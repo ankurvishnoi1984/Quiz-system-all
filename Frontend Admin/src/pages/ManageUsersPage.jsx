@@ -526,7 +526,7 @@ function ManageUsersPage() {
               ))}
             </select>
             <p className="mt-1 text-xs text-slate-500">
-              Limits how many people can join across all of this user&apos;s sessions.
+              Limits how many participants can be connected at once across all of this user&apos;s sessions.
             </p>
           </div>
           {needsDepartment ? (

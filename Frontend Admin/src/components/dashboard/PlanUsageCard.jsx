@@ -53,7 +53,7 @@ export function PlanUsageCard({ usage, compact = false }) {
 
       <div className={`mt-4 grid gap-3 ${compact ? 'sm:grid-cols-3' : 'sm:grid-cols-2 lg:grid-cols-4'}`}>
         <div className="rounded-xl border border-white/70 bg-white/80 px-3 py-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Used</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Connected</p>
           <p className="mt-1 text-xl font-bold text-navy-900">{formatCount(used)}</p>
         </div>
         <div className="rounded-xl border border-white/70 bg-white/80 px-3 py-2">
@@ -84,7 +84,7 @@ export function PlanUsageCard({ usage, compact = false }) {
       {!unrestricted ? (
         <div className="mt-4">
           <div className="mb-1 flex items-center justify-between text-xs font-semibold text-slate-600">
-            <span>{percent}% of participant allowance used</span>
+            <span>{percent}% of connected participant allowance in use</span>
             <span>
               {formatCount(used)} / {formatCount(limit)}
             </span>
@@ -100,12 +100,12 @@ export function PlanUsageCard({ usage, compact = false }) {
 
       <p className="mt-3 text-sm text-slate-600">
         {exceeded
-          ? 'Your plan limit is full. New participants cannot join until you reset a session or upgrade your plan.'
+          ? 'Your connected participant limit is full. New participants cannot join until someone disconnects or you upgrade your plan.'
           : unrestricted
             ? 'No paid-plan limit is assigned. Session-level max participants still apply.'
             : Number(usage.extra_participants || 0) > 0
-              ? `Your plan includes ${formatCount(usage.plan_limit)} participants plus ${formatCount(usage.extra_participants)} paid extra seats, shared across all of your sessions.`
-              : 'This allowance is shared across all of your sessions.'}
+              ? `Your plan includes ${formatCount(usage.plan_limit)} connected participants plus ${formatCount(usage.extra_participants)} paid extra seats at the same time. Participants free up capacity when they disconnect.`
+              : 'This allowance counts participants with an active connection at the same time. Disconnecting frees up capacity for new joins.'}
       </p>
     </div>
   )

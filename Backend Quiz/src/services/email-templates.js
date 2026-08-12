@@ -504,7 +504,7 @@ function renderParticipantLimitExceededEmail({
   const bodyHtml = `
     <p style="margin:0 0 16px;font-size:16px;line-height:1.65;color:${BRAND.slate};">${safeGreeting}</p>
     <p style="margin:0 0 24px;font-size:16px;line-height:1.65;color:${BRAND.slate};">
-      Your participant limit has been reached. New people can no longer join any of your sessions until capacity is available.
+      Your connected participant limit has been reached. New people can no longer join any of your sessions until someone disconnects.
     </p>
 
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px;">
@@ -514,7 +514,7 @@ function renderParticipantLimitExceededEmail({
             Plan limit reached
           </p>
           <p style="margin:0;font-size:16px;line-height:1.6;color:${BRAND.navy};">
-            <strong>${safePlan}</strong> allows <strong>${limitLabel}</strong> participants across all sessions.
+            <strong>${safePlan}</strong> allows <strong>${limitLabel}</strong> connected participants at the same time.
             Current usage is <strong>${usedLabel} / ${limitLabel}</strong>.
           </p>
         </td>
@@ -522,7 +522,7 @@ function renderParticipantLimitExceededEmail({
     </table>
 
     <p style="margin:0 0 24px;font-size:15px;line-height:1.65;color:${BRAND.slate};">
-      Ask your administrator to upgrade your plan.
+      Capacity frees up when participants disconnect. Ask your administrator to upgrade your plan if you need more seats.
     </p>
 
     <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:0 auto 28px;">
@@ -547,13 +547,13 @@ function renderParticipantLimitExceededEmail({
 
   const text = `${greeting}
 
-Your participant limit has been reached. New people can no longer join any of your sessions until capacity is available.
+Your connected participant limit has been reached. New people can no longer join any of your sessions until someone disconnects.
 
 PLAN LIMIT REACHED
 Plan: ${planName || "your plan"}
-Usage: ${usedLabel} / ${limitLabel}
+Connected: ${usedLabel} / ${limitLabel}
 
-Ask your administrator to upgrade your plan.
+Capacity frees up when participants disconnect, or ask your administrator to upgrade your plan.
 
 Open host dashboard: ${loginUrl}
 

@@ -108,7 +108,7 @@ function ManagePlansPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-navy-700">Administration</p>
           <h2 className="mt-1 text-2xl font-bold text-navy-900">Paid Plans</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Each plan sets how many participants can join across all sessions on a user account.
+            Each plan sets how many participants can be connected at the same time across all of a user&apos;s sessions. Disconnecting frees up capacity.
           </p>
         </div>
         <button
@@ -153,7 +153,7 @@ function ManagePlansPage() {
               <tr key={plan.plan_id} className="border-b border-blue-50 last:border-b-0">
                 <td className="px-4 py-3 font-semibold text-navy-900">{plan.name}</td>
                 <td className="px-4 py-3 text-slate-700">
-                  {Number(plan.max_participants).toLocaleString()} across all sessions
+                  {Number(plan.max_participants).toLocaleString()} connected at once
                 </td>
                 <td className="px-4 py-3 text-slate-600">{plan.description || '—'}</td>
                 <td className="px-4 py-3">
@@ -231,7 +231,7 @@ function ManagePlansPage() {
               required
             />
             <p className="mt-1 text-xs text-slate-500">
-              Total participants allowed across every session on that user account.
+              Maximum connected participants at the same time across all of the user&apos;s sessions.
             </p>
           </div>
           <div>
@@ -240,7 +240,7 @@ function ManagePlansPage() {
               value={form.description}
               onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
               className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
-              placeholder="Up to 100 participants across all sessions"
+              placeholder="Up to 100 connected participants at once"
             />
           </div>
           <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">

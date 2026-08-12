@@ -64,7 +64,7 @@ module.exports = {
     await queryInterface.bulkInsert("plans", [
       {
         name: "Starter",
-        description: "Up to 50 participants across all sessions",
+        description: "Up to 50 live participants across active sessions",
         max_participants: 50,
         is_active: true,
         created_at: new Date(),
@@ -72,7 +72,7 @@ module.exports = {
       },
       {
         name: "Standard",
-        description: "Up to 100 participants across all sessions",
+        description: "Up to 100 live participants across active sessions",
         max_participants: 100,
         is_active: true,
         created_at: new Date(),
@@ -80,7 +80,7 @@ module.exports = {
       },
       {
         name: "Professional",
-        description: "Up to 500 participants across all sessions",
+        description: "Up to 500 live participants across active sessions",
         max_participants: 500,
         is_active: true,
         created_at: new Date(),
@@ -88,7 +88,7 @@ module.exports = {
       },
       {
         name: "Enterprise",
-        description: "Up to 2000 participants across all sessions",
+        description: "Up to 2000 live participants across active sessions",
         max_participants: 2000,
         is_active: true,
         created_at: new Date(),
