@@ -16,6 +16,14 @@ export function isSessionQuizTotalTimeEnabled(session) {
   )
 }
 
+/** Each participant sees questions in a shuffled order; host must activate all at once. */
+export function isSessionRandomQuestionOrderEnabled(session) {
+  if (!session) return false
+  const value = session.random_question_order_enabled
+  const randomEnabled = value === true || value === 1 || value === '1'
+  return session.participant_navigation_enabled !== false && randomEnabled
+}
+
 export function sessionHasTimedQuestions(questions = []) {
   return (questions || []).some(
     (q) => Number(q?.timeLimit ?? q?.time_limit_seconds ?? 0) > 0,

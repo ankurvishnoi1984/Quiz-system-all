@@ -10,6 +10,10 @@ const {
 } = require("../models");
 const { formatQuestionForParticipant } = require("./question.service");
 const { notifyLeaderboard, notifyRankingResponseSubmitted } = require("./websocket.service");
+const {
+  assignRandomQuestionOrderToParticipant,
+  sortQuestionsByOrder
+} = require("../utils/participantQuestionOrder");
 
 function participantDisplayName(participant, participantId) {
   const p = participant?.participant ?? participant?.Participant ?? participant;
@@ -944,6 +948,10 @@ async function listParticipantQuestionsService({ sessionId, participant }) {
     await assignRandomSetToParticipant(session, participant);
   }
 
+  const questionOrder = participant
+    ? await assignRandomQuestionOrderToParticipant(session, participant)
+    : [];
+
   const questionWhere = { session_id: sessionId, is_live: true };
   if (participant?.assigned_set_id) {
     // Participants see their assigned set plus shared questions that belong to no set.
@@ -973,6 +981,10 @@ async function listParticipantQuestionsService({ sessionId, participant }) {
       [QuestionOption, "display_order", "ASC"]
     ]
   });
+
+  if (questionOrder.length) {
+    questions = sortQuestionsByOrder(questions, questionOrder);
+  }
 
   let submittedQuestionIds = new Set();
   if (participant?.participant_id && questions.length) {

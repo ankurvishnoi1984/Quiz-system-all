@@ -34,8 +34,8 @@ import ShareSessionPanel from '../components/dashboard/ShareSessionPanel'
 import Modal from '../components/ui/Modal'
 import { HostAlertModal } from '../components/live/HostAlertModal'
 import { HostQuestionActionButton } from '../components/live/HostQuestionActionButton'
-import { canHostActivateAllQuestions, canHostCloseAllQuestions } from '../utils/hostQuestionControls'
-import { isSessionQuizTotalTimeEnabled } from '../utils/sessionFlags'
+import { canHostActivateAllQuestions, canHostCloseAllQuestions, sessionRequiresActivateAllQuestions } from '../utils/hostQuestionControls'
+import { isSessionQuizTotalTimeEnabled, isSessionRandomQuestionOrderEnabled } from '../utils/sessionFlags'
 import { HostNoSessionsEmpty } from '../components/layout/HostNoSessionsEmpty'
 import { useHostNavSessions, getLivePresenterSessionId } from '../hooks/useHostNavSessions'
 import { useShell } from '../context/ShellContext'
@@ -775,7 +775,11 @@ function LivePage() {
     Boolean(session) && session.status !== 'completed' && session.status !== 'archived'
   const singleActiveQuestionMode = session?.participant_navigation_enabled === false
   const sessionQuizTotalTimeEnabled = isSessionQuizTotalTimeEnabled(session)
-  const sessionUsesSets = useMemo(() => sessionUsesQuestionSets(mappedQuestions), [mappedQuestions])
+  const disableSingleActivation = useMemo(
+    () => sessionRequiresActivateAllQuestions(session, mappedQuestions, sessionUsesQuestionSets),
+    [session, mappedQuestions],
+  )
+  const randomQuestionOrderEnabled = isSessionRandomQuestionOrderEnabled(session)
   const showSessionControls = session?.status === 'live' || session?.status === 'paused'
   const showCloseAllQuestionsButton = useMemo(
     () =>
@@ -1151,6 +1155,12 @@ function LivePage() {
                   other live question.
                 </p>
               ) : null}
+              {canEditLive && randomQuestionOrderEnabled ? (
+                <p className="mb-3 rounded-xl border border-indigo-200/80 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-900">
+                  Random question order: use Activate all questions. Each participant sees questions
+                  in a different sequence.
+                </p>
+              ) : null}
               {canEditLive && sessionQuizTotalTimeEnabled ? (
                 <p className="mb-3 rounded-xl border border-violet-200/80 bg-violet-50 px-3 py-2 text-xs font-medium text-violet-900">
                   Quiz total time: all questions are available to participants. Use reveal,
@@ -1162,7 +1172,7 @@ function LivePage() {
                 canEditLive={canEditLive}
                 singleActiveQuestionMode={singleActiveQuestionMode}
                 sessionQuizTotalTimeEnabled={sessionQuizTotalTimeEnabled}
-                disableSingleActivation={sessionUsesSets}
+                disableSingleActivation={disableSingleActivation}
                 questionLiveMutation={questionLiveMutation}
                 answerRevealMutation={answerRevealMutation}
                 questionLeaderboardMutation={questionLeaderboardMutation}

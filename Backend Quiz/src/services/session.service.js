@@ -211,6 +211,8 @@ async function createSession({ deptId, input, user }) {
        input.participant_navigation_enabled && input.quiz_total_time_minutes != null
          ? Number(input.quiz_total_time_minutes)
          : null,
+     random_question_order_enabled:
+       input.participant_navigation_enabled && Boolean(input.random_question_order_enabled),
      qr_code_url: input.qr_code_url || null,
      logo_url:
        input.logo_url != null && String(input.logo_url).trim()
@@ -281,6 +283,7 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
         show_question_leaderboard: source.show_question_leaderboard ?? false,
         participant_navigation_enabled: source.participant_navigation_enabled ?? true,
         quiz_total_time_minutes: source.quiz_total_time_minutes ?? null,
+        random_question_order_enabled: Boolean(source.random_question_order_enabled),
         qr_code_url: null,
         logo_url: source.logo_url || null
       },
@@ -421,6 +424,12 @@ async function updateSession({ sessionId, input, user }) {
         : Number(input.quiz_total_time_minutes);
   }
 
+  const nextRandomQuestionOrderEnabled = !nextParticipantNavigationEnabled
+    ? false
+    : input.random_question_order_enabled !== undefined
+      ? Boolean(input.random_question_order_enabled)
+      : session.random_question_order_enabled;
+
   Object.assign(session, {
     title: input.title !== undefined ? input.title : session.title,
     description: input.description !== undefined ? input.description : session.description,
@@ -453,6 +462,7 @@ async function updateSession({ sessionId, input, user }) {
         ? Boolean(input.participant_navigation_enabled)
         : session.participant_navigation_enabled,
     quiz_total_time_minutes: nextQuizTotalTimeMinutes,
+    random_question_order_enabled: nextRandomQuestionOrderEnabled,
     join_type:
       input.join_type !== undefined ? input.join_type : session.join_type,
     scheduled_date:
@@ -710,11 +720,13 @@ async function joinSession({ code, payload }) {
   const session = await getSessionByCode(code);
   const joinPayload = payload || {};
 
-    const existingByIdentity = await findParticipantByNameEmail(session, joinPayload);
+  const existingByIdentity = await findParticipantByNameEmail(session, joinPayload);
   if (existingByIdentity) {
     assertSessionAcceptingJoin(session, { isReturning: true });
     const { assignRandomSetToParticipant } = require("./question-set.service");
+    const { assignRandomQuestionOrderToParticipant } = require("../utils/participantQuestionOrder");
     await assignRandomSetToParticipant(session, existingByIdentity);
+    await assignRandomQuestionOrderToParticipant(session, existingByIdentity);
     return finalizeParticipantJoin(session, existingByIdentity, {
       isReturning: true,
       payload: joinPayload
@@ -732,7 +744,9 @@ async function joinSession({ code, payload }) {
     if (existingByDevice && !wantsFreshIdentity) {
       assertSessionAcceptingJoin(session, { isReturning: true });
       const { assignRandomSetToParticipant } = require("./question-set.service");
+      const { assignRandomQuestionOrderToParticipant } = require("../utils/participantQuestionOrder");
       await assignRandomSetToParticipant(session, existingByDevice);
+      await assignRandomQuestionOrderToParticipant(session, existingByDevice);
       return finalizeParticipantJoin(session, existingByDevice, {
         isReturning: true,
         payload: joinPayload
@@ -775,7 +789,9 @@ async function joinSession({ code, payload }) {
   });
 
   const { assignRandomSetToParticipant } = require("./question-set.service");
+  const { assignRandomQuestionOrderToParticipant } = require("../utils/participantQuestionOrder");
   await assignRandomSetToParticipant(session, participant);
+  await assignRandomQuestionOrderToParticipant(session, participant);
 
   return finalizeParticipantJoin(session, participant, {
     isReturning: false,

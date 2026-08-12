@@ -1,3 +1,5 @@
+import { isSessionRandomQuestionOrderEnabled } from './sessionFlags'
+
 /** Untimed single-active-question sessions: host may close submissions while question stays live. */
 export function canHostCloseQuestion(question, singleActiveQuestionMode) {
   if (!singleActiveQuestionMode || !question?.isLive) return false
@@ -12,6 +14,14 @@ export function canHostCloseAllQuestions(questions, { canEditLive, singleActiveQ
   if (!live.length) return false
   if (live.some((q) => Number(q.timeLimit ?? 0) > 0)) return false
   return live.some((q) => !q.submissionsClosed)
+}
+
+/** Per-question Activate is hidden when sets or random order require all-or-nothing activation. */
+export function sessionRequiresActivateAllQuestions(session, mappedQuestions, sessionUsesQuestionSets) {
+  if (typeof sessionUsesQuestionSets === 'function') {
+    return sessionUsesQuestionSets(mappedQuestions) || isSessionRandomQuestionOrderEnabled(session)
+  }
+  return Boolean(sessionUsesQuestionSets) || isSessionRandomQuestionOrderEnabled(session)
 }
 
 /** Multi-question sessions (timed or untimed): activate every question at once. */

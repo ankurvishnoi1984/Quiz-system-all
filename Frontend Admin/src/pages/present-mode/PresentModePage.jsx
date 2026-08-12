@@ -22,7 +22,7 @@ import {
   getPresentViewSurveySummaryApi,
   // listPresentViewQaApi, // Q&A feature disabled
 } from '../../services/presentViewApi'
-import { canHostActivateAllQuestions, canHostCloseAllQuestions } from '../../utils/hostQuestionControls'
+import { canHostActivateAllQuestions, canHostCloseAllQuestions, sessionRequiresActivateAllQuestions } from '../../utils/hostQuestionControls'
 import { broadcastPreviewFollow } from '../../utils/previewFollow'
 import {
   sessionSupportsOverallLeaderboard,
@@ -105,6 +105,10 @@ function PresentModePage({
   const canToggleSurveyResults = sessionSupportsSurveyEndingScreen(mappedQuestions)
   const singleActiveQuestionMode = session?.participant_navigation_enabled === false
   const sessionQuizTotalTimeEnabled = isSessionQuizTotalTimeEnabled(session)
+  const disableSingleActivation = useMemo(
+    () => sessionRequiresActivateAllQuestions(session, mappedQuestions, sessionUsesQuestionSets),
+    [session, mappedQuestions],
+  )
 
   const showActivateAllQuestionsButton = useMemo(
     () =>
@@ -790,7 +794,7 @@ function PresentModePage({
                 canEditLive={canEditLive}
                 singleActiveQuestionMode={singleActiveQuestionMode}
                 sessionQuizTotalTimeEnabled={sessionQuizTotalTimeEnabled}
-                disableSingleActivation={sessionUsesQuestionSets(mappedQuestions)}
+                disableSingleActivation={disableSingleActivation}
                 size="compact"
                 showLabel
                 questionLiveMutation={questionLiveMutation}

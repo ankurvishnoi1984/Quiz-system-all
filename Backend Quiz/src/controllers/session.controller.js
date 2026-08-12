@@ -34,6 +34,7 @@ const {
 const { getSessionSummaryReport, getSessionQuestionsReport, getSessionParticipantsReport, getSessionQaReport } = require("../services/session-report.service");
 const { Session } = require("../models");
 const { getFrontendPublicUrl } = require("../config/publicAppUrl");
+const { isSessionRandomQuestionOrderEnabled } = require("../utils/sessionFlags");
 const {
   createPresentViewLink,
   buildEmbedLinkPayload,
@@ -115,6 +116,7 @@ async function update(req, res) {
         show_question_leaderboard: session.show_question_leaderboard,
         participant_navigation_enabled: session.participant_navigation_enabled !== false,
         quiz_total_time_minutes: session.quiz_total_time_minutes ?? null,
+        random_question_order_enabled: isSessionRandomQuestionOrderEnabled(session),
         allow_late_join: Boolean(session.allow_late_join)
       });
       if (req.body.leaderboard_enabled === true && session.leaderboard_enabled) {
@@ -230,6 +232,7 @@ async function lookupByCode(req, res) {
           show_question_leaderboard: Boolean(session.show_question_leaderboard),
           participant_navigation_enabled: session.participant_navigation_enabled !== false,
           quiz_total_time_minutes: session.quiz_total_time_minutes ?? null,
+          random_question_order_enabled: isSessionRandomQuestionOrderEnabled(session),
           allow_late_join: Boolean(session.allow_late_join),
           join_blocked: Boolean(joinBlock.blocked),
           join_blocked_message: joinBlock.message || null,

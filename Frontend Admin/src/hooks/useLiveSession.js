@@ -282,6 +282,10 @@ export function useLiveSession(accessToken, sessionId, options = {}) {
             data.participant_navigation_enabled !== undefined
               ? data.participant_navigation_enabled
               : old.participant_navigation_enabled,
+          random_question_order_enabled:
+            data.random_question_order_enabled !== undefined
+              ? Boolean(data.random_question_order_enabled)
+              : old.random_question_order_enabled,
           allow_late_join:
             data.allow_late_join !== undefined ? data.allow_late_join : old.allow_late_join,
         }

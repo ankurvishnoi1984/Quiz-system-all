@@ -20,7 +20,7 @@ import { useParticipantProgressPersistence } from '../../hooks/useParticipantPro
 import { useParticipantPreJoinRealtime } from '../../hooks/useParticipantPreJoinRealtime'
 import { hasSessionCodeInJoinPath, normalizeSessionCode } from '../../utils/joinUrl'
 import { computeResponseTimeMs } from '../../utils/quizResponseTime'
-import { isSessionQuizTotalTimeEnabled, isStrictLateJoinSession, sessionHasTimedQuestions } from '../../utils/sessionFlags'
+import { isSessionQuizTotalTimeEnabled, isSessionRandomQuestionOrderEnabled, isStrictLateJoinSession, sessionHasTimedQuestions } from '../../utils/sessionFlags'
 import {
   questionSupportsLeaderboard,
   questionSupportsParticipantResults,
@@ -45,10 +45,12 @@ import { WaitingForQuestion } from './components/WaitingForQuestion'
 import { WaitingView } from './components/WaitingView'
 import { isParticipantChoiceCorrect } from '../../utils/answerReveal'
 import {
+  applyParticipantQuestionOrder,
   buildResponsePayloadForQuestion,
   canShowPreviousForTimedMultiNav,
   canShowPreviousForUntimedMultiNav,
   canShowPreviousForQuizTotalTimeMultiNav,
+  ensureParticipantQuestionOrder,
   getSessionLastQuestionId,
   isMultiNavLastQuestionFinalized,
   getLastActivatedLiveQuestion,
@@ -101,6 +103,7 @@ function ParticipantSessionPage() {
     quizQuestionOpenedAt,
     quizSubmittedQuestionIds,
     quizExplicitSubmittedQuestionIds,
+    quizQuestionOrder,
     setResponses,
     setQuestionIndex,
     setLiveQuestionId,
@@ -116,6 +119,7 @@ function ParticipantSessionPage() {
     markQuestionsExplicitlySubmitted,
     unlockQuestionForReattempt,
     markQuestionOpened,
+    setQuizQuestionOrder,
   } = useParticipantStore(
     useShallow((s) => ({
       responses: s.quizResponses,
@@ -127,6 +131,7 @@ function ParticipantSessionPage() {
       quizQuestionOpenedAt: s.quizQuestionOpenedAt,
       quizSubmittedQuestionIds: s.quizSubmittedQuestionIds,
       quizExplicitSubmittedQuestionIds: s.quizExplicitSubmittedQuestionIds,
+      quizQuestionOrder: s.quizQuestionOrder,
       setResponses: s.setQuizResponses,
       setQuestionIndex: s.setQuizQuestionIndex,
       setLiveQuestionId: s.setQuizLiveQuestionId,
@@ -142,6 +147,7 @@ function ParticipantSessionPage() {
       markQuestionsExplicitlySubmitted: s.markQuestionsExplicitlySubmitted,
       unlockQuestionForReattempt: s.unlockQuestionForReattempt,
       markQuestionOpened: s.markQuestionOpened,
+      setQuizQuestionOrder: s.setQuizQuestionOrder,
     })),
   )
 
@@ -273,6 +279,7 @@ function ParticipantSessionPage() {
     (sessionSupportsSurveyEndingScreen(mappedQuestions) || showSurveyResultsEnabled)
   const endingScreenOnlyMode = showOverallLeaderboardTab || showSurveyEndingScreen
   const navigationEnabled = session?.participant_navigation_enabled !== false
+  const randomQuestionOrderEnabled = isSessionRandomQuestionOrderEnabled(session)
   const sessionQuizTotalTimeEnabled = useMemo(
     () => isSessionQuizTotalTimeEnabled(session),
     [session],
@@ -292,26 +299,55 @@ function ParticipantSessionPage() {
     [session, mappedQuestions],
   )
 
-  const activeQuestions = useMemo(
+  const activeQuestionsBase = useMemo(
     () => filterActiveQuestionsForLateJoinPolicy(mappedQuestions),
     [mappedQuestions],
   )
 
-  const sessionLastQuestionId = useMemo(
-    () => getSessionLastQuestionId(mappedQuestions),
-    [mappedQuestions],
-  )
+  useEffect(() => {
+    if (!randomQuestionOrderEnabled || !navigationEnabled || !activeQuestionsBase.length) return
+    const nextOrder = ensureParticipantQuestionOrder(activeQuestionsBase, quizQuestionOrder)
+    const currentKey = (quizQuestionOrder || []).join(',')
+    const nextKey = nextOrder.join(',')
+    if (currentKey !== nextKey) {
+      setQuizQuestionOrder(nextOrder)
+    }
+  }, [
+    randomQuestionOrderEnabled,
+    navigationEnabled,
+    activeQuestionsBase,
+    quizQuestionOrder,
+    setQuizQuestionOrder,
+  ])
+
+  const activeQuestions = useMemo(() => {
+    if (!randomQuestionOrderEnabled || !quizQuestionOrder?.length) return activeQuestionsBase
+    return applyParticipantQuestionOrder(activeQuestionsBase, quizQuestionOrder)
+  }, [activeQuestionsBase, randomQuestionOrderEnabled, quizQuestionOrder])
+
+  const sessionLastQuestionId = useMemo(() => {
+    if (randomQuestionOrderEnabled) {
+      return activeQuestions.length ? activeQuestions[activeQuestions.length - 1]?.id ?? null : null
+    }
+    return getSessionLastQuestionId(mappedQuestions)
+  }, [randomQuestionOrderEnabled, activeQuestions, mappedQuestions])
 
   const participantEditPolicy = useMemo(
     () => ({
       sessionQuizTotalTimeEnabled,
       lastQuestionFinalized:
         navigationEnabled &&
-        isMultiNavLastQuestionFinalized(mappedQuestions, quizExplicitSubmittedQuestionIds),
+        isMultiNavLastQuestionFinalized(
+          randomQuestionOrderEnabled ? activeQuestions : mappedQuestions,
+          quizExplicitSubmittedQuestionIds,
+          { useParticipantOrder: randomQuestionOrderEnabled },
+        ),
     }),
     [
       sessionQuizTotalTimeEnabled,
       navigationEnabled,
+      randomQuestionOrderEnabled,
+      activeQuestions,
       mappedQuestions,
       quizExplicitSubmittedQuestionIds,
     ],
@@ -328,6 +364,10 @@ function ParticipantSessionPage() {
         quizSubmittedQuestionIds,
       )
     }
+    if (randomQuestionOrderEnabled) {
+      const idx = clamp(questionIndex, 0, activeQuestions.length - 1)
+      return activeQuestions[idx] ?? null
+    }
     if (liveQuestionId) {
       const live = activeQuestions.find((q) => q.id === liveQuestionId)
       if (live) return live
@@ -339,6 +379,7 @@ function ParticipantSessionPage() {
     liveQuestionId,
     questionIndex,
     navigationEnabled,
+    randomQuestionOrderEnabled,
     quizSubmittedQuestionIds,
   ])
 
@@ -581,11 +622,16 @@ function ParticipantSessionPage() {
 
   const handleHostQuestionActivated = useCallback(
     (questionId) => {
-      pendingActivatedQuestionIdRef.current = questionId
       addUnseenActivatedQuestion(questionId)
+      if (randomQuestionOrderEnabled) return
+      pendingActivatedQuestionIdRef.current = questionId
       tryApplyPendingActivatedQuestion()
     },
-    [addUnseenActivatedQuestion, tryApplyPendingActivatedQuestion],
+    [
+      addUnseenActivatedQuestion,
+      randomQuestionOrderEnabled,
+      tryApplyPendingActivatedQuestion,
+    ],
   )
 
   useEffect(() => {
@@ -891,6 +937,8 @@ function ParticipantSessionPage() {
               survey_results_enabled: isSurveyResultsEnabled,
               participant_navigation_enabled:
                 data.participant_navigation_enabled ?? old.participant_navigation_enabled,
+              random_question_order_enabled:
+                data.random_question_order_enabled ?? old.random_question_order_enabled,
               allow_late_join:
                 data.allow_late_join !== undefined ? data.allow_late_join : old.allow_late_join,
             }
@@ -1033,6 +1081,11 @@ function ParticipantSessionPage() {
       return
     }
 
+    if (randomQuestionOrderEnabled) {
+      setQuestionIndex((prev) => clamp(prev, 0, activeQuestions.length - 1))
+      return
+    }
+
     if (liveQuestionId) {
       const idx = activeQuestions.findIndex((q) => q.id === liveQuestionId)
       if (idx !== -1) {
@@ -1047,6 +1100,7 @@ function ParticipantSessionPage() {
     activeQuestions,
     liveQuestionId,
     navigationEnabled,
+    randomQuestionOrderEnabled,
     quizSubmittedQuestionIds,
     setLiveQuestionId,
     setQuestionIndex,

@@ -449,6 +449,7 @@ function notifySessionSettings(sessionCode, settings) {
     ),
     show_question_leaderboard: Boolean(settings.show_question_leaderboard),
     participant_navigation_enabled: settings.participant_navigation_enabled !== false,
+    random_question_order_enabled: Boolean(settings.random_question_order_enabled),
     allow_late_join: Boolean(settings.allow_late_join)
   });
 }

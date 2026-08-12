@@ -13,10 +13,17 @@ function isSessionQuizTotalTimeEnabled(session) {
   );
 }
 
+/** DB/Sequelize may return 0/1 or a Buffer; never treat a Buffer as automatically true. */
+function flagEnabled(value) {
+  if (value === true || value === 1 || value === "1") return true;
+  if (typeof Buffer !== "undefined" && Buffer.isBuffer(value)) return value[0] === 1;
+  return false;
+}
+
 /** DB/Sequelize may return 0/1; never use `value !== false` for booleans. */
 function participantNavigationEnabled(value) {
   if (value === undefined || value === null) return true;
-  return Boolean(value);
+  return flagEnabled(value);
 }
 
 function parseActivationTime(value) {
@@ -95,10 +102,20 @@ async function sessionHasTimedQuestionsInDb(sessionId) {
   return Boolean(row);
 }
 
+function isSessionRandomQuestionOrderEnabled(session) {
+  if (!session) return false;
+  return (
+    participantNavigationEnabled(session?.participant_navigation_enabled) &&
+    flagEnabled(session.random_question_order_enabled)
+  );
+}
+
 module.exports = {
   MULTI_NAV_TIMED_JOIN_CLOSED_MESSAGE,
   participantNavigationEnabled,
+  sessionFlagEnabled: flagEnabled,
   isSessionQuizTotalTimeEnabled,
+  isSessionRandomQuestionOrderEnabled,
   sessionHasTimedQuestions,
   isStrictLateJoinSession,
   sessionHasTimedQuestionsInDb,

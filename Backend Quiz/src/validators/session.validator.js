@@ -63,6 +63,23 @@ function validateAutoEndFields(payload, { requireFuture = true } = {}) {
 
 const QUIZ_TOTAL_TIME_MINUTES = [15, 30, 45, 60];
 
+function validateRandomQuestionOrder(payload) {
+  if (
+    payload?.random_question_order_enabled === undefined ||
+    payload?.random_question_order_enabled === false ||
+    payload?.random_question_order_enabled === null
+  ) {
+    return null;
+  }
+  if (typeof payload.random_question_order_enabled !== "boolean") {
+    return "random_question_order_enabled must be a boolean";
+  }
+  if (payload.participant_navigation_enabled === false) {
+    return "random_question_order_enabled requires multiple active questions";
+  }
+  return null;
+}
+
 function validateQuizTotalTimeMinutes(payload) {
   if (payload?.quiz_total_time_minutes == null || payload?.quiz_total_time_minutes === "") {
     return null;
@@ -110,6 +127,13 @@ function validateCreateSessionPayload(payload) {
     errors.push("participant_navigation_enabled must be a boolean");
   }
 
+  if (
+    payload?.random_question_order_enabled !== undefined &&
+    typeof payload.random_question_order_enabled !== "boolean"
+  ) {
+    errors.push("random_question_order_enabled must be a boolean");
+  }
+
   const scheduledDateError = validateScheduledDate(payload?.scheduled_date);
   if (scheduledDateError) errors.push(scheduledDateError);
 
@@ -124,6 +148,9 @@ function validateCreateSessionPayload(payload) {
 
   const quizTotalTimeError = validateQuizTotalTimeMinutes(payload);
   if (quizTotalTimeError) errors.push(quizTotalTimeError);
+
+  const randomOrderError = validateRandomQuestionOrder(payload);
+  if (randomOrderError) errors.push(randomOrderError);
 
   errors.push(...validateAutoEndFields(payload));
 
@@ -143,6 +170,7 @@ function validateUpdateSessionPayload(payload) {
     "show_question_leaderboard",
     "participant_navigation_enabled",
     "quiz_total_time_minutes",
+    "random_question_order_enabled",
     "join_type",
     "scheduled_date",
     "scheduled_time",
@@ -195,6 +223,9 @@ function validateUpdateSessionPayload(payload) {
 
   const quizTotalTimeError = validateQuizTotalTimeMinutes(payload);
   if (quizTotalTimeError) errors.push(quizTotalTimeError);
+
+  const randomOrderError = validateRandomQuestionOrder(payload);
+  if (randomOrderError) errors.push(randomOrderError);
 
   if (payload?.auto_end_enabled !== undefined) {
     errors.push(...validateAutoEndFields(payload, { requireFuture: false }));

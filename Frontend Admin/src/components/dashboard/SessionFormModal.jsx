@@ -24,6 +24,7 @@ const defaultInitial = {
   departmentId: '',
   joinRequirement: 'name',
   enableNavigation: false,
+  randomQuestionOrder: false,
   quizTotalTimeEnabled: false,
   quizTotalTimeMinutes: 30,
   overallLeaderboard: false,
@@ -50,6 +51,7 @@ function SessionFormModal({
   const logoInputRef = useRef(null)
   const [joinRequirement, setJoinRequirement] = useState(defaultInitial.joinRequirement)
   const [enableNavigation, setEnableNavigation] = useState(defaultInitial.enableNavigation)
+  const [randomQuestionOrder, setRandomQuestionOrder] = useState(defaultInitial.randomQuestionOrder)
   const [quizTotalTimeEnabled, setQuizTotalTimeEnabled] = useState(defaultInitial.quizTotalTimeEnabled)
   const [quizTotalTimeMinutes, setQuizTotalTimeMinutes] = useState(defaultInitial.quizTotalTimeMinutes)
   const [overallLeaderboard, setOverallLeaderboard] = useState(defaultInitial.overallLeaderboard)
@@ -66,6 +68,7 @@ function SessionFormModal({
     if (!open) return
     setJoinRequirement(initialValues.joinRequirement ?? defaultInitial.joinRequirement)
     setEnableNavigation(Boolean(initialValues.enableNavigation))
+    setRandomQuestionOrder(Boolean(initialValues.randomQuestionOrder))
     setQuizTotalTimeEnabled(Boolean(initialValues.quizTotalTimeEnabled))
     setQuizTotalTimeMinutes(
       QUIZ_TOTAL_TIME_MINUTES.includes(Number(initialValues.quizTotalTimeMinutes))
@@ -83,6 +86,7 @@ function SessionFormModal({
     setEnableNavigation(enabled)
     if (!enabled) {
       setQuizTotalTimeEnabled(false)
+      setRandomQuestionOrder(false)
     }
   }
 
@@ -165,6 +169,7 @@ function SessionFormModal({
         : String(form.get('department') || defaultDepartmentId || ''),
       joinRequirement,
       enableNavigation,
+      randomQuestionOrder: enableNavigation && randomQuestionOrder,
       quizTotalTimeEnabled: enableNavigation && quizTotalTimeEnabled,
       quizTotalTimeMinutes: enableNavigation && quizTotalTimeEnabled ? quizTotalTimeMinutes : null,
       overallLeaderboard,
@@ -406,6 +411,28 @@ function SessionFormModal({
                       </select>
                     </div>
                   ) : null}
+                  <div className="md:col-span-2">
+                    <label className="text-sm font-semibold text-slate-700" htmlFor="question-order">
+                      Question order
+                    </label>
+                    <select
+                      id="question-order"
+                      value={randomQuestionOrder ? 'random' : 'fixed'}
+                      onChange={(e) => setRandomQuestionOrder(e.target.value === 'random')}
+                      className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+                    >
+                      <option value="fixed">
+                        Fixed order — participants browse questions in builder order
+                      </option>
+                      <option value="random">
+                        Random order — each participant gets a shuffled sequence; use Activate all
+                      </option>
+                    </select>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Random order activates every question together. Per-question Activate is hidden
+                      in host controls.
+                    </p>
+                  </div>
                 </>
               ) : null}
             </>

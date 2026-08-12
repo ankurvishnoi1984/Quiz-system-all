@@ -10,6 +10,13 @@ const EMPTY_PARTICIPANT_SESSION_STATE = Object.freeze({
   quizQuestionOpenedAt: {}
 });
 
+function normalizeQuestionOrder(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((id) => Number(id))
+    .filter((id) => Number.isFinite(id) && id > 0);
+}
+
 function normalizeRecord(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {};
@@ -53,7 +60,8 @@ function normalizeParticipantSessionState(raw) {
       raw.quizSessionCountdown && typeof raw.quizSessionCountdown === "object"
         ? raw.quizSessionCountdown
         : null,
-    quizQuestionOpenedAt: normalizeRecord(raw.quizQuestionOpenedAt)
+    quizQuestionOpenedAt: normalizeRecord(raw.quizQuestionOpenedAt),
+    quizQuestionOrder: normalizeQuestionOrder(raw.quizQuestionOrder)
   };
 }
 

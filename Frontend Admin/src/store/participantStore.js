@@ -17,6 +17,8 @@ const initialQuiz = {
   quizSessionCountdown: null,
   /** Untimed: when the participant first saw each question (epoch ms) */
   quizQuestionOpenedAt: {},
+  /** Random-order sessions: participant-specific question id sequence */
+  quizQuestionOrder: [],
 }
 
 export const useParticipantStore = create(
@@ -66,6 +68,13 @@ export const useParticipantStore = create(
         })),
 
       setQuizLiveQuestionId: (id) => set({ quizLiveQuestionId: id }),
+
+      setQuizQuestionOrder: (order) =>
+        set({
+          quizQuestionOrder: Array.isArray(order)
+            ? order.map(Number).filter((id) => Number.isFinite(id) && id > 0)
+            : [],
+        }),
 
       markQuestionsSubmitted: (questionIds) =>
         set((s) => ({
@@ -251,6 +260,7 @@ export const useParticipantStore = create(
         quizCountdownByQuestion: state.quizCountdownByQuestion,
         quizSessionCountdown: state.quizSessionCountdown,
         quizQuestionOpenedAt: state.quizQuestionOpenedAt,
+        quizQuestionOrder: state.quizQuestionOrder,
       }),
       migrate: (persistedState, version) => {
         const s = persistedState || {}

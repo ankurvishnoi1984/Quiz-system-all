@@ -243,13 +243,67 @@ export function getSessionLastQuestionId(questions = []) {
   return sorted[sorted.length - 1]?.id ?? null
 }
 
+/** Last question in a participant-specific order (e.g. random shuffle). */
+export function getLastQuestionIdInOrder(questions = []) {
+  if (!questions.length) return null
+  return questions[questions.length - 1]?.id ?? null
+}
+
+export function shuffleQuestionIds(ids = []) {
+  const arr = [...ids]
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+  }
+  return arr
+}
+
+export function applyParticipantQuestionOrder(questions = [], orderIds = []) {
+  if (!orderIds?.length || !questions?.length) return questions
+  const byId = new Map(questions.map((q) => [Number(q.id), q]))
+  const seen = new Set()
+  const ordered = []
+  for (const rawId of orderIds) {
+    const id = Number(rawId)
+    const question = byId.get(id)
+    if (!question || seen.has(id)) continue
+    ordered.push(question)
+    seen.add(id)
+  }
+  for (const question of questions) {
+    const id = Number(question.id)
+    if (!seen.has(id)) ordered.push(question)
+  }
+  return ordered
+}
+
+/** Keep a stable per-participant order from the API; append newly visible questions at the end. */
+export function ensureParticipantQuestionOrder(questions = [], existingOrder = []) {
+  const ids = questions.map((q) => Number(q.id)).filter((id) => Number.isFinite(id) && id > 0)
+  if (!ids.length) return []
+  if (!existingOrder?.length) return ids
+
+  const idSet = new Set(ids)
+  const validOrder = existingOrder.map(Number).filter((id) => idSet.has(id))
+  const missing = ids.filter((id) => !validOrder.includes(id))
+  if (missing.length === 0 && validOrder.length === ids.length) return validOrder
+  return [...validOrder, ...missing]
+}
+
 /**
  * Multi-nav: participant finalized by submitting the session's last question.
- * @param {Array} sessionQuestions All session questions (ordered by host)
+ * @param {Array} sessionQuestions All session questions (ordered by host or participant)
  * @param {Record<string, boolean>} explicitSubmittedIds
+ * @param {{ useParticipantOrder?: boolean }} [options]
  */
-export function isMultiNavLastQuestionFinalized(sessionQuestions = [], explicitSubmittedIds = {}) {
-  const lastId = getSessionLastQuestionId(sessionQuestions)
+export function isMultiNavLastQuestionFinalized(
+  sessionQuestions = [],
+  explicitSubmittedIds = {},
+  { useParticipantOrder = false } = {},
+) {
+  const lastId = useParticipantOrder
+    ? getLastQuestionIdInOrder(sessionQuestions)
+    : getSessionLastQuestionId(sessionQuestions)
   return lastId != null && Boolean(explicitSubmittedIds[String(lastId)])
 }
 

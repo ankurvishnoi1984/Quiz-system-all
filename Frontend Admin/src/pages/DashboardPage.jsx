@@ -427,6 +427,7 @@ function DashboardPage() {
         show_results_to_participants: true,
         leaderboard_enabled: values.overallLeaderboard,
         participant_navigation_enabled: values.enableNavigation,
+        random_question_order_enabled: values.enableNavigation && values.randomQuestionOrder,
         quiz_total_time_minutes:
           values.enableNavigation && values.quizTotalTimeEnabled
             ? Number(values.quizTotalTimeMinutes)
@@ -451,6 +452,7 @@ function DashboardPage() {
       departmentId: String(editSession.dept_id ?? ''),
       joinRequirement: joinType,
       enableNavigation: Boolean(editSession.participant_navigation_enabled),
+      randomQuestionOrder: Boolean(editSession.random_question_order_enabled),
       quizTotalTimeEnabled:
         editSession.quiz_total_time_minutes != null &&
         Number(editSession.quiz_total_time_minutes) > 0,
@@ -510,6 +512,7 @@ function DashboardPage() {
         scheduled_time: values.scheduledTime || null,
         show_results_to_participants: true,
         participant_navigation_enabled: values.enableNavigation,
+        random_question_order_enabled: values.enableNavigation && values.randomQuestionOrder,
         quiz_total_time_minutes:
           values.enableNavigation && values.quizTotalTimeEnabled
             ? Number(values.quizTotalTimeMinutes)

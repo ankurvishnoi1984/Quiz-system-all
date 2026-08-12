@@ -9,6 +9,7 @@ import { getPresentSlideApi, setPresentSlideApi } from '../../services/liveApi'
 import { transitionSessionApi } from '../../services/dashboardApi'
 import { lookupSessionByCodeApi } from '../../services/embedApi'
 import { useAuthStore } from '../../store/authStore'
+import { sessionRequiresActivateAllQuestions } from '../../utils/hostQuestionControls'
 import { isSessionQuizTotalTimeEnabled } from '../../utils/sessionFlags'
 import { sessionUsesQuestionSets } from '../../utils/livePresentation'
 
@@ -167,6 +168,10 @@ function EmbedControls({ sessionId }) {
   const canEditLive = isLive
   const singleActiveQuestionMode = session?.participant_navigation_enabled === false
   const sessionQuizTotalTimeEnabled = isSessionQuizTotalTimeEnabled(session)
+  const disableSingleActivation = useMemo(
+    () => sessionRequiresActivateAllQuestions(session, mappedQuestions, sessionUsesQuestionSets),
+    [session, mappedQuestions],
+  )
 
   const activeQuestion = useMemo(
     () => mappedQuestions.find((question) => question.isLive) || mappedQuestions[0] || null,
@@ -272,7 +277,7 @@ function EmbedControls({ sessionId }) {
             canEditLive={canEditLive}
             singleActiveQuestionMode={singleActiveQuestionMode}
             sessionQuizTotalTimeEnabled={sessionQuizTotalTimeEnabled}
-            disableSingleActivation={sessionUsesQuestionSets(mappedQuestions)}
+            disableSingleActivation={disableSingleActivation}
             size="compact"
             showLabel={false}
             questionLiveMutation={questionMutations.questionLiveMutation}

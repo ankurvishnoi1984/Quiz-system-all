@@ -9,7 +9,10 @@ const {
   Client,
   User
 } = require("../models");
-const { isSessionQuizTotalTimeEnabled } = require("../utils/sessionFlags");
+const {
+  isSessionQuizTotalTimeEnabled,
+  isSessionRandomQuestionOrderEnabled
+} = require("../utils/sessionFlags");
 const { validateCreateQuestionPayload } = require("../validators/question.validator");
 
 function isParticipantNavigationEnabled(session) {
@@ -574,6 +577,13 @@ async function setQuestionLiveState({ questionId, user, isLive }) {
     if (setQuestionCount > 0) {
       const error = new Error(
         "This session uses question sets. Use \"Activate all questions\" so every set goes live together."
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+    if (isSessionRandomQuestionOrderEnabled(session)) {
+      const error = new Error(
+        "This session uses random question order. Use \"Activate all questions\" so every participant receives the full set at once."
       );
       error.statusCode = 400;
       throw error;
