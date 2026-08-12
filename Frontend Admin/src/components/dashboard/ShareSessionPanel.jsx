@@ -1,0 +1,647 @@
+import { Check, Code2, Copy, Download, Hash, Link2, Monitor, QrCode } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import QRCode from 'qrcode'
+import { getPresentViewLinkApi, getSessionQrApi } from '../../services/dashboardApi'
+import {
+  buildEmbedControlsUrl,
+  buildEmbedIframeSnippet,
+  getSessionEmbedLinkApi,
+} from '../../services/embedApi'
+import { isIntegrationsEnabled } from '../../utils/integrations'
+import {
+  buildGenericJoinUrl,
+  buildSessionJoinUrl,
+  normalizeSessionCode,
+  resolveSessionJoinUrl,
+} from '../../utils/joinUrl'
+import { formatScheduledSessionForDisplay } from '../../utils/sessionSchedule'
+
+const INTEGRATIONS_ENABLED = isIntegrationsEnabled()
+
+const SHARE_TABS = [
+  { id: 'link', label: 'Link', icon: Link2 },
+  { id: 'qr', label: 'QR code', icon: QrCode },
+  { id: 'code', label: 'Session code', icon: Hash },
+]
+
+function dataUrlToBlob(dataUrl) {
+  const [header, base64] = dataUrl.split(',')
+  const mime = header.match(/:(.*?);/)?.[1] || 'image/png'
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return new Blob([bytes], { type: mime })
+}
+
+function downloadDataUrl(filename, dataUrl) {
+  const a = document.createElement('a')
+  a.href = dataUrl
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
+function qrDownloadFilename(sessionCode, sessionId) {
+  const slug = (sessionCode || `session-${sessionId || 'qr'}`).toLowerCase()
+  return `quiz-qr-${slug}.png`
+}
+
+function buildShareLinkText({ title, description, scheduledLabel, joinUrl }) {
+  const lines = ["You're invited to join a quiz session!", '', `Session: ${title}`]
+  if (scheduledLabel) lines.push(`Date and time: ${scheduledLabel}`)
+  if (description?.trim()) lines.push(`Description: ${description.trim()}`)
+  lines.push('', `Join link: ${joinUrl}`, '', 'Open the link to join directly — no code entry needed.')
+  return lines.join('\n')
+}
+
+function QrImageActions({ dataUrl, filename }) {
+  const [copied, setCopied] = useState(false)
+  const [copyError, setCopyError] = useState(false)
+
+  const actionClass =
+    'inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-blue-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50'
+
+  return (
+    <div className="mt-3 flex gap-2">
+      <button
+        type="button"
+        disabled={!dataUrl}
+        onClick={async () => {
+          if (!dataUrl) return
+          setCopyError(false)
+          try {
+            if (!navigator.clipboard?.write || typeof ClipboardItem === 'undefined') {
+              throw new Error('Clipboard API unavailable')
+            }
+            const blob = await dataUrlToBlob(dataUrl)
+            await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })])
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1500)
+          } catch {
+            setCopyError(true)
+            setTimeout(() => setCopyError(false), 2000)
+          }
+        }}
+        className={`${actionClass} ${
+          copied
+            ? 'border-green-300 bg-green-100 text-green-700'
+            : copyError
+              ? 'border-red-300 bg-red-50 text-red-700'
+              : ''
+        }`}
+      >
+        {copied ? 'Copied ✓' : copyError ? 'Copy failed' : 'Copy QR'}
+      </button>
+      <button
+        type="button"
+        disabled={!dataUrl}
+        onClick={() => {
+          if (!dataUrl) return
+          downloadDataUrl(filename, dataUrl)
+        }}
+        className={actionClass}
+      >
+        <Download className="size-4" />
+        Download
+      </button>
+    </div>
+  )
+}
+
+function useCopyToClipboard() {
+  const [copied, setCopied] = useState(false)
+
+  const copy = (value) => {
+    if (!value) return
+    navigator.clipboard.writeText(value)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
+  return { copied, copy }
+}
+
+function CopyButton({ value, disabled, className = '', label = 'Copy', copiedLabel = 'Copied ✓' }) {
+  const { copied, copy } = useCopyToClipboard()
+
+  return (
+    <button
+      type="button"
+      disabled={disabled || !value}
+      onClick={() => copy(value)}
+      className={`h-11 shrink-0 rounded-xl border px-4 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+        copied
+          ? 'scale-95 border-green-300 bg-green-100 text-green-700'
+          : 'border-blue-200 bg-white text-slate-700 hover:bg-blue-50'
+      } ${className}`}
+    >
+      {copied ? copiedLabel : label}
+    </button>
+  )
+}
+
+function CopyIconButton({
+  value,
+  disabled,
+  ariaLabel = 'Copy link',
+  showLabel = false,
+  attached = false,
+}) {
+  const { copied, copy } = useCopyToClipboard()
+
+  return (
+    <button
+      type="button"
+      disabled={disabled || !value}
+      aria-label={copied ? 'Copied' : ariaLabel}
+      title={copied ? 'Copied' : ariaLabel}
+      onClick={() => copy(value)}
+      className={`inline-flex shrink-0 items-center justify-center gap-1 transition disabled:cursor-not-allowed disabled:opacity-50 ${
+        attached
+          ? `h-11 border-l border-blue-200/70 px-3 text-xs font-semibold ${
+              copied
+                ? 'bg-green-50 text-green-700'
+                : 'bg-blue-50/50 text-navy-700 hover:bg-blue-50'
+            }`
+          : `h-9 w-9 rounded-lg border ${
+              copied
+                ? 'border-green-300 bg-green-100 text-green-700'
+                : 'border-blue-200 bg-white text-slate-600 hover:bg-blue-50'
+            }`
+      }`}
+    >
+      {copied ? <Check className="size-4 shrink-0" /> : <Copy className="size-4 shrink-0" />}
+      {showLabel ? <span>{copied ? 'Copied' : 'Copy link'}</span> : null}
+    </button>
+  )
+}
+
+function buildPresentViewShareText({ title, viewUrl }) {
+  return [
+    'Watch this live session display (view only):',
+    '',
+    `Session: ${title}`,
+    '',
+    `Display link: ${viewUrl}`,
+    '',
+    'Open on a projector, TV, or second screen. No login required.',
+  ].join('\n')
+}
+
+export default function ShareSessionPanel({
+  session,
+  accessToken,
+  sessionDbId,
+  showPresentViewShare = true,
+}) {
+  const [shareTab, setShareTab] = useState('link')
+  const [shareJoinUrl, setShareJoinUrl] = useState('')
+  const [qrDataUrl, setQrDataUrl] = useState('')
+  const [presentViewUrl, setPresentViewUrl] = useState('')
+  const [presentViewQrDataUrl, setPresentViewQrDataUrl] = useState('')
+  const [presentViewError, setPresentViewError] = useState('')
+  const [embedUrl, setEmbedUrl] = useState('')
+  const [embedError, setEmbedError] = useState('')
+  const [embedBusy, setEmbedBusy] = useState(false)
+
+  const resolvedSessionDbId = sessionDbId ?? session?.session_id ?? session?.id
+  const canSharePresentView = showPresentViewShare && session?.status !== 'archived'
+
+  const sessionCode = normalizeSessionCode(session?.session_code)
+  const genericJoinUrl = buildGenericJoinUrl()
+  const sessionDescription = session?.description || ''
+  const scheduledLabel = formatScheduledSessionForDisplay(
+    session?.scheduled_date,
+    session?.scheduled_time,
+  )
+
+  const shareLinkText = useMemo(
+    () =>
+      buildShareLinkText({
+        title: session?.title || 'Quiz session',
+        description: sessionDescription,
+        scheduledLabel,
+        joinUrl: shareJoinUrl,
+      }),
+    [session?.title, sessionDescription, scheduledLabel, shareJoinUrl],
+  )
+
+  const presentViewShareText = useMemo(
+    () =>
+      buildPresentViewShareText({
+        title: session?.title || 'Quiz session',
+        viewUrl: presentViewUrl,
+      }),
+    [session?.title, presentViewUrl],
+  )
+
+  const shareTabs = useMemo(() => {
+    const tabs = [...SHARE_TABS]
+    if (canSharePresentView) {
+      tabs.push({ id: 'display', label: 'View display', icon: Monitor })
+      if (INTEGRATIONS_ENABLED) {
+        tabs.push({ id: 'embed', label: 'Embed', icon: Code2 })
+      }
+    }
+    return tabs
+  }, [canSharePresentView])
+
+  const embedControlsUrl = useMemo(
+    () =>
+      INTEGRATIONS_ENABLED && resolvedSessionDbId
+        ? buildEmbedControlsUrl({ sessionId: resolvedSessionDbId })
+        : '',
+    [resolvedSessionDbId],
+  )
+  const embedSnippet = useMemo(
+    () => (INTEGRATIONS_ENABLED && embedUrl ? buildEmbedIframeSnippet(embedUrl) : ''),
+    [embedUrl],
+  )
+
+  const loadEmbedLink = useCallback(
+    async (action = 'get') => {
+      if (!INTEGRATIONS_ENABLED || !accessToken || !resolvedSessionDbId) return
+      setEmbedBusy(true)
+      setEmbedError('')
+      try {
+        const payload = await getSessionEmbedLinkApi(accessToken, resolvedSessionDbId, action)
+        setEmbedUrl(payload?.embed_url || '')
+      } catch (err) {
+        setEmbedUrl('')
+        setEmbedError(err?.message || 'Could not create an embed link')
+      } finally {
+        setEmbedBusy(false)
+      }
+    },
+    [accessToken, resolvedSessionDbId],
+  )
+
+  useEffect(() => {
+    if (!INTEGRATIONS_ENABLED) return
+    if (shareTab !== 'embed' || embedUrl || embedBusy || embedError) return
+    loadEmbedLink('get')
+  }, [shareTab, embedUrl, embedBusy, embedError, loadEmbedLink])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const resolve = async () => {
+      if (!session) {
+        setShareJoinUrl('')
+        setQrDataUrl('')
+        return
+      }
+
+      const code = sessionCode || String(session.id || '')
+      let link = buildSessionJoinUrl(code)
+      if (accessToken && resolvedSessionDbId) {
+        try {
+          const qrPayload = await getSessionQrApi(accessToken, resolvedSessionDbId)
+          link = resolveSessionJoinUrl(qrPayload?.join_url, code)
+        } catch {
+          // Use local join URL when QR endpoint fails.
+        }
+      }
+
+      if (cancelled) return
+      setShareJoinUrl(link)
+      const data = await QRCode.toDataURL(link, { margin: 1, width: 280 })
+      if (!cancelled) setQrDataUrl(data)
+    }
+
+    resolve()
+    return () => {
+      cancelled = true
+    }
+  }, [session, accessToken, resolvedSessionDbId, sessionCode])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const resolvePresentView = async () => {
+      if (!canSharePresentView || !accessToken || !resolvedSessionDbId) {
+        setPresentViewUrl('')
+        setPresentViewQrDataUrl('')
+        setPresentViewError('')
+        return
+      }
+
+      try {
+        const payload = await getPresentViewLinkApi(accessToken, resolvedSessionDbId)
+        const link = payload?.view_url || ''
+        if (cancelled) return
+        setPresentViewUrl(link)
+        setPresentViewError('')
+        if (link) {
+          const data = await QRCode.toDataURL(link, { margin: 1, width: 280 })
+          if (!cancelled) setPresentViewQrDataUrl(data)
+        } else {
+          setPresentViewQrDataUrl('')
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setPresentViewUrl('')
+          setPresentViewQrDataUrl('')
+          const message = err.message || 'Could not create display link'
+          setPresentViewError(
+            message === 'Route not found'
+              ? 'Display link is not available yet. Deploy the latest API, then try again.'
+              : message,
+          )
+        }
+      }
+    }
+
+    resolvePresentView()
+    return () => {
+      cancelled = true
+    }
+  }, [canSharePresentView, accessToken, resolvedSessionDbId])
+
+  if (!session) return null
+
+  return (
+    <div className="space-y-4">
+      {shareTab !== 'link' && (
+        <div className="rounded-2xl border border-blue-200/70 bg-white p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">Session</p>
+          <p className="mt-1 text-lg font-bold text-navy-900">{session.title}</p>
+          {scheduledLabel ? (
+            <p className="mt-1 text-sm text-slate-600">{scheduledLabel}</p>
+          ) : (
+            <p className="mt-1 text-sm text-slate-600">Share link for participants to join this session.</p>
+          )}
+        </div>
+      )}
+
+      <div className="inline-flex flex-wrap rounded-xl border border-blue-200/70 bg-white p-0.5 shadow-sm">
+        {shareTabs.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setShareTab(id)}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+              shareTab === id
+                ? 'bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 text-white shadow'
+                : 'text-slate-600 hover:bg-blue-50'
+            }`}
+          >
+            <Icon className="size-3.5" />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {shareTab === 'link' && (
+        <div className="space-y-3">
+          <label className="text-sm font-semibold text-slate-700">Share with participants</label>
+          <div className="space-y-3 rounded-2xl border border-blue-200/70 bg-white p-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">Session</p>
+              <p className="mt-1 text-base font-bold text-navy-900">{session.title}</p>
+            </div>
+            {scheduledLabel ? (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">Date and time</p>
+                <p className="mt-1 text-sm font-semibold text-navy-900">{scheduledLabel}</p>
+              </div>
+            ) : null}
+            {sessionDescription.trim() ? (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">Description</p>
+                <p className="mt-1 text-sm leading-relaxed text-slate-700">{sessionDescription.trim()}</p>
+              </div>
+            ) : null}
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">Join link</p>
+              <div className="mt-1 flex overflow-hidden rounded-xl border border-blue-200/70 bg-white">
+                <input
+                  readOnly
+                  value={shareJoinUrl || 'Generating link…'}
+                  className="h-11 min-w-0 flex-1 border-0 bg-transparent px-3 text-sm text-slate-700 outline-none"
+                  aria-label="Join link"
+                />
+                <CopyIconButton
+                  value={shareJoinUrl}
+                  disabled={!shareJoinUrl}
+                  attached
+                  showLabel
+                />
+              </div>
+            </div>
+          </div>
+          <CopyButton
+            value={shareLinkText}
+            disabled={!shareJoinUrl}
+            label="Copy all"
+            className="w-full"
+          />
+          <p className="text-xs text-slate-500">
+            Use Copy link on the field for the URL only, or Copy all for session details plus the join link.
+          </p>
+        </div>
+      )}
+
+      {shareTab === 'qr' && (
+        <div className="mx-auto max-w-[304px] rounded-2xl border border-blue-200/70 bg-white p-3">
+          {qrDataUrl ? (
+            <>
+              <img src={qrDataUrl} alt="Session QR" className="mx-auto h-[240px] w-[240px]" />
+              <QrImageActions
+                dataUrl={qrDataUrl}
+                filename={qrDownloadFilename(sessionCode, session.id)}
+              />
+            </>
+          ) : (
+            <div className="grid h-[240px] place-items-center text-sm text-slate-500">Generating QR...</div>
+          )}
+        </div>
+      )}
+
+      {shareTab === 'code' && (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700">Join page (no code in URL)</label>
+            <div className="flex gap-2">
+              <input
+                readOnly
+                value={genericJoinUrl}
+                className="h-11 flex-1 rounded-xl border border-blue-200/70 bg-white px-3 text-sm text-slate-700 outline-none"
+              />
+              <CopyButton value={genericJoinUrl} />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700">Session code</label>
+            <div className="flex gap-2">
+              <input
+                readOnly
+                value={sessionCode}
+                className="h-11 flex-1 rounded-xl border border-blue-200/70 bg-white px-3 font-mono text-sm font-semibold tracking-widest text-navy-900 outline-none"
+              />
+              <CopyButton value={sessionCode} disabled={!sessionCode} />
+            </div>
+          </div>
+          <p className="rounded-xl border border-sky-200 bg-sky-50/80 px-3 py-2 text-xs leading-relaxed text-slate-600">
+            Share the join page link and session code separately. Participants open the join page, enter the code,
+            then provide their name{session.join_type === 'name_email' ? ' and email' : ''} as required.
+          </p>
+        </div>
+      )}
+
+      {INTEGRATIONS_ENABLED && shareTab === 'embed' && (
+        <div className="space-y-3">
+          <label className="text-sm font-semibold text-slate-700">Embed in another app</label>
+          <p className="text-xs leading-relaxed text-slate-600">
+            Paste this link into PowerPoint, Microsoft Teams, Zoom, or Google Slides to show live
+            results inside your deck or meeting. Unlike the view display link, it does not expire
+            after a few hours — so a deck you build today still works next month.
+          </p>
+          {embedError ? (
+            <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {embedError}
+            </p>
+          ) : null}
+          <div className="space-y-3 rounded-2xl border border-blue-200/70 bg-white p-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">
+                Display link (read only)
+              </p>
+              <div className="mt-1 flex overflow-hidden rounded-xl border border-blue-200/70 bg-white">
+                <input
+                  readOnly
+                  value={embedUrl || (embedBusy ? 'Generating link…' : '')}
+                  className="h-11 min-w-0 flex-1 border-0 bg-transparent px-3 text-sm text-slate-700 outline-none"
+                  aria-label="Embed display link"
+                />
+                <CopyIconButton value={embedUrl} disabled={!embedUrl} attached showLabel />
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">
+                Host controls link
+              </p>
+              <div className="mt-1 flex overflow-hidden rounded-xl border border-blue-200/70 bg-white">
+                <input
+                  readOnly
+                  value={embedControlsUrl}
+                  className="h-11 min-w-0 flex-1 border-0 bg-transparent px-3 text-sm text-slate-700 outline-none"
+                  aria-label="Embed host controls link"
+                />
+                <CopyIconButton value={embedControlsUrl} disabled={!embedControlsUrl} attached showLabel />
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Opens a small control panel. You sign in inside the panel — apps keep their frames
+                separate from your browser tab.
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">
+                HTML snippet
+              </p>
+              <textarea
+                readOnly
+                rows={3}
+                value={embedSnippet}
+                className="mt-1 w-full resize-none rounded-xl border border-blue-200/70 bg-white px-3 py-2 font-mono text-[11px] leading-relaxed text-slate-700 outline-none"
+                aria-label="Embed iframe snippet"
+              />
+              <CopyButton
+                value={embedSnippet}
+                disabled={!embedSnippet}
+                label="Copy snippet"
+                className="mt-2 w-full"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={embedBusy}
+              onClick={() => loadEmbedLink('rotate')}
+              className="h-10 flex-1 rounded-xl border border-blue-200 bg-white text-sm font-semibold text-navy-800 transition hover:bg-blue-50 disabled:opacity-50"
+            >
+              Generate new link
+            </button>
+            <button
+              type="button"
+              disabled={embedBusy || !embedUrl}
+              onClick={() => loadEmbedLink('revoke')}
+              className="h-10 flex-1 rounded-xl border border-red-200 bg-red-50 text-sm font-semibold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+            >
+              Revoke all links
+            </button>
+          </div>
+          <p className="rounded-xl border border-sky-200 bg-sky-50/80 px-3 py-2 text-xs leading-relaxed text-slate-600">
+            Anyone with the display link can watch results, so treat it like a password. Generating a
+            new link immediately stops the old one from working.
+          </p>
+        </div>
+      )}
+
+      {shareTab === 'display' && (
+        <div className="space-y-3">
+          <label className="text-sm font-semibold text-slate-700">View-only display link</label>
+          <p className="text-xs leading-relaxed text-slate-600">
+            Share with co-hosts, moderators, or room displays. They can watch live results like Present
+            mode without host controls — before or during the session. No login required.
+          </p>
+          {presentViewError ? (
+            <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {presentViewError}
+            </p>
+          ) : null}
+          <div className="space-y-3 rounded-2xl border border-blue-200/70 bg-white p-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">Session</p>
+              <p className="mt-1 text-base font-bold text-navy-900">{session.title}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">Display link</p>
+              <div className="mt-1 flex overflow-hidden rounded-xl border border-blue-200/70 bg-white">
+                <input
+                  readOnly
+                  value={presentViewUrl || 'Generating link…'}
+                  className="h-11 min-w-0 flex-1 border-0 bg-transparent px-3 text-sm text-slate-700 outline-none"
+                  aria-label="View-only display link"
+                />
+                <CopyIconButton
+                  value={presentViewUrl}
+                  disabled={!presentViewUrl}
+                  attached
+                  showLabel
+                />
+              </div>
+            </div>
+          </div>
+          <CopyButton
+            value={presentViewShareText}
+            disabled={!presentViewUrl}
+            label="Copy all"
+            className="w-full"
+          />
+          <div className="mx-auto max-w-[304px] rounded-2xl border border-blue-200/70 bg-white p-3">
+            {presentViewQrDataUrl ? (
+              <>
+                <img
+                  src={presentViewQrDataUrl}
+                  alt="View display QR"
+                  className="mx-auto h-[240px] w-[240px]"
+                />
+                <QrImageActions
+                  dataUrl={presentViewQrDataUrl}
+                  filename={qrDownloadFilename(sessionCode, session.id).replace('quiz-qr', 'quiz-display')}
+                />
+              </>
+            ) : (
+              <div className="grid h-[240px] place-items-center text-sm text-slate-500">
+                {presentViewError ? 'QR unavailable' : 'Generating QR…'}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

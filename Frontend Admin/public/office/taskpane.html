@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Quiz host controls</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <script src="./embed-config.js"></script>
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+        background: #f8fafc;
+        color: #0f172a;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        padding: 12px 12px 8px;
+        border-bottom: 1px solid #dbeafe;
+        background: #fff;
+      }
+      h1 {
+        margin: 0;
+        font-size: 15px;
+      }
+      p.help {
+        margin: 6px 0 0;
+        font-size: 12px;
+        line-height: 1.5;
+        color: #475569;
+      }
+      main {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      #setup {
+        padding: 12px;
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      input {
+        width: 100%;
+        box-sizing: border-box;
+        height: 34px;
+        padding: 0 8px;
+        font-size: 13px;
+        border: 1px solid #bfdbfe;
+        border-radius: 6px;
+      }
+      button {
+        margin-top: 8px;
+        width: 100%;
+        height: 34px;
+        font-size: 13px;
+        font-weight: 600;
+        border-radius: 6px;
+        border: 0;
+        cursor: pointer;
+        background: #1e3a5f;
+        color: #fff;
+      }
+      button.secondary {
+        background: #fff;
+        color: #1e3a5f;
+        border: 1px solid #bfdbfe;
+      }
+      #error {
+        margin-top: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        color: #b91c1c;
+      }
+      #controls {
+        flex: 1;
+        min-height: 0;
+        border: 0;
+        width: 100%;
+      }
+      .hidden {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Quiz host controls</h1>
+      <p class="help" id="statusText">Connect a session to control it from inside PowerPoint.</p>
+    </header>
+
+    <main>
+      <section id="setup">
+        <label for="embedLink">Embed link</label>
+        <input
+          id="embedLink"
+          type="url"
+          placeholder="https://your-quiz-app/embed/display?session=…&token=…"
+          autocomplete="off"
+        />
+        <p class="help">
+          Copy it from your dashboard: open a session &rsaquo; Share &rsaquo; Embed &rsaquo; Display
+          link.
+        </p>
+        <button id="connect" type="button">Connect session</button>
+        <p id="error" class="hidden"></p>
+      </section>
+
+      <iframe
+        id="controls"
+        class="hidden"
+        title="Quiz host controls"
+        referrerpolicy="origin"
+      ></iframe>
+
+      <section id="connected" class="hidden" style="padding: 8px 12px 12px">
+        <button id="disconnect" type="button" class="secondary">Disconnect session</button>
+      </section>
+    </main>
+
+    <script>
+      Office.onReady(function () {
+        var setup = document.getElementById('setup')
+        var controls = document.getElementById('controls')
+        var connected = document.getElementById('connected')
+        var statusText = document.getElementById('statusText')
+        var error = document.getElementById('error')
+        var input = document.getElementById('embedLink')
+
+        function showError(message) {
+          error.textContent = message
+          error.classList.remove('hidden')
+        }
+
+        function render(config) {
+          error.classList.add('hidden')
+          if (!config) {
+            setup.classList.remove('hidden')
+            controls.classList.add('hidden')
+            connected.classList.add('hidden')
+            controls.removeAttribute('src')
+            statusText.textContent = 'Connect a session to control it from inside PowerPoint.'
+            return
+          }
+          setup.classList.add('hidden')
+          controls.classList.remove('hidden')
+          connected.classList.remove('hidden')
+          controls.src = QuizEmbed.buildControlsUrl(config)
+          statusText.textContent =
+            'Connected. Insert the "Quiz Live Results" add-in on a slide to show results.'
+        }
+
+        document.getElementById('connect').addEventListener('click', function () {
+          var parsed = QuizEmbed.parseEmbedLink(input.value)
+          if (!parsed) {
+            showError('That does not look like an embed link. Copy the full Display link.')
+            return
+          }
+          QuizEmbed.saveConfig(parsed, function (err) {
+            if (err) {
+              showError('Could not save to this presentation: ' + err.message)
+              return
+            }
+            render(parsed)
+          })
+        })
+
+        document.getElementById('disconnect').addEventListener('click', function () {
+          QuizEmbed.clearConfig(function () {
+            input.value = ''
+            render(null)
+          })
+        })
+
+        render(QuizEmbed.readConfig())
+      })
+    </script>
+  </body>
+</html>

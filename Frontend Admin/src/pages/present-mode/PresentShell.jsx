@@ -1,0 +1,204 @@
+import { Info, Trophy } from 'lucide-react'
+import { BrandLogoPair } from '../../components/branding/BrandLogoPair'
+// import { Info, MessageSquare, Trophy } from 'lucide-react' // MessageSquare was for Q&A tile
+
+export function PresentShell({ children, footer, embed = false }) {
+  return (
+    <div
+      className={`present-mode relative flex flex-col overflow-hidden bg-linear-to-br from-slate-50 via-blue-50/80 to-indigo-100/60 text-navy-900 ${
+        embed ? 'h-dvh' : 'min-h-dvh'
+      }`}
+    >
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.35]"
+        aria-hidden
+        style={{
+          backgroundImage:
+            'radial-gradient(circle at 20% 20%, rgba(27, 75, 107, 0.12) 0%, transparent 45%), radial-gradient(circle at 80% 80%, rgba(79, 70, 229, 0.08) 0%, transparent 40%)',
+        }}
+      />
+      <main
+        className={`relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden ${
+          embed
+            ? 'px-[clamp(0.5rem,2vw,1.25rem)] py-[clamp(0.5rem,2vh,1rem)]'
+            : 'px-[clamp(1rem,3vw,3rem)] py-[clamp(1rem,2.5vh,2rem)]'
+        }`}
+      >
+        {children}
+      </main>
+      {footer}
+    </div>
+  )
+}
+
+function PresentHeaderStatButton({
+  label,
+  count,
+  onClick,
+  ariaLabel,
+  icon: Icon = Info,
+  active = false,
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group cursor-pointer rounded-2xl border px-4 py-2.5 text-right shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60 ${
+        active
+          ? 'border-amber-300 bg-amber-50 hover:border-amber-400 hover:bg-amber-50 hover:shadow-md'
+          : 'border-blue-200/80 bg-white/90 hover:border-sky-300 hover:bg-white hover:shadow-md'
+      }`}
+      aria-label={ariaLabel}
+    >
+      <div className="flex items-center justify-end gap-2">
+        <Icon
+          className={`size-[clamp(0.9rem,1.6vw,1.1rem)] shrink-0 transition ${
+            active
+              ? 'text-amber-600 group-hover:text-amber-700'
+              : 'text-sky-600 group-hover:text-sky-700'
+          }`}
+          aria-hidden
+        />
+        <p
+          className={`text-[clamp(0.7rem,1.3vw,0.85rem)] font-semibold uppercase tracking-wider ${
+            active ? 'text-amber-800' : 'text-slate-500'
+          }`}
+        >
+          {label}
+        </p>
+      </div>
+      {count != null ? (
+        <p
+          className={`mt-1 text-[clamp(1.25rem,2.4vw,1.75rem)] font-bold tabular-nums ${
+            active ? 'text-amber-900' : 'text-navy-700'
+          }`}
+        >
+          {count}
+        </p>
+      ) : (
+        <p
+          className={`mt-1 text-[clamp(0.85rem,1.6vw,1rem)] font-semibold ${
+            active ? 'text-amber-800' : 'text-navy-700'
+          }`}
+        >
+          View
+        </p>
+      )}
+    </button>
+  )
+}
+
+function PresentLiveIndicator({ isSessionLive }) {
+  if (isSessionLive) {
+    return (
+      <span className="relative flex size-2.5 shrink-0" aria-hidden>
+        <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+        <span className="relative inline-flex size-2.5 rounded-full bg-emerald-500" />
+      </span>
+    )
+  }
+
+  return <span className="inline-flex size-2.5 shrink-0 rounded-full bg-slate-300" aria-hidden />
+}
+
+export function PresentSlideHeader({
+  sessionTitle,
+  sessionLogoUrl,
+  participantCount = 0,
+  // qaCount = 0, // Q&A feature disabled
+  isSessionLive = false,
+  onParticipantsClick,
+  onOverallRankingsClick,
+  overallRankingsActive = false,
+  // onQaClick, // Q&A feature disabled
+  readOnly = false,
+}) {
+  const modeLabel = readOnly ? 'View display' : 'Present mode'
+  const showParticipantsTile = Boolean(onParticipantsClick)
+  const showOverallRankingsTile = Boolean(onOverallRankingsClick)
+  // const showQaTile = Boolean(onQaClick) // Q&A feature disabled
+  const showStatTiles = showParticipantsTile || showOverallRankingsTile
+  // const showStatTiles = showParticipantsTile || showQaTile
+
+  return (
+    <header className="mb-[clamp(1rem,3vh,2rem)] flex shrink-0 flex-wrap items-end justify-between gap-4">
+      <div className="min-w-0 flex-1">
+        {/* <BrandLogoPair
+          variant="present"
+          sessionLogoUrl={sessionLogoUrl}
+          sessionTitle={sessionTitle}
+          className="mb-3"
+        /> */}
+        <div className="flex items-center gap-2">
+          <PresentLiveIndicator isSessionLive={isSessionLive} />
+          <p className="text-[clamp(0.65rem,1.2vw,0.8rem)] font-semibold uppercase tracking-[0.35em] text-navy-600/80">
+            {modeLabel}
+          </p>
+        </div>
+        <h1 className="mt-1 text-[clamp(1.1rem,2.5vw,1.75rem)] font-bold text-navy-900">{sessionTitle}</h1>
+      </div>
+
+      {showStatTiles ? (
+        <div className="flex flex-wrap items-stretch justify-end gap-2">
+          {/* Q&A feature disabled — re-enable when bringing Q&A back
+          {showQaTile ? (
+            <PresentHeaderStatButton
+              label="Q&A"
+              count={qaCount}
+              onClick={onQaClick}
+              icon={MessageSquare}
+              ariaLabel={`${qaCount} Q&A questions. View question list.`}
+            />
+          ) : null}
+          */}
+          {showOverallRankingsTile ? (
+            <PresentHeaderStatButton
+              label="Overall rankings"
+              onClick={onOverallRankingsClick}
+              icon={Trophy}
+              active={overallRankingsActive}
+              ariaLabel="View overall rankings for host only"
+            />
+          ) : null}
+          {showParticipantsTile ? (
+            <PresentHeaderStatButton
+              label="Participants"
+              count={participantCount}
+              onClick={onParticipantsClick}
+              icon={Info}
+              ariaLabel={`${participantCount} participants joined. View participant list.`}
+            />
+          ) : null}
+        </div>
+      ) : (
+        <div className="text-right">
+          <div className="flex items-center justify-end gap-2">
+            <PresentLiveIndicator isSessionLive={isSessionLive} />
+            <p className="text-[clamp(0.7rem,1.3vw,0.85rem)] font-semibold uppercase tracking-wider text-slate-500">
+              Participants
+            </p>
+          </div>
+          <p className="text-[clamp(1.25rem,2.4vw,1.75rem)] font-bold tabular-nums text-navy-700">
+            {participantCount}
+          </p>
+        </div>
+      )}
+    </header>
+  )
+}
+
+export function PresentNavButton({ direction, onClick, disabled, label }) {
+  const isPrev = direction === 'prev'
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      className="inline-flex min-h-[clamp(3rem,8vh,4.5rem)] min-w-[clamp(8rem,18vw,12rem)] items-center justify-center gap-2 rounded-2xl border border-blue-200/80 bg-white/90 px-6 text-[clamp(0.95rem,1.8vw,1.15rem)] font-semibold text-navy-800 shadow-lg shadow-navy-900/10 transition hover:border-navy-300 hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      {isPrev ? '←' : '→'}
+      <span>{label}</span>
+    </button>
+  )
+}

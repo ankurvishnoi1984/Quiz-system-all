@@ -1,0 +1,51 @@
+import { BrandLogoPair } from '../../../components/branding/BrandLogoPair'
+
+export function SessionHeader({
+  session,
+  joinedUser,
+  step,
+  onStepChange,
+  rankingsOnlyMode = false,
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200/70 bg-white p-4 shadow-sm">
+      <div className="min-w-0 flex-1">
+        <BrandLogoPair
+          variant="header"
+          sessionLogoUrl={session?.logo_url}
+          sessionTitle={session?.title || 'Session'}
+          className="mb-2"
+        />
+        <h1 className="text-xl font-bold text-navy-900">{session.title}</h1>
+        <p className="text-sm text-slate-600">
+          {joinedUser?.name
+            ? `${joinedUser.name}${!joinedUser.anonymous && joinedUser.email ? ` • ${joinedUser.email}` : ''}`
+            : joinedUser?.anonymous
+              ? 'Anonymous participant'
+              : ''}
+        </p>
+      </div>
+
+      {!rankingsOnlyMode ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onStepChange('active')}
+            className={`rounded-xl px-3 py-2 text-sm font-semibold ${step === 'active' ? 'bg-blue-100 text-blue-900' : 'border border-blue-200/70 bg-white text-slate-700'}`}
+          >
+            Questions
+          </button>
+          {/* Q&A feature disabled — re-enable when bringing Q&A back
+          <button
+            type="button"
+            onClick={() => onStepChange('qa')}
+            className={`rounded-xl px-3 py-2 text-sm font-semibold ${step === 'qa' ? 'bg-blue-100 text-blue-900' : 'border border-blue-200/70 bg-white text-slate-700'}`}
+          >
+            Q&amp;A
+          </button>
+          */}
+        </div>
+      ) : null}
+    </div>
+  )
+}

@@ -1,0 +1,141 @@
+import { BarChart3, Copy, LayoutList, Pencil, Rocket, RotateCcw, Share2, Trash2 } from 'lucide-react'
+import { useMemo } from 'react'
+import KebabMenu from '../ui/KebabMenu'
+
+function StatusBadge({ status }) {
+  const styles = {
+    Draft: 'bg-slate-100 text-slate-700 border-slate-200',
+    Live: 'bg-red-50 text-red-700 border-red-200 animate-pulse',
+    Completed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  }
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${styles[status] ?? styles.Draft}`}>
+      {status}
+    </span>
+  )
+}
+
+function Tag({ children }) {
+  return <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-semibold text-navy-700">{children}</span>
+}
+
+function ProgressPill({ value, isLive }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className="h-2 w-24 overflow-hidden rounded-full bg-slate-100">
+        <div 
+          className={`h-full bg-linear-to-r from-navy-600 to-navy-500 transition-all duration-500 ${isLive ? 'animate-pulse' : ''}`} 
+          style={{ width: `${Math.max(2, Math.min(100, value))}%` }} 
+        />
+      </div>
+      <span className="text-xs font-semibold text-slate-600">{value}%</span>
+    </div>
+  )
+}
+
+function SessionCard({ session, onAction }) {
+  const preview = useMemo(() => {
+    const labels = session.tags?.join(', ') || 'Quiz'
+    return `${labels} • ${session.participants} participants • Status: ${session.status}`
+  }, [session.participants, session.status, session.tags])
+
+  const isLive = session.status === 'Live'
+  const isCompleted = session.status === 'Completed'
+
+  const menuItems = useMemo(() => {
+    const items = [
+      {
+        id: 'edit-session',
+        label: 'Edit session',
+        icon: Pencil,
+        onClick: () => onAction('edit-session', session),
+      },
+      {
+        id: 'builder',
+        label: 'Question builder',
+        icon: LayoutList,
+        onClick: () => onAction('builder', session),
+      },
+      { id: 'analytics', label: 'Analytics', icon: BarChart3, onClick: () => onAction('analytics', session) },
+      { id: 'duplicate', label: 'Duplicate', icon: Copy, onClick: () => onAction('duplicate', session) },
+      {
+        id: 'reset-responses',
+        label: 'Reset responses',
+        icon: RotateCcw,
+        onClick: () => onAction('reset-responses', session),
+      },
+    ]
+    if (!isCompleted) {
+      items.unshift({
+        id: 'share',
+        label: 'Share',
+        icon: Share2,
+        onClick: () => onAction('share', session),
+      })
+    }
+    if (!isLive) {
+      items.push({
+        id: 'delete',
+        label: 'Delete',
+        icon: Trash2,
+        variant: 'danger',
+        onClick: () => onAction('delete', session),
+      })
+    }
+    return items
+  }, [isCompleted, onAction, session])
+
+  return (
+    <div
+      className="group relative z-0 overflow-visible rounded-2xl border border-blue-200/70 bg-white/90 p-4 shadow-sm shadow-blue-900/5 backdrop-blur transition hover:z-20 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-blue-900/10"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate text-base font-semibold text-navy-900">{session.title}</p>
+            <StatusBadge status={session.status} />
+            {isLive && (
+              <span className="flex items-center gap-1 rounded-full bg-red-50 px-2 py-1 text-[11px] font-semibold text-red-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+                Live
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-sm text-slate-600">Created: {session.date}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {(session.tags ?? []).map((tag) => (
+              <Tag key={tag}>{tag}</Tag>
+            ))}
+            <span className="ml-auto text-sm font-semibold text-slate-700">
+              {session.participants} participants
+            </span>
+          </div>
+          <div className="mt-3">
+            <ProgressPill value={session.progress ?? 0} isLive={isLive} />
+          </div>
+        </div>
+
+        <div className="flex flex-col items-end gap-2">
+          <button
+            type="button"
+            disabled={isCompleted}
+            title={isCompleted ? 'This session has ended' : undefined}
+            className="rounded-xl border border-blue-200/70 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() => onAction('launch', session)}
+          >
+            <Rocket className="mr-2 inline size-4" />
+            Launch
+          </button>
+
+          <KebabMenu items={menuItems} />
+        </div>
+      </div>
+
+      <div className="pointer-events-none absolute left-4 top-2 hidden max-w-[70%] rounded-xl border border-blue-200/70 bg-white/95 px-3 py-2 text-xs text-slate-700 shadow-lg shadow-blue-900/10 group-hover:block">
+        Quick preview: {preview}
+      </div>
+    </div>
+  )
+}
+
+export default SessionCard
