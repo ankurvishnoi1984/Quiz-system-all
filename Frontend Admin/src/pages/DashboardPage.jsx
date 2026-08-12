@@ -27,6 +27,7 @@ import { getPlanUsageApi } from '../services/managementApi'
 import { PlanUsageCard } from '../components/dashboard/PlanUsageCard'
 import { toDateInputValue, toTimeInputValue } from '../utils/sessionSchedule'
 import { buildDashboardStats, formatTrendLabel } from '../utils/dashboardMetrics'
+import { isWebsiteSignupHost } from '../utils/websiteSignupHost'
 
 const tabItems = ['All', 'Draft', 'Live', 'Completed']
 
@@ -52,6 +53,7 @@ function DashboardPage() {
   const canSelectDepartmentOnCreate = ['super_admin', 'client_admin', 'dept_admin'].includes(
     user?.role,
   )
+  const hideDepartmentForHost = isWebsiteSignupHost({ user, departments, departmentId })
   const debouncedSearch = useDebouncedValue(search, 250).trim().toLowerCase()
 
   const sessionsQuery = useQuery({
@@ -649,6 +651,7 @@ function DashboardPage() {
         departmentLabel={createDepartmentLabel}
         workspaceClientLabel={isSuperAdmin ? createClientLabel : ''}
         useWorkspaceDepartment={isSuperAdmin}
+        hideDepartment={hideDepartmentForHost}
         onClose={() => setCreateOpen(false)}
         onSubmit={handleCreate}
         isSubmitting={createMutation.isPending}
@@ -665,6 +668,7 @@ function DashboardPage() {
           initialValues={editSessionInitial ?? {}}
           liveSettingsOnly={editSessionLiveSettingsOnly}
           departmentLabel={editDepartmentLabel}
+          hideDepartment={hideDepartmentForHost}
           onClose={() => setEditSession(null)}
           onSubmit={handleUpdate}
           isSubmitting={updateMutation.isPending}

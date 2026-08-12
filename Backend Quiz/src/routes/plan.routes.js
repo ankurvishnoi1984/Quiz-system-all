@@ -5,6 +5,7 @@ const authorizeRoles = require("../middlewares/role.middleware");
 
 const router = express.Router();
 
+router.get("/public", planController.publicList);
 router.use(authMiddleware);
 
 router.get("/usage", planController.usage);

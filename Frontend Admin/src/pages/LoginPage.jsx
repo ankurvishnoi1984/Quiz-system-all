@@ -1,7 +1,8 @@
 import { Eye, EyeOff, LoaderCircle, Lock, User } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
+import { getWebsiteUrl } from '../utils/websiteUrl'
 
 function LoginPage() {
   const [identifier, setIdentifier] = useState('')
@@ -9,8 +10,20 @@ function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [signupSuccess, setSignupSuccess] = useState(false)
   const login = useAuthStore((state) => state.login)
   const loading = useAuthStore((state) => state.isLoading)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('signup') === 'success') {
+      setSignupSuccess(true)
+      const email = params.get('email')
+      if (email) {
+        setIdentifier(email)
+      }
+    }
+  }, [])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -51,6 +64,12 @@ function LoginPage() {
           {/* <h1 className="text-2xl font-bold text-navy-900 sm:text-3xl">Welcome back</h1> */}
           <p className="text-sm text-slate-600">Sign in to manage your quiz, poll, and survey sessions.</p>
         </div>
+
+        {signupSuccess ? (
+          <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            Account created successfully. Sign in with the email and password you registered.
+          </div>
+        ) : null}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
@@ -126,6 +145,13 @@ function LoginPage() {
           </button>
           {submitError ? <p className="text-sm text-red-600">{submitError}</p> : null}
         </form>
+
+        <p className="mt-6 text-center text-sm text-slate-600">
+          New here?{' '}
+          <a href={getWebsiteUrl('/pricing')} className="font-medium text-navy-800 hover:text-navy-950">
+            View plans & register
+          </a>
+        </p>
       </section>
     </main>
   )

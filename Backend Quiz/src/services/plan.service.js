@@ -28,6 +28,17 @@ async function listPlans() {
   return plans.map(toPlanPayload);
 }
 
+async function listPublicPlans() {
+  const plans = await Plan.findAll({
+    where: { is_active: true },
+    order: [
+      ["max_participants", "ASC"],
+      ["plan_id", "ASC"]
+    ]
+  });
+  return plans.map(toPlanPayload);
+}
+
 async function getPlanOrThrow(planId) {
   const plan = await Plan.findByPk(planId);
   if (!plan) {
@@ -256,6 +267,7 @@ module.exports = {
   ACCOUNT_PLAN_LIMIT_MESSAGE,
   toPlanPayload,
   listPlans,
+  listPublicPlans,
   getPlanOrThrow,
   createPlan,
   updatePlan,

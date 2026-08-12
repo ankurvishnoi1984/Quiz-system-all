@@ -1,5 +1,7 @@
 const bcrypt = require("bcryptjs");
-const { User } = require("../models");
+const { User, Plan } = require("../models");
+const { sequelize } = require("../config/database");
+const { getWebsiteSignupOrganization } = require("./websiteSignupOrg.service");
 const { sendPasswordResetEmail } = require("./email.service");
 const { generateTemporaryPassword } = require("../utils/password");
 const {
@@ -63,6 +65,59 @@ async function registerUser(input) {
   const payload = buildUserPayload(user);
   const tokens = buildAuthTokens(payload);
   return { user: payload, tokens };
+}
+
+async function signupUser(input) {
+  const email = input.email.toLowerCase().trim();
+  const existingUser = await User.findOne({ where: { email } });
+
+  if (existingUser) {
+    const error = new Error("Email already registered");
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const planId = Number(input.plan_id);
+  const plan = await Plan.findOne({
+    where: { plan_id: planId, is_active: true }
+  });
+
+  if (!plan) {
+    const error = new Error("Selected plan is not available");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const password_hash = await bcrypt.hash(input.password, 10);
+  const transaction = await sequelize.transaction();
+
+  try {
+    const { client, department } = await getWebsiteSignupOrganization({ transaction });
+
+    const user = await User.create(
+      {
+        full_name: input.full_name.trim(),
+        email,
+        password_hash,
+        role: "host",
+        client_id: client.client_id,
+        dept_id: department.dept_id,
+        plan_id: plan.plan_id,
+        must_change_password: false,
+        is_active: true
+      },
+      { transaction }
+    );
+
+    await transaction.commit();
+
+    const payload = buildUserPayload(user);
+    const tokens = buildAuthTokens(payload);
+    return { user: payload, tokens, plan: { plan_id: plan.plan_id, name: plan.name } };
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
 }
 
 async function loginUser(input) {
@@ -204,6 +259,7 @@ async function changePassword(userId, body = {}) {
 
 module.exports = {
   registerUser,
+  signupUser,
   loginUser,
   refreshAccessToken,
   requestPasswordReset,

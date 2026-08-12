@@ -66,9 +66,39 @@ function validateChangePasswordPayload(payload, { mustChangePassword = false } =
   return errors;
 }
 
+function validateSignupPayload(payload) {
+  const errors = [];
+
+  if (!payload?.full_name || typeof payload.full_name !== "string" || !payload.full_name.trim()) {
+    errors.push("full_name is required");
+  }
+
+  if (!payload?.email || typeof payload.email !== "string" || !payload.email.trim()) {
+    errors.push("email is required");
+  }
+
+  if (!payload?.password || typeof payload.password !== "string") {
+    errors.push("password is required");
+  } else if (payload.password.length < 8) {
+    errors.push("password must be at least 8 characters");
+  }
+
+  const planId = Number(payload?.plan_id);
+  if (!payload?.plan_id || Number.isNaN(planId) || planId < 1) {
+    errors.push("plan_id is required");
+  }
+
+  if (payload?.company_name != null && typeof payload.company_name !== "string") {
+    errors.push("company_name must be a string");
+  }
+
+  return errors;
+}
+
 module.exports = {
   validateRegisterPayload,
   validateLoginPayload,
   validateForgotPasswordPayload,
-  validateChangePasswordPayload
+  validateChangePasswordPayload,
+  validateSignupPayload
 };

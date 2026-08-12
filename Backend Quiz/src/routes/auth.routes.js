@@ -1,10 +1,12 @@
 const express = require("express");
 const authController = require("../controllers/auth.controller");
 const authMiddleware = require("../middlewares/auth.middleware");
+const authorizeRoles = require("../middlewares/role.middleware");
 
 const router = express.Router();
 
-router.post("/register", authController.register);
+router.post("/signup", authController.signup);
+router.post("/register", authMiddleware, authorizeRoles("super_admin"), authController.register);
 router.post("/login", authController.login);
 router.post("/refresh", authController.refresh);
 router.post("/forgot-password", authController.forgotPassword);

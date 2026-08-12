@@ -5,6 +5,7 @@ import { useShell } from '../../context/ShellContext'
 import { useAuthStore } from '../../store/authStore'
 import { canSwitchShellDepartment } from '../../utils/adminRoles'
 import { isShellFilterDisabled } from '../../utils/shellFilterPaths'
+import { isWebsiteSignupHost } from '../../utils/websiteSignupHost'
 
 const pageTitles = {
   '/dashboard': 'Admin Dashboard',
@@ -31,6 +32,7 @@ function Navbar() {
   const logout = useAuthStore((state) => state.logout)
   const shellFiltersDisabled = isShellFilterDisabled(pathname)
   const canSwitchDepartment = canSwitchShellDepartment(user?.role)
+  const hideDepartment = isWebsiteSignupHost({ user, departments, departmentId })
   const departmentLabel =
     departments.find((d) => String(d.dept_id) === String(departmentId))?.name ||
     department ||
@@ -98,7 +100,7 @@ function Navbar() {
                 </select>
               </label>
             ) : null}
-            {!departmentsLoading && (departments.length > 0 || departmentLabel) ? (
+            {!hideDepartment && !departmentsLoading && (departments.length > 0 || departmentLabel) ? (
               canSwitchDepartment ? (
                 <label htmlFor="shell-filter-department" className="flex items-center gap-2">
                   <span className="text-sm font-medium text-slate-500">Department:</span>

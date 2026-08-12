@@ -1,5 +1,6 @@
 const {
   registerUser,
+  signupUser,
   loginUser,
   refreshAccessToken,
   requestPasswordReset,
@@ -8,7 +9,8 @@ const {
 const {
   validateLoginPayload,
   validateRegisterPayload,
-  validateForgotPasswordPayload
+  validateForgotPasswordPayload,
+  validateSignupPayload
 } = require("../validators/auth.validator");
 const { successResponse, errorResponse } = require("../utils/response");
 
@@ -21,6 +23,20 @@ async function register(req, res) {
 
     const result = await registerUser(req.body);
     return successResponse(res, result, "User registered successfully", 201);
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
+async function signup(req, res) {
+  try {
+    const errors = validateSignupPayload(req.body);
+    if (errors.length > 0) {
+      return errorResponse(res, "Validation failed", 400, errors);
+    }
+
+    const result = await signupUser(req.body);
+    return successResponse(res, result, "Account created successfully", 201);
   } catch (err) {
     return errorResponse(res, err.message, err.statusCode || 500);
   }
@@ -84,6 +100,7 @@ async function changePasswordHandler(req, res) {
 
 module.exports = {
   register,
+  signup,
   login,
   me,
   refresh,

@@ -221,6 +221,7 @@ function App() {
             />
           </Route>
 
+          <Route path="/" element={<Navigate to={user ? postLoginPath : '/login'} replace />} />
           <Route path="*" element={<Navigate to={user ? postLoginPath : '/login'} replace />} />
         </Routes>
       </BrowserRouter>

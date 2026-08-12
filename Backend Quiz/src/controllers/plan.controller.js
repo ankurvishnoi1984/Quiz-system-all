@@ -1,6 +1,7 @@
 const { successResponse, errorResponse } = require("../utils/response");
 const {
   listPlans,
+  listPublicPlans,
   createPlan,
   updatePlan,
   getCurrentUserPlanUsage
@@ -9,6 +10,15 @@ const {
   validateCreatePlanPayload,
   validateUpdatePlanPayload
 } = require("../validators/plan.validator");
+
+async function publicList(req, res) {
+  try {
+    const plans = await listPublicPlans();
+    return successResponse(res, { plans }, "Plans fetched", 200);
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
 
 async function list(req, res) {
   try {
@@ -62,6 +72,7 @@ async function usage(req, res) {
 }
 
 module.exports = {
+  publicList,
   list,
   create,
   update,

@@ -42,6 +42,7 @@ function SessionFormModal({
   departmentLabel = '',
   workspaceClientLabel = '',
   useWorkspaceDepartment = false,
+  hideDepartment = false,
   onClose,
   onSubmit,
   isSubmitting = false,
@@ -195,7 +196,7 @@ function SessionFormModal({
           </div>
           {!liveSettingsOnly ? (
             <>
-              {mode === 'create' && useWorkspaceDepartment ? (
+              {mode === 'create' && useWorkspaceDepartment && !hideDepartment ? (
                 <div className="md:col-span-2 grid gap-4 md:grid-cols-2">
                   {workspaceClientLabel ? (
                     <div>
@@ -215,7 +216,7 @@ function SessionFormModal({
                   </div>
                 </div>
               ) : null}
-              {mode === 'create' && allowDepartmentSelection && !useWorkspaceDepartment ? (
+              {mode === 'create' && allowDepartmentSelection && !useWorkspaceDepartment && !hideDepartment ? (
                 <div className="md:col-span-2">
                   <label className="text-sm font-semibold text-slate-700">Department</label>
                   <select
@@ -317,7 +318,7 @@ function SessionFormModal({
               ) : null}
             </>
           ) : null}
-          {mode === 'edit' ? (
+          {mode === 'edit' && !hideDepartment ? (
             <div className={liveSettingsOnly ? 'md:col-span-2' : ''}>
               <label className="text-sm font-semibold text-slate-700">Department</label>
               <p className="mt-1 flex h-11 items-center rounded-xl border border-blue-200/70 bg-slate-50 px-3 text-sm text-slate-700">
