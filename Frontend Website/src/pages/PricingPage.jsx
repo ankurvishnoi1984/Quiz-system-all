@@ -2,7 +2,7 @@ import { Check, LoaderCircle } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { fetchPublicPlansApi } from '../services/publicApi'
-import { getPlanDisplayPrice, COMPARISON_ROWS } from '../constants/siteContent'
+import { getPlanDisplayPrice, COMPARISON_ROWS, formatPlanParticipantLimit } from '../constants/siteContent'
 import CTASection from '../components/marketing/CTASection'
 import { getAdminPortalUrl } from '../utils/adminPortal'
 
@@ -23,8 +23,9 @@ function PricingPage() {
             <p className="eyebrow">Pricing</p>
             <h1 className="section-heading mt-3">Transparent plans for every event size</h1>
             <p className="section-subheading">
-              Participant limits apply across all sessions on your host account. Select a plan, register, and
-              access the admin portal immediately. Online payments will be enabled in a future release.
+              Plans limit how many participants can be connected at the same time while your sessions are live.
+              Select a plan, register, and access the host portal immediately. Online payments will be enabled in a
+              future release.
             </p>
           </div>
         </div>
@@ -62,7 +63,9 @@ function PricingPage() {
 
                   <div className="mb-6">
                     <h2 className="text-xl font-bold text-navy-950">{plan.name}</h2>
-                    <p className="mt-2 min-h-12 text-sm text-slate-600">{plan.description}</p>
+                    <p className="mt-2 min-h-12 text-sm text-slate-600">
+                      {formatPlanParticipantLimit(plan.max_participants)}
+                    </p>
                   </div>
 
                   <div className="mb-6">
@@ -76,7 +79,7 @@ function PricingPage() {
                   <ul className="mb-8 flex-1 space-y-3 text-sm text-slate-700">
                     <li className="flex items-start gap-2">
                       <Check className="mt-0.5 size-4 shrink-0 text-navy-700" />
-                      Up to {plan.max_participants.toLocaleString()} participants total
+                      {formatPlanParticipantLimit(plan.max_participants)}
                     </li>
                     <li className="flex items-start gap-2">
                       <Check className="mt-0.5 size-4 shrink-0 text-navy-700" />
@@ -153,7 +156,7 @@ function PricingPage() {
 
       <CTASection
         title="Need help choosing a plan?"
-        description="Start with the participant count you expect across your busiest month. You can request extra seats from your administrator later."
+        description="Estimate the largest number of people who will be connected at the same time during your live events. You can request extra concurrent seats from your administrator later."
         primaryLabel="Create account"
         primaryTo="/register"
         secondaryLabel="Contact via About page"

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { fetchPublicPlansApi, signupApi } from '../services/publicApi'
-import { getPlanDisplayPrice } from '../constants/siteContent'
+import { getPlanDisplayPrice, formatPlanParticipantLimitShort, formatPlanParticipantLimit } from '../constants/siteContent'
 import { getAdminPortalUrl, redirectToAdminLoginAfterSignup } from '../utils/adminPortal'
 import {
   hasValidationErrors,
@@ -285,7 +285,7 @@ function RegisterPage() {
                       const planPrice = getPlanDisplayPrice(plan.name)
                       return (
                         <option key={plan.plan_id} value={plan.plan_id}>
-                          {plan.name} — {plan.max_participants} participants ({planPrice.label}
+                          {plan.name} — {formatPlanParticipantLimitShort(plan.max_participants)} ({planPrice.label}
                           {planPrice.period})
                         </option>
                       )
@@ -319,12 +319,17 @@ function RegisterPage() {
                 {selectedPlan ? (
                   <>
                     <p className="mt-2 text-lg font-bold text-navy-950">{selectedPlan.name}</p>
-                    <p className="text-sm text-slate-600">{selectedPlan.description}</p>
+                    <p className="text-sm text-slate-600">
+                      {formatPlanParticipantLimit(selectedPlan.max_participants)}
+                    </p>
                     <p className="mt-3 text-2xl font-bold text-navy-900">
                       {price?.label}
                       <span className="text-base font-medium text-slate-500">{price?.period}</span>
                     </p>
-                    <p className="mt-1 text-xs text-slate-500">Payment skipped — plan activated on signup</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {formatPlanParticipantLimitShort(selectedPlan.max_participants)} while connected live ·
+                      Payment skipped for now
+                    </p>
                   </>
                 ) : null}
               </div>
@@ -332,7 +337,7 @@ function RegisterPage() {
               <ul className="space-y-2 text-sm text-slate-700">
                 <li className="flex items-center gap-2">
                   <Check className="size-4 text-navy-700" />
-                  Organization and host workspace created automatically
+                  Concurrent participant limit applied to your account
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="size-4 text-navy-700" />

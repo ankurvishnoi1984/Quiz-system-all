@@ -38,7 +38,7 @@ const detailSections = [
       'Attendees join from any device without installing software. Collect names when needed or allow anonymous participation.',
       'Waiting screens, progress indicators, and clear messaging keep large groups aligned during transitions.',
     ],
-    bullets: ['Mobile-friendly join', 'Session codes', 'Plan-based capacity limits'],
+    bullets: ['Mobile-friendly join', 'Shared plan capacity across sessions', 'Disconnect frees join slots'],
   },
   {
     icon: BarChart3,
@@ -156,7 +156,7 @@ function FeaturesPage() {
       <FAQSection title="Feature questions" />
       <CTASection
         title="See pricing for your audience size"
-        description="Plans are based on total participants across your account. Pick the tier that fits and register in minutes."
+        description="Plans limit concurrent live connections on your account. Pick the tier that fits your peak audience and register in minutes."
         primaryLabel="Compare plans"
         primaryTo="/pricing"
         secondaryLabel="Back to home"

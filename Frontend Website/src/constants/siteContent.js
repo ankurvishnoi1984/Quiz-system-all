@@ -18,8 +18,21 @@ export function getPlanDisplayPrice(planName) {
   )
 }
 
+/** Human-readable concurrent participant cap from plan max_participants. */
+export function formatPlanParticipantLimit(maxParticipants) {
+  const count = Number(maxParticipants)
+  if (!Number.isFinite(count) || count <= 0) return 'Custom participant limit'
+  return `${count.toLocaleString()} participants connected at the same time`
+}
+
+export function formatPlanParticipantLimitShort(maxParticipants) {
+  const count = Number(maxParticipants)
+  if (!Number.isFinite(count) || count <= 0) return 'Custom limit'
+  return `${count.toLocaleString()} at a time`
+}
+
 export const HERO_STATS = [
-  { value: '10K+', label: 'Participants supported per event' },
+  { value: 'Live', label: 'Concurrent participant limits' },
   { value: 'Real-time', label: 'Live results & leaderboards' },
   { value: '5 min', label: 'Average setup time' },
   { value: '99.9%', label: 'Platform uptime target' },
@@ -57,10 +70,10 @@ export const CORE_FEATURES = [
     highlights: ['Session summaries', 'Department analytics', 'Downloadable reports'],
   },
   {
-    title: 'Flexible participant limits',
+    title: 'Concurrent participant limits',
     description:
-      'Plans scale by total participants across all sessions on your account — ideal for teams that run multiple events throughout the year.',
-    highlights: ['Plan-based caps', 'Extra seat add-ons', 'Usage dashboard'],
+      'Your plan sets how many participants can be connected at the same time across your live sessions. When someone leaves, that slot opens for a new joiner.',
+    highlights: ['Live connection counting', 'Extra seat add-ons', 'Usage dashboard in host portal'],
   },
 ]
 
@@ -91,7 +104,7 @@ export const HOW_IT_WORKS = [
   {
     step: '01',
     title: 'Choose your plan',
-    description: 'Pick a participant limit that matches your audience size. Upgrade anytime as your events grow.',
+    description: 'Pick how many participants can be connected at once during your live events. Upgrade when your audience grows.',
   },
   {
     step: '02',
@@ -114,6 +127,7 @@ export const TRUST_POINTS = [
   'Role-based host portal with secure authentication',
   'Participant join links work on any modern browser',
   'Designed for in-room, hybrid, and fully remote audiences',
+  'Plans limit concurrent live connections — capacity frees up when participants disconnect',
   'Payment gateway integration coming soon — plans activate on signup today',
 ]
 
@@ -121,7 +135,12 @@ export const FAQ_ITEMS = [
   {
     question: 'How does participant limiting work?',
     answer:
-      'Your plan sets a maximum number of participants across all active sessions on your account, not per individual session. You can monitor usage from the My Plan page in the host portal.',
+      'Your plan limits how many participants can have an active live connection at the same time across all of your sessions — for example, a 50-participant plan means up to 50 people can be connected at once. When a participant closes their browser or disconnects, that slot becomes available again. Track connected vs remaining capacity on the My Plan page in the host portal.',
+  },
+  {
+    question: 'Can I run multiple sessions at once?',
+    answer:
+      'Yes. Your plan allowance is shared across all live sessions on your account. If you run two sessions simultaneously, both draw from the same concurrent participant pool until people disconnect.',
   },
   {
     question: 'Do participants need to install an app?',
@@ -146,7 +165,7 @@ export const FAQ_ITEMS = [
   {
     question: 'Can super admins manage plans and users?',
     answer:
-      'Yes. Platform administrators can create plans, assign them to users, grant extra participant seats, and activate or deactivate accounts from the admin portal.',
+      'Yes. Platform administrators can create plans, assign them to users, grant extra concurrent participant seats, and activate or deactivate accounts from the admin portal.',
   },
 ]
 

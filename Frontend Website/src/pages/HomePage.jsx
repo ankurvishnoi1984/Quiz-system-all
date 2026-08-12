@@ -18,8 +18,8 @@ function HomePage() {
                 Turn every meeting into an interactive experience
               </h1>
               <p className="max-w-xl text-lg leading-relaxed text-slate-600">
-                Run live quizzes, polls, and surveys with a powerful host portal to build sessions,
-                present on stage, and measure results.
+                Run live quizzes, polls, and surveys with a powerful host portal. Plans scale by how many
+                participants can be connected at the same time during your live events.
               </p>
             </div>
 
