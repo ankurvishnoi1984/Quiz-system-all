@@ -78,14 +78,23 @@ async function tableExists(connection, table) {
       await connection.query(`
         INSERT INTO plans (name, description, max_participants, is_active)
         VALUES
-          ('Starter', 'Up to 50 participants across all sessions', 50, 1),
-          ('Standard', 'Up to 100 participants across all sessions', 100, 1),
-          ('Professional', 'Up to 500 participants across all sessions', 500, 1),
-          ('Enterprise', 'Up to 2000 participants across all sessions', 2000, 1)
+          ('Starter', 'Up to 50 live participants across active sessions', 50, 1),
+          ('Standard', 'Up to 100 live participants across active sessions', 100, 1),
+          ('Professional', 'Up to 500 live participants across active sessions', 500, 1),
+          ('Enterprise', 'Up to 2000 live participants across active sessions', 2000, 1)
       `);
       console.log("seeded default plans");
     } else {
       console.log("plans already seeded");
+    }
+
+    const [renamed] = await connection.query(`
+      UPDATE plans
+      SET description = REPLACE(description, 'participants across all sessions', 'live participants across active sessions')
+      WHERE description LIKE '%participants across all sessions%'
+    `);
+    if (renamed.affectedRows) {
+      console.log(`updated ${renamed.affectedRows} plan description(s) to live-participant wording`);
     }
   } finally {
     await connection.end();

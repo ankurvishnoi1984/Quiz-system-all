@@ -1,11 +1,17 @@
 const { Op } = require("sequelize");
-const { sequelize } = require("../config/database");
-const { Plan, User, Session, Participant } = require("../models");
+const { Plan, User, Session } = require("../models");
 const { sendParticipantLimitExceededEmail } = require("./email.service");
+const {
+  countLiveParticipantConnectionsForSessionCodes,
+  countLiveParticipantConnectionsBySessionCodeMap
+} = require("./websocket.service");
 
 const ACCOUNT_PLAN_LIMIT_MESSAGE =
   "Participant limit exceeded for this session. Please contact the session host.";
 const PLAN_LIMIT_EMAIL_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+// Plan limits apply to live WebSocket connections (role=participant), not
+// historical participant rows. Closing a tab frees capacity immediately.
 
 function toPlanPayload(plan) {
   if (!plan) return null;
@@ -95,16 +101,15 @@ async function updatePlan({ planId, input }) {
 async function countParticipantsForHost(hostId) {
   if (!hostId) return 0;
 
-  return Participant.count({
-    include: [
-      {
-        model: Session,
-        required: true,
-        attributes: [],
-        where: { host_id: hostId }
-      }
-    ]
+  const sessions = await Session.findAll({
+    where: { host_id: hostId },
+    attributes: ["session_code"],
+    raw: true
   });
+
+  return countLiveParticipantConnectionsForSessionCodes(
+    sessions.map((session) => session.session_code)
+  );
 }
 
 async function countParticipantsByHostIds(hostIds) {
@@ -112,17 +117,19 @@ async function countParticipantsByHostIds(hostIds) {
   const usage = new Map(ids.map((id) => [id, 0]));
   if (!ids.length) return usage;
 
-  const [rows] = await sequelize.query(
-    `SELECT s.host_id AS host_id, COUNT(p.participant_id) AS used
-     FROM participants p
-     INNER JOIN sessions s ON s.session_id = p.session_id
-     WHERE p.deleted_at IS NULL AND s.host_id IN (:ids)
-     GROUP BY s.host_id`,
-    { replacements: { ids } }
-  );
+  const sessions = await Session.findAll({
+    where: { host_id: { [Op.in]: ids } },
+    attributes: ["session_code", "host_id"],
+    raw: true
+  });
 
-  for (const row of rows) {
-    usage.set(Number(row.host_id), Number(row.used) || 0);
+  const sessionCodeToHostId = new Map(
+    sessions.map((session) => [session.session_code, Number(session.host_id)])
+  );
+  const liveByHost = countLiveParticipantConnectionsBySessionCodeMap(sessionCodeToHostId);
+
+  for (const id of ids) {
+    usage.set(id, liveByHost.get(id) || 0);
   }
 
   return usage;

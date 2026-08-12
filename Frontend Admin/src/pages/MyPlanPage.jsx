@@ -19,7 +19,7 @@ function MyPlanPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-navy-700">Account</p>
         <h2 className="mt-1 text-2xl font-bold text-navy-900">My Plan</h2>
         <p className="mt-1 text-sm text-slate-600">
-          See your current plan, how many participants you have used, and how many joins remain.
+          See your current plan, how many participants are connected right now, and how many join slots remain.
         </p>
       </div>
 
@@ -61,7 +61,7 @@ function MyPlanPage() {
             <dd className="mt-1 text-sm font-semibold text-navy-900">
               {usageQuery.data?.unrestricted
                 ? 'No account-wide participant cap'
-                : `${Number(usageQuery.data?.limit || 0).toLocaleString()} participants across all sessions`}
+                : `${Number(usageQuery.data?.limit || 0).toLocaleString()} connected participants at the same time`}
             </dd>
           </div>
           <div className="bg-white px-4 py-3">

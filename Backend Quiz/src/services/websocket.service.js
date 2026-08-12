@@ -534,6 +534,62 @@ function getConnectionCount(sessionCode) {
   return count;
 }
 
+const WS_OPEN = 1;
+
+function parseConnectionBucketKey(bucketKey) {
+  const colonIndex = bucketKey.indexOf(":");
+  if (colonIndex === -1) {
+    return { sessionCode: bucketKey, role: "unknown" };
+  }
+  return {
+    sessionCode: bucketKey.slice(0, colonIndex),
+    role: bucketKey.slice(colonIndex + 1) || "unknown"
+  };
+}
+
+function countOpenConnectionsInSet(connSet, { authenticatedParticipantsOnly = false } = {}) {
+  let count = 0;
+  for (const ws of connSet) {
+    if (ws.readyState !== WS_OPEN) continue;
+    if (authenticatedParticipantsOnly && !ws.user?.participant_id) continue;
+    count += 1;
+  }
+  return count;
+}
+
+function countLiveParticipantConnectionsForSessionCodes(sessionCodes) {
+  const codeSet = new Set((sessionCodes || []).filter(Boolean));
+  if (!codeSet.size) return 0;
+
+  let count = 0;
+  for (const [bucketKey, connSet] of activeConnections.entries()) {
+    const { sessionCode, role } = parseConnectionBucketKey(bucketKey);
+    if (role !== "participant" || !codeSet.has(sessionCode)) continue;
+    count += countOpenConnectionsInSet(connSet, { authenticatedParticipantsOnly: true });
+  }
+  return count;
+}
+
+function countLiveParticipantConnectionsBySessionCodeMap(sessionCodeToHostId) {
+  const usage = new Map();
+  if (!sessionCodeToHostId?.size) return usage;
+
+  for (const [bucketKey, connSet] of activeConnections.entries()) {
+    const { sessionCode, role } = parseConnectionBucketKey(bucketKey);
+    if (role !== "participant") continue;
+
+    const hostId = sessionCodeToHostId.get(sessionCode);
+    if (hostId == null) continue;
+
+    const openCount = countOpenConnectionsInSet(connSet, { authenticatedParticipantsOnly: true });
+    if (!openCount) continue;
+
+    usage.set(hostId, (usage.get(hostId) || 0) + openCount);
+  }
+
+  return usage;
+}
+
 module.exports = {
   setupWebSocketServer,
   send,
@@ -556,5 +612,7 @@ module.exports = {
   getLiveResults,
   getSessionProgress,
   getConnectionCount,
+  countLiveParticipantConnectionsForSessionCodes,
+  countLiveParticipantConnectionsBySessionCodeMap,
   activeConnections
 };
