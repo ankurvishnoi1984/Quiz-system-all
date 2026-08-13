@@ -1,5 +1,6 @@
 export const SITE_NAME = 'High Voltage'
 
+/** @deprecated Prefer getPlanDisplayPrice(plan) with API plan objects that include price_monthly. */
 export const PLAN_DISPLAY_PRICES = {
   Starter: { monthly: 999, currency: 'INR', label: '₹999', period: '/month' },
   Standard: { monthly: 2499, currency: 'INR', label: '₹2,499', period: '/month' },
@@ -7,9 +8,49 @@ export const PLAN_DISPLAY_PRICES = {
   Enterprise: { monthly: 14999, currency: 'INR', label: '₹14,999', period: '/month' },
 }
 
-export function getPlanDisplayPrice(planName) {
+function formatCurrencyLabel(amount, currency = 'INR') {
+  const value = Number(amount)
+  if (!Number.isFinite(value) || value < 0) return null
+  const code = String(currency || 'INR').toUpperCase()
+  try {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: code,
+      maximumFractionDigits: 0,
+    }).format(value)
+  } catch {
+    return `${code} ${value.toLocaleString('en-IN')}`
+  }
+}
+
+/**
+ * Resolve display price from a DB plan object (preferred) or legacy plan name string.
+ */
+export function getPlanDisplayPrice(planOrName) {
+  if (planOrName && typeof planOrName === 'object') {
+    const monthly =
+      planOrName.price_monthly != null && planOrName.price_monthly !== ''
+        ? Number(planOrName.price_monthly)
+        : null
+    const currency = planOrName.currency || 'INR'
+    if (Number.isFinite(monthly) && monthly >= 0) {
+      return {
+        monthly,
+        currency,
+        label: planOrName.price_label || formatCurrencyLabel(monthly, currency) || 'Custom',
+        period: '/month',
+      }
+    }
+    return {
+      monthly: null,
+      currency,
+      label: 'Custom',
+      period: '',
+    }
+  }
+
   return (
-    PLAN_DISPLAY_PRICES[planName] || {
+    PLAN_DISPLAY_PRICES[planOrName] || {
       monthly: null,
       currency: 'INR',
       label: 'Custom',
@@ -169,6 +210,7 @@ export const FAQ_ITEMS = [
   },
 ]
 
+/* Static comparison kept for reference; PricingPage now builds columns from API plans.
 export const COMPARISON_ROWS = [
   { feature: 'Live quizzes & polls', starter: true, standard: true, professional: true, enterprise: true },
   { feature: 'Present mode', starter: true, standard: true, professional: true, enterprise: true },
@@ -178,3 +220,4 @@ export const COMPARISON_ROWS = [
   { feature: 'Priority support', starter: false, standard: false, professional: true, enterprise: true },
   { feature: 'Dedicated onboarding', starter: false, standard: false, professional: false, enterprise: true },
 ]
+*/

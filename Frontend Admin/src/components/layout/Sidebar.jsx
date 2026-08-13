@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { SidebarNavGroup } from './SidebarNavGroup'
 import { useHostNavSessions, getBuilderNavTo, getLiveNavTo } from '../../hooks/useHostNavSessions'
+import { usePlanLock } from '../../hooks/usePlanLock'
 import { useAuthStore } from '../../store/authStore'
 import { isAdminRole } from '../../utils/adminRoles'
 
@@ -35,6 +36,7 @@ function Sidebar({ collapsed, onToggle }) {
   const user = useAuthStore((state) => state.user)
   const sessionsQuery = useHostNavSessions()
   const sessions = sessionsQuery.data
+  const { planLocked } = usePlanLock()
 
   const builderTo = useMemo(() => getBuilderNavTo(sessions), [sessions])
   const liveTo = useMemo(() => getLiveNavTo(sessions), [sessions])
@@ -49,11 +51,25 @@ function Sidebar({ collapsed, onToggle }) {
           return true
         })
         .map((item) => {
-          if (item.kind === 'builder') return { ...item, to: builderTo }
-          if (item.kind === 'live') return { ...item, to: liveTo }
+          if (item.kind === 'builder') {
+            return {
+              ...item,
+              to: builderTo,
+              disabled: planLocked,
+              disabledTitle: 'No active plan — renew to open Question Builder',
+            }
+          }
+          if (item.kind === 'live') {
+            return {
+              ...item,
+              to: liveTo,
+              disabled: planLocked,
+              disabledTitle: 'No active plan — renew to open Live Present Mode',
+            }
+          }
           return item
         }),
-    [builderTo, liveTo, user?.role],
+    [builderTo, liveTo, planLocked, user?.role],
   )
 
   const manageClientsItems = useMemo(() => {
@@ -78,6 +94,38 @@ function Sidebar({ collapsed, onToggle }) {
   const renderNavLink = (item) => {
     const Icon = item.icon
     const navKey = item.kind === 'builder' ? 'nav-builder' : item.kind === 'live' ? 'nav-live' : item.to
+
+    if (item.disabled) {
+      return (
+        <div
+          key={navKey}
+          title={item.disabledTitle || 'Unavailable'}
+          className="flex cursor-not-allowed items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-blue-100/40"
+          aria-disabled="true"
+        >
+          <Icon className="size-4 shrink-0 opacity-60" />
+          {!collapsed && (
+            <>
+              <span className="truncate">{item.label}</span>
+              <div className="ml-auto flex items-center gap-2">
+                {item.live && (
+                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-blue-100/50">
+                    LIVE
+                  </span>
+                )}
+                {item.isNew && (
+                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-blue-100/50">
+                    NEW
+                  </span>
+                )}
+              </div>
+            </>
+          )}
+          {collapsed && item.live && <span className="ml-auto size-2 rounded-full bg-blue-100/30" />}
+        </div>
+      )
+    }
+
     return (
       <NavLink
         key={navKey}

@@ -25,6 +25,12 @@ import {
 } from '../services/dashboardApi'
 import { getPlanUsageApi } from '../services/managementApi'
 import { PlanUsageCard } from '../components/dashboard/PlanUsageCard'
+import {
+  PlanExpiredBanner,
+  PlanExpiredModal,
+  hasNoActivePlan,
+  formatNoActivePlanMessage,
+} from '../components/dashboard/PlanExpiredNotice'
 import { toDateInputValue, toTimeInputValue } from '../utils/sessionSchedule'
 import { buildDashboardStats, formatTrendLabel } from '../utils/dashboardMetrics'
 import { isWebsiteSignupHost } from '../utils/websiteSignupHost'
@@ -68,6 +74,28 @@ function DashboardPage() {
     enabled: Boolean(accessToken && user?.role !== 'super_admin'),
   })
   const planUsage = planUsageQuery.data
+  const planLocked = user?.role !== 'super_admin' && hasNoActivePlan(planUsage)
+  const [planExpiryModalOpen, setPlanExpiryModalOpen] = useState(false)
+
+  useEffect(() => {
+    if (!planLocked || !user?.user_id) return
+    const key = `plan-expiry-notice:${user.user_id}:${planUsage?.plan_expires_at || 'inactive'}`
+    if (sessionStorage.getItem(key) === '1') return
+    sessionStorage.setItem(key, '1')
+    setPlanExpiryModalOpen(true)
+  }, [planLocked, planUsage?.plan_expires_at, user?.user_id])
+
+  const showPlanLockedAlert = () => {
+    const copy = formatNoActivePlanMessage(planUsage)
+    setSessionAlert({
+      variant: 'warning',
+      title: copy?.title || 'No active plan',
+      message:
+        copy?.message ||
+        'You do not have an active plan. Contact your administrator to renew before using this feature.',
+      confirmLabel: 'Got it',
+    })
+  }
 
   const createMutation = useMutation({
     mutationFn: (payload) => createSessionApi(accessToken, payload.deptId, payload.input),
@@ -342,6 +370,13 @@ function DashboardPage() {
       setDeleteConfirmSession(session)
       return
     }
+    if (
+      planLocked &&
+      ['reset-responses', 'duplicate', 'edit-session', 'builder', 'launch', 'share'].includes(action)
+    ) {
+      showPlanLockedAlert()
+      return
+    }
     if (action === 'reset-responses') {
       setResetConfirmSession(session)
       return
@@ -381,7 +416,14 @@ function DashboardPage() {
               }
               goLive()
             },
-            onError: () => goLive(),
+            onError: (error) => {
+              setSessionAlert({
+                variant: 'error',
+                title: 'Could not launch session',
+                message: error?.message || 'Unable to launch this session. Please try again.',
+                confirmLabel: 'Close',
+              })
+            },
           },
         )
         return
@@ -397,6 +439,10 @@ function DashboardPage() {
   }
 
   const handleCreate = (values) => {
+    if (planLocked) {
+      showPlanLockedAlert()
+      return
+    }
     if (!values.title) return
 
     const targetDeptId = isSuperAdmin
@@ -537,17 +583,31 @@ function DashboardPage() {
 
         <button
           type="button"
-          onClick={() => setCreateOpen(true)}
-          className="inline-flex items-center gap-2 rounded-2xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-900/25 transition hover:brightness-110"
+          disabled={planLocked}
+          title={planLocked ? 'No active plan — renew to create sessions' : undefined}
+          onClick={() => {
+            if (planLocked) {
+              showPlanLockedAlert()
+              return
+            }
+            setCreateOpen(true)
+          }}
+          className="inline-flex items-center gap-2 rounded-2xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-900/25 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Plus className="size-4" />
           New Session
         </button>
       </div>
 
-      {/* {user?.role !== 'super_admin' && planUsage ? (
+      {user?.role !== 'super_admin' && planLocked ? (
+        <PlanExpiredBanner usage={planUsage} />
+      ) : null}
+
+      {/* Plan usage card on dashboard — re-enable when we want the "Your plan" summary here again.
+      {user?.role !== 'super_admin' && planUsage ? (
         <PlanUsageCard usage={planUsage} compact />
-      ) : null} */}
+      ) : null}
+      */}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
@@ -635,7 +695,12 @@ function DashboardPage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         {filtered.map((session) => (
-          <SessionCard key={session.id} session={session} onAction={handleAction} />
+          <SessionCard
+            key={session.id}
+            session={session}
+            onAction={handleAction}
+            planLocked={planLocked}
+          />
         ))}
         {!filtered.length && !sessionsQuery.isLoading && !sessionsQuery.error ? (
           <div className="rounded-2xl border border-dashed border-blue-300 bg-white/70 p-10 text-center text-slate-600 shadow-sm lg:col-span-2">
@@ -786,6 +851,12 @@ function DashboardPage() {
         message={sessionAlert?.message ?? ''}
         confirmLabel={sessionAlert?.confirmLabel ?? 'OK'}
         onClose={() => setSessionAlert(null)}
+      />
+
+      <PlanExpiredModal
+        open={planExpiryModalOpen}
+        usage={planUsage}
+        onClose={() => setPlanExpiryModalOpen(false)}
       />
     </section>
   )

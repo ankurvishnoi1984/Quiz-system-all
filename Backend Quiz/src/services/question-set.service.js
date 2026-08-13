@@ -1,6 +1,7 @@
 const { Op } = require("sequelize");
 const { sequelize } = require("../config/database");
 const { Question, QuestionSet, Participant, Session } = require("../models");
+const { assertHostCanRunSessions } = require("./plan.service");
 
 function sessionAccess() {
   return require("./session.service");
@@ -74,6 +75,7 @@ async function createQuestionSet({ sessionId, user, name }) {
   const { getSessionOrThrow, assertSessionWriteAccess } = sessionAccess();
   const session = await getSessionOrThrow(sessionId);
   assertSessionWriteAccess(user, session);
+  await assertHostCanRunSessions(session.host_id);
   if (session.status !== "draft") {
     const error = new Error("Question sets can be created only for draft sessions");
     error.statusCode = 400;
@@ -112,6 +114,7 @@ async function updateQuestionSet({ sessionId, setId, user, name }) {
   const { getSessionOrThrow, assertSessionWriteAccess } = sessionAccess();
   const session = await getSessionOrThrow(sessionId);
   assertSessionWriteAccess(user, session);
+  await assertHostCanRunSessions(session.host_id);
   if (session.status !== "draft") {
     const error = new Error("Question sets can be renamed only for draft sessions");
     error.statusCode = 400;
@@ -143,6 +146,7 @@ async function deleteQuestionSet({ sessionId, setId, user }) {
   const { getSessionOrThrow, assertSessionWriteAccess } = sessionAccess();
   const session = await getSessionOrThrow(sessionId);
   assertSessionWriteAccess(user, session);
+  await assertHostCanRunSessions(session.host_id);
   if (session.status !== "draft") {
     const error = new Error("Question sets can be deleted only for draft sessions");
     error.statusCode = 400;

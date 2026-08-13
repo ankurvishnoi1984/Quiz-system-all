@@ -29,6 +29,30 @@ function validateCreatePlanPayload(payload) {
     errors.push("is_active must be a boolean");
   }
 
+  if (payload?.is_free !== undefined && typeof payload.is_free !== "boolean") {
+    errors.push("is_free must be a boolean");
+  }
+
+  if (payload?.default_duration_days != null && payload.default_duration_days !== "") {
+    const days = Number(payload.default_duration_days);
+    if (!Number.isInteger(days) || days <= 0) {
+      errors.push("default_duration_days must be a positive whole number or null");
+    }
+  }
+
+  if (payload?.price_monthly != null && payload.price_monthly !== "") {
+    const price = Number(payload.price_monthly);
+    if (!Number.isInteger(price) || price < 0) {
+      errors.push("price_monthly must be a non-negative whole number or null");
+    }
+  }
+
+  if (payload?.currency !== undefined && payload.currency != null && payload.currency !== "") {
+    if (typeof payload.currency !== "string" || !/^[A-Za-z]{3}$/.test(payload.currency.trim())) {
+      errors.push("currency must be a 3-letter code (e.g. INR)");
+    }
+  }
+
   return errors;
 }
 
@@ -44,7 +68,16 @@ function validateUpdatePlanPayload(payload) {
     errors.push("at least one field is required");
   }
 
-  const allowed = ["name", "description", "max_participants", "is_active"];
+  const allowed = [
+    "name",
+    "description",
+    "max_participants",
+    "is_active",
+    "is_free",
+    "default_duration_days",
+    "price_monthly",
+    "currency"
+  ];
   const invalid = keys.filter((key) => !allowed.includes(key));
   if (invalid.length) {
     errors.push(`invalid fields: ${invalid.join(", ")}`);
@@ -76,6 +109,34 @@ function validateUpdatePlanPayload(payload) {
     errors.push("is_active must be a boolean");
   }
 
+  if (payload.is_free !== undefined && typeof payload.is_free !== "boolean") {
+    errors.push("is_free must be a boolean");
+  }
+
+  if (payload.default_duration_days !== undefined) {
+    if (payload.default_duration_days != null && payload.default_duration_days !== "") {
+      const days = Number(payload.default_duration_days);
+      if (!Number.isInteger(days) || days <= 0) {
+        errors.push("default_duration_days must be a positive whole number or null");
+      }
+    }
+  }
+
+  if (payload.price_monthly !== undefined) {
+    if (payload.price_monthly != null && payload.price_monthly !== "") {
+      const price = Number(payload.price_monthly);
+      if (!Number.isInteger(price) || price < 0) {
+        errors.push("price_monthly must be a non-negative whole number or null");
+      }
+    }
+  }
+
+  if (payload.currency !== undefined && payload.currency != null && payload.currency !== "") {
+    if (typeof payload.currency !== "string" || !/^[A-Za-z]{3}$/.test(payload.currency.trim())) {
+      errors.push("currency must be a 3-letter code (e.g. INR)");
+    }
+  }
+
   return errors;
 }
 
@@ -90,13 +151,20 @@ function validateAssignPlanPayload(payload) {
     return errors;
   }
 
-  if (payload.plan_id === null || payload.plan_id === "") {
-    return errors;
+  if (payload.plan_id !== null && payload.plan_id !== "") {
+    const planId = parsePlanId(payload.plan_id);
+    if (Number.isNaN(planId)) {
+      errors.push("plan_id must be a positive number or null");
+    }
   }
 
-  const planId = parsePlanId(payload.plan_id);
-  if (Number.isNaN(planId)) {
-    errors.push("plan_id must be a positive number or null");
+  if (payload.plan_expires_at !== undefined && payload.plan_expires_at != null && payload.plan_expires_at !== "") {
+    if (
+      typeof payload.plan_expires_at !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(payload.plan_expires_at.trim())
+    ) {
+      errors.push("plan_expires_at must be a date (YYYY-MM-DD) or null");
+    }
   }
 
   return errors;

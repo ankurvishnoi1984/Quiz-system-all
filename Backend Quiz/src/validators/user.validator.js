@@ -36,6 +36,15 @@ function validateCreateUserPayload(payload) {
     }
   }
 
+  if (
+    payload?.plan_expires_at != null &&
+    payload.plan_expires_at !== "" &&
+    (typeof payload.plan_expires_at !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(String(payload.plan_expires_at).trim()))
+  ) {
+    errors.push("plan_expires_at must be a date (YYYY-MM-DD) or null");
+  }
+
   return errors;
 }
 

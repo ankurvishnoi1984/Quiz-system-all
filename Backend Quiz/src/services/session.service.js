@@ -26,7 +26,8 @@ const {
 } = require("./participant.service");
 const {
   getPlanJoinBlock,
-  notifyHostPlanLimitIfNeeded
+  notifyHostPlanLimitIfNeeded,
+  assertHostCanRunSessions
 } = require("./plan.service");
 
 function canAccessDepartment(user, department) {
@@ -174,6 +175,8 @@ async function createSession({ deptId, input, user }) {
     throw error;
   }
 
+  await assertHostCanRunSessions(host.user_id);
+
   if (
     user.role !== "super_admin" &&
     Number(host.dept_id) !== Number(deptId)
@@ -251,6 +254,8 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
       throw error;
     }
   }
+
+  await assertHostCanRunSessions(hostId);
 
   const rawTitle =
     typeof input.title === "string" && input.title.trim().length > 0
@@ -394,6 +399,7 @@ async function getSessionById({ sessionId, user }) {
 async function updateSession({ sessionId, input, user }) {
   const session = await getSessionOrThrow(sessionId);
   assertSessionWriteAccess(user, session);
+  await assertHostCanRunSessions(session.host_id);
 
   const liveSettingsOnly = ["leaderboard_enabled", "survey_results_enabled", "title", "logo_url"];
   const inputKeys = Object.keys(input || {});
@@ -513,6 +519,7 @@ async function archiveSession({ sessionId, user }) {
 async function resetSessionResponses({ sessionId, user }) {
   const session = await getSessionOrThrow(sessionId);
   assertSessionWriteAccess(user, session);
+  await assertHostCanRunSessions(session.host_id);
 
   if (session.status === "archived") {
     const error = new Error("Cannot reset responses for an archived session");
@@ -600,6 +607,10 @@ async function transitionSessionStatus({ sessionId, user, action }) {
     const error = new Error(`Cannot ${action} a session in ${session.status} status`);
     error.statusCode = 400;
     throw error;
+  }
+
+  if (action === "start" || action === "resume") {
+    await assertHostCanRunSessions(session.host_id);
   }
 
   session.status = rule.to;

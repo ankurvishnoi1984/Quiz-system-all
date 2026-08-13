@@ -22,6 +22,26 @@ const Plan = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false
     },
+    is_free: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+    default_duration_days: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: null
+    },
+    price_monthly: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: null
+    },
+    currency: {
+      type: DataTypes.STRING(3),
+      allowNull: false,
+      defaultValue: "INR"
+    },
     is_active: {
       type: DataTypes.BOOLEAN,
       allowNull: false,

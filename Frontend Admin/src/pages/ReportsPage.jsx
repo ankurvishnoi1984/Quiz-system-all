@@ -7,6 +7,7 @@ import { ReportPreviewModal } from '../components/reports/ReportPreviewModal'
 import KebabMenu from '../components/ui/KebabMenu'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useDepartmentSessionsList } from '../hooks/useHostNavSessions'
+import { usePlanLock } from '../hooks/usePlanLock'
 import { listSessionQuestionsApi } from '../services/builderApi'
 import { useAuthStore } from '../store/authStore'
 
@@ -188,6 +189,7 @@ const PAGE_SIZE = 10
 function ReportsPage() {
   const { sessions, isLoading: sessionsLoading } = useDepartmentSessionsList()
   const accessToken = useAuthStore((s) => s.accessToken)
+  const { planLocked } = usePlanLock()
   const navigate = useNavigate()
   const [status, setStatus] = useState('All')
   const [query, setQuery] = useState('')
@@ -403,8 +405,20 @@ function ReportsPage() {
                       navigate(`/analytics?session=${encodeURIComponent(s.id)}`)
                     },
                   },
-                  { id: 'builder', label: 'Open Builder', onClick: () => navigate(`/builder?session=${encodeURIComponent(s.id)}`) },
-                  { id: 'live', label: 'Open Live Mode', onClick: () => navigate(`/live?session=${encodeURIComponent(s.id)}`) },
+                  {
+                    id: 'builder',
+                    label: 'Open Builder',
+                    disabled: planLocked,
+                    title: planLocked ? 'No active plan — renew to open Question Builder' : undefined,
+                    onClick: () => navigate(`/builder?session=${encodeURIComponent(s.id)}`),
+                  },
+                  {
+                    id: 'live',
+                    label: 'Open Live Mode',
+                    disabled: planLocked,
+                    title: planLocked ? 'No active plan — renew to open Live Present Mode' : undefined,
+                    onClick: () => navigate(`/live?session=${encodeURIComponent(s.id)}`),
+                  },
                 ]}
               />
             </div>

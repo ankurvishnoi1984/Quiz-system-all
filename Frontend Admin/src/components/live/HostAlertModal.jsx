@@ -1,4 +1,4 @@
-import { CheckCircle2, Info, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Info, XCircle } from 'lucide-react'
 import { useEffect } from 'react'
 
 const VARIANT_STYLES = {
@@ -28,6 +28,15 @@ const VARIANT_STYLES = {
     message: 'text-emerald-800/90',
     button: 'bg-linear-to-r from-emerald-600 to-teal-600 focus:ring-emerald-500',
     Icon: Info,
+  },
+  warning: {
+    panel: 'border-amber-200/80 bg-linear-to-b from-amber-50 to-white shadow-amber-900/15',
+    bar: 'bg-linear-to-r from-amber-500 to-orange-500',
+    iconWrap: 'bg-amber-100 text-amber-700 ring-amber-50',
+    title: 'text-amber-950',
+    message: 'text-amber-900/90',
+    button: 'bg-linear-to-r from-amber-600 to-orange-600 focus:ring-amber-500',
+    Icon: AlertTriangle,
   },
 }
 

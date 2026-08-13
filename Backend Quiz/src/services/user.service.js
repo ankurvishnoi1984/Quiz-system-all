@@ -1,7 +1,14 @@
 const bcrypt = require("bcryptjs");
 const { User, Client, Department, Plan, UserParticipantAddon } = require("../models");
 const { sendNewUserWelcomeEmail } = require("./email.service");
-const { getPlanOrThrow, toPlanPayload, countParticipantsByHostIds } = require("./plan.service");
+const {
+  getPlanOrThrow,
+  toPlanPayload,
+  countParticipantsByHostIds,
+  resolvePlanExpiresAt,
+  isPlanExpired,
+  toDateOnlyString
+} = require("./plan.service");
 
 const ROLE_LABELS = {
   client_admin: "Client admin",
@@ -10,6 +17,8 @@ const ROLE_LABELS = {
 };
 
 function buildUserPayload(user, extras = {}) {
+  const plan = extras.plan !== undefined ? extras.plan : user.plan ? toPlanPayload(user.plan) : null;
+  const planExpiresAt = toDateOnlyString(user.plan_expires_at);
   return {
     user_id: user.user_id,
     email: user.email,
@@ -18,7 +27,9 @@ function buildUserPayload(user, extras = {}) {
     client_id: user.client_id,
     dept_id: user.dept_id,
     plan_id: user.plan_id || null,
-    plan: extras.plan !== undefined ? extras.plan : user.plan ? toPlanPayload(user.plan) : null,
+    plan,
+    plan_expires_at: planExpiresAt,
+    plan_expired: isPlanExpired(planExpiresAt, { isFree: Boolean(plan?.is_free) }),
     extra_participants: Math.max(0, Number(user.extra_participants || 0)),
     participants_used: extras.participants_used ?? 0,
     is_active: Boolean(user.is_active)
@@ -46,6 +57,7 @@ async function listUsers() {
       "client_id",
       "dept_id",
       "plan_id",
+      "plan_expires_at",
       "extra_participants",
       "is_active",
       "last_login_at",
@@ -76,6 +88,10 @@ async function createUserByAdmin(input, adminUser) {
   }
 
   const planId = await resolveActivePlanId(input.plan_id);
+  const planExpiresAt = await resolvePlanExpiresAt({
+    planId,
+    planExpiresAt: input.plan_expires_at
+  });
   const password_hash = await bcrypt.hash(input.password, 10);
   const user = await User.create({
     full_name: String(input.full_name).trim(),
@@ -85,6 +101,7 @@ async function createUserByAdmin(input, adminUser) {
     client_id: input.client_id ? Number(input.client_id) : null,
     dept_id: input.dept_id ? Number(input.dept_id) : null,
     plan_id: planId,
+    plan_expires_at: planExpiresAt,
     must_change_password: false
   });
 
@@ -143,7 +160,7 @@ async function reloadUserAccountPayload(user) {
   });
 }
 
-async function assignUserPlan({ userId, planId }) {
+async function assignUserPlan({ userId, planId, planExpiresAt }) {
   const user = await User.findByPk(userId);
   if (!user) {
     const error = new Error("User not found");
@@ -152,8 +169,15 @@ async function assignUserPlan({ userId, planId }) {
   }
 
   const nextPlanId = planId == null || planId === "" ? null : await resolveActivePlanId(planId);
+  const nextExpiresAt = await resolvePlanExpiresAt({
+    planId: nextPlanId,
+    planExpiresAt
+  });
+
   user.plan_id = nextPlanId;
+  user.plan_expires_at = nextExpiresAt;
   user.plan_limit_email_sent_at = null;
+  user.plan_expiry_email_sent_at = null;
   await user.save();
 
   return reloadUserAccountPayload(user);

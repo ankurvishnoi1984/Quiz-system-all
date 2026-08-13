@@ -63,11 +63,14 @@ function KebabMenu({ items, align = 'right' }) {
             <button
               key={item.id}
               type="button"
+              disabled={Boolean(item.disabled)}
+              title={item.title}
               onClick={() => {
+                if (item.disabled) return
                 setOpen(false)
                 item.onClick?.()
               }}
-              className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold transition ${
+              className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-45 ${
                 item.variant === 'danger' ? 'text-red-700 hover:bg-red-50' : 'text-slate-700 hover:bg-blue-50'
               }`}
             >

@@ -14,6 +14,7 @@ const {
   isSessionRandomQuestionOrderEnabled
 } = require("../utils/sessionFlags");
 const { validateCreateQuestionPayload } = require("../validators/question.validator");
+const { assertHostCanRunSessions } = require("./plan.service");
 
 function isParticipantNavigationEnabled(session) {
   return session.participant_navigation_enabled !== false;
@@ -141,6 +142,7 @@ async function listSessionQuestions({ sessionId, user, publicView = false }) {
 async function createQuestion({ sessionId, input, user }) {
   const session = await getSessionForQuestionFlow(sessionId);
   assertScopeAccess(user, session);
+  await assertHostCanRunSessions(session.host_id);
 
   if (session.status !== "draft") {
     const error = new Error("Questions can be created only for draft sessions");
@@ -382,6 +384,7 @@ async function getQuestionById({ questionId, user }) {
 async function updateQuestion({ questionId, input, user }) {
   const question = await getQuestionById({ questionId, user });
   const session = await getSessionForQuestionFlow(question.session_id);
+  await assertHostCanRunSessions(session.host_id);
   const isDraft = session.status === "draft";
 
   if (isDraft) {
@@ -509,6 +512,7 @@ async function updateQuestion({ questionId, input, user }) {
 async function deleteQuestion({ questionId, user }) {
   const question = await getQuestionById({ questionId, user });
   const session = await getSessionForQuestionFlow(question.session_id);
+  await assertHostCanRunSessions(session.host_id);
   if (session.status !== "draft") {
     const error = new Error("Only draft-session questions can be deleted");
     error.statusCode = 400;
@@ -521,6 +525,7 @@ async function deleteQuestion({ questionId, user }) {
 async function reorderQuestions({ sessionId, orderedIds, user }) {
   const session = await getSessionForQuestionFlow(sessionId);
   assertScopeAccess(user, session);
+  await assertHostCanRunSessions(session.host_id);
   if (session.status !== "draft") {
     const error = new Error("Questions can be reordered only in draft sessions");
     error.statusCode = 400;

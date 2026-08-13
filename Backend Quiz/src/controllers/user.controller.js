@@ -55,7 +55,8 @@ async function assignPlan(req, res) {
 
     const user = await assignUserPlan({
       userId,
-      planId: req.body.plan_id
+      planId: req.body.plan_id,
+      planExpiresAt: req.body.plan_expires_at
     });
     return successResponse(res, { user }, "User plan updated", 200);
   } catch (err) {

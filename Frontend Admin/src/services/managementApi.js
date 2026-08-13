@@ -62,10 +62,14 @@ export async function setUserStatusApi(accessToken, userId, isActive) {
   return data?.user
 }
 
-export async function assignUserPlanApi(accessToken, userId, planId) {
+export async function assignUserPlanApi(accessToken, userId, planId, planExpiresAt) {
+  const body = { plan_id: planId }
+  if (planExpiresAt !== undefined) {
+    body.plan_expires_at = planExpiresAt || null
+  }
   const data = await authRequest(`/users/${userId}/plan`, accessToken, {
     method: 'PATCH',
-    body: JSON.stringify({ plan_id: planId }),
+    body: JSON.stringify(body),
   })
   return data?.user
 }

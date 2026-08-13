@@ -31,6 +31,10 @@ import { buildEmojiBarData } from '../utils/emojiReaction'
 import { renderPieLabel } from '../components/charts/renderPieLabel'
 import { CHART_COLORS, CHART_TOOLTIP_STYLE, getChartColor } from '../utils/chartColors'
 import ShareSessionPanel from '../components/dashboard/ShareSessionPanel'
+import {
+  formatNoActivePlanMessage,
+  hasNoActivePlan,
+} from '../components/dashboard/PlanExpiredNotice'
 import Modal from '../components/ui/Modal'
 import { HostAlertModal } from '../components/live/HostAlertModal'
 import { HostQuestionActionButton } from '../components/live/HostQuestionActionButton'
@@ -68,6 +72,7 @@ import {
   transitionSessionApi,
   updateSessionApi,
 } from '../services/liveApi'
+import { getPlanUsageApi } from '../services/managementApi'
 import { formatQuizSubmitTimeCompact } from '../utils/quizResponseTime'
 import { createRealtimeClient, RealtimeEvent } from '../services/realtimeClient'
 import {
@@ -96,11 +101,19 @@ function LivePage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const accessToken = useAuthStore((state) => state.accessToken)
+  const user = useAuthStore((state) => state.user)
   const sessionId = searchParams.get('session') || ''
   const navSessionsQuery = useHostNavSessions()
   const { departmentId } = useShell()
   const prevDepartmentIdRef = useRef(departmentId)
   const deptSessionsQuery = navSessionsQuery
+
+  const planUsageQuery = useQuery({
+    queryKey: ['plan-usage'],
+    queryFn: () => getPlanUsageApi(accessToken),
+    enabled: Boolean(accessToken && user?.role !== 'super_admin'),
+  })
+  const planLocked = user?.role !== 'super_admin' && hasNoActivePlan(planUsageQuery.data)
 
 
   const [questionIndex, setQuestionIndex] = useState(0)
@@ -880,8 +893,21 @@ function LivePage() {
           {canLaunchSession ? (
             <button
               type="button"
-              disabled={transitionMutation.isPending}
-              onClick={() =>
+              disabled={transitionMutation.isPending || planLocked}
+              title={planLocked ? 'No active plan — renew to launch' : undefined}
+              onClick={() => {
+                if (planLocked) {
+                  const copy = formatNoActivePlanMessage(planUsageQuery.data)
+                  setHostAlert({
+                    variant: 'warning',
+                    title: copy?.title || 'No active plan',
+                    message:
+                      copy?.message ||
+                      'You do not have an active plan. Contact your administrator to renew.',
+                    confirmLabel: 'Got it',
+                  })
+                  return
+                }
                 transitionMutation.mutate(
                   { action: 'start' },
                   {
@@ -903,7 +929,7 @@ function LivePage() {
                     },
                   },
                 )
-              }
+              }}
               className="inline-flex h-11 items-center gap-2 rounded-2xl border border-blue-200/70 bg-white/90 px-4 text-sm font-semibold text-slate-700 transition hover:bg-blue-50 disabled:opacity-60"
             >
               <Rocket className="size-4" />

@@ -69,6 +69,7 @@ const emptyForm = {
   client_id: '',
   dept_id: '',
   plan_id: '',
+  plan_expires_at: '',
 }
 
 function ManageUsersPage() {
@@ -83,6 +84,8 @@ function ManageUsersPage() {
   const [extraUser, setExtraUser] = useState(null)
   const [extraSeats, setExtraSeats] = useState('20')
   const [extraNote, setExtraNote] = useState('')
+  const [planEditUser, setPlanEditUser] = useState(null)
+  const [planEditForm, setPlanEditForm] = useState({ plan_id: '', plan_expires_at: '' })
   // const [passwordVault, setPasswordVault] = useState(() => getStoredUserPasswords())
 
   const usersQuery = useQuery({
@@ -109,7 +112,7 @@ function ManageUsersPage() {
     enabled: Boolean(accessToken),
   })
 
-  const activePlans = (plansQuery.data || []).filter((plan) => plan.is_active)
+  const activePlans = (plansQuery.data || []).filter((plan) => plan.is_active && !plan.is_free)
 
   const clientsById = useMemo(() => {
     const map = new Map()
@@ -189,7 +192,10 @@ function ManageUsersPage() {
 
     if (needsClient) payload.client_id = Number(form.client_id)
     if (needsDepartment) payload.dept_id = Number(form.dept_id)
-    if (form.plan_id) payload.plan_id = Number(form.plan_id)
+    if (form.plan_id) {
+      payload.plan_id = Number(form.plan_id)
+      payload.plan_expires_at = form.plan_expires_at || null
+    }
 
     createMutation.mutate(payload)
   }
@@ -251,9 +257,18 @@ function ManageUsersPage() {
   })
 
   const assignPlanMutation = useMutation({
-    mutationFn: ({ userId, planId }) => assignUserPlanApi(accessToken, userId, planId),
+    mutationFn: ({ userId, planId, planExpiresAt }) =>
+      assignUserPlanApi(accessToken, userId, planId, planExpiresAt),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['manage-users'] })
+      queryClient.invalidateQueries({ queryKey: ['plan-usage'] })
+      setPlanEditUser(null)
+      setAlert({
+        variant: 'success',
+        title: 'Plan updated',
+        message: 'The user plan and expiry date were saved.',
+        confirmLabel: 'OK',
+      })
     },
     onError: (error) => {
       setAlert({
@@ -264,6 +279,18 @@ function ManageUsersPage() {
       })
     },
   })
+
+  const openPlanEditor = (user) => {
+    setPlanEditUser(user)
+    setPlanEditForm({
+      plan_id: user.plan_id ? String(user.plan_id) : '',
+      plan_expires_at: user.plan_expires_at || '',
+    })
+  }
+
+  const selectedPlanForEdit = (plansQuery.data || []).find(
+    (plan) => String(plan.plan_id) === String(planEditForm.plan_id),
+  )
 
   return (
     <section className="space-y-6">
@@ -313,6 +340,7 @@ function ManageUsersPage() {
               <th className="px-4 py-3 font-semibold text-slate-700">Client</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Department</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Plan</th>
+              <th className="px-4 py-3 font-semibold text-slate-700">Expires</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Participants</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Extra seats</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Status</th>
@@ -338,24 +366,27 @@ function ManageUsersPage() {
                     : '—'}
                 </td>
                 <td className="px-4 py-3">
-                  <select
-                    value={user.plan_id || ''}
-                    disabled={assignPlanMutation.isPending}
-                    onChange={(e) =>
-                      assignPlanMutation.mutate({
-                        userId: user.user_id,
-                        planId: e.target.value ? Number(e.target.value) : null,
-                      })
-                    }
-                    className="h-9 max-w-[180px] rounded-lg border border-blue-200/70 bg-white px-2 text-xs font-semibold text-navy-800 outline-none focus:border-blue-400"
+                  <button
+                    type="button"
+                    onClick={() => openPlanEditor(user)}
+                    className="rounded-lg border border-blue-200/70 bg-white px-2.5 py-1.5 text-left text-xs font-semibold text-navy-800 transition hover:bg-blue-50"
                   >
-                    <option value="">No plan</option>
-                    {(plansQuery.data || []).map((plan) => (
-                      <option key={plan.plan_id} value={plan.plan_id} disabled={!plan.is_active}>
-                        {plan.name} ({Number(plan.max_participants).toLocaleString()})
-                      </option>
-                    ))}
-                  </select>
+                    {user.plan?.name || 'No plan'}
+                    {user.plan_expired ? (
+                      <span className="mt-0.5 block text-[10px] font-semibold text-amber-700">
+                        Expired
+                      </span>
+                    ) : null}
+                  </button>
+                </td>
+                <td className="px-4 py-3 text-slate-700">
+                  {user.plan?.is_free
+                    ? 'Never'
+                    : user.plan_expires_at
+                      ? user.plan_expires_at
+                      : user.plan_id
+                        ? 'No end date'
+                        : '—'}
                 </td>
                 <td className="px-4 py-3 text-slate-700">
                   {user.plan?.max_participants != null
@@ -402,7 +433,7 @@ function ManageUsersPage() {
             ))}
             {!usersQuery.isLoading && !filteredUsers.length ? (
               <tr>
-                <td colSpan={9} className="px-4 py-10 text-center text-slate-600">
+                <td colSpan={10} className="px-4 py-10 text-center text-slate-600">
                   {(usersQuery.data || []).length
                     ? 'No users match the selected client or department.'
                     : 'No users found.'}
@@ -515,7 +546,21 @@ function ManageUsersPage() {
             <label className="text-sm font-semibold text-slate-700">Paid plan</label>
             <select
               value={form.plan_id}
-              onChange={(e) => setForm((prev) => ({ ...prev, plan_id: e.target.value }))}
+              onChange={(e) => {
+                const planId = e.target.value
+                const plan = activePlans.find((p) => String(p.plan_id) === planId)
+                let expires = ''
+                if (plan?.default_duration_days) {
+                  const date = new Date()
+                  date.setUTCDate(date.getUTCDate() + Number(plan.default_duration_days))
+                  expires = date.toISOString().slice(0, 10)
+                }
+                setForm((prev) => ({
+                  ...prev,
+                  plan_id: planId,
+                  plan_expires_at: plan?.is_free ? '' : expires,
+                }))
+              }}
               className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
             >
               <option value="">No plan (unlimited)</option>
@@ -529,6 +574,22 @@ function ManageUsersPage() {
               Limits how many participants can be connected at once across all of this user&apos;s sessions.
             </p>
           </div>
+          {form.plan_id && !activePlans.find((p) => String(p.plan_id) === form.plan_id)?.is_free ? (
+            <div>
+              <label className="text-sm font-semibold text-slate-700">Plan expiry date</label>
+              <input
+                type="date"
+                value={form.plan_expires_at}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, plan_expires_at: e.target.value }))
+                }
+                className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                Leave blank for no end date. After expiry the user has no active plan until you renew.
+              </p>
+            </div>
+          ) : null}
           {needsDepartment ? (
             <div>
               <label className="text-sm font-semibold text-slate-700">Department</label>
@@ -678,6 +739,94 @@ function ManageUsersPage() {
               className="h-11 rounded-xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 text-sm font-semibold text-white shadow-lg shadow-blue-900/25 transition hover:brightness-110 disabled:opacity-60"
             >
               {extraMutation.isPending ? 'Saving…' : 'Add extra seats'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={Boolean(planEditUser)}
+        title={planEditUser ? `Plan — ${planEditUser.full_name}` : 'Plan'}
+        onClose={() => {
+          if (assignPlanMutation.isPending) return
+          setPlanEditUser(null)
+        }}
+      >
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault()
+            if (!planEditUser) return
+            assignPlanMutation.mutate({
+              userId: planEditUser.user_id,
+              planId: planEditForm.plan_id ? Number(planEditForm.plan_id) : null,
+              planExpiresAt: selectedPlanForEdit?.is_free
+                ? null
+                : planEditForm.plan_expires_at || null,
+            })
+          }}
+        >
+          <div>
+            <label className="text-sm font-semibold text-slate-700">Plan</label>
+            <select
+              value={planEditForm.plan_id}
+              onChange={(e) => {
+                const planId = e.target.value
+                const plan = (plansQuery.data || []).find((p) => String(p.plan_id) === planId)
+                let expires = ''
+                if (plan?.default_duration_days && !plan.is_free) {
+                  const date = new Date()
+                  date.setUTCDate(date.getUTCDate() + Number(plan.default_duration_days))
+                  expires = date.toISOString().slice(0, 10)
+                }
+                setPlanEditForm({
+                  plan_id: planId,
+                  plan_expires_at: plan?.is_free ? '' : expires || planEditForm.plan_expires_at,
+                })
+              }}
+              className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+            >
+              <option value="">No plan (unlimited)</option>
+              {(plansQuery.data || [])
+                .filter((plan) => !plan.is_free)
+                .map((plan) => (
+                <option key={plan.plan_id} value={plan.plan_id} disabled={!plan.is_active}>
+                  {plan.name} ({Number(plan.max_participants).toLocaleString()})
+                </option>
+              ))}
+            </select>
+          </div>
+          {planEditForm.plan_id && !selectedPlanForEdit?.is_free ? (
+            <div>
+              <label className="text-sm font-semibold text-slate-700">Expiry date</label>
+              <input
+                type="date"
+                value={planEditForm.plan_expires_at}
+                onChange={(e) =>
+                  setPlanEditForm((prev) => ({ ...prev, plan_expires_at: e.target.value }))
+                }
+                className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                After this date the host has no active plan until you renew their access.
+              </p>
+            </div>
+          ) : null}
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              disabled={assignPlanMutation.isPending}
+              onClick={() => setPlanEditUser(null)}
+              className="h-11 rounded-xl border border-blue-200/70 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-blue-50 disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={assignPlanMutation.isPending}
+              className="h-11 rounded-xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 text-sm font-semibold text-white shadow-lg shadow-blue-900/25 transition hover:brightness-110 disabled:opacity-60"
+            >
+              {assignPlanMutation.isPending ? 'Saving…' : 'Save plan'}
             </button>
           </div>
         </form>

@@ -4,6 +4,7 @@ const { sequelize } = require("../config/database");
 const { getWebsiteSignupOrganization } = require("./websiteSignupOrg.service");
 const { sendPasswordResetEmail } = require("./email.service");
 const { generateTemporaryPassword } = require("../utils/password");
+const { addDaysToDateOnly } = require("./plan.service");
 const {
   signAccessToken,
   signRefreshToken,
@@ -88,6 +89,16 @@ async function signupUser(input) {
     throw error;
   }
 
+  if (plan.is_free) {
+    const error = new Error("Free Demo cannot be selected during signup");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const planExpiresAt = plan.default_duration_days
+    ? addDaysToDateOnly(plan.default_duration_days)
+    : null;
+
   const password_hash = await bcrypt.hash(input.password, 10);
   const transaction = await sequelize.transaction();
 
@@ -103,6 +114,7 @@ async function signupUser(input) {
         client_id: client.client_id,
         dept_id: department.dept_id,
         plan_id: plan.plan_id,
+        plan_expires_at: planExpiresAt,
         must_change_password: false,
         is_active: true
       },

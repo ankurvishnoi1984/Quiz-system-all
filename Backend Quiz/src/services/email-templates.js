@@ -566,12 +566,83 @@ Open host dashboard: ${loginUrl}
   };
 }
 
+function renderPlanExpiredEmail({
+  fullName,
+  planName,
+  expiredAt,
+  brandName,
+  logoCid,
+  logoUrl
+}) {
+  const greeting = fullName ? `Hello ${fullName},` : "Hello,";
+  const loginUrl = buildLoginUrl();
+  const safeGreeting = escapeHtml(greeting);
+  const safePlan = escapeHtml(planName || "your plan");
+  const expiredLabel = expiredAt || "recently";
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px;font-size:16px;line-height:1.65;color:${BRAND.slate};">${safeGreeting}</p>
+    <p style="margin:0 0 24px;font-size:16px;line-height:1.65;color:${BRAND.slate};">
+      Your <strong>${safePlan}</strong> access ended on <strong>${escapeHtml(String(expiredLabel))}</strong>.
+      You no longer have an active plan, so launching sessions, editing questions, and resetting responses are paused until your plan is renewed.
+    </p>
+
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px;">
+      <tr>
+        <td style="background-color:${BRAND.amberLight};border:1px solid ${BRAND.amberBorder};border-radius:12px;padding:20px 22px;">
+          <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${BRAND.amber};">
+            No active plan
+          </p>
+          <p style="margin:0;font-size:16px;line-height:1.6;color:${BRAND.navy};">
+            Ask your administrator to renew or assign a plan so you can host live sessions again.
+          </p>
+        </td>
+      </tr>
+    </table>
+
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:0 auto 28px;">
+      <tr>
+        <td align="center" style="border-radius:12px;background:linear-gradient(135deg,${BRAND.navy} 0%,${BRAND.navyMid} 100%);">
+          <a class="cta-button" href="${escapeHtml(loginUrl)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:${BRAND.white};text-decoration:none;border-radius:12px;">
+            Open host dashboard
+          </a>
+        </td>
+      </tr>
+    </table>`;
+
+  const html = renderEmailLayout({
+    preheader: `Your ${planName || "plan"} has expired. You do not have an active plan.`,
+    brandName,
+    title: "No active plan",
+    bodyHtml,
+    footerNote: "You received this email because your plan end date has passed.",
+    logoCid,
+    logoUrl
+  });
+
+  const text = `${greeting}
+
+Your ${planName || "plan"} access ended on ${expiredLabel}.
+You no longer have an active plan. Launching sessions, editing questions, and resetting responses are paused until your administrator renews your plan.
+
+Open host dashboard: ${loginUrl}
+
+— ${brandName || "Quiz Platform"}`;
+
+  return {
+    subject: `Your ${planName || "plan"} has expired on ${brandName || "Quiz Platform"}`,
+    text,
+    html
+  };
+}
+
 module.exports = {
   escapeHtml,
   renderEmailLayout,
   renderPasswordResetEmail,
   renderNewUserWelcomeEmail,
   renderParticipantLimitExceededEmail,
+  renderPlanExpiredEmail,
   buildLoginUrl,
   buildEmailLogoUrl,
   EMAIL_LOGO_CID

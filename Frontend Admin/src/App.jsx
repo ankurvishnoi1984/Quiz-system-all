@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AdminOnlyRoute } from './components/auth/AdminOnlyRoute'
 import { SuperAdminOnlyRoute } from './components/auth/SuperAdminOnlyRoute'
+import { RequireActivePlan } from './components/auth/RequireActivePlan'
 import DepartmentAnalyticsPage from './pages/DepartmentAnalyticsPage'
 import ClientAnalyticsPage from './pages/ClientAnalyticsPage'
 import LoginPage from './pages/LoginPage'
@@ -98,7 +99,9 @@ function App() {
             path="/present"
             element={
               user && !mustChangePassword ? (
-                <PresentModePage />
+                <RequireActivePlan>
+                  <PresentModePage />
+                </RequireActivePlan>
               ) : (
                 <Navigate to={user ? '/change-password' : '/login'} replace />
               )
@@ -159,8 +162,22 @@ function App() {
                 )
               }
             />
-            <Route path="/builder" element={<BuilderPage />} />
-            <Route path="/live" element={<LivePage />} />
+            <Route
+              path="/builder"
+              element={
+                <RequireActivePlan>
+                  <BuilderPage />
+                </RequireActivePlan>
+              }
+            />
+            <Route
+              path="/live"
+              element={
+                <RequireActivePlan>
+                  <LivePage />
+                </RequireActivePlan>
+              }
+            />
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route
               path="/department-analytics"

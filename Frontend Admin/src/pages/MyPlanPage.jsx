@@ -1,5 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { PlanUsageCard } from '../components/dashboard/PlanUsageCard'
+import {
+  PlanExpiredBanner,
+  hasNoActivePlan,
+} from '../components/dashboard/PlanExpiredNotice'
 import { useAuthStore } from '../store/authStore'
 import { getPlanUsageApi } from '../services/managementApi'
 
@@ -19,7 +23,8 @@ function MyPlanPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-navy-700">Account</p>
         <h2 className="mt-1 text-2xl font-bold text-navy-900">My Plan</h2>
         <p className="mt-1 text-sm text-slate-600">
-          See your current plan, how many participants are connected right now, and how many join slots remain.
+          See your current plan, expiry, how many participants are connected right now, and how many
+          join slots remain.
         </p>
       </div>
 
@@ -35,6 +40,7 @@ function MyPlanPage() {
         </div>
       ) : null}
 
+      {hasNoActivePlan(usageQuery.data) ? <PlanExpiredBanner usage={usageQuery.data} /> : null}
       {usageQuery.data ? <PlanUsageCard usage={usageQuery.data} /> : null}
 
       <div className="overflow-hidden rounded-2xl border border-blue-200/70 bg-white/90 shadow-sm shadow-blue-900/5">
@@ -51,31 +57,41 @@ function MyPlanPage() {
             <dd className="mt-1 text-sm font-semibold text-navy-900">{user?.email || '—'}</dd>
           </div>
           <div className="bg-white px-4 py-3">
-            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Plan</dt>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Assigned plan</dt>
             <dd className="mt-1 text-sm font-semibold text-navy-900">
-              {usageQuery.data?.plan?.name || 'No plan assigned'}
+              {usageQuery.data?.assigned_plan?.name ||
+                usageQuery.data?.plan?.name ||
+                'No plan assigned'}
             </dd>
           </div>
           <div className="bg-white px-4 py-3">
-            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Restrictions</dt>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Expiry</dt>
             <dd className="mt-1 text-sm font-semibold text-navy-900">
-              {usageQuery.data?.unrestricted
-                ? 'No account-wide participant cap'
-                : `${Number(usageQuery.data?.limit || 0).toLocaleString()} connected participants at the same time`}
+              {usageQuery.data?.plan?.is_free
+                ? 'No end date'
+                : usageQuery.data?.plan_expired
+                  ? `Expired ${usageQuery.data.plan_expires_at || ''}`.trim()
+                  : usageQuery.data?.plan_expires_at || 'No end date'}
             </dd>
           </div>
           <div className="bg-white px-4 py-3">
-            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Plan seats</dt>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Effective access
+            </dt>
             <dd className="mt-1 text-sm font-semibold text-navy-900">
-              {usageQuery.data?.unrestricted
-                ? '—'
-                : Number(usageQuery.data?.plan_limit || 0).toLocaleString()}
+              {usageQuery.data?.plan_expired || usageQuery.data?.has_active_plan === false
+                ? 'None — plan inactive'
+                : usageQuery.data?.unrestricted
+                  ? 'No account-wide participant cap'
+                  : `${Number(usageQuery.data?.limit || 0).toLocaleString()} connected participants at the same time`}
             </dd>
           </div>
           <div className="bg-white px-4 py-3">
             <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Extra seats</dt>
             <dd className="mt-1 text-sm font-semibold text-navy-900">
-              {Number(usageQuery.data?.extra_participants || 0).toLocaleString()}
+              {usageQuery.data?.plan_expired || usageQuery.data?.has_active_plan === false
+                ? 'Paused while plan is inactive'
+                : Number(usageQuery.data?.extra_participants || 0).toLocaleString()}
             </dd>
           </div>
         </dl>

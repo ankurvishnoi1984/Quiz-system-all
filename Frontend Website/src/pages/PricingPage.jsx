@@ -1,10 +1,21 @@
 import { Check, LoaderCircle } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchPublicPlansApi } from '../services/publicApi'
-import { getPlanDisplayPrice, COMPARISON_ROWS, formatPlanParticipantLimit } from '../constants/siteContent'
+import {
+  getPlanDisplayPrice,
+  formatPlanParticipantLimit,
+  formatPlanParticipantLimitShort,
+} from '../constants/siteContent'
 import CTASection from '../components/marketing/CTASection'
 import { getAdminPortalUrl } from '../utils/adminPortal'
+
+const SHARED_FEATURES = [
+  'Unlimited sessions',
+  'Present mode & live analytics',
+  'Host admin portal access',
+]
 
 function PricingPage() {
   const plansQuery = useQuery({
@@ -14,6 +25,27 @@ function PricingPage() {
 
   const plans = plansQuery.data || []
   const featuredIndex = Math.min(1, Math.max(0, plans.length - 1))
+
+  const comparisonRows = useMemo(() => {
+    if (!plans.length) return []
+    return [
+      {
+        feature: 'Monthly price',
+        values: plans.map((plan) => {
+          const price = getPlanDisplayPrice(plan)
+          return price.monthly != null ? `${price.label}${price.period}` : price.label
+        }),
+      },
+      {
+        feature: 'Live participants at once',
+        values: plans.map((plan) => formatPlanParticipantLimitShort(plan.max_participants)),
+      },
+      ...SHARED_FEATURES.map((feature) => ({
+        feature,
+        values: plans.map(() => true),
+      })),
+    ]
+  }, [plans])
 
   return (
     <div>
@@ -40,10 +72,18 @@ function PricingPage() {
           <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center text-sm text-red-700">
             Unable to load plans. Please try again later.
           </div>
+        ) : !plans.length ? (
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-600">
+            No public plans are available yet. Please check back soon.
+          </div>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+          <div
+            className={`grid gap-6 md:grid-cols-2 ${
+              plans.length >= 4 ? 'xl:grid-cols-4' : plans.length === 3 ? 'xl:grid-cols-3' : ''
+            }`}
+          >
             {plans.map((plan, index) => {
-              const price = getPlanDisplayPrice(plan.name)
+              const price = getPlanDisplayPrice(plan)
               const isFeatured = index === featuredIndex
 
               return (
@@ -64,14 +104,16 @@ function PricingPage() {
                   <div className="mb-6">
                     <h2 className="text-xl font-bold text-navy-950">{plan.name}</h2>
                     <p className="mt-2 min-h-12 text-sm text-slate-600">
-                      {formatPlanParticipantLimit(plan.max_participants)}
+                      {plan.description || formatPlanParticipantLimit(plan.max_participants)}
                     </p>
                   </div>
 
                   <div className="mb-6">
                     <p className="text-4xl font-bold text-navy-900">
                       {price.label}
-                      <span className="text-base font-medium text-slate-500">{price.period}</span>
+                      {price.period ? (
+                        <span className="text-base font-medium text-slate-500">{price.period}</span>
+                      ) : null}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">Payment gateway coming soon</p>
                   </div>
@@ -81,18 +123,12 @@ function PricingPage() {
                       <Check className="mt-0.5 size-4 shrink-0 text-navy-700" />
                       {formatPlanParticipantLimit(plan.max_participants)}
                     </li>
-                    <li className="flex items-start gap-2">
-                      <Check className="mt-0.5 size-4 shrink-0 text-navy-700" />
-                      Unlimited sessions
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <Check className="mt-0.5 size-4 shrink-0 text-navy-700" />
-                      Present mode & live analytics
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <Check className="mt-0.5 size-4 shrink-0 text-navy-700" />
-                      Host admin portal access
-                    </li>
+                    {SHARED_FEATURES.map((feature) => (
+                      <li key={feature} className="flex items-start gap-2">
+                        <Check className="mt-0.5 size-4 shrink-0 text-navy-700" />
+                        {feature}
+                      </li>
+                    ))}
                   </ul>
 
                   <Link
@@ -119,40 +155,45 @@ function PricingPage() {
         </p>
       </section>
 
-      <section className="border-y border-slate-200 bg-white py-16">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
-          <h2 className="text-center text-2xl font-bold text-navy-950">Plan comparison</h2>
-          <div className="mt-8 overflow-x-auto rounded-2xl border border-slate-200">
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-50 text-slate-600">
-                <tr>
-                  <th className="px-4 py-3 font-semibold">Feature</th>
-                  <th className="px-4 py-3 font-semibold">Starter</th>
-                  <th className="px-4 py-3 font-semibold">Standard</th>
-                  <th className="px-4 py-3 font-semibold">Professional</th>
-                  <th className="px-4 py-3 font-semibold">Enterprise</th>
-                </tr>
-              </thead>
-              <tbody>
-                {COMPARISON_ROWS.map((row) => (
-                  <tr key={row.feature} className="border-t border-slate-200">
-                    <td className="px-4 py-3 font-medium text-slate-800">{row.feature}</td>
-                    {['starter', 'standard', 'professional', 'enterprise'].map((tier) => (
-                      <td key={tier} className="px-4 py-3 text-slate-600">
-                        {row[tier] ? (
-                          <Check className="size-4 text-navy-700" />
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
-                      </td>
+      {plans.length ? (
+        <section className="border-y border-slate-200 bg-white py-16">
+          <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
+            <h2 className="text-center text-2xl font-bold text-navy-950">Plan comparison</h2>
+            <div className="mt-8 overflow-x-auto rounded-2xl border border-slate-200">
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-slate-50 text-slate-600">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold">Feature</th>
+                    {plans.map((plan) => (
+                      <th key={plan.plan_id} className="px-4 py-3 font-semibold">
+                        {plan.name}
+                      </th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {comparisonRows.map((row) => (
+                    <tr key={row.feature} className="border-t border-slate-200">
+                      <td className="px-4 py-3 font-medium text-slate-800">{row.feature}</td>
+                      {row.values.map((value, index) => (
+                        <td key={`${row.feature}-${plans[index]?.plan_id || index}`} className="px-4 py-3 text-slate-600">
+                          {value === true ? (
+                            <Check className="size-4 text-navy-700" />
+                          ) : value === false ? (
+                            <span className="text-slate-300">—</span>
+                          ) : (
+                            value
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      ) : null}
 
       <CTASection
         title="Need help choosing a plan?"

@@ -51,6 +51,14 @@ const User = sequelize.define(
       type: DataTypes.DATE,
       allowNull: true
     },
+    plan_expires_at: {
+      type: DataTypes.DATEONLY,
+      allowNull: true
+    },
+    plan_expiry_email_sent_at: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
     is_active: {
       type: DataTypes.BOOLEAN,
       defaultValue: true

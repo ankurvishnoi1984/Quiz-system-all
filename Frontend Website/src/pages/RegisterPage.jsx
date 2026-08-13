@@ -113,7 +113,7 @@ function RegisterPage() {
     }
   }
 
-  const price = selectedPlan ? getPlanDisplayPrice(selectedPlan.name) : null
+  const price = selectedPlan ? getPlanDisplayPrice(selectedPlan) : null
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
@@ -282,7 +282,7 @@ function RegisterPage() {
                     aria-describedby={fieldErrors.plan ? 'plan-error' : undefined}
                   >
                     {plans.map((plan) => {
-                      const planPrice = getPlanDisplayPrice(plan.name)
+                      const planPrice = getPlanDisplayPrice(plan)
                       return (
                         <option key={plan.plan_id} value={plan.plan_id}>
                           {plan.name} — {formatPlanParticipantLimitShort(plan.max_participants)} ({planPrice.label}

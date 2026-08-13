@@ -4,20 +4,33 @@ function formatCount(value) {
   return Number(value || 0).toLocaleString()
 }
 
+function formatExpiryLabel(usage) {
+  if (usage?.plan_expired) return `Expired ${usage.plan_expires_at || ''}`.trim()
+  if (usage?.plan_expires_at) return `Expires ${usage.plan_expires_at}`
+  return null
+}
+
 export function PlanUsageCard({ usage, compact = false }) {
   if (!usage) return null
 
   const unrestricted = Boolean(usage.unrestricted)
   const exceeded = Boolean(usage.exceeded)
+  const expired = Boolean(usage.plan_expired)
   const limit = usage.limit
   const used = Number(usage.used || 0)
   const remaining = usage.remaining
   const percent = Math.min(100, Number(usage.percent_used || 0))
-  const planName = usage.plan?.name || 'No plan assigned'
+  const planName =
+    expired && usage.assigned_plan?.name
+      ? `${usage.assigned_plan.name} (expired)`
+      : usage.plan?.name || 'No plan assigned'
+  const expiryLabel = formatExpiryLabel(usage)
 
-  const statusClass = exceeded
-    ? 'border-red-200 bg-red-50'
-    : 'border-blue-200/70 bg-white/90'
+  const statusClass = expired
+    ? 'border-amber-200 bg-amber-50'
+    : exceeded
+      ? 'border-red-200 bg-red-50'
+      : 'border-blue-200/70 bg-white/90'
 
   return (
     <div className={`rounded-2xl border px-4 py-4 shadow-sm shadow-blue-900/5 ${statusClass}`}>
@@ -28,8 +41,22 @@ export function PlanUsageCard({ usage, compact = false }) {
           {usage.plan?.description ? (
             <p className="mt-1 text-sm text-slate-600">{usage.plan.description}</p>
           ) : null}
+          {expired ? (
+            <p className="mt-1 text-sm font-medium text-amber-900">
+              No active plan — renew to launch sessions and manage questions.
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {expiryLabel ? (
+            <span
+              className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                expired ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {expiryLabel}
+            </span>
+          ) : null}
           {unrestricted ? (
             <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold text-slate-600">
               Unlimited
@@ -99,13 +126,15 @@ export function PlanUsageCard({ usage, compact = false }) {
       ) : null}
 
       <p className="mt-3 text-sm text-slate-600">
-        {exceeded
-          ? 'Your connected participant limit is full. New participants cannot join until someone disconnects or you upgrade your plan.'
-          : unrestricted
-            ? 'No paid-plan limit is assigned. Session-level max participants still apply.'
-            : Number(usage.extra_participants || 0) > 0
-              ? `Your plan includes ${formatCount(usage.plan_limit)} connected participants plus ${formatCount(usage.extra_participants)} paid extra seats at the same time. Participants free up capacity when they disconnect.`
-              : 'This allowance counts participants with an active connection at the same time. Disconnecting frees up capacity for new joins.'}
+        {expired
+          ? 'Your plan has ended. Creating, sharing, editing, launching, and managing sessions are paused until your administrator renews your plan.'
+          : exceeded
+            ? 'Your connected participant limit is full. New participants cannot join until someone disconnects or you upgrade your plan.'
+            : unrestricted
+              ? 'No paid-plan limit is assigned. Session-level max participants still apply.'
+              : Number(usage.extra_participants || 0) > 0
+                ? `Your plan includes ${formatCount(usage.plan_limit)} connected participants plus ${formatCount(usage.extra_participants)} paid extra seats at the same time. Participants free up capacity when they disconnect.`
+                : 'This allowance counts participants with an active connection at the same time. Disconnecting frees up capacity for new joins.'}
       </p>
     </div>
   )

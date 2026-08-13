@@ -59,6 +59,13 @@ import { EmojiReactionEditor } from '../components/builder/EmojiReactionEditor'
 import { createDefaultEmojiReactionOptions } from '../utils/emojiReaction'
 import { useHostNavSessions, getLatestSessionId } from '../hooks/useHostNavSessions'
 import { useShell } from '../context/ShellContext'
+import { getPlanUsageApi } from '../services/managementApi'
+import {
+  PlanExpiredBanner,
+  PlanExpiredModal,
+  formatNoActivePlanMessage,
+  hasNoActivePlan,
+} from '../components/dashboard/PlanExpiredNotice'
 
 function InlineEditableSessionTitle({ title, onSave, isSaving }) {
   const [editing, setEditing] = useState(false)
@@ -1114,11 +1121,24 @@ function BuilderPage() {
   const { departmentId } = useShell()
   const navigate = useNavigate()
   const accessToken = useAuthStore((state) => state.accessToken)
+  const user = useAuthStore((state) => state.user)
   const queryClient = useQueryClient()
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
+
+  const planUsageQuery = useQuery({
+    queryKey: ['plan-usage'],
+    queryFn: () => getPlanUsageApi(accessToken),
+    enabled: Boolean(accessToken && user?.role !== 'super_admin'),
+  })
+  const planLocked = user?.role !== 'super_admin' && hasNoActivePlan(planUsageQuery.data)
+  const [planLockedModalOpen, setPlanLockedModalOpen] = useState(false)
+
+  useEffect(() => {
+    if (planLocked) setPlanLockedModalOpen(true)
+  }, [planLocked])
 
   const [selectedId, setSelectedId] = useState(null)
   const [previewOpen, setPreviewOpen] = useState(false)
@@ -1889,6 +1909,13 @@ function BuilderPage() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!session) return
+      if (planLocked) {
+        const copy = formatNoActivePlanMessage(planUsageQuery.data)
+        throw new Error(
+          copy?.message ||
+            'You do not have an active plan. Renew your plan to edit questions.',
+        )
+      }
       const isDraft = session.rawStatus === 'draft'
       if (hasMixedQuestionTypes) {
         throw new Error('Only one question type is allowed per session. Please keep all questions the same type before saving.')
@@ -2174,6 +2201,7 @@ function BuilderPage() {
 
   return (
     <section className="space-y-6">
+      {planLocked ? <PlanExpiredBanner usage={planUsageQuery.data} /> : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-navy-700">Question Builder</p>
@@ -2256,10 +2284,12 @@ function BuilderPage() {
 
           <button
             type="button"
+            disabled={saveMutation.isPending || planLocked}
+            title={planLocked ? 'No active plan — renew to edit questions' : undefined}
             onClick={() => {
               saveMutation.mutate()
             }}
-            className="inline-flex items-center gap-2 rounded-2xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-900/25 transition hover:brightness-110"
+            className="inline-flex items-center gap-2 rounded-2xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-900/25 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {saveMutation.isPending ? 'Saving...' : 'Save'}
           </button>
@@ -3006,6 +3036,12 @@ function BuilderPage() {
         accessToken={accessToken}
         lockedType={sessionQuestionType}
         onAddSelected={addAiGeneratedQuestions}
+      />
+
+      <PlanExpiredModal
+        open={planLockedModalOpen}
+        usage={planUsageQuery.data}
+        onClose={() => setPlanLockedModalOpen(false)}
       />
 
       <Modal open={previewOpen} title="Preview Participant View" onClose={() => setPreviewOpen(false)}>

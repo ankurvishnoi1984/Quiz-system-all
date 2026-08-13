@@ -33,7 +33,9 @@ function ProgressPill({ value, isLive }) {
   )
 }
 
-function SessionCard({ session, onAction }) {
+const PLAN_LOCKED_TITLE = 'No active plan — renew to use this action'
+
+function SessionCard({ session, onAction, planLocked = false }) {
   const preview = useMemo(() => {
     const labels = session.tags?.join(', ') || 'Quiz'
     return `${labels} • ${session.participants} participants • Status: ${session.status}`
@@ -41,6 +43,12 @@ function SessionCard({ session, onAction }) {
 
   const isLive = session.status === 'Live'
   const isCompleted = session.status === 'Completed'
+  const launchDisabled = isCompleted || planLocked
+  const launchTitle = isCompleted
+    ? 'This session has ended'
+    : planLocked
+      ? PLAN_LOCKED_TITLE
+      : undefined
 
   const menuItems = useMemo(() => {
     const items = [
@@ -48,20 +56,33 @@ function SessionCard({ session, onAction }) {
         id: 'edit-session',
         label: 'Edit session',
         icon: Pencil,
+        disabled: planLocked,
+        title: planLocked ? PLAN_LOCKED_TITLE : undefined,
         onClick: () => onAction('edit-session', session),
       },
       {
         id: 'builder',
         label: 'Question builder',
         icon: LayoutList,
+        disabled: planLocked,
+        title: planLocked ? PLAN_LOCKED_TITLE : undefined,
         onClick: () => onAction('builder', session),
       },
       { id: 'analytics', label: 'Analytics', icon: BarChart3, onClick: () => onAction('analytics', session) },
-      { id: 'duplicate', label: 'Duplicate', icon: Copy, onClick: () => onAction('duplicate', session) },
+      {
+        id: 'duplicate',
+        label: 'Duplicate',
+        icon: Copy,
+        disabled: planLocked,
+        title: planLocked ? PLAN_LOCKED_TITLE : undefined,
+        onClick: () => onAction('duplicate', session),
+      },
       {
         id: 'reset-responses',
         label: 'Reset responses',
         icon: RotateCcw,
+        disabled: planLocked,
+        title: planLocked ? PLAN_LOCKED_TITLE : undefined,
         onClick: () => onAction('reset-responses', session),
       },
     ]
@@ -70,6 +91,8 @@ function SessionCard({ session, onAction }) {
         id: 'share',
         label: 'Share',
         icon: Share2,
+        disabled: planLocked,
+        title: planLocked ? PLAN_LOCKED_TITLE : undefined,
         onClick: () => onAction('share', session),
       })
     }
@@ -83,7 +106,7 @@ function SessionCard({ session, onAction }) {
       })
     }
     return items
-  }, [isCompleted, onAction, session])
+  }, [isCompleted, isLive, onAction, planLocked, session])
 
   return (
     <div
@@ -118,8 +141,8 @@ function SessionCard({ session, onAction }) {
         <div className="flex flex-col items-end gap-2">
           <button
             type="button"
-            disabled={isCompleted}
-            title={isCompleted ? 'This session has ended' : undefined}
+            disabled={launchDisabled}
+            title={launchTitle}
             className="rounded-xl border border-blue-200/70 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={() => onAction('launch', session)}
           >
