@@ -10,3 +10,5 @@ yarn-error.log*
 quiz_db.sql
 .env
 *.zip
+dist
+*.sql
