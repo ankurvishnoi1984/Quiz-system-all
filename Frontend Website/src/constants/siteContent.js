@@ -1,4 +1,5 @@
 export const SITE_NAME = 'High Voltage'
+export const SUPPORT_EMAIL = 'techsupport@netcastservice.com'
 
 /** @deprecated Prefer getPlanDisplayPrice(plan) with API plan objects that include price_monthly. */
 export const PLAN_DISPLAY_PRICES = {

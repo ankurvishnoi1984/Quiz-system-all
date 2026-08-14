@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { getAdminPortalUrl } from '../../utils/adminPortal'
 import { LOGO_ALT, LOGO_SRC } from '../../constants/branding'
+import { SUPPORT_EMAIL } from '../../constants/siteContent'
 
 function MarketingFooter() {
   return (
@@ -13,6 +14,12 @@ function MarketingFooter() {
           <p className="max-w-md text-sm leading-relaxed text-slate-400">
             Run interactive quizzes, polls, and surveys for events, training, and meetings — with a
             dedicated host portal for session management and analytics.
+          </p>
+          <p className="mt-4 text-sm">
+            <span className="text-slate-500">Need help? </span>
+            <a href={`mailto:${SUPPORT_EMAIL}`} className="text-white hover:underline">
+              {SUPPORT_EMAIL}
+            </a>
           </p>
         </div>
 

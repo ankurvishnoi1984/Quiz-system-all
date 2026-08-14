@@ -1,11 +1,26 @@
-import { ArrowRight, BarChart3, CheckCircle2, MessageSquare, Presentation, Users, Zap } from 'lucide-react'
+import {
+  ArrowRight,
+  BarChart3,
+  CheckCircle2,
+  ClipboardList,
+  Headphones,
+  Mail,
+  MessageSquare,
+  Presentation,
+  Sparkles,
+} from 'lucide-react'
 import { Link } from 'react-router-dom'
 import StatsBar from '../components/marketing/StatsBar'
 import CTASection from '../components/marketing/CTASection'
 import FAQSection from '../components/marketing/FAQSection'
-import { CORE_FEATURES, HOW_IT_WORKS, TRUST_POINTS, USE_CASES } from '../constants/siteContent'
+import { CORE_FEATURES, HOW_IT_WORKS, SUPPORT_EMAIL, TRUST_POINTS, USE_CASES } from '../constants/siteContent'
 
-const heroIcons = [Zap, Users, BarChart3, Presentation]
+const heroHighlights = [
+  { icon: Sparkles, title: 'Quizzes', detail: 'Timed scoring & leaderboards' },
+  { icon: ClipboardList, title: 'Polls & surveys', detail: 'Instant audience feedback' },
+  { icon: Presentation, title: 'Present mode', detail: 'Stage-ready full screen' },
+  { icon: BarChart3, title: 'Reports', detail: 'PDF & Excel exports' },
+]
 
 function HomePage() {
   return (
@@ -43,54 +58,57 @@ function HomePage() {
             </div>
           </div>
 
-          <div className="glass-card relative overflow-hidden p-6 sm:p-8">
-            <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-navy-400/15 blur-3xl" />
-            <div className="relative space-y-6">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-navy-900">Live session dashboard</p>
-                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
-                  Live
-                </span>
+          <div className="relative">
+            <div className="absolute -right-8 -top-10 h-44 w-44 rounded-full bg-navy-400/25 blur-3xl" />
+            <div className="absolute -bottom-10 -left-8 h-36 w-36 rounded-full bg-accent/20 blur-3xl" />
+
+            <div className="relative overflow-hidden rounded-3xl bg-linear-to-br from-navy-950 via-navy-900 to-navy-800 p-6 text-white shadow-2xl shadow-navy-900/25 sm:p-8">
+              <div className="pointer-events-none absolute right-0 top-0 h-32 w-32 translate-x-8 -translate-y-8 rounded-full bg-white/10 blur-2xl" />
+
+              <div className="relative">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-navy-400">
+                  Host workspace
+                </p>
+                <h2 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">
+                  Build. Present. Measure.
+                </h2>
+                <p className="mt-2 max-w-sm text-sm leading-relaxed text-slate-300">
+                  A dedicated portal for quizzes, polls, surveys, and reports — ready for events,
+                  training, and meetings.
+                </p>
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                <p className="text-sm font-medium text-slate-700">Which topic should we cover next?</p>
-                <div className="mt-4 space-y-2">
-                  {[
-                    { label: 'Product roadmap', pct: 38 },
-                    { label: 'Customer success stories', pct: 27 },
-                    { label: 'Team culture', pct: 21 },
-                    { label: 'Training modules', pct: 14 },
-                  ].map((row) => (
-                    <div key={row.label}>
-                      <div className="mb-1 flex justify-between text-xs text-slate-600">
-                        <span>{row.label}</span>
-                        <span>{row.pct}%</span>
-                      </div>
-                      <div className="h-2 rounded-full bg-slate-200">
-                        <div
-                          className="h-2 rounded-full bg-linear-to-r from-navy-800 to-navy-500"
-                          style={{ width: `${row.pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                {heroIcons.map((Icon, index) => (
+              <div className="relative mt-7 grid grid-cols-2 gap-3">
+                {heroHighlights.map(({ icon: Icon, title, detail }) => (
                   <div
-                    key={index}
-                    className="rounded-xl border border-slate-200 bg-white p-3 text-center shadow-sm"
+                    key={title}
+                    className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm"
                   >
-                    <Icon className="mx-auto size-5 text-navy-700" />
-                    <p className="mt-2 text-xs font-medium text-slate-600">
-                      {['Real-time', 'Audience', 'Analytics', 'Present'][index]}
-                    </p>
+                    <Icon className="size-5 text-navy-400" />
+                    <p className="mt-3 text-sm font-semibold">{title}</p>
+                    <p className="mt-1 text-xs text-slate-400">{detail}</p>
                   </div>
                 ))}
               </div>
+
+              <a
+                href={`mailto:${SUPPORT_EMAIL}`}
+                className="relative mt-6 flex items-center gap-3 rounded-2xl border border-white/10 bg-white px-4 py-4 text-navy-950 shadow-lg transition hover:bg-slate-50"
+              >
+                <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl bg-navy-50 text-navy-800">
+                  <Headphones className="size-5" />
+                </span>
+                <span className="min-w-0 flex-1 text-left">
+                  <span className="block text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Talk to support
+                  </span>
+                  <span className="mt-0.5 flex items-center gap-1.5 text-sm font-semibold">
+                    <Mail className="size-3.5 shrink-0 text-navy-700" />
+                    {SUPPORT_EMAIL}
+                  </span>
+                </span>
+                <ArrowRight className="size-4 shrink-0 text-navy-700" />
+              </a>
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 import { Building2, Globe, Mail, Target } from 'lucide-react'
 import CTASection from '../components/marketing/CTASection'
-import { SITE_NAME, TRUST_POINTS } from '../constants/siteContent'
+import { SITE_NAME, SUPPORT_EMAIL, TRUST_POINTS } from '../constants/siteContent'
 import { getAdminPortalUrl } from '../utils/adminPortal'
 
 const values = [
@@ -94,8 +94,8 @@ function AboutPage() {
         <h2 className="text-2xl font-bold text-navy-950">Get in touch</h2>
         <p className="mt-4 text-slate-600">
           For enterprise plans, custom onboarding, or partnership inquiries, contact our team at{' '}
-          <a href="mailto:support@netcastservice.online" className="font-medium text-navy-800 hover:text-navy-950">
-            support@netcastservice.online
+          <a href={`mailto:${SUPPORT_EMAIL}`} className="font-medium text-navy-800 hover:text-navy-950">
+            {SUPPORT_EMAIL}
           </a>
         </p>
       </section>
