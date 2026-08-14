@@ -45,3 +45,19 @@ export async function signupApi(payload) {
     body: JSON.stringify(payload),
   })
 }
+
+export async function initiatePaymentApi(payload) {
+  const response = await request('/payments/initiate', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return response?.data?.payment
+}
+
+export async function confirmPaymentApi(payload) {
+  const response = await request('/payments/confirm', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return response?.data?.payment
+}

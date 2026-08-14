@@ -1,6 +1,7 @@
 const User = require("./user.model");
 const Plan = require("./plan.model");
 const UserParticipantAddon = require("./user-participant-addon.model");
+const Payment = require("./payment.model");
 const Client = require("./client.model");
 const Department = require("./department.model");
 const Session = require("./session.model");
@@ -19,6 +20,10 @@ const registerAuditHooks = require("./register-audit-hooks");
 
 Plan.hasMany(User, { foreignKey: "plan_id", as: "users" });
 User.belongsTo(Plan, { foreignKey: "plan_id", as: "plan" });
+Plan.hasMany(Payment, { foreignKey: "plan_id", as: "payments" });
+Payment.belongsTo(Plan, { foreignKey: "plan_id", as: "plan" });
+User.hasMany(Payment, { foreignKey: "user_id", as: "payments" });
+Payment.belongsTo(User, { foreignKey: "user_id", as: "user" });
 User.hasMany(UserParticipantAddon, { foreignKey: "user_id", as: "participant_addons" });
 UserParticipantAddon.belongsTo(User, { foreignKey: "user_id", as: "user" });
 
@@ -76,6 +81,7 @@ MediaAsset.belongsTo(User, { foreignKey: "uploaded_by" });
 const models = {
   User,
   Plan,
+  Payment,
   UserParticipantAddon,
   Client,
   Department,

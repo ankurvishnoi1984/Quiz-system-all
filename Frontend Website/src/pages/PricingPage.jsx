@@ -115,7 +115,7 @@ function PricingPage() {
                         <span className="text-base font-medium text-slate-500">{price.period}</span>
                       ) : null}
                     </p>
-                    <p className="mt-1 text-xs text-slate-500">Payment gateway coming soon</p>
+                    <p className="mt-1 text-xs text-slate-500">Demo checkout — card & UPI</p>
                   </div>
 
                   <ul className="mb-8 flex-1 space-y-3 text-sm text-slate-700">

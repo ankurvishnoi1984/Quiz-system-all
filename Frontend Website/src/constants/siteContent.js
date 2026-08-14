@@ -169,7 +169,7 @@ export const TRUST_POINTS = [
   'Participant join links work on any modern browser',
   'Designed for in-room, hybrid, and fully remote audiences',
   'Plans limit concurrent live connections — capacity frees up when participants disconnect',
-  'Payment gateway integration coming soon — plans activate on signup today',
+  'Demo checkout available today — card and UPI flows are simulated until live gateway integration',
 ]
 
 export const FAQ_ITEMS = [

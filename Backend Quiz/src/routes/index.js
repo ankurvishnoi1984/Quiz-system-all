@@ -1,6 +1,7 @@
 const express = require("express");
 const { healthHandler } = require("../health");
 const authRoutes = require("./auth.routes");
+const paymentRoutes = require("./payment.routes");
 const userRoutes = require("./user.routes");
 const planRoutes = require("./plan.routes");
 const clientRoutes = require("./client.routes");
@@ -22,6 +23,7 @@ const router = express.Router();
 router.get("/health", healthHandler);
 
 router.use("/auth", authRoutes);
+router.use("/payments", paymentRoutes);
 router.use("/audit-logs", auditLogRoutes);
 router.use("/users", userRoutes);
 router.use("/plans", planRoutes);

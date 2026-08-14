@@ -92,6 +92,11 @@ function validateSignupPayload(payload) {
     errors.push("company_name must be a string");
   }
 
+  const paymentId = Number(payload?.payment_id);
+  if (!payload?.payment_id || Number.isNaN(paymentId) || paymentId < 1) {
+    errors.push("payment_id is required");
+  }
+
   return errors;
 }
 

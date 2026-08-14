@@ -1,0 +1,37 @@
+-- Payments table for dummy checkout today; Razorpay/Stripe fields reserved for future.
+-- Run once against quiz_db if migrations are not applied via sequelize-cli.
+
+CREATE TABLE IF NOT EXISTS payments (
+  payment_id INT NOT NULL AUTO_INCREMENT,
+  payment_reference VARCHAR(64) NOT NULL,
+  purpose VARCHAR(40) NOT NULL DEFAULT 'plan_signup',
+  plan_id INT NOT NULL,
+  user_id INT NULL,
+  payer_email VARCHAR(255) NOT NULL,
+  payer_name VARCHAR(200) NOT NULL,
+  company_name VARCHAR(200) NULL,
+  amount INT NOT NULL COMMENT 'Smallest currency unit, e.g. paise for INR',
+  currency VARCHAR(3) NOT NULL DEFAULT 'INR',
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  payment_method VARCHAR(20) NULL,
+  provider VARCHAR(30) NOT NULL DEFAULT 'dummy',
+  provider_order_id VARCHAR(120) NULL,
+  provider_payment_id VARCHAR(120) NULL,
+  provider_signature VARCHAR(255) NULL,
+  method_details JSON NULL,
+  failure_reason VARCHAR(500) NULL,
+  metadata JSON NULL,
+  expires_at DATETIME NULL,
+  paid_at DATETIME NULL,
+  failed_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (payment_id),
+  UNIQUE KEY payments_reference_unique (payment_reference),
+  KEY payments_payer_email_idx (payer_email),
+  KEY payments_status_idx (status),
+  KEY payments_user_id_idx (user_id),
+  KEY payments_provider_payment_idx (provider, provider_payment_id),
+  CONSTRAINT payments_plan_fk FOREIGN KEY (plan_id) REFERENCES plans (plan_id) ON UPDATE CASCADE ON DELETE RESTRICT,
+  CONSTRAINT payments_user_fk FOREIGN KEY (user_id) REFERENCES users (user_id) ON UPDATE CASCADE ON DELETE SET NULL
+);

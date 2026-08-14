@@ -2,6 +2,7 @@ import { Check, Eye, EyeOff, LoaderCircle, Lock, User } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import DemoPaymentForm from '../components/checkout/DemoPaymentForm'
 import { fetchPublicPlansApi, signupApi } from '../services/publicApi'
 import { getPlanDisplayPrice, formatPlanParticipantLimitShort, formatPlanParticipantLimit } from '../constants/siteContent'
 import { getAdminPortalUrl, redirectToAdminLoginAfterSignup } from '../utils/adminPortal'
@@ -40,6 +41,7 @@ function RegisterPage() {
   const [submitError, setSubmitError] = useState('')
   const [step, setStep] = useState('register')
   const [loading, setLoading] = useState(false)
+  const [paidPayment, setPaidPayment] = useState(null)
 
   const plansQuery = useQuery({
     queryKey: ['public-plans'],
@@ -90,10 +92,11 @@ function RegisterPage() {
       return
     }
 
-    setStep('checkout')
+    setStep('payment')
   }
 
-  const handleCompletePurchase = async () => {
+  const handlePaymentSuccess = async (payment) => {
+    setPaidPayment(payment)
     setSubmitError('')
     setLoading(true)
 
@@ -104,28 +107,31 @@ function RegisterPage() {
         email: email.trim(),
         password,
         plan_id: Number(selectedPlanId),
+        payment_id: payment.payment_id,
       })
       redirectToAdminLoginAfterSignup(email.trim())
     } catch (error) {
-      setSubmitError(error.message || 'Unable to create account')
-      setStep('register')
+      setSubmitError(error.message || 'Payment succeeded but account creation failed')
+      setStep('payment')
       setLoading(false)
     }
   }
 
   const price = selectedPlan ? getPlanDisplayPrice(selectedPlan) : null
+  const stepTitle =
+    step === 'register' ? 'Create your host account' : step === 'payment' ? 'Complete payment' : 'Confirm your plan'
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
       <div className="mb-8 text-center">
         <p className="eyebrow">Get started</p>
-        <h1 className="section-heading mt-3">
-          {step === 'register' ? 'Create your host account' : 'Confirm your plan'}
-        </h1>
+        <h1 className="section-heading mt-3">{stepTitle}</h1>
         <p className="section-subheading mx-auto max-w-2xl">
           {step === 'register'
-            ? 'Register on this website, then continue in the host admin portal to build and run sessions.'
-            : 'Review your details and complete signup. You will be redirected to the admin portal to sign in.'}
+            ? 'Register on this website, pay for your plan, then continue in the host admin portal.'
+            : step === 'payment'
+              ? 'Use demo card or UPI checkout. Your account is created only after payment succeeds.'
+              : 'Review your details before payment.'}
         </p>
       </div>
 
@@ -302,97 +308,83 @@ function RegisterPage() {
               ) : null}
 
               <button type="submit" className="btn-primary mt-2 w-full">
-                Continue to buy
+                Continue to payment
               </button>
             </form>
-          ) : (
+          ) : step === 'payment' ? (
             <div className="space-y-6">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                <p className="text-sm font-semibold text-navy-900">Account</p>
-                <p className="mt-2 text-sm text-slate-600">{fullName}</p>
-                <p className="text-sm text-slate-600">{email}</p>
-                {companyName ? <p className="text-sm text-slate-600">{companyName}</p> : null}
-              </div>
-
-              <div className="rounded-2xl border border-navy-200 bg-navy-50/50 p-5">
-                <p className="text-sm font-semibold text-navy-900">Selected plan</p>
-                {selectedPlan ? (
-                  <>
-                    <p className="mt-2 text-lg font-bold text-navy-950">{selectedPlan.name}</p>
-                    <p className="text-sm text-slate-600">
-                      {formatPlanParticipantLimit(selectedPlan.max_participants)}
-                    </p>
-                    <p className="mt-3 text-2xl font-bold text-navy-900">
-                      {price?.label}
-                      <span className="text-base font-medium text-slate-500">{price?.period}</span>
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {formatPlanParticipantLimitShort(selectedPlan.max_participants)} while connected live ·
-                      Payment skipped for now
-                    </p>
-                  </>
-                ) : null}
-              </div>
-
-              <ul className="space-y-2 text-sm text-slate-700">
-                <li className="flex items-center gap-2">
-                  <Check className="size-4 text-navy-700" />
-                  Concurrent participant limit applied to your account
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="size-4 text-navy-700" />
-                  Redirect to admin portal after completion
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="size-4 text-navy-700" />
-                  Sign in with the email and password you just created
-                </li>
-              </ul>
-
-              {submitError ? (
-                <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
-                  {submitError}
-                </p>
-              ) : null}
-
-              <div className="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => setStep('register')}
-                  className="btn-secondary"
-                  disabled={loading}
-                >
-                  Back
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCompletePurchase}
-                  disabled={loading}
-                  className="btn-primary flex-1 sm:flex-none"
-                >
-                  {loading ? (
-                    <>
-                      <LoaderCircle className="size-4 animate-spin" />
-                      Creating account...
-                    </>
-                  ) : (
-                    'Complete signup'
-                  )}
-                </button>
-              </div>
+              {loading ? (
+                <div className="flex items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-navy-900">
+                  <LoaderCircle className="size-4 animate-spin" />
+                  Creating your account after successful payment…
+                </div>
+              ) : (
+                <DemoPaymentForm
+                  email={email}
+                  payerName={fullName}
+                  companyName={companyName}
+                  plan={selectedPlan}
+                  onPaid={handlePaymentSuccess}
+                  onBack={() => {
+                    setStep('register')
+                    setSubmitError('')
+                  }}
+                  submitError={submitError}
+                  setSubmitError={setSubmitError}
+                />
+              )}
             </div>
-          )}
+          ) : null}
         </section>
 
         <aside className="space-y-4">
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-navy-900">Order summary</h2>
+            {selectedPlan ? (
+              <div className="mt-4 space-y-3 text-sm text-slate-600">
+                <p>
+                  <span className="font-semibold text-navy-900">{selectedPlan.name}</span>
+                  <br />
+                  {formatPlanParticipantLimit(selectedPlan.max_participants)}
+                </p>
+                <p className="text-2xl font-bold text-navy-950">
+                  {price?.label}
+                  <span className="text-base font-medium text-slate-500">{price?.period}</span>
+                </p>
+                {fullName ? (
+                  <p>
+                    Account: {fullName}
+                    <br />
+                    {email}
+                  </p>
+                ) : null}
+                {paidPayment?.payment_reference ? (
+                  <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-900">
+                    Paid — {paidPayment.payment_reference}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-navy-900">After signup</h2>
             <ol className="mt-4 space-y-3 text-sm text-slate-600">
-              <li>1. Your account and plan are created.</li>
-              <li>2. You are redirected to the admin portal login page.</li>
-              <li>3. Sign in and open your dashboard to create your first session.</li>
+              <li className="flex items-center gap-2">
+                <Check className="size-4 text-navy-700" />
+                Demo payment recorded securely on our server
+              </li>
+              <li className="flex items-center gap-2">
+                <Check className="size-4 text-navy-700" />
+                Account and plan created automatically
+              </li>
+              <li className="flex items-center gap-2">
+                <Check className="size-4 text-navy-700" />
+                Redirect to admin portal to sign in
+              </li>
             </ol>
           </div>
+
           <p className="text-sm text-slate-500">
             Already registered?{' '}
             <a href={getAdminPortalUrl('/login')} className="font-medium text-navy-800 hover:text-navy-950">

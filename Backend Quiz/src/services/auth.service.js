@@ -2,6 +2,10 @@ const bcrypt = require("bcryptjs");
 const { User, Plan } = require("../models");
 const { sequelize } = require("../config/database");
 const { getWebsiteSignupOrganization } = require("./websiteSignupOrg.service");
+const {
+  assertPaymentEligibleForSignup,
+  linkPaymentToUser
+} = require("./payment.service");
 const { sendPasswordResetEmail } = require("./email.service");
 const { generateTemporaryPassword } = require("../utils/password");
 const { addDaysToDateOnly } = require("./plan.service");
@@ -95,6 +99,19 @@ async function signupUser(input) {
     throw error;
   }
 
+  const paymentId = Number(input.payment_id);
+  if (!input.payment_id || Number.isNaN(paymentId) || paymentId < 1) {
+    const error = new Error("payment_id is required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  await assertPaymentEligibleForSignup({
+    paymentId,
+    email,
+    planId: plan.plan_id
+  });
+
   const planExpiresAt = plan.default_duration_days
     ? addDaysToDateOnly(plan.default_duration_days)
     : null;
@@ -120,6 +137,8 @@ async function signupUser(input) {
       },
       { transaction }
     );
+
+    await linkPaymentToUser(paymentId, user.user_id, { transaction });
 
     await transaction.commit();
 
