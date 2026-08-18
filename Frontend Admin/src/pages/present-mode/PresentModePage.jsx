@@ -31,6 +31,11 @@ import {
 } from '../../utils/livePresentation'
 import { SESSION_LEADERBOARD_TOP_N } from '../../utils/leaderboard'
 import { isSessionQuizTotalTimeEnabled } from '../../utils/sessionFlags'
+import {
+  HOST_EXTRA_SOUNDS_ENABLED,
+  playLeaderboardShown,
+  playSlideChanged,
+} from '../../utils/timerSounds'
 import { getLastActivatedLiveQuestion } from '../participant-session/utils/questionUtils'
 import { formatScheduledSessionForDisplay } from '../../utils/sessionSchedule'
 import { LeaderboardSlide } from './LeaderboardSlide'
@@ -69,6 +74,7 @@ function PresentModePage({
   const { session, mappedQuestions, responses, participants, leaderboard, isLoading, isError } =
     useLiveSession(accessToken, sessionId, {
       mode: readOnly ? 'viewer' : 'host',
+      sessionSounds: HOST_EXTRA_SOUNDS_ENABLED,
       onPresentSlideChanged: readOnly ? applySyncedSlide : undefined,
     })
 
@@ -415,12 +421,22 @@ function PresentModePage({
   const currentQuestion = currentSlide?.type === 'question' ? currentSlide.question : null
 
   const goPrev = useCallback(() => {
-    setSlideIndex((i) => Math.max(0, i - 1))
-  }, [])
+    const next = Math.max(0, slideIndex - 1)
+    if (next === slideIndex) return
+    setSlideIndex(next)
+    if (!HOST_EXTRA_SOUNDS_ENABLED) return
+    if (slides[next]?.type === 'leaderboard') playLeaderboardShown()
+    else playSlideChanged()
+  }, [slideIndex, slides])
 
   const goNext = useCallback(() => {
-    setSlideIndex((i) => Math.min(slideTotal - 1, i + 1))
-  }, [slideTotal])
+    const next = Math.min(slideTotal - 1, slideIndex + 1)
+    if (next === slideIndex) return
+    setSlideIndex(next)
+    if (!HOST_EXTRA_SOUNDS_ENABLED) return
+    if (slides[next]?.type === 'leaderboard') playLeaderboardShown()
+    else playSlideChanged()
+  }, [slideIndex, slideTotal, slides])
 
   useEffect(() => {
     didBootstrapSlideRef.current = false
@@ -483,6 +499,7 @@ function PresentModePage({
     prevLeaderboardEnabledRef.current = enabled
 
     if (enabled) {
+      if (HOST_EXTRA_SOUNDS_ENABLED) playLeaderboardShown()
       setHostLeaderboardOpen(true)
       broadcastPreviewFollow(sessionId, { screen: 'leaderboard' })
       return

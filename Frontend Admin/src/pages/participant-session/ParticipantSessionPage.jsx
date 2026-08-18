@@ -20,6 +20,19 @@ import { useParticipantProgressPersistence } from '../../hooks/useParticipantPro
 import { useParticipantPreJoinRealtime } from '../../hooks/useParticipantPreJoinRealtime'
 import { hasSessionCodeInJoinPath, normalizeSessionCode } from '../../utils/joinUrl'
 import { computeResponseTimeMs } from '../../utils/quizResponseTime'
+import {
+  playAnswerCorrect,
+  playAnswerReveal,
+  playAnswerWrong,
+  playJoinedSession,
+  playLeaderboardShown,
+  playLeaderboardUpdate,
+  playNewQuestion,
+  playPickAnswer,
+  playSessionEnded,
+  playSubmitSuccess,
+  unlockTimerAudio,
+} from '../../utils/timerSounds'
 import { isSessionQuizTotalTimeEnabled, isSessionRandomQuestionOrderEnabled, isStrictLateJoinSession, sessionHasTimedQuestions } from '../../utils/sessionFlags'
 import {
   questionSupportsLeaderboard,
@@ -622,6 +635,7 @@ function ParticipantSessionPage() {
 
   const handleHostQuestionActivated = useCallback(
     (questionId) => {
+      playNewQuestion()
       addUnseenActivatedQuestion(questionId)
       if (randomQuestionOrderEnabled) return
       pendingActivatedQuestionIdRef.current = questionId
@@ -695,6 +709,7 @@ function ParticipantSessionPage() {
     freezeAllCountdowns()
     if (sessionEndedNotifiedRef.current) return
     sessionEndedNotifiedRef.current = true
+    playSessionEnded()
     setSessionEndedModal(true)
   }, [participantToken, session?.status, freezeAllCountdowns])
 
@@ -727,6 +742,7 @@ function ParticipantSessionPage() {
         freezeAllCountdowns()
         if (!sessionEndedNotifiedRef.current) {
           sessionEndedNotifiedRef.current = true
+          playSessionEnded()
           setSessionEndedModal(true)
         }
       }
@@ -888,13 +904,28 @@ function ParticipantSessionPage() {
     const offAnswerReveal = client.on(RealtimeEvent.ANSWER_REVEALED, (data) => {
       const qid = String(data?.question_id ?? '')
       if (!qid) return
+      const revealed = Boolean(data.answer_revealed)
+      const correctOptionIds = (data.correct_option_ids || []).map(Number)
       setAnswerRevealByQuestion((prev) => ({
         ...prev,
         [qid]: {
-          revealed: Boolean(data.answer_revealed),
-          correctOptionIds: (data.correct_option_ids || []).map(Number),
+          revealed,
+          correctOptionIds,
         },
       }))
+      if (revealed) {
+        const state = useParticipantStore.getState()
+        const q = activeQuestionsRef.current.find((item) => String(item.id) === qid)
+        const response = state.quizResponses?.[qid] || state.quizResponses?.[Number(qid)]
+        const submitted = Boolean((state.quizSubmittedQuestionIds || {})[qid])
+        const isCorrect =
+          submitted && q
+            ? isParticipantChoiceCorrect(q, response, { revealed: true, correctOptionIds })
+            : null
+        if (isCorrect === true) playAnswerCorrect()
+        else if (isCorrect === false) playAnswerWrong()
+        else playAnswerReveal()
+      }
       queryClient.invalidateQueries({ queryKey: ['participant-questions', dbSessionId] })
     })
 
@@ -905,6 +936,7 @@ function ParticipantSessionPage() {
     })
 
     const offLeaderboard = client.on(RealtimeEvent.LEADERBOARD_UPDATE, (data) => {
+      playLeaderboardUpdate()
       if (Array.isArray(data.leaderboard)) {
         setLeaderboard(data.leaderboard)
       }
@@ -945,7 +977,8 @@ function ParticipantSessionPage() {
           : old,
       )
 
-      if (!wasLeaderboardEnabled && isLeaderboardEnabled) {
+        if (!wasLeaderboardEnabled && isLeaderboardEnabled) {
+        playLeaderboardShown()
         setStep((current) => {
           if (current === 'join' || current === 'waiting') return current
           return 'leaderboard'
@@ -981,6 +1014,9 @@ function ParticipantSessionPage() {
           ...prev,
           [qid]: Boolean(data.show_leaderboard),
         }))
+        if (data.show_leaderboard) {
+          playLeaderboardShown()
+        }
         if (!data.show_leaderboard) {
           setQuestionLeaderboardByQuestion((prev) => {
             const next = { ...prev }
@@ -1529,6 +1565,7 @@ function ParticipantSessionPage() {
         if (Number(q.timeLimit) > 0) {
           freezeCountdownAfterSubmit(questionId)
         }
+        playSubmitSuccess()
         return true
       } catch (err) {
         const message = err?.message || ''
@@ -1593,6 +1630,7 @@ function ParticipantSessionPage() {
       if (dbSessionId) {
         queryClient.invalidateQueries({ queryKey: ['participant-leaderboard', dbSessionId] })
       }
+      playSubmitSuccess()
       return true
     } catch (err) {
       console.error(err)
@@ -1802,6 +1840,7 @@ function ParticipantSessionPage() {
   const handleJoin = async (event) => {
     event.preventDefault()
     setJoinError('')
+    unlockTimerAudio()
 
     if (!effectiveSessionCode) {
       setJoinError('Please enter a session code')
@@ -1877,6 +1916,7 @@ function ParticipantSessionPage() {
         setStep('waiting')
       }
       setJoinError('')
+      playJoinedSession()
     } catch (err) {
       setJoinError(err.message || 'Failed to join session')
     }
@@ -1932,6 +1972,7 @@ function ParticipantSessionPage() {
       if (!canEditResponses) return
       const q = activeQuestions.find((item) => item.id === questionId)
       if (!q) return
+      playPickAnswer()
       if (q.allowMultipleSelect) {
         setResponses((prev) => {
           const current = prev[questionId] || {}
@@ -1960,6 +2001,7 @@ function ParticipantSessionPage() {
       if (!canEditResponses) return
       const q = activeQuestions.find((item) => item.id === questionId)
       if (!q || q.type !== 'Emoji Reaction') return
+      playPickAnswer()
       setResponses((prev) => {
         const current = prev[questionId] || {}
         const selected = String(current.selectedOption || '').trim()
@@ -1988,6 +2030,7 @@ function ParticipantSessionPage() {
       }
       const t = tagsInput.trim()
       if (!t) return
+      playPickAnswer()
       setResponses((prev) => ({
         ...prev,
         [questionId]: {
@@ -2169,11 +2212,15 @@ function ParticipantSessionPage() {
             onAddTag={handleAddWordCloudTag}
             onSelectOption={handleSelectOption}
             onToggleEmojiOption={handleToggleEmojiOption}
-            onSelectRating={(questionId, rating) => updateResponse(questionId, { rating })}
+            onSelectRating={(questionId, rating) => {
+              playPickAnswer()
+              updateResponse(questionId, { rating })
+            }}
             onTextChange={(questionId, text) => updateResponse(questionId, { textResponse: text })}
-            onRankingChange={(questionId, rankingOrder) =>
+            onRankingChange={(questionId, rankingOrder) => {
+              playPickAnswer()
               updateResponse(questionId, { rankingOrder })
-            }
+            }}
             onPrevious={handlePrevious}
             onNextOrSubmit={handleNextOrSubmit}
             // onGoToQa={() => setStep('qa')} // Q&A feature disabled

@@ -10,6 +10,7 @@ export function HostQuestionTimer({
   singleActiveQuestionMode = false,
   variant = 'default',
   className = '',
+  soundEnabled = true,
 }) {
   const { visible, remainingSeconds, timeLimit } = useHostQuestionCountdown(question, {
     singleActiveQuestionMode,
@@ -23,6 +24,7 @@ export function HostQuestionTimer({
       timeLimit={timeLimit}
       variant={variant}
       className={className}
+      soundEnabled={soundEnabled}
     />
   )
 }

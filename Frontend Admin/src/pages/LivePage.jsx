@@ -74,6 +74,15 @@ import {
 } from '../services/liveApi'
 import { getPlanUsageApi } from '../services/managementApi'
 import { formatQuizSubmitTimeCompact } from '../utils/quizResponseTime'
+import {
+  HOST_EXTRA_SOUNDS_ENABLED,
+  playAnswerReveal,
+  playHostParticipantJoined,
+  playHostResponseReceived,
+  playLeaderboardShown,
+  playLeaderboardUpdate,
+  playSessionEnded,
+} from '../utils/timerSounds'
 import { createRealtimeClient, RealtimeEvent } from '../services/realtimeClient'
 import {
   buildOptionChartData,
@@ -328,11 +337,13 @@ function LivePage() {
       console.warn('[WS host]', data?.message)
     })
     const offResp = client.on('response_received', () => {
+      playHostResponseReceived()
       queryClient.invalidateQueries({ queryKey: ['live-question-results'] })
       queryClient.invalidateQueries({ queryKey: ['live-responses', sessionId] })
       queryClient.invalidateQueries({ queryKey: ['live-leaderboard', sessionId] })
     })
     const offRankingResp = client.on(RealtimeEvent.RANKING_RESPONSE_SUBMITTED, () => {
+      playHostResponseReceived()
       queryClient.invalidateQueries({ queryKey: ['live-question-results'] })
       queryClient.invalidateQueries({ queryKey: ['live-responses', sessionId] })
     })
@@ -344,22 +355,34 @@ function LivePage() {
           old ? { ...old, status: data.status } : old,
         )
       }
+      if (
+        HOST_EXTRA_SOUNDS_ENABLED &&
+        (data?.status === 'completed' || data?.status === 'archived')
+      ) {
+        playSessionEnded()
+      }
     })
     const offQuestion = client.on('question_changed', () => {
       queryClient.invalidateQueries({ queryKey: ['live-questions', sessionId] })
     })
-    const offAnswerReveal = client.on(RealtimeEvent.ANSWER_REVEALED, () => {
+    const offAnswerReveal = client.on(RealtimeEvent.ANSWER_REVEALED, (data) => {
+      if (HOST_EXTRA_SOUNDS_ENABLED && data?.answer_revealed) playAnswerReveal()
       queryClient.invalidateQueries({ queryKey: ['live-questions', sessionId] })
     })
-    const offQuestionLb = client.on(RealtimeEvent.QUESTION_LEADERBOARD_VISIBILITY, () => {
+    const offQuestionLb = client.on(RealtimeEvent.QUESTION_LEADERBOARD_VISIBILITY, (data) => {
+      if (HOST_EXTRA_SOUNDS_ENABLED && data?.show_leaderboard) playLeaderboardShown()
       queryClient.invalidateQueries({ queryKey: ['live-questions', sessionId] })
     })
     const offLeaderboard = client.on(RealtimeEvent.LEADERBOARD_UPDATE, (data) => {
+      if (HOST_EXTRA_SOUNDS_ENABLED) playLeaderboardUpdate()
       if (Array.isArray(data?.leaderboard)) {
         queryClient.setQueryData(['live-leaderboard', sessionId, leaderboardLimit], data.leaderboard)
       } else {
         queryClient.invalidateQueries({ queryKey: ['live-leaderboard', sessionId] })
       }
+    })
+    const offParticipantJoined = client.on(RealtimeEvent.PARTICIPANT_JOINED, () => {
+      playHostParticipantJoined()
     })
 
 
@@ -376,6 +399,7 @@ function LivePage() {
       offAnswerReveal()
       offQuestionLb()
       offLeaderboard()
+      offParticipantJoined()
       client.disconnect()
     }
   }, [sessionQuery.data?.session_code, accessToken, queryClient, sessionId, leaderboardLimit])

@@ -1,4 +1,5 @@
 import { Check, Clock3 } from 'lucide-react'
+import { useQuestionTimerSound } from '../../../../hooks/useQuestionTimerSound'
 
 function formatTime(seconds) {
   const mins = Math.floor(seconds / 60)
@@ -12,7 +13,10 @@ export function QuestionTimer({
   submittedAtSeconds = null,
   variant = 'default',
   className = '',
+  soundEnabled = true,
 }) {
+  useQuestionTimerSound(timer, { enabled: soundEnabled })
+
   const expired = timer <= 0
   const urgent = !expired && timer <= 5
   const submitted = submittedAtSeconds != null

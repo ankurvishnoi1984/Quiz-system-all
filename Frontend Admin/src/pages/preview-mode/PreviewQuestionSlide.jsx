@@ -144,6 +144,7 @@ export function PreviewQuestionSlide({
             singleActiveQuestionMode={singleActiveQuestionMode}
             variant="compact"
             className="absolute right-[clamp(0.5rem,2vw,1rem)] top-[clamp(0.25rem,1vh,0.75rem)] z-30"
+            soundEnabled={false}
           />
         ) : null}
         <div

@@ -22,6 +22,13 @@ import {
   mergeParticipantLists,
 } from '../utils/livePresentation'
 import { SESSION_LEADERBOARD_TOP_N } from '../utils/leaderboard'
+import {
+  playAnswerReveal,
+  playHostParticipantJoined,
+  playHostResponseReceived,
+  playSessionEnded,
+  playSlideChanged,
+} from '../utils/timerSounds'
 
 /** When WS is healthy, poll less often — push events cover most updates (Phase 1.5). */
 const POLL_MS_WHEN_WS = 20000
@@ -31,6 +38,7 @@ const JOIN_INVALIDATE_DEBOUNCE_MS = 400
 export function useLiveSession(accessToken, sessionId, options = {}) {
   const mode = options.mode || 'host'
   const isViewer = mode === 'viewer'
+  const sessionSounds = Boolean(options.sessionSounds)
   const queryClient = useQueryClient()
   const onPresentSlideChangedRef = useRef(options.onPresentSlideChanged)
   const [wsConnected, setWsConnected] = useState(false)
@@ -135,6 +143,7 @@ export function useLiveSession(accessToken, sessionId, options = {}) {
     }
 
     const invalidateResponseFanout = () => {
+      if (sessionSounds) playHostResponseReceived()
       queryClient.invalidateQueries({ queryKey: ['live-responses', sessionId] })
       queryClient.invalidateQueries({ queryKey: ['live-leaderboard', sessionId] })
       queryClient.invalidateQueries({ queryKey: ['live-question-results'] })
@@ -149,7 +158,12 @@ export function useLiveSession(accessToken, sessionId, options = {}) {
     }
 
     const offResp = client.on('response_received', invalidateResponseFanout)
-    const offSession = client.on('session_updated', invalidateStructural)
+    const offSession = client.on('session_updated', (data) => {
+      if (sessionSounds && (data?.status === 'completed' || data?.status === 'archived')) {
+        playSessionEnded()
+      }
+      invalidateStructural()
+    })
     const offQuestion = client.on('question_changed', (data) => {
       // Optimistic is_live sync so Preview/Present update before the refetch lands.
       if (data?.question_id != null) {
@@ -195,7 +209,10 @@ export function useLiveSession(accessToken, sessionId, options = {}) {
       }
       invalidateStructural()
     })
-    const offAnswerReveal = client.on(RealtimeEvent.ANSWER_REVEALED, invalidateStructural)
+    const offAnswerReveal = client.on(RealtimeEvent.ANSWER_REVEALED, (data) => {
+      if (sessionSounds && data?.answer_revealed) playAnswerReveal()
+      invalidateStructural()
+    })
     const offQuestionLb = client.on(RealtimeEvent.QUESTION_LEADERBOARD_VISIBILITY, invalidateStructural)
     const offLeaderboard = client.on(RealtimeEvent.LEADERBOARD_UPDATE, (data) => {
       if (Array.isArray(data?.leaderboard)) {
@@ -210,6 +227,7 @@ export function useLiveSession(accessToken, sessionId, options = {}) {
 
     // Phase 1.4: join storm — do not invalidateAll (was refetching 5 heavy APIs per join)
     const offParticipantJoined = client.on(RealtimeEvent.PARTICIPANT_JOINED, (data) => {
+      if (sessionSounds) playHostParticipantJoined()
       const incoming = data?.participant
       const pid = Number(incoming?.participant_id)
       if (Number.isFinite(pid)) {
@@ -262,6 +280,7 @@ export function useLiveSession(accessToken, sessionId, options = {}) {
     const offPresentSlide = client.on(RealtimeEvent.PRESENT_SLIDE_CHANGED, (data) => {
       // Viewers always sync; hosts only when a callback is opted in (e.g. Preview Mode).
       if (!isViewer && !onPresentSlideChangedRef.current) return
+      if (sessionSounds && isViewer) playSlideChanged()
       onPresentSlideChangedRef.current?.(data)
     })
 
@@ -327,6 +346,7 @@ export function useLiveSession(accessToken, sessionId, options = {}) {
     isViewer,
     viewerSessionActive,
     mode,
+    sessionSounds,
   ])
 
   const isLoading = isViewer
