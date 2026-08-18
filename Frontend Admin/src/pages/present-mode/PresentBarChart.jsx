@@ -60,7 +60,7 @@ export function PresentBarChart({ data, rawType, answerRevealed, compact = false
               return [`${value} (${pct}%)`, label]
             }}
           />
-          <Bar dataKey="value" radius={[12, 12, 0, 0]} maxBarSize={120}>
+          <Bar dataKey="value" radius={[12, 12, 0, 0]} maxBarSize={120} animationDuration={750} animationEasing="ease-out">
             {data.map((entry, idx) => (
               <Cell
                 key={entry.name}

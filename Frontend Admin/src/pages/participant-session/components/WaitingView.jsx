@@ -5,7 +5,7 @@ import { PageCenteredShell } from './PageCenteredShell'
 export function WaitingView({ session, transitioningLive }) {
   return (
     <PageCenteredShell maxWidth="max-w-2xl">
-      <div className="space-y-4">
+      <div className="quiz-enter space-y-4">
         <BrandLogoPair
           variant="hero"
           sessionLogoUrl={session?.logo_url}

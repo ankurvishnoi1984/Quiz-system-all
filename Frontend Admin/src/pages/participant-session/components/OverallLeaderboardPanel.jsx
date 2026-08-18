@@ -10,7 +10,7 @@ export function OverallLeaderboardPanel({
   const canShowScores = hasAnyQuestionSaved || sessionStatus === 'completed'
 
   return (
-    <section className="space-y-4 rounded-2xl border border-blue-200/70 bg-white p-5 shadow-sm">
+    <section className="quiz-enter space-y-4 rounded-2xl border border-blue-200/70 bg-white p-5 shadow-sm">
       <div className="flex items-center gap-2">
         <Trophy className="size-5 text-amber-600" aria-hidden />
         <h2 className="text-xl font-bold text-navy-900">Overall Rankings</h2>

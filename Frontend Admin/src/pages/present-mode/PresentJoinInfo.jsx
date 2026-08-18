@@ -214,7 +214,7 @@ export function PresentJoinPanel({ session, className = '' }) {
     <div
       className={`flex min-h-0 w-full min-w-0 flex-1 flex-col items-center justify-center overflow-x-hidden px-[clamp(0.5rem,2vw,1.5rem)] ${className}`}
     >
-      <div className="w-full min-w-0 max-w-6xl">
+      <div className="quiz-enter w-full min-w-0 max-w-6xl">
         <div className="mb-[clamp(1rem,3vh,1.75rem)] text-center">
           {session?.logo_url ? (
             <BrandLogoPair

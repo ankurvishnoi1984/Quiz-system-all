@@ -23,7 +23,9 @@ export function TrueFalseOptions({
             key={label}
             type="button"
             onClick={() => onSelectOption(label)}
-            className={`rounded-2xl border px-4 py-4 text-sm font-semibold transition ${getChoiceRevealClasses({
+            className={`quiz-option rounded-2xl border px-4 py-4 text-sm font-semibold transition ${
+              isSelected ? 'quiz-option-selected' : ''
+            } ${getChoiceRevealClasses({
               isSelected,
               isCorrectOption: isCorrect,
               answerRevealed: canSeeAnswerReveal,

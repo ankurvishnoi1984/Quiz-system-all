@@ -1180,7 +1180,10 @@ function LivePage() {
             </div>
 
             <div className="space-y-4">
-              <div className="space-y-4 rounded-2xl border border-blue-200/70 bg-white/70 p-5">
+              <div
+                key={activeQuestion?.id || 'none'}
+                className="quiz-enter space-y-4 rounded-2xl border border-blue-200/70 bg-white/70 p-5"
+              >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">Current question</p>
@@ -1243,12 +1246,15 @@ function LivePage() {
           <div className="rounded-2xl border border-blue-200 bg-white p-4">
             <div className="flex items-center justify-between text-sm font-semibold text-slate-700">
               <span>Response rate</span>
-              <span>
+              <span key={responded} className="quiz-host-pop">
                 {responded} / {participants} ({responseRate}%)
               </span>
             </div>
             <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-100">
-              <div className="h-full bg-linear-to-r from-navy-600 to-navy-500" style={{ width: `${responseRate}%` }} />
+              <div
+                className="h-full bg-linear-to-r from-navy-600 to-navy-500 transition-all duration-500 ease-out"
+                style={{ width: `${responseRate}%` }}
+              />
             </div>
           </div>
 

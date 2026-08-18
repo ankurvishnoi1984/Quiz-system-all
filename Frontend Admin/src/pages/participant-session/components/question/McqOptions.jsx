@@ -29,7 +29,9 @@ export function McqOptions({
             disabled={inputsLocked}
             type="button"
             onClick={() => onSelectOption(o.option_text)}
-            className={`rounded-2xl border px-4 py-4 text-left text-sm font-semibold transition ${getChoiceRevealClasses({
+            className={`quiz-option rounded-2xl border px-4 py-4 text-left text-sm font-semibold transition ${
+              isSelected ? 'quiz-option-selected' : ''
+            } ${getChoiceRevealClasses({
               isSelected,
               isCorrectOption: isCorrect,
               answerRevealed: canSeeAnswerReveal,

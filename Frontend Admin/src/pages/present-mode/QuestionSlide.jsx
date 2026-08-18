@@ -312,7 +312,7 @@ export function QuestionSlide({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="quiz-slide-in flex min-h-0 flex-1 flex-col">
       <PresentSlideHeader
         sessionTitle={sessionTitle}
         sessionLogoUrl={session?.logo_url}

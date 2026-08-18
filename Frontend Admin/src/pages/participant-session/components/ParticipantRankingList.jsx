@@ -52,7 +52,8 @@ export function ParticipantRankingList({
       {visibleRows.map((row, idx) => (
         <div
           key={row.participant_id}
-          className={`flex items-center justify-between gap-3 rounded-2xl border border-amber-200/60 bg-amber-50/40 ${rowPadding}`}
+          className={`quiz-row-in flex items-center justify-between gap-3 rounded-2xl border border-amber-200/60 bg-amber-50/40 ${rowPadding}`}
+          style={{ animationDelay: `${idx * 55}ms` }}
         >
           <div className="flex min-w-0 items-center gap-3">
             <div className="grid size-8 shrink-0 place-items-center rounded-xl bg-linear-to-br from-amber-400 to-amber-600 text-sm font-bold text-white">

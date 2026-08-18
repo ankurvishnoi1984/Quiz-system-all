@@ -77,9 +77,9 @@ export function RatingOptions({
                 aria-checked={isSelected}
                 aria-label={`Rate ${value} of ${max}`}
                 onClick={() => onSelectRating(value)}
-                className={`flex min-h-12 w-full flex-col items-center justify-center gap-0.5 rounded-xl border px-1 py-2 transition-all active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 ${
+                className={`quiz-option flex min-h-12 w-full flex-col items-center justify-center gap-0.5 rounded-xl border px-1 py-2 transition-all active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 ${
                   isSelected
-                    ? 'border-amber-400 bg-amber-50 text-amber-900 shadow-sm shadow-amber-100/80 ring-2 ring-amber-300/60'
+                    ? 'quiz-option-selected border-amber-400 bg-amber-50 text-amber-900 shadow-sm shadow-amber-100/80 ring-2 ring-amber-300/60'
                     : 'border-slate-200 bg-slate-50/80 text-slate-700 hover:border-amber-200 hover:bg-amber-50/60'
                 }`}
               >
@@ -143,9 +143,9 @@ export function RatingOptions({
                 aria-checked={isSelected}
                 aria-label={`Rate ${value}`}
                 onClick={() => onSelectRating(value)}
-                className={`flex shrink-0 flex-col items-center justify-center gap-1 rounded-xl border transition-all ${desktopButtonSizeClass} ${
+                className={`quiz-option flex shrink-0 flex-col items-center justify-center gap-1 rounded-xl border transition-all ${desktopButtonSizeClass} ${
                   isSelected
-                    ? 'border-amber-400 bg-white text-amber-800 shadow-md shadow-amber-100/80 ring-2 ring-amber-300/50'
+                    ? 'quiz-option-selected border-amber-400 bg-white text-amber-800 shadow-md shadow-amber-100/80 ring-2 ring-amber-300/50'
                     : 'border-slate-200/90 bg-white text-slate-600 hover:border-amber-200 hover:bg-amber-50/70'
                 }`}
               >

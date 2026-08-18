@@ -67,7 +67,7 @@ export function ParticipantAlertModal({
         role="alertdialog"
         aria-labelledby="participant-alert-title"
         aria-describedby="participant-alert-message"
-        className={`relative w-full max-w-md overflow-hidden rounded-2xl border shadow-2xl ${theme.panel}`}
+        className={`quiz-pop relative w-full max-w-md overflow-hidden rounded-2xl border shadow-2xl ${theme.panel}`}
       >
         <div className={`h-1.5 w-full ${theme.bar}`} aria-hidden />
         <div className="p-6 text-center">

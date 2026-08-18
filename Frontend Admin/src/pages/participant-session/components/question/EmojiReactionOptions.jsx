@@ -49,7 +49,7 @@ export function EmojiReactionOptions({
               aria-pressed={isSelected}
               aria-label={`React with ${emoji}`}
               onClick={() => onToggleOption(emoji)}
-              className={`flex min-h-14 min-w-14 items-center justify-center rounded-2xl border bg-white text-4xl leading-none transition duration-200 sm:min-h-16 sm:min-w-16 ${
+              className={`quiz-option flex min-h-14 min-w-14 items-center justify-center rounded-2xl border bg-white text-4xl leading-none transition duration-200 sm:min-h-16 sm:min-w-16 ${
                 isSelected
                   ? 'scale-[1.2] border-indigo-400 ring-4 ring-indigo-300/50 shadow-lg shadow-indigo-100'
                   : 'border-slate-200 hover:border-indigo-200 hover:bg-indigo-50/40'

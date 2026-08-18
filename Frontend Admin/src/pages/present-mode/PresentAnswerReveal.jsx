@@ -27,7 +27,7 @@ export function PresentOptionsKey({ question, chartData = [] }) {
   if (!options.length) return null
 
   return (
-    <div className="mt-4 border-t border-slate-200/80 pt-4">
+    <div className="quiz-banner-in mt-4 border-t border-slate-200/80 pt-4">
       <p className="mb-3 text-center text-[clamp(0.7rem,1.2vw,0.8rem)] font-semibold uppercase tracking-wider text-slate-500">
         Answer key
       </p>
@@ -44,11 +44,12 @@ export function PresentOptionsKey({ question, chartData = [] }) {
           return (
             <div
               key={opt.option_id ?? idx}
-              className={`flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
+              className={`quiz-row-in flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
                 isCorrect
                   ? 'border-emerald-400/90 bg-emerald-50/90'
                   : 'border-slate-200/90 bg-white/80'
               }`}
+              style={{ animationDelay: `${idx * 70}ms` }}
             >
               <span
                 className="grid size-9 shrink-0 place-items-center rounded-lg text-sm font-bold text-white shadow-sm"

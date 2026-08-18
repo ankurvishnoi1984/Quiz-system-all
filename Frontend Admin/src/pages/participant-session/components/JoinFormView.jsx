@@ -25,7 +25,7 @@ export function JoinFormView({
 
   return (
     <PageCenteredShell maxWidth="max-w-lg">
-      <form onSubmit={onSubmit} className="space-y-4 text-left">
+      <form onSubmit={onSubmit} className="quiz-enter space-y-4 text-left">
         <div className="text-center">
           <BrandLogoPair
             variant="hero"

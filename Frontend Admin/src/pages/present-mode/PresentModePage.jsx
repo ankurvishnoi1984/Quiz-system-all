@@ -851,7 +851,7 @@ function PresentModePage({
               readOnly
             />
             <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-[clamp(1rem,4vw,3rem)] text-center">
-              <div className="max-w-2xl rounded-3xl border border-blue-200/70 bg-white/95 px-[clamp(1.5rem,4vw,3rem)] py-[clamp(2rem,6vh,3.5rem)] shadow-xl shadow-navy-900/10">
+              <div className="quiz-enter max-w-2xl rounded-3xl border border-blue-200/70 bg-white/95 px-[clamp(1.5rem,4vw,3rem)] py-[clamp(2rem,6vh,3.5rem)] shadow-xl shadow-navy-900/10">
                 <p className="text-[clamp(0.75rem,1.4vw,0.9rem)] font-semibold uppercase tracking-[0.25em] text-slate-500">
                   Waiting for host
                 </p>

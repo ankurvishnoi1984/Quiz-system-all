@@ -63,7 +63,10 @@ export function ActiveQuestionPanel({
   const useNextNav = navigationEnabled && !isLastDisplayedQuestion
 
   return (
-    <section className="space-y-4 rounded-2xl border border-blue-200/70 bg-white p-5 shadow-sm">
+    <section
+      key={question.id}
+      className="quiz-enter space-y-4 rounded-2xl border border-blue-200/70 bg-white p-5 shadow-sm"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         {navigationEnabled ? (
           <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -116,7 +119,7 @@ export function ActiveQuestionPanel({
       </div>
 
       {showNewQuestionAlert ? (
-        <p className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
+        <p className="quiz-pop rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
           {highlightNextButton
             ? 'New question available — tap Next to view it.'
             : 'New question available — use Previous to view it.'}
@@ -350,7 +353,7 @@ export function ActiveQuestionPanel({
         hasSubmittedQuestion &&
         (!navigationEnabled || isLastDisplayedQuestion) &&
         question.type !== 'Emoji Reaction' && (
-        <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 text-center">
+        <div className="quiz-banner-in rounded-2xl border border-violet-200 bg-violet-50 p-4 text-center">
           <p className="text-sm font-semibold text-violet-800">Thanks for your response!</p>
         </div>
       )}
@@ -362,8 +365,8 @@ export function ActiveQuestionPanel({
           <div
             className={`rounded-2xl border p-4 ${
               participantAnswerIsCorrect
-                ? 'border-emerald-200 bg-emerald-50'
-                : 'border-red-200 bg-red-50'
+                ? 'quiz-banner-in border-emerald-200 bg-emerald-50'
+                : 'quiz-banner-wrong border-red-200 bg-red-50'
             }`}
           >
             <p
