@@ -20,12 +20,14 @@ const INACTIVE_ONBOARDING = {
   isLast: false,
   sessionId: null,
   paused: false,
+  stepDone: true,
   next: () => {},
   back: () => {},
   skip: () => {},
   complete: () => {},
   restart: () => {},
   setPaused: () => {},
+  markStepDone: () => {},
   continueAfterSessionCreated: () => {},
   continueAfterQuestionSaved: () => {},
 }
@@ -56,6 +58,7 @@ export function HostOnboardingProvider({ children }) {
   const [stepIndex, setStepIndex] = useState(0)
   const [sessionId, setSessionId] = useState(null)
   const [paused, setPaused] = useState(false)
+  const [doneSteps, setDoneSteps] = useState(new Set())
 
   const persist = useCallback(
     (next) => {
@@ -111,6 +114,17 @@ export function HostOnboardingProvider({ children }) {
 
   const step = HOST_ONBOARDING_STEPS[stepIndex] || HOST_ONBOARDING_STEPS[0]
   const isLast = stepIndex >= HOST_ONBOARDING_STEPS.length - 1
+
+  const stepDone = !step.requireCompletion || doneSteps.has(step.id)
+
+  const markStepDone = useCallback((stepId) => {
+    setDoneSteps((prev) => {
+      if (prev.has(stepId)) return prev
+      const next = new Set(prev)
+      next.add(stepId)
+      return next
+    })
+  }, [])
 
   const goToStep = useCallback(
     (index, nextSessionId = sessionId) => {
@@ -180,12 +194,14 @@ export function HostOnboardingProvider({ children }) {
       isLast,
       sessionId,
       paused,
+      stepDone,
       next,
       back,
       skip: complete,
       complete,
       restart,
       setPaused,
+      markStepDone,
       continueAfterSessionCreated,
       continueAfterQuestionSaved,
     }),
@@ -196,12 +212,14 @@ export function HostOnboardingProvider({ children }) {
       continueAfterQuestionSaved,
       continueAfterSessionCreated,
       isLast,
+      markStepDone,
       next,
       paused,
       restart,
       sessionId,
       setPaused,
       step,
+      stepDone,
       stepIndex,
     ],
   )

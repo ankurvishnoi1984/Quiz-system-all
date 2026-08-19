@@ -49,7 +49,7 @@ function tooltipPosition(rect, placement) {
 }
 
 export function HostOnboardingTour() {
-  const { active, paused, step, stepIndex, totalSteps, isLast, next, back, skip } = useHostOnboarding()
+  const { active, paused, step, stepIndex, totalSteps, isLast, stepDone, next, back, skip } = useHostOnboarding()
   const location = useLocation()
   const [rect, setRect] = useState(null)
 
@@ -156,13 +156,24 @@ export function HostOnboardingTour() {
                 Back
               </button>
             ) : null}
-            <button
-              type="button"
-              onClick={next}
-              className="rounded-xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 py-2 text-sm font-semibold text-white shadow-md shadow-navy-900/20 hover:brightness-110"
-            >
-              {isLast ? 'Finish' : step.nextLabel || 'Next'}
-            </button>
+            {step.requireCompletion === 'auto' ? (
+              <span className="px-3 py-2 text-xs font-medium text-slate-400">
+                Complete the action to continue
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={next}
+                disabled={!stepDone}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold shadow-md shadow-navy-900/20 transition ${
+                  stepDone
+                    ? 'bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 text-white hover:brightness-110'
+                    : 'cursor-not-allowed bg-slate-200 text-slate-400'
+                }`}
+              >
+                {isLast ? 'Finish' : step.nextLabel || 'Next'}
+              </button>
+            )}
           </div>
         </div>
       </div>

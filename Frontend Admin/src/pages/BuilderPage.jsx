@@ -1120,7 +1120,7 @@ function BuilderPage() {
   const sessionId = searchParams.get('session') || ''
   const navSessionsQuery = useHostNavSessions()
   const { departmentId } = useShell()
-  const { active: tourActive, step: tourStep, next: tourNext, continueAfterQuestionSaved } =
+  const { active: tourActive, step: tourStep, next: tourNext, markStepDone, continueAfterQuestionSaved } =
     useHostOnboarding()
   const navigate = useNavigate()
   const accessToken = useAuthStore((state) => state.accessToken)
@@ -1547,6 +1547,9 @@ function BuilderPage() {
   const updateQuestion = (next) => {
     setDirty(true)
     setQuestions((prev) => prev.map((q) => (q.id === next.id ? next : q)))
+    if (tourActive && tourStep?.id === 'edit-question' && next.text?.trim()) {
+      markStepDone('edit-question')
+    }
   }
 
   const applyQuestionTimeLimit = (seconds) => {

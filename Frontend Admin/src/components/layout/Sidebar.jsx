@@ -20,6 +20,7 @@ import { useHostNavSessions, getBuilderNavTo, getLiveNavTo } from '../../hooks/u
 import { usePlanLock } from '../../hooks/usePlanLock'
 import { useAuthStore } from '../../store/authStore'
 import { isAdminRole } from '../../utils/adminRoles'
+import { useHostOnboarding } from '../../context/HostOnboardingContext'
 
 const staticNavigationItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, kind: 'static' },
@@ -39,6 +40,7 @@ function Sidebar({ collapsed, onToggle }) {
   const sessionsQuery = useHostNavSessions()
   const sessions = sessionsQuery.data
   const { planLocked } = usePlanLock()
+  const { active: tourActive, step: tourStep } = useHostOnboarding()
 
   const builderTo = useMemo(() => getBuilderNavTo(sessions), [sessions])
   const liveTo = useMemo(() => getLiveNavTo(sessions), [sessions])
@@ -139,16 +141,25 @@ function Sidebar({ collapsed, onToggle }) {
       )
     }
 
+    const tourBlocked =
+      tourActive &&
+      tourStep?.route &&
+      item.to &&
+      !item.to.startsWith(tourStep.route)
+
     return (
       <NavLink
         key={navKey}
         to={item.to}
         data-tour={tourId}
+        onClick={tourBlocked ? (e) => e.preventDefault() : undefined}
         className={({ isActive }) =>
           `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
-            isActive
-              ? 'bg-white/18 text-white'
-              : 'text-blue-100/85 hover:bg-white/10 hover:text-white'
+            tourBlocked
+              ? 'cursor-not-allowed text-blue-100/40'
+              : isActive
+                ? 'bg-white/18 text-white'
+                : 'text-blue-100/85 hover:bg-white/10 hover:text-white'
           }`
         }
       >

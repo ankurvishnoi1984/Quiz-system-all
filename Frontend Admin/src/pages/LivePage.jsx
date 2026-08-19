@@ -629,9 +629,15 @@ function LivePage() {
         questionId: activatedId,
         questionIndex: idx >= 0 ? idx : null,
       })
+      if (tourActive && tourStep?.id === 'activate-question') {
+        tourNext()
+      }
     },
     onActivateAllQuestionsSuccess: () => {
       window.setTimeout(() => pushCurrentPreviewFollow(), 0)
+      if (tourActive && tourStep?.id === 'activate-question') {
+        tourNext()
+      }
     },
     onMutationError: (message) => setErrorMessage(message),
     onCloseQuestionSuccess: (questionText) => {
