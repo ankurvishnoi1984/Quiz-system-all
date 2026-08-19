@@ -362,7 +362,7 @@ export default function ShareSessionPanel({
   if (!session) return null
 
   return (
-    <div className="space-y-4">
+    <div data-tour="share-panel" className="space-y-4">
       {shareTab !== 'link' && (
         <div className="rounded-2xl border border-blue-200/70 bg-white p-4">
           <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">Session</p>

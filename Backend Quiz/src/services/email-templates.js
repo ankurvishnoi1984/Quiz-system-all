@@ -636,11 +636,156 @@ Open host dashboard: ${loginUrl}
   };
 }
 
+function renderWebsiteSignupWelcomeEmail({
+  fullName,
+  email,
+  password,
+  planName,
+  planExpiresAt,
+  companyName,
+  brandName,
+  logoCid,
+  logoUrl
+}) {
+  const greeting = fullName ? `Hello ${fullName},` : "Hello,";
+  const loginUrl = buildLoginUrl();
+  const supportEmail = process.env.SUPPORT_EMAIL || "techsupport@netcastservice.com";
+  const safeGreeting = escapeHtml(greeting);
+  const safeEmail = escapeHtml(email);
+  const safePassword = escapeHtml(password);
+  const safePlan = escapeHtml(planName || "Paid plan");
+  const safeExpiry = planExpiresAt ? escapeHtml(planExpiresAt) : "Does not expire";
+
+  const assignmentRows = [
+    renderAssignmentDetail("Email", email),
+    renderAssignmentDetail("Role", "Host"),
+    renderAssignmentDetail("Plan", planName || "Paid plan"),
+    renderAssignmentDetail("Plan valid until", planExpiresAt || "Does not expire"),
+    renderAssignmentDetail("Company", companyName)
+  ]
+    .filter(Boolean)
+    .join("");
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px;font-size:16px;line-height:1.65;color:${BRAND.slate};">${safeGreeting}</p>
+    <p style="margin:0 0 24px;font-size:16px;line-height:1.65;color:${BRAND.slate};">
+      Your host account on "Quiz Platform" is ready. Keep this email for your sign-in details and plan information.
+    </p>
+
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px;">
+      <tr>
+        <td style="background-color:${BRAND.surface};border:1px solid ${BRAND.border};border-radius:12px;padding:20px 22px;">
+          <p style="margin:0 0 14px;font-size:14px;font-weight:700;color:${BRAND.navy};">Account details</p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+            ${assignmentRows}
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 28px;">
+      <tr>
+        <td style="background-color:${BRAND.amberLight};border:1px solid ${BRAND.amberBorder};border-radius:12px;padding:24px;text-align:center;">
+          <p style="margin:0 0 10px;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${BRAND.amber};">
+            Password
+          </p>
+          <p class="password-box" style="margin:0;font-family:'SF Mono',SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;font-size:28px;font-weight:700;letter-spacing:0.18em;color:${BRAND.navy};word-break:break-all;">
+            ${safePassword}
+          </p>
+        </td>
+      </tr>
+    </table>
+
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 28px;">
+      <tr>
+        <td style="background-color:${BRAND.surface};border:1px solid ${BRAND.border};border-radius:12px;padding:20px 22px;">
+          <p style="margin:0 0 14px;font-size:14px;font-weight:700;color:${BRAND.navy};">Getting started</p>
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+            <tr>
+              <td style="padding:0 0 10px;vertical-align:top;width:28px;font-size:14px;font-weight:700;color:${BRAND.blue};">1.</td>
+              <td style="padding:0 0 10px;font-size:14px;line-height:1.55;color:${BRAND.slate};">Open the host portal with the button below.</td>
+            </tr>
+            <tr>
+              <td style="padding:0 0 10px;vertical-align:top;width:28px;font-size:14px;font-weight:700;color:${BRAND.blue};">2.</td>
+              <td style="padding:0 0 10px;font-size:14px;line-height:1.55;color:${BRAND.slate};">Sign in with <strong>${safeEmail}</strong> and the password above.</td>
+            </tr>
+            <tr>
+              <td style="padding:0;vertical-align:top;width:28px;font-size:14px;font-weight:700;color:${BRAND.blue};">3.</td>
+              <td style="padding:0;font-size:14px;line-height:1.55;color:${BRAND.slate};">Create a session, add questions, and go live. Need help? ${escapeHtml(supportEmail)}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:0 auto 28px;">
+      <tr>
+        <td align="center" style="border-radius:12px;background:linear-gradient(135deg,${BRAND.navy} 0%,${BRAND.navyMid} 100%);">
+          <a class="cta-button" href="${escapeHtml(loginUrl)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:${BRAND.white};text-decoration:none;border-radius:12px;">
+            Sign in to the host portal
+          </a>
+        </td>
+      </tr>
+    </table>
+
+    <p style="margin:0 0 8px;font-size:13px;line-height:1.6;color:${BRAND.slateLight};text-align:center;">
+      Or copy this link into your browser:<br />
+      <a href="${escapeHtml(loginUrl)}" style="color:${BRAND.blue};word-break:break-all;">${escapeHtml(loginUrl)}</a>
+    </p>
+
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:28px;">
+      <tr>
+        <td style="background-color:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:16px 18px;">
+          <p style="margin:0;font-size:13px;line-height:1.6;color:#1e3a8a;">
+            <strong>Plan:</strong> ${safePlan}${planExpiresAt ? ` · valid until ${safeExpiry}` : ""}. Keep this email in a safe place.
+          </p>
+        </td>
+      </tr>
+    </table>`;
+
+  const html = renderEmailLayout({
+    preheader: `Your ${brandName || "Quiz Platform"} host account is ready. Sign in with ${email}.`,
+    brandName,
+    title: "Your host account is ready",
+    bodyHtml,
+    footerNote: "You received this email because you created a host account on our website.",
+    logoCid,
+    logoUrl
+  });
+
+  const text = `${greeting}
+
+Your host account on "Quiz Platform" is ready.
+
+ACCOUNT DETAILS
+Email: ${email}
+Role: Host
+Plan: ${planName || "Paid plan"}
+Plan valid until: ${planExpiresAt || "Does not expire"}
+${companyName ? `Company: ${companyName}\n` : ""}
+PASSWORD
+${password}
+
+GETTING STARTED
+1. Open the host portal: ${loginUrl}
+2. Sign in with your email and the password above.
+3. Create a session, add questions, and go live. Need help? ${supportEmail}
+
+— ${brandName || "Quiz Platform"}`;
+
+  return {
+    subject: `Your ${brandName || "Quiz Platform"} host account is ready`,
+    text,
+    html
+  };
+}
+
 module.exports = {
   escapeHtml,
   renderEmailLayout,
   renderPasswordResetEmail,
   renderNewUserWelcomeEmail,
+  renderWebsiteSignupWelcomeEmail,
   renderParticipantLimitExceededEmail,
   renderPlanExpiredEmail,
   buildLoginUrl,

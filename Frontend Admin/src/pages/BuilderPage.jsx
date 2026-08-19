@@ -59,6 +59,7 @@ import { EmojiReactionEditor } from '../components/builder/EmojiReactionEditor'
 import { createDefaultEmojiReactionOptions } from '../utils/emojiReaction'
 import { useHostNavSessions, getLatestSessionId } from '../hooks/useHostNavSessions'
 import { useShell } from '../context/ShellContext'
+import { useHostOnboarding } from '../context/HostOnboardingContext'
 import { getPlanUsageApi } from '../services/managementApi'
 import {
   PlanExpiredBanner,
@@ -1119,6 +1120,8 @@ function BuilderPage() {
   const sessionId = searchParams.get('session') || ''
   const navSessionsQuery = useHostNavSessions()
   const { departmentId } = useShell()
+  const { active: tourActive, step: tourStep, next: tourNext, continueAfterQuestionSaved } =
+    useHostOnboarding()
   const navigate = useNavigate()
   const accessToken = useAuthStore((state) => state.accessToken)
   const user = useAuthStore((state) => state.user)
@@ -1617,6 +1620,9 @@ function BuilderPage() {
     }
     setQuestions((prev) => [...prev, q])
     setSelectedId(q.id)
+    if (tourActive && tourStep?.id === 'add-questions') {
+      tourNext()
+    }
   }
 
   const addAiGeneratedQuestions = (generatedList) => {
@@ -2133,6 +2139,9 @@ function BuilderPage() {
           minute: '2-digit',
         }),
       )
+      if (tourActive && (tourStep?.id === 'edit-question' || tourStep?.id === 'save-question')) {
+        continueAfterQuestionSaved()
+      }
     },
     onError: (error) => {
       setSaveError(error.message || 'Unable to save builder changes')
@@ -2284,6 +2293,7 @@ function BuilderPage() {
 
           <button
             type="button"
+            data-tour="save-question"
             disabled={saveMutation.isPending || planLocked}
             title={planLocked ? 'No active plan — renew to edit questions' : undefined}
             onClick={() => {
@@ -2341,6 +2351,7 @@ function BuilderPage() {
               </div>
               <button
                 type="button"
+                data-tour="add-question"
                 onClick={handleQuickAddQuestion}
                 disabled={!canQuickAddQuestion}
                 title={
@@ -2356,7 +2367,7 @@ function BuilderPage() {
                 Add question
               </button>
             </div>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
+            <div data-tour="question-types" className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
               {QUESTION_TYPES.map((t) => {
                 const Icon = t.icon
                 const isDisabled = Boolean(sessionQuestionType && sessionQuestionType !== t.type) || !isDraftSession
@@ -2615,7 +2626,7 @@ function BuilderPage() {
         </div>
 
         {/* Center: Editor */}
-        <div className="space-y-4">
+        <div data-tour="question-editor" className="space-y-4">
           <div className="rounded-2xl border border-blue-200/70 bg-white/90 p-6 shadow-sm shadow-blue-900/5 backdrop-blur">
             {!selected ? (
               <div className="rounded-2xl border border-dashed border-blue-300 bg-white/70 p-8 text-center text-slate-600">

@@ -8,6 +8,7 @@ import {
   CreditCard,
   FileBarChart2,
   FileQuestion,
+  GraduationCap,
   LayoutDashboard,
   Layers,
   PanelLeftClose,
@@ -29,6 +30,7 @@ const staticNavigationItems = [
   { to: '/client-analytics', label: 'Client Analytics', icon: Layers, kind: 'static', superAdminOnly: true },
   { to: '/monitor/websockets', label: 'Connection Monitor', icon: Activity, kind: 'static', superAdminOnly: true },
   { to: '/reports', label: 'Reports', icon: FileBarChart2, kind: 'static' },
+  { to: '/training', label: 'Training Library', icon: GraduationCap, kind: 'static' },
   { to: '/my-plan', label: 'My Plan', icon: CreditCard, kind: 'static', hideForSuperAdmin: true },
 ]
 
@@ -94,11 +96,22 @@ function Sidebar({ collapsed, onToggle }) {
   const renderNavLink = (item) => {
     const Icon = item.icon
     const navKey = item.kind === 'builder' ? 'nav-builder' : item.kind === 'live' ? 'nav-live' : item.to
+    const tourId =
+      item.kind === 'builder'
+        ? 'nav-builder'
+        : item.kind === 'live'
+          ? 'nav-live'
+          : item.to === '/analytics'
+            ? 'nav-analytics'
+            : item.to === '/training'
+              ? 'nav-training'
+            : undefined
 
     if (item.disabled) {
       return (
         <div
           key={navKey}
+          data-tour={tourId}
           title={item.disabledTitle || 'Unavailable'}
           className="flex cursor-not-allowed items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-blue-100/40"
           aria-disabled="true"
@@ -130,6 +143,7 @@ function Sidebar({ collapsed, onToggle }) {
       <NavLink
         key={navKey}
         to={item.to}
+        data-tour={tourId}
         className={({ isActive }) =>
           `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
             isActive

@@ -60,6 +60,7 @@ import {
 // import { exportQaAnalyticsExcel } from '../utils/qaAnalyticsExcelExport'
 // import { getSessionQaReportApi } from '../services/analyticsApi'
 import { useAuthStore, syncAuthForNewBrowserTab } from '../store/authStore'
+import { useHostOnboarding } from '../context/HostOnboardingContext'
 import {
   getQuestionResultsApi,
   getSessionDetailApi,
@@ -111,6 +112,7 @@ function LivePage() {
   const queryClient = useQueryClient()
   const accessToken = useAuthStore((state) => state.accessToken)
   const user = useAuthStore((state) => state.user)
+  const { active: tourActive, step: tourStep, next: tourNext, setPaused: setTourPaused } = useHostOnboarding()
   const sessionId = searchParams.get('session') || ''
   const navSessionsQuery = useHostNavSessions()
   const { departmentId } = useShell()
@@ -218,6 +220,21 @@ function LivePage() {
     }
   }, [departmentId, sessionId, navSessionsQuery.data, navSessionsQuery.isFetching, navigate])
 
+  useEffect(() => {
+    if (!tourActive) return
+    if (tourStep?.action === 'open-share') {
+      setShareOpen(true)
+      return
+    }
+    if (tourStep?.id === 'launch' || tourStep?.id === 'activate-question' || tourStep?.id === 'host-controls' || tourStep?.id === 'end-session') {
+      setShareOpen(false)
+    }
+  }, [tourActive, tourStep?.action, tourStep?.id, shareOpen])
+
+  useEffect(() => {
+    setTourPaused(Boolean(endSessionConfirmOpen || hostAlert))
+    return () => setTourPaused(false)
+  }, [endSessionConfirmOpen, hostAlert, setTourPaused])
 
   const mappedQuestions = useMemo(
     () => mapLiveQuestions(questionsQuery.data),
@@ -872,7 +889,7 @@ function LivePage() {
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-navy-700">Live session</p>
           <p className="mt-1 text-lg font-bold text-navy-900">{session.title}</p>
-          <p className="mt-1 text-xs text-slate-600">
+          <p className="mt-1 text-xs text-slate-600" data-tour={!canLaunchSession ? 'launch-session' : undefined}>
             {statusLabel} 
           </p>
         </div>
@@ -891,7 +908,14 @@ function LivePage() {
           {showSessionControls ? (
             <button
               type="button"
-              onClick={() => setEndSessionConfirmOpen(true)}
+              data-tour="end-session"
+              onClick={() => {
+                if (tourActive && tourStep?.id === 'end-session') {
+                  tourNext()
+                  return
+                }
+                setEndSessionConfirmOpen(true)
+              }}
               disabled={transitionMutation.isPending}
               className="h-11 rounded-2xl border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 disabled:opacity-60"
             >
@@ -917,6 +941,7 @@ function LivePage() {
           {canLaunchSession ? (
             <button
               type="button"
+              data-tour="launch-session"
               disabled={transitionMutation.isPending || planLocked}
               title={planLocked ? 'No active plan — renew to launch' : undefined}
               onClick={() => {
@@ -936,6 +961,10 @@ function LivePage() {
                   { action: 'start' },
                   {
                     onSuccess: () => {
+                      if (tourActive && tourStep?.id === 'launch') {
+                        tourNext()
+                        return
+                      }
                       setHostAlert({
                         variant: 'success',
                         title: 'Session is live',
@@ -988,6 +1017,7 @@ function LivePage() {
           {canShareSession ? (
             <button
               type="button"
+              data-tour="share-session"
               onClick={() => setShareOpen(true)}
               className="inline-flex h-11 items-center gap-2 rounded-2xl border border-blue-200/70 bg-white/90 px-4 text-sm font-semibold text-slate-700 transition hover:bg-blue-50"
             >
@@ -1061,6 +1091,7 @@ function LivePage() {
             ) : null}
             {showActivateAllQuestionsButton ? (
               <HostQuestionActionButton
+                dataTour="activate-question"
                 disabled={activateAllQuestionsMutation.isPending}
                 icon={Play}
                 label={

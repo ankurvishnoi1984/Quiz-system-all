@@ -5,6 +5,7 @@ import {
   loginApi,
   meApi,
   refreshApi,
+  setHintsCompletedApi,
 } from '../services/authApi'
 
 const AUTH_STORAGE_KEY = 'auth-storage'
@@ -209,6 +210,25 @@ export const useAuthStore = create(
             error: null,
           })
         }
+      },
+      setHintsCompleted: async (completed) => {
+        const { accessToken, user } = get()
+        const nextValue = Boolean(completed)
+        if (user) {
+          set({ user: { ...user, hints_completed: nextValue } })
+        }
+        if (!accessToken) return get().user
+        try {
+          const response = await setHintsCompletedApi(accessToken, nextValue)
+          const nextUser = response?.data?.user
+          if (nextUser) {
+            set({ user: nextUser })
+            return nextUser
+          }
+        } catch {
+          // Keep the optimistic local flag so the tour is not stuck.
+        }
+        return get().user
       },
       logout: () => {
         clearAuthStorage()

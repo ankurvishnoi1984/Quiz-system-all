@@ -1,7 +1,8 @@
-import { ChevronDown, CreditCard, LogOut } from 'lucide-react'
+import { ChevronDown, CircleHelp, CreditCard, LogOut } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useShell } from '../../context/ShellContext'
+import { useHostOnboarding } from '../../context/HostOnboardingContext'
 import { useAuthStore } from '../../store/authStore'
 import { canSwitchShellDepartment } from '../../utils/adminRoles'
 import { isShellFilterDisabled } from '../../utils/shellFilterPaths'
@@ -15,6 +16,7 @@ const pageTitles = {
   '/department-analytics': 'Department Analytics',
   '/client-analytics': 'Client Analytics',
   '/reports': 'Reports',
+  '/training': 'Training Library',
   '/manage/clients': 'Manage Clients',
   '/manage/departments': 'Manage Departments',
   '/manage/users': 'User Management',
@@ -30,6 +32,7 @@ function Navbar() {
   const { client, setClient, clientId, setClientId, department, setDepartment, departmentId, setDepartmentId, clients, departments, isSuperAdmin, clientsLoading, departmentsLoading } = useShell()
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
+  const { restart } = useHostOnboarding()
   const shellFiltersDisabled = isShellFilterDisabled(pathname)
   const canSwitchDepartment = canSwitchShellDepartment(user?.role)
   const hideDepartment = isWebsiteSignupHost({ user, departments, departmentId })
@@ -163,6 +166,17 @@ function Navbar() {
                 My Plan
               </Link>
             ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false)
+                restart()
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 transition hover:bg-blue-50"
+            >
+              <CircleHelp className="size-4" />
+              Getting started hints
+            </button>
             <button
               type="button"
               onClick={logout}

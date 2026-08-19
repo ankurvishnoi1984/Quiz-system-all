@@ -6,9 +6,9 @@ const {
   assertPaymentEligibleForSignup,
   linkPaymentToUser
 } = require("./payment.service");
-const { sendPasswordResetEmail } = require("./email.service");
+const { sendPasswordResetEmail, sendWebsiteSignupWelcomeEmail } = require("./email.service");
 const { generateTemporaryPassword } = require("../utils/password");
-const { addDaysToDateOnly } = require("./plan.service");
+const { addDaysToDateOnly, toDateOnlyString } = require("./plan.service");
 const {
   signAccessToken,
   signRefreshToken,
@@ -25,6 +25,10 @@ function isMustChangePassword(value) {
   return value === true || value === 1;
 }
 
+function isHintsCompleted(value) {
+  return value === true || value === 1;
+}
+
 function buildUserPayload(user) {
   return {
     user_id: user.user_id,
@@ -33,7 +37,8 @@ function buildUserPayload(user) {
     role: user.role,
     client_id: user.client_id,
     dept_id: user.dept_id,
-    must_change_password: isMustChangePassword(user.must_change_password)
+    must_change_password: isMustChangePassword(user.must_change_password),
+    hints_completed: isHintsCompleted(user.hints_completed)
   };
 }
 
@@ -141,14 +146,29 @@ async function signupUser(input) {
     await linkPaymentToUser(paymentId, user.user_id, { transaction });
 
     await transaction.commit();
-
-    const payload = buildUserPayload(user);
-    const tokens = buildAuthTokens(payload);
-    return { user: payload, tokens, plan: { plan_id: plan.plan_id, name: plan.name } };
   } catch (err) {
     await transaction.rollback();
     throw err;
   }
+
+  try {
+    await sendWebsiteSignupWelcomeEmail({
+      to: email,
+      fullName: input.full_name.trim(),
+      email,
+      password: input.password,
+      planName: plan.name,
+      planExpiresAt: toDateOnlyString(planExpiresAt),
+      companyName: input.company_name ? String(input.company_name).trim() : null
+    });
+  } catch (err) {
+    console.error("signupUser welcome email failed:", err);
+  }
+
+  const createdUser = await User.findOne({ where: { email } });
+  const payload = buildUserPayload(createdUser);
+  const tokens = buildAuthTokens(payload);
+  return { user: payload, tokens, plan: { plan_id: plan.plan_id, name: plan.name } };
 }
 
 async function loginUser(input) {
@@ -288,6 +308,20 @@ async function changePassword(userId, body = {}) {
   };
 }
 
+async function setHintsCompleted(userId, completed) {
+  const user = await User.findByPk(userId);
+  if (!user || !user.is_active) {
+    const error = new Error("User not found or inactive");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  user.hints_completed = Boolean(completed);
+  await user.save();
+
+  return { user: buildUserPayload(user) };
+}
+
 module.exports = {
   registerUser,
   signupUser,
@@ -295,5 +329,7 @@ module.exports = {
   refreshAccessToken,
   requestPasswordReset,
   changePassword,
-  isMustChangePassword
+  setHintsCompleted,
+  isMustChangePassword,
+  isHintsCompleted
 };

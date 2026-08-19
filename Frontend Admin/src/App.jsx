@@ -12,6 +12,7 @@ import DashboardPage from './pages/DashboardPage'
 import BuilderPage from './pages/BuilderPage'
 import LivePage from './pages/LivePage'
 import AnalyticsPage from './pages/AnalyticsPage'
+import TrainingLibraryPage from './pages/TrainingLibraryPage'
 import ReportsPage from './pages/ReportsPage'
 import ManageClientsPage from './pages/ManageClientsPage'
 import ManageDepartmentsPage from './pages/ManageDepartmentsPage'
@@ -179,6 +180,7 @@ function App() {
               }
             />
             <Route path="/analytics" element={<AnalyticsPage />} />
+            <Route path="/training" element={<TrainingLibraryPage />} />
             <Route
               path="/department-analytics"
               element={

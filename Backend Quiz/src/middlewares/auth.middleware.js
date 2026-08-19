@@ -1,6 +1,6 @@
 const { verifyAccessToken } = require("../utils/jwt");
 const { User } = require("../models");
-const { isMustChangePassword } = require("../services/auth.service");
+const { isMustChangePassword, isHintsCompleted } = require("../services/auth.service");
 const { errorResponse } = require("../utils/response");
 
 async function authMiddleware(req, res, next) {
@@ -27,7 +27,8 @@ async function authMiddleware(req, res, next) {
       role: user.role,
       client_id: user.client_id,
       dept_id: user.dept_id,
-      must_change_password: isMustChangePassword(user.must_change_password)
+      must_change_password: isMustChangePassword(user.must_change_password),
+      hints_completed: isHintsCompleted(user.hints_completed)
     };
     return next();
   } catch (err) {

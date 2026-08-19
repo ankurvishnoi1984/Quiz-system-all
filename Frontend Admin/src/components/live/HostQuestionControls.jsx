@@ -53,9 +53,10 @@ export function HostQuestionControls({
           Host controls
         </p>
       ) : null}
-      <div className="flex flex-wrap gap-2">
+      <div data-tour="host-controls" className="flex flex-wrap gap-2">
         {!sessionQuizTotalTimeEnabled && !disableSingleActivation ? (
           <HostQuestionActionButton
+            dataTour="activate-question"
             disabled={!canEditLive || questionLiveMutation.isPending}
             onClick={() =>
               questionLiveMutation.mutate({

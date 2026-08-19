@@ -186,12 +186,13 @@ function SessionFormModal({
 
   return (
     <Modal open={open} title={modalTitle} onClose={onClose}>
-      <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+      <form data-tour={mode === 'create' ? 'session-form' : undefined} onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
         <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto overscroll-contain pr-1 md:grid-cols-2">
           <div className="md:col-span-2">
             <label className="text-sm font-semibold text-slate-700">Title</label>
             <input
               name="title"
+              data-tour="session-title"
               key={`title-${initialValues.title}-${open}`}
               defaultValue={initialValues.title ?? ''}
               className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
@@ -523,6 +524,7 @@ function SessionFormModal({
           </button>
           <button
             type="submit"
+            data-tour="create-session-submit"
             disabled={isSubmitting || logoUploading}
             className="h-11 rounded-xl bg-navy-900 px-4 text-sm font-semibold text-white transition hover:bg-navy-800 disabled:cursor-not-allowed disabled:opacity-60"
           >

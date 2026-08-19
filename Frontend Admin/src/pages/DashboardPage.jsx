@@ -12,6 +12,7 @@ import { HostAlertModal } from '../components/live/HostAlertModal'
 import Modal from '../components/ui/Modal'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useAuthStore } from '../store/authStore'
+import { useHostOnboarding } from '../context/HostOnboardingContext'
 import { useShell } from '../context/ShellContext'
 import { createRealtimeClient, RealtimeEvent } from '../services/realtimeClient'
 import {
@@ -40,6 +41,7 @@ const tabItems = ['All', 'Draft', 'Live', 'Completed']
 function DashboardPage() {
   const accessToken = useAuthStore((state) => state.accessToken)
   const user = useAuthStore((state) => state.user)
+  const { active: tourActive, step: tourStep, continueAfterSessionCreated } = useHostOnboarding()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [tab, setTab] = useState('All')
@@ -99,11 +101,15 @@ function DashboardPage() {
 
   const createMutation = useMutation({
     mutationFn: (payload) => createSessionApi(accessToken, payload.deptId, payload.input),
-    onSuccess: (_session, variables) => {
+    onSuccess: (session, variables) => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-sessions'] })
       queryClient.invalidateQueries({ queryKey: ['plan-usage'] })
       setDashboardError('')
       setCreateOpen(false)
+      if (tourActive && ['create', 'create-form'].includes(tourStep?.id)) {
+        continueAfterSessionCreated(session?.session_id || session?.id)
+        return
+      }
       setSessionAlert({
         variant: 'success',
         title: 'Session created',
@@ -254,6 +260,12 @@ function DashboardPage() {
       setDashboardError(error.message || 'Unable to duplicate session')
     },
   })
+
+  useEffect(() => {
+    if (tourActive && tourStep?.action === 'open-create-session') {
+      setCreateOpen(true)
+    }
+  }, [tourActive, tourStep?.action])
 
   useEffect(() => {
     const liveSessions = (sessionsQuery.data || []).filter((session) => session.status === 'live' && session.session_code)
@@ -576,13 +588,14 @@ function DashboardPage() {
   return (
     <section className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+        <div data-tour="dashboard-overview">
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-navy-700">Admin Dashboard</p>
           <h2 className="mt-1 text-2xl font-bold text-navy-900">Sessions overview</h2>
         </div>
 
         <button
           type="button"
+          data-tour="create-session"
           disabled={planLocked}
           title={planLocked ? 'No active plan — renew to create sessions' : undefined}
           onClick={() => {
@@ -720,7 +733,10 @@ function DashboardPage() {
         workspaceClientLabel={isSuperAdmin ? createClientLabel : ''}
         useWorkspaceDepartment={isSuperAdmin}
         hideDepartment={hideDepartmentForHost}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => {
+          if (tourActive && tourStep?.action === 'open-create-session') return
+          setCreateOpen(false)
+        }}
         onSubmit={handleCreate}
         isSubmitting={createMutation.isPending}
       />

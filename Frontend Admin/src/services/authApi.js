@@ -82,3 +82,13 @@ export async function refreshApi(refreshToken) {
     body: JSON.stringify({ refresh_token: refreshToken }),
   })
 }
+
+export async function setHintsCompletedApi(accessToken, completed) {
+  return request('/auth/hints-completed', {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ completed: Boolean(completed) }),
+  })
+}

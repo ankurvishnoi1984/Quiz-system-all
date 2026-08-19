@@ -4,7 +4,8 @@ const {
   loginUser,
   refreshAccessToken,
   requestPasswordReset,
-  changePassword
+  changePassword,
+  setHintsCompleted
 } = require("../services/auth.service");
 const {
   validateLoginPayload,
@@ -98,6 +99,20 @@ async function changePasswordHandler(req, res) {
   }
 }
 
+async function hintsCompleted(req, res) {
+  try {
+    const completed = req.body?.completed ?? req.body?.hints_completed;
+    if (typeof completed !== "boolean" && completed !== 0 && completed !== 1) {
+      return errorResponse(res, "completed is required", 400);
+    }
+
+    const result = await setHintsCompleted(req.user.user_id, Boolean(completed));
+    return successResponse(res, result, "Hints status updated", 200);
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
 module.exports = {
   register,
   signup,
@@ -105,5 +120,6 @@ module.exports = {
   me,
   refresh,
   forgotPassword,
-  changePassword: changePasswordHandler
+  changePassword: changePasswordHandler,
+  hintsCompleted
 };

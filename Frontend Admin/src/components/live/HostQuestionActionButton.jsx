@@ -63,6 +63,7 @@ export function HostQuestionActionButton({
   tone = 'emerald',
   title,
   size = 'default',
+  dataTour,
 }) {
   const styles = HOST_ACTION_TONES[tone] || HOST_ACTION_TONES.emerald
   const tooltip = title || label
@@ -75,6 +76,7 @@ export function HostQuestionActionButton({
       onClick={onClick}
       title={tooltip}
       aria-pressed={active}
+      data-tour={dataTour}
       className={`group inline-flex items-center gap-2 rounded-lg border font-semibold transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50 ${
         isCompact ? 'px-2 py-1 text-[11px]' : 'px-2.5 py-1.5 text-xs'
       } ${active ? styles.active : styles.idle}`}

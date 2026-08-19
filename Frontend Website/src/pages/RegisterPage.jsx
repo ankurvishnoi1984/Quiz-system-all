@@ -380,6 +380,10 @@ function RegisterPage() {
               </li>
               <li className="flex items-center gap-2">
                 <Check className="size-4 text-navy-700" />
+                Welcome email with sign-in details and plan information
+              </li>
+              <li className="flex items-center gap-2">
+                <Check className="size-4 text-navy-700" />
                 Redirect to admin portal to sign in
               </li>
             </ol>

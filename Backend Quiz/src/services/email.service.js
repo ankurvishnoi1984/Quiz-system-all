@@ -5,6 +5,7 @@ const { MailConfig } = require("../models");
 const {
   renderPasswordResetEmail,
   renderNewUserWelcomeEmail,
+  renderWebsiteSignupWelcomeEmail,
   renderParticipantLimitExceededEmail,
   renderPlanExpiredEmail,
   EMAIL_LOGO_CID
@@ -192,11 +193,44 @@ async function sendPlanExpiredEmail({
   });
 }
 
+async function sendWebsiteSignupWelcomeEmail({
+  to,
+  fullName,
+  email,
+  password,
+  planName,
+  planExpiresAt,
+  companyName
+}) {
+  const config = await getActiveMailConfig();
+  const brandName = config?.sender_name || "Quiz Platform";
+  const logoAttachment = getEmailLogoAttachment();
+  const { subject, text, html } = renderWebsiteSignupWelcomeEmail({
+    fullName,
+    email,
+    password,
+    planName,
+    planExpiresAt,
+    companyName,
+    brandName,
+    logoCid: logoAttachment ? EMAIL_LOGO_CID : null
+  });
+
+  await sendMailWithConfig(config, {
+    to,
+    subject,
+    text,
+    html,
+    attachments: logoAttachment ? [logoAttachment] : []
+  });
+}
+
 module.exports = {
   getActiveMailConfig,
   sendMail,
   sendPasswordResetEmail,
   sendNewUserWelcomeEmail,
+  sendWebsiteSignupWelcomeEmail,
   sendParticipantLimitExceededEmail,
   sendPlanExpiredEmail
 };

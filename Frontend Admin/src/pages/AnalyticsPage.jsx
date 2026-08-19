@@ -526,7 +526,7 @@ function AnalyticsPage() {
 
   if (!activeSessionId || !sessionMeta) {
     return (
-      <div className="rounded-2xl border border-dashed border-blue-300 bg-white/70 p-10 text-center text-slate-600 shadow-sm">
+      <div data-tour="session-analytics" className="rounded-2xl border border-dashed border-blue-300 bg-white/70 p-10 text-center text-slate-600 shadow-sm">
         No session selected. Go to <strong>Dashboard</strong> and choose a session.
       </div>
     )
@@ -534,7 +534,7 @@ function AnalyticsPage() {
 
   if (!numericSessionId) {
     return (
-      <div className="rounded-2xl border border-dashed border-amber-300 bg-amber-50/80 p-10 text-center text-slate-700 shadow-sm">
+      <div data-tour="session-analytics" className="rounded-2xl border border-dashed border-amber-300 bg-amber-50/80 p-10 text-center text-slate-700 shadow-sm">
         <p className="font-semibold text-navy-900">Session analytics requires a saved session</p>
         <p className="mt-2 text-sm">Select a session from your department list on the dashboard.</p>
       </div>
@@ -554,7 +554,7 @@ function AnalyticsPage() {
 
       <section className="host-screen-only analytics-screen-only space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+        <div data-tour="session-analytics">
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-navy-700">Session Analytics</p>
           <h2 className="mt-1 text-2xl font-bold text-navy-900">{sessionMeta.title}</h2>
           <p className="mt-1 text-sm text-slate-600">

@@ -141,6 +141,7 @@ function SessionCard({ session, onAction, planLocked = false }) {
         <div className="flex flex-col items-end gap-2">
           <button
             type="button"
+            data-tour="launch-session"
             disabled={launchDisabled}
             title={launchTitle}
             className="rounded-xl border border-blue-200/70 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
