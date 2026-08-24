@@ -74,6 +74,13 @@ export async function saveParticipantSessionStateApi(participantToken, sessionSt
   return data?.session_state || null
 }
 
+export async function pingParticipantActivityApi(participantToken) {
+  const data = await authRequest('/participants/me/activity', participantToken, {
+    method: 'POST',
+  })
+  return data?.last_activity_at || null
+}
+
 export async function submitResponseApi(participantToken, payload) {
   const data = await authRequest('/responses/submit', participantToken, {
     method: 'POST',

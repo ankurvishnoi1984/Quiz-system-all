@@ -118,6 +118,10 @@ const Session = sequelize.define(
       type: DataTypes.TEXT,
       allowNull: true
     },
+    last_activity_at: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
     started_at: {
       type: DataTypes.DATE,
       allowNull: true

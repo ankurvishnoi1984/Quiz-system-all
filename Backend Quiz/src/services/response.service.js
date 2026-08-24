@@ -335,6 +335,9 @@ async function submitResponse({ participant, input }) {
     throw error;
   }
 
+  const { touchSessionActivity } = require("./session.service");
+  await touchSessionActivity(session.session_id);
+
   const timed = isQuestionTimed(question);
   const effectiveType = getEffectiveQuestionType(question);
   const nonScored = isNonScoredQuestion(question);

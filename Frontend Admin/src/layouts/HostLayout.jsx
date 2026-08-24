@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom'
 import Navbar from '../components/layout/Navbar'
 import Sidebar from '../components/layout/Sidebar'
 import { HostOnboardingTour } from '../components/onboarding/HostOnboardingTour'
+import { HostIdleSessionsGuard } from '../components/session/HostIdleSessionsGuard'
 import { HostOnboardingProvider, useHostOnboarding } from '../context/HostOnboardingContext'
 import { ShellProvider } from '../context/ShellContext'
 import { SessionsProvider } from '../context/SessionsContext'
@@ -32,6 +33,7 @@ function HostLayoutShell() {
         </main>
       </div>
       <HostOnboardingTour />
+      <HostIdleSessionsGuard />
     </div>
   )
 }

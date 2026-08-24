@@ -12,7 +12,8 @@ const {
   getSessionJoinBlockInfo,
   joinSession,
   listSessionParticipants,
-  getSessionQr
+  getSessionQr,
+  pingHostSessionActivity
 } = require("../services/session.service");
 const {
   validateCreateSessionPayload,
@@ -206,6 +207,23 @@ function lifecycleAction(action) {
   };
 }
 
+async function pingActivity(req, res) {
+  try {
+    const session = await pingHostSessionActivity({
+      sessionId: Number(req.params.sessionId),
+      user: req.user
+    });
+    return successResponse(
+      res,
+      { last_activity_at: session.last_activity_at },
+      "Session activity recorded",
+      200
+    );
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
 async function lookupByCode(req, res) {
   try {
     const session = await getSessionByCode(req.params.code);
@@ -234,6 +252,8 @@ async function lookupByCode(req, res) {
           quiz_total_time_minutes: session.quiz_total_time_minutes ?? null,
           random_question_order_enabled: isSessionRandomQuestionOrderEnabled(session),
           allow_late_join: Boolean(session.allow_late_join),
+          last_activity_at: session.last_activity_at || null,
+          started_at: session.started_at || null,
           join_blocked: Boolean(joinBlock.blocked),
           join_blocked_message: joinBlock.message || null,
           join_blocked_reason: joinBlock.reason || null
@@ -511,6 +531,7 @@ module.exports = {
   pause: lifecycleAction("pause"),
   resume: lifecycleAction("resume"),
   end: lifecycleAction("end"),
+  pingActivity,
   lookupByCode,
   joinByCode,
   qr,

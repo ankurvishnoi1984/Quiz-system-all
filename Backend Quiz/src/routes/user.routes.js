@@ -2,8 +2,21 @@ const express = require("express");
 const userController = require("../controllers/user.controller");
 const authMiddleware = require("../middlewares/auth.middleware");
 const authorizeRoles = require("../middlewares/role.middleware");
+const { uploadExtraSeatAttachment } = require("../config/multer");
+const multer = require("multer");
+const { errorResponse } = require("../utils/response");
 
 const router = express.Router();
+
+function uploadExtraSeatFile(req, res, next) {
+  uploadExtraSeatAttachment.single("file")(req, res, (error) => {
+    if (!error) return next();
+    if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+      return errorResponse(res, "Attachment must be 10 MB or smaller", 400);
+    }
+    return errorResponse(res, error.message || "Invalid attachment", 400);
+  });
+}
 
 router.use(authMiddleware);
 
@@ -15,6 +28,12 @@ router.get(
   "/:userId/extra-participants",
   authorizeRoles("super_admin"),
   userController.listAddons
+);
+router.post(
+  "/:userId/extra-participants/attachment",
+  authorizeRoles("super_admin"),
+  uploadExtraSeatFile,
+  userController.uploadExtraAttachment
 );
 router.patch(
   "/:userId/extra-participants",

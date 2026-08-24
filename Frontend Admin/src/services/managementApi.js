@@ -1,4 +1,5 @@
-import { hostAuthRequest } from './hostAuthRequest'
+import { useAuthStore } from '../store/authStore'
+import { hostAuthRequest, refreshHostAccessToken } from './hostAuthRequest'
 
 async function authRequest(path, accessToken, options = {}) {
   return hostAuthRequest(path, accessToken, options)
@@ -82,6 +83,58 @@ export async function getPlanUsageApi(accessToken) {
 export async function listUserExtraParticipantsApi(accessToken, userId) {
   const data = await authRequest(`/users/${userId}/extra-participants`, accessToken)
   return data?.addons || []
+}
+
+export async function uploadExtraSeatAttachmentApi(userId, file) {
+  const execute = async (afterRefresh = false) => {
+    const { accessToken, refreshToken, clearAuth } = useAuthStore.getState()
+    if (!accessToken) {
+      const err = new Error('Not authenticated')
+      err.status = 401
+      throw err
+    }
+
+    const formData = new FormData()
+    formData.append('file', file)
+
+    const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'
+    const response = await fetch(`${apiBase}/users/${userId}/extra-participants/attachment`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: formData,
+    })
+
+    let payload = null
+    try {
+      payload = await response.json()
+    } catch {
+      payload = null
+    }
+
+    if (response.status === 401 && refreshToken && !afterRefresh) {
+      try {
+        await refreshHostAccessToken()
+        return execute(true)
+      } catch {
+        clearAuth()
+        const err = new Error(payload?.message || 'Session expired')
+        err.status = 401
+        throw err
+      }
+    }
+
+    if (!response.ok) {
+      const err = new Error(payload?.message || 'Attachment upload failed')
+      err.status = response.status
+      throw err
+    }
+
+    return payload?.data || null
+  }
+
+  return execute(false)
 }
 
 export async function adjustUserExtraParticipantsApi(accessToken, userId, payload) {

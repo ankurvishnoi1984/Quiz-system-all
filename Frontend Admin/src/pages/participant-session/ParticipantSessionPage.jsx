@@ -49,6 +49,7 @@ import { JoinFormView } from './components/JoinFormView'
 import { SessionNotLiveView } from './components/SessionNotLiveView'
 import { PageCenteredShell } from './components/PageCenteredShell'
 import { ParticipantAlertModal } from './components/ParticipantAlertModal'
+import { ParticipantSessionInactivityModal } from '../../components/session/ParticipantSessionInactivityModal'
 // import { QaPanel } from './components/QaPanel' // Q&A feature disabled
 import { OverallLeaderboardPanel } from './components/OverallLeaderboardPanel'
 import { SurveySessionEndingPanel } from './components/SurveySessionEndingPanel'
@@ -2043,6 +2044,11 @@ function ParticipantSessionPage() {
     [canEditResponses, question?.id, wordCloudInputsLocked, tagsInput, setResponses],
   )
 
+  const handleLeaveInactiveSession = useCallback(() => {
+    useParticipantStore.getState().clearParticipant()
+    setStep('join')
+  }, [])
+
   if (!participantHydrated) {
     return (
       <PageCenteredShell>
@@ -2128,8 +2134,23 @@ function ParticipantSessionPage() {
     )
   }
 
+  const inactivityModal = (
+    <ParticipantSessionInactivityModal
+      enabled={Boolean(participantToken)}
+      session={session}
+      participantToken={participantToken}
+      sessionQueryKey={['participant-session', effectiveSessionCode]}
+      onLeave={handleLeaveInactiveSession}
+    />
+  )
+
   if (step === 'waiting') {
-    return <WaitingView session={session} transitioningLive={transitioningLive} />
+    return (
+      <>
+        <WaitingView session={session} transitioningLive={transitioningLive} />
+        {inactivityModal}
+      </>
+    )
   }
 
   return (
@@ -2291,6 +2312,8 @@ function ParticipantSessionPage() {
         confirmLabel="OK"
         onClose={() => setSessionEndedModal(false)}
       />
+
+      {inactivityModal}
 
     </main>
   )

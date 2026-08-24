@@ -46,6 +46,7 @@ function mapApiSessionToLocal(session) {
     id: session.session_id,
     session_id: session.session_id,
     title: session.title,
+    session_code: session.session_code || '',
     date: session.created_at ? session.created_at.split('T')[0] : '',
     status: session.status === 'live' ? 'Live' : session.status === 'completed' ? 'Completed' : session.status === 'draft' ? 'Draft' : session.status === 'paused' ? 'Paused' : session.status,
     participants: session.participants_count ?? 0,
@@ -65,6 +66,9 @@ function mapApiSessionToLocal(session) {
     qaItems: createDefaultQa(),
     host: session.host ? { id: session.host.user_id, name: session.host.full_name } : null,
     dept_id: session.dept_id,
+    last_activity_at: session.last_activity_at || null,
+    started_at: session.started_at || null,
+    updated_at: session.updated_at || null,
   }
 }
 
@@ -179,7 +183,7 @@ export function SessionsProvider({ children }) {
     }
 
     return { sessions, getSession, createSession, deleteSession, duplicateSession, updateSession, saveSession, isLoading }
-  }, [sessions, allSessions.length])
+  }, [sessions, allSessions.length, isLoading])
 
   return <SessionsContext.Provider value={api}>{children}</SessionsContext.Provider>
 }

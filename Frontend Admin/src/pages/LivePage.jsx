@@ -37,6 +37,7 @@ import {
 } from '../components/dashboard/PlanExpiredNotice'
 import Modal from '../components/ui/Modal'
 import { HostAlertModal } from '../components/live/HostAlertModal'
+import { HostSessionInactivityModal } from '../components/session/HostSessionInactivityModal'
 import { HostQuestionActionButton } from '../components/live/HostQuestionActionButton'
 import { canHostActivateAllQuestions, canHostCloseAllQuestions, sessionRequiresActivateAllQuestions } from '../utils/hostQuestionControls'
 import { isSessionQuizTotalTimeEnabled, isSessionRandomQuestionOrderEnabled } from '../utils/sessionFlags'
@@ -137,6 +138,7 @@ function LivePage() {
   const [chartView, setChartView] = useState('bar')
   const [hostAlert, setHostAlert] = useState(null)
   const [endSessionConfirmOpen, setEndSessionConfirmOpen] = useState(false)
+  const [inactivityOpen, setInactivityOpen] = useState(false)
   // const [qaExporting, setQaExporting] = useState(false) // Q&A feature disabled
 
 
@@ -232,9 +234,9 @@ function LivePage() {
   }, [tourActive, tourStep?.action, tourStep?.id, shareOpen])
 
   useEffect(() => {
-    setTourPaused(Boolean(endSessionConfirmOpen || hostAlert))
+    setTourPaused(Boolean(endSessionConfirmOpen || hostAlert || inactivityOpen))
     return () => setTourPaused(false)
-  }, [endSessionConfirmOpen, hostAlert, setTourPaused])
+  }, [endSessionConfirmOpen, hostAlert, inactivityOpen, setTourPaused])
 
   const mappedQuestions = useMemo(
     () => mapLiveQuestions(questionsQuery.data),
@@ -1581,6 +1583,14 @@ function LivePage() {
         isQuizQuestion={Boolean(activeQuestion?.isQuizMode)}
         limit={leaderboardLimit}
         onLimitChange={setLeaderboardLimit}
+      />
+
+      <HostSessionInactivityModal
+        enabled={Boolean(session && (session.status === 'live' || session.status === 'paused'))}
+        session={session}
+        accessToken={accessToken}
+        sessionQueryKey={['live-session', sessionId]}
+        onOpenChange={setInactivityOpen}
       />
 
       <HostAlertModal

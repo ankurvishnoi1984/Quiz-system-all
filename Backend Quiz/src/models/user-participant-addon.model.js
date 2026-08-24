@@ -18,6 +18,14 @@ const UserParticipantAddon = sequelize.define(
       allowNull: false
     },
     note: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    attachment_url: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    attachment_filename: {
       type: DataTypes.STRING(255),
       allowNull: true
     },

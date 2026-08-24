@@ -615,6 +615,9 @@ async function transitionSessionStatus({ sessionId, user, action }) {
 
   session.status = rule.to;
   if (action === "start" && !session.started_at) session.started_at = new Date();
+  if (action === "start" || action === "resume" || action === "pause") {
+    session.last_activity_at = new Date();
+  }
   if (action === "end") session.ended_at = new Date();
   await session.save();
 
@@ -822,6 +825,38 @@ async function getSessionQr({ sessionId, user, baseUrl }) {
   };
 }
 
+async function touchSessionActivity(sessionId) {
+  const id = Number(sessionId);
+  if (!Number.isFinite(id) || id <= 0) return null;
+
+  const now = new Date();
+  await Session.update(
+    { last_activity_at: now },
+    {
+      where: {
+        session_id: id,
+        status: ["live", "paused"]
+      }
+    }
+  );
+  return now;
+}
+
+async function pingHostSessionActivity({ sessionId, user }) {
+  const session = await getSessionOrThrow(sessionId);
+  assertSessionWriteAccess(user, session);
+
+  if (session.status !== "live" && session.status !== "paused") {
+    const error = new Error("Session is not active");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const lastActivityAt = await touchSessionActivity(session.session_id);
+  session.last_activity_at = lastActivityAt;
+  return session;
+}
+
 module.exports = {
   listDepartmentSessions,
   createSession,
@@ -838,5 +873,7 @@ module.exports = {
   listSessionParticipants,
   getSessionQr,
   assertSessionWriteAccess,
-  getSessionOrThrow
+  getSessionOrThrow,
+  touchSessionActivity,
+  pingHostSessionActivity
 };

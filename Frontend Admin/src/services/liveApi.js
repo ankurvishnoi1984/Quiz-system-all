@@ -127,6 +127,14 @@ export async function setPresentSlideApi(accessToken, sessionId, { slideIndex, s
   })
 }
 
+export async function pingSessionActivityApi(accessToken, sessionId) {
+  const data = await authRequest(`/sessions/${sessionId}/activity`, accessToken, {
+    method: 'POST',
+  })
+  return data?.last_activity_at || null
+}
+
 export async function getPresentSlideApi(accessToken, sessionId) {
   return authRequest(`/sessions/${sessionId}/present-slide`, accessToken)
 }
+

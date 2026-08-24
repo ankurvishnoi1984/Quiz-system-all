@@ -1,4 +1,5 @@
 const bcrypt = require("bcryptjs");
+const path = require("path");
 const { User, Client, Department, Plan, UserParticipantAddon } = require("../models");
 const { sendNewUserWelcomeEmail } = require("./email.service");
 const {
@@ -188,6 +189,8 @@ function toAddonPayload(row) {
     addon_id: row.addon_id,
     seats: Number(row.seats),
     note: row.note || null,
+    attachment_url: row.attachment_url || null,
+    attachment_filename: row.attachment_filename || null,
     created_at: row.created_at
   };
 }
@@ -212,7 +215,15 @@ async function listUserParticipantAddons(userId) {
   return rows.map(toAddonPayload);
 }
 
-async function adjustUserExtraParticipants({ userId, add, set, note, adminUser }) {
+async function adjustUserExtraParticipants({
+  userId,
+  add,
+  set,
+  note,
+  attachmentUrl,
+  attachmentFilename,
+  adminUser
+}) {
   const user = await User.findByPk(userId);
   if (!user) {
     const error = new Error("User not found");
@@ -246,14 +257,42 @@ async function adjustUserExtraParticipants({ userId, add, set, note, adminUser }
   user.plan_limit_email_sent_at = null;
   await user.save();
 
+  const trimmedNote = note ? String(note).trim().slice(0, 2000) : null;
+  const trimmedUrl = attachmentUrl ? String(attachmentUrl).trim() : null;
+  const trimmedFilename = attachmentFilename
+    ? String(attachmentFilename).trim().slice(0, 255)
+    : null;
+
   await UserParticipantAddon.create({
     user_id: user.user_id,
     seats: seatsDelta,
-    note: note ? String(note).trim().slice(0, 255) : null,
+    note: trimmedNote,
+    attachment_url: trimmedUrl || null,
+    attachment_filename: trimmedFilename || null,
     created_by: adminUser?.user_id || null
   });
 
   return reloadUserAccountPayload(user);
+}
+
+async function saveExtraParticipantAttachment({ userId, file }) {
+  const user = await User.findByPk(userId, { attributes: ["user_id"] });
+  if (!user) {
+    const error = new Error("User not found");
+    error.statusCode = 404;
+    throw error;
+  }
+  if (!file) {
+    const error = new Error("file is required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const filePath = `/${path.relative(process.cwd(), file.path).replaceAll(path.sep, "/")}`;
+  return {
+    file_path: filePath,
+    original_filename: file.originalname || "attachment"
+  };
 }
 
 async function setUserActiveStatus({ userId, isActive, adminUser }) {
@@ -287,5 +326,6 @@ module.exports = {
   assignUserPlan,
   listUserParticipantAddons,
   adjustUserExtraParticipants,
+  saveExtraParticipantAttachment,
   setUserActiveStatus
 };

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BarChart3, Layers, Maximize2, Minimize2, Play, Trophy } from 'lucide-react'
 import { HostAlertModal } from '../../components/live/HostAlertModal'
+import { HostSessionInactivityModal } from '../../components/session/HostSessionInactivityModal'
 import { HostQuestionActionButton } from '../../components/live/HostQuestionActionButton'
 import { HostQuestionControls } from '../../components/live/HostQuestionControls'
 import { SessionLeaderboardModal } from '../../components/leaderboard/SessionLeaderboardModal'
@@ -964,6 +965,15 @@ function PresentModePage({
         readOnly={readOnly}
       />
       */}
+      {!readOnly ? (
+        <HostSessionInactivityModal
+          enabled={Boolean(session && (session.status === 'live' || session.status === 'paused'))}
+          session={session}
+          accessToken={hostAccessToken}
+          sessionQueryKey={['live-session', sessionId, 'host']}
+        />
+      ) : null}
+
       {!readOnly ? (
         <HostAlertModal
           open={Boolean(hostAlert)}

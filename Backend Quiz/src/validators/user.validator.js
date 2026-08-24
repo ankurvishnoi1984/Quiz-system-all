@@ -82,6 +82,22 @@ function validateExtraParticipantsPayload(payload) {
     errors.push("note must be a string");
   }
 
+  if (
+    payload.attachment_url != null &&
+    payload.attachment_url !== "" &&
+    typeof payload.attachment_url !== "string"
+  ) {
+    errors.push("attachment_url must be a string");
+  }
+
+  if (
+    payload.attachment_filename != null &&
+    payload.attachment_filename !== "" &&
+    typeof payload.attachment_filename !== "string"
+  ) {
+    errors.push("attachment_filename must be a string");
+  }
+
   return errors;
 }
 

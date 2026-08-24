@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Plus } from 'lucide-react'
+import { Eye, EyeOff, Paperclip, Plus, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Modal from '../components/ui/Modal'
@@ -15,8 +15,10 @@ import {
   listPlansApi,
   listUserExtraParticipantsApi,
   listUsersApi,
+  uploadExtraSeatAttachmentApi,
 } from '../services/managementApi'
 import { filterUsersByShell } from '../utils/shellFilterPaths'
+import { resolveQuestionMediaUrl } from '../utils/questionMedia'
 // import { getStoredUserPasswords, setStoredUserPassword } from '../utils/userPasswordVault'
 
 const ROLE_OPTIONS = [
@@ -61,6 +63,19 @@ function StatusToggle({ checked, disabled, pending, onChange, activeLabel = 'Act
   )
 }
 
+const EXTRA_ATTACHMENT_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,application/pdf'
+const EXTRA_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024
+
+function extraAttachmentError(file) {
+  if (!file) return ''
+  if (file.size > EXTRA_ATTACHMENT_MAX_BYTES) return 'Attachment must be 10 MB or smaller.'
+  const allowed = EXTRA_ATTACHMENT_ACCEPT.split(',')
+  if (file.type && !allowed.includes(file.type)) {
+    return 'Use a JPEG, PNG, WebP, GIF, or PDF file.'
+  }
+  return ''
+}
+
 const emptyForm = {
   full_name: '',
   email: '',
@@ -84,6 +99,8 @@ function ManageUsersPage() {
   const [extraUser, setExtraUser] = useState(null)
   const [extraSeats, setExtraSeats] = useState('20')
   const [extraNote, setExtraNote] = useState('')
+  const [extraFile, setExtraFile] = useState(null)
+  const [extraFileError, setExtraFileError] = useState('')
   const [planEditUser, setPlanEditUser] = useState(null)
   const [planEditForm, setPlanEditForm] = useState({ plan_id: '', plan_expires_at: '' })
   // const [passwordVault, setPasswordVault] = useState(() => getStoredUserPasswords())
@@ -207,8 +224,15 @@ function ManageUsersPage() {
   })
 
   const extraMutation = useMutation({
-    mutationFn: ({ userId, payload }) =>
-      adjustUserExtraParticipantsApi(accessToken, userId, payload),
+    mutationFn: async ({ userId, payload, file }) => {
+      const nextPayload = { ...payload }
+      if (file) {
+        const uploaded = await uploadExtraSeatAttachmentApi(userId, file)
+        nextPayload.attachment_url = uploaded?.file_path || null
+        nextPayload.attachment_filename = uploaded?.original_filename || file.name
+      }
+      return adjustUserExtraParticipantsApi(accessToken, userId, nextPayload)
+    },
     onSuccess: (user) => {
       queryClient.invalidateQueries({ queryKey: ['manage-users'] })
       queryClient.invalidateQueries({ queryKey: ['user-extra-participants', user?.user_id] })
@@ -216,6 +240,8 @@ function ManageUsersPage() {
       setExtraUser((prev) => (prev && user ? { ...prev, ...user } : prev))
       setExtraSeats('20')
       setExtraNote('')
+      setExtraFile(null)
+      setExtraFileError('')
       setAlert({
         variant: 'success',
         title: 'Extra seats updated',
@@ -406,6 +432,8 @@ function ManageUsersPage() {
                         setExtraUser(user)
                         setExtraSeats('20')
                         setExtraNote('')
+                        setExtraFile(null)
+                        setExtraFileError('')
                       }}
                       className="rounded-lg border border-blue-200/70 bg-white px-2 py-1 text-[11px] font-semibold text-navy-800 transition hover:bg-blue-50"
                     >
@@ -638,6 +666,9 @@ function ManageUsersPage() {
         onClose={() => {
           if (extraMutation.isPending) return
           setExtraUser(null)
+          setExtraFile(null)
+          setExtraFileError('')
+          setExtraNote('')
         }}
       >
         <form
@@ -649,6 +680,7 @@ function ManageUsersPage() {
             extraMutation.mutate({
               userId: extraUser.user_id,
               payload: { add, note: extraNote.trim() || null },
+              file: extraFile,
             })
           }}
         >
@@ -687,25 +719,93 @@ function ManageUsersPage() {
             </p>
           </div>
           <div>
-            <label className="text-sm font-semibold text-slate-700">Payment note (optional)</label>
-            <input
+            <label className="text-sm font-semibold text-slate-700">Comment</label>
+            <textarea
               value={extraNote}
               onChange={(e) => setExtraNote(e.target.value)}
-              className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
-              placeholder="Paid for 20 extra seats"
+              rows={3}
+              maxLength={2000}
+              className="mt-1 w-full rounded-xl border border-blue-200/70 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+              placeholder="Reason for extra seats, payment details, invoice number…"
             />
+          </div>
+          <div>
+            <label className="text-sm font-semibold text-slate-700">Attachment</label>
+            <p className="mt-0.5 text-xs text-slate-500">JPEG, PNG, WebP, GIF, or PDF · 10 MB max</p>
+            {extraFile ? (
+              <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-blue-200/70 bg-white px-3 py-2">
+                <p className="min-w-0 truncate text-sm text-slate-700">
+                  <Paperclip className="mr-1 inline size-3.5 text-navy-700" aria-hidden />
+                  {extraFile.name}
+                </p>
+                <button
+                  type="button"
+                  disabled={extraMutation.isPending}
+                  onClick={() => {
+                    setExtraFile(null)
+                    setExtraFileError('')
+                  }}
+                  className="rounded-lg p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                  aria-label="Remove attachment"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            ) : (
+              <label className="mt-2 flex h-11 cursor-pointer items-center justify-center rounded-xl border border-dashed border-blue-300 bg-white px-3 text-sm font-semibold text-navy-800 transition hover:bg-blue-50">
+                <input
+                  type="file"
+                  accept={EXTRA_ATTACHMENT_ACCEPT}
+                  className="sr-only"
+                  disabled={extraMutation.isPending}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] || null
+                    const error = extraAttachmentError(file)
+                    setExtraFileError(error)
+                    setExtraFile(error ? null : file)
+                    event.target.value = ''
+                  }}
+                />
+                Choose file
+              </label>
+            )}
+            {extraFileError ? <p className="mt-1 text-xs text-red-600">{extraFileError}</p> : null}
           </div>
           {extraHistoryQuery.data?.length ? (
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">History</p>
-              <ul className="mt-2 max-h-36 space-y-1 overflow-y-auto text-xs text-slate-600">
-                {extraHistoryQuery.data.map((row) => (
-                  <li key={row.addon_id}>
-                    {row.seats > 0 ? '+' : ''}
-                    {Number(row.seats).toLocaleString()} seats
-                    {row.note ? ` — ${row.note}` : ''}
-                  </li>
-                ))}
+              <ul className="mt-2 max-h-40 space-y-2 overflow-y-auto text-xs text-slate-600">
+                {extraHistoryQuery.data.map((row) => {
+                  const attachmentUrl = resolveQuestionMediaUrl(row.attachment_url)
+                  return (
+                    <li key={row.addon_id} className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-2">
+                      <p>
+                        <span className="font-semibold text-navy-900">
+                          {row.seats > 0 ? '+' : ''}
+                          {Number(row.seats).toLocaleString()} seats
+                        </span>
+                        {row.created_at ? (
+                          <span className="text-slate-500">
+                            {' '}
+                            · {new Date(row.created_at).toLocaleString()}
+                          </span>
+                        ) : null}
+                      </p>
+                      {row.note ? <p className="mt-1 whitespace-pre-wrap text-slate-700">{row.note}</p> : null}
+                      {attachmentUrl ? (
+                        <a
+                          href={attachmentUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-flex items-center gap-1 font-semibold text-navy-800 hover:underline"
+                        >
+                          <Paperclip className="size-3" aria-hidden />
+                          {row.attachment_filename || 'View attachment'}
+                        </a>
+                      ) : null}
+                    </li>
+                  )
+                })}
               </ul>
             </div>
           ) : null}
@@ -735,7 +835,7 @@ function ManageUsersPage() {
             </button>
             <button
               type="submit"
-              disabled={extraMutation.isPending}
+              disabled={extraMutation.isPending || Boolean(extraFileError)}
               className="h-11 rounded-xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 text-sm font-semibold text-white shadow-lg shadow-blue-900/25 transition hover:brightness-110 disabled:opacity-60"
             >
               {extraMutation.isPending ? 'Saving…' : 'Add extra seats'}

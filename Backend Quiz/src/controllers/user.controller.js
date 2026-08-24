@@ -5,6 +5,7 @@ const {
   assignUserPlan,
   listUserParticipantAddons,
   adjustUserExtraParticipants,
+  saveExtraParticipantAttachment,
   setUserActiveStatus
 } = require("../services/user.service");
 const {
@@ -95,6 +96,8 @@ async function adjustExtraParticipants(req, res) {
       add: req.body.add,
       set: req.body.set,
       note: req.body.note,
+      attachmentUrl: req.body.attachment_url,
+      attachmentFilename: req.body.attachment_filename,
       adminUser: req.user
     });
     return successResponse(res, { user }, "Extra participants updated", 200);
@@ -131,11 +134,32 @@ async function setStatus(req, res) {
   }
 }
 
+async function uploadExtraAttachment(req, res) {
+  try {
+    const userId = Number(req.params.userId);
+    if (Number.isNaN(userId)) {
+      return errorResponse(res, "userId must be a number", 400);
+    }
+    if (!req.file) {
+      return errorResponse(res, "file is required", 400);
+    }
+
+    const attachment = await saveExtraParticipantAttachment({
+      userId,
+      file: req.file
+    });
+    return successResponse(res, attachment, "Attachment uploaded", 201);
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
 module.exports = {
   list,
   create,
   assignPlan,
   listAddons,
   adjustExtraParticipants,
+  uploadExtraAttachment,
   setStatus
 };
