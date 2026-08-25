@@ -68,6 +68,9 @@ import {
   hasNoActivePlan,
 } from '../components/dashboard/PlanExpiredNotice'
 
+/** Temporarily hide question-set management in the builder (backend support unchanged). */
+const QUESTION_SETS_UI_ENABLED = false
+
 function InlineEditableSessionTitle({ title, onSave, isSaving }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(title)
@@ -1180,7 +1183,7 @@ function BuilderPage() {
   const questionSetsQuery = useQuery({
     queryKey: ['builder-question-sets', sessionId],
     queryFn: () => listQuestionSetsApi(accessToken, sessionId),
-    enabled: Boolean(accessToken && sessionId),
+    enabled: Boolean(accessToken && sessionId && QUESTION_SETS_UI_ENABLED),
   })
   const questionSets = questionSetsQuery.data || []
 
@@ -1697,7 +1700,9 @@ function BuilderPage() {
   const canQuickAddQuestion = isDraftSession && Boolean(sessionQuestionType)
 
   const canManageSets =
-    isDraftSession && sessionQuery.data?.participant_navigation_enabled !== false
+    QUESTION_SETS_UI_ENABLED &&
+    isDraftSession &&
+    sessionQuery.data?.participant_navigation_enabled !== false
 
   const [renamingSetId, setRenamingSetId] = useState(null)
   const [setRenameDraft, setSetRenameDraft] = useState('')
@@ -2053,7 +2058,7 @@ function BuilderPage() {
         throw new Error('Cannot remove questions while the session is live.')
       }
 
-      if (isDraft && questionSets.length >= 2) {
+      if (QUESTION_SETS_UI_ENABLED && isDraft && questionSets.length >= 2) {
         const unassigned = questions.filter((item) => item.setId == null)
         if (unassigned.length) {
           throw new Error(
@@ -2420,7 +2425,8 @@ function BuilderPage() {
               </span>
             </div>
 
-            {sessionQuery.data?.participant_navigation_enabled !== false ? (
+            {QUESTION_SETS_UI_ENABLED &&
+            sessionQuery.data?.participant_navigation_enabled !== false ? (
               <div className="mt-3 rounded-xl border border-indigo-200/80 bg-indigo-50/60 px-3 py-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -2641,7 +2647,7 @@ function BuilderPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">Editing</p>
-                {questionSets.length ? (
+                {QUESTION_SETS_UI_ENABLED && questionSets.length ? (
                   <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-slate-600">
                     Set
                     <select
