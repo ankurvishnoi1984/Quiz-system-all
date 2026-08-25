@@ -803,17 +803,19 @@ async function getQuestionResults({ questionId, user }) {
 }
 
 function questionAllowsParticipantAggregateResults(question) {
-  if (
-    question.question_type === "poll" ||
-    question.question_type === "rating" ||
-    question.question_type === "emoji_reaction"
-  ) {
-    return true;
+  const effectiveType = getEffectiveQuestionType(question);
+  if (!effectiveType || effectiveType === "open_text" || effectiveType === "fill_blank") {
+    return false;
   }
-  if (question.question_type === "survey") {
-    return getEffectiveQuestionType(question) !== "open_text";
-  }
-  return false;
+  return [
+    "mcq",
+    "poll",
+    "true_false",
+    "ranking",
+    "rating",
+    "word_cloud",
+    "emoji_reaction"
+  ].includes(effectiveType);
 }
 
 async function getParticipantSurveyQuestionResults({ questionId, participant }) {

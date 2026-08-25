@@ -236,6 +236,22 @@ function apiSurveySubTypeToUi(subType) {
   return mapping[subType] || 'MCQ'
 }
 
+/** Builder UI types that can show anonymous aggregate results to participants. */
+function builderQuestionSupportsResults(question) {
+  if (!question) return false
+  if (question.type === 'Text') return false
+  if (question.type === 'Survey') return question.surveySubType !== 'Text'
+  return [
+    'MCQ',
+    'Poll',
+    'True/False',
+    'Ranking',
+    'Rating',
+    'Word Cloud',
+    'Emoji Reaction',
+  ].includes(question.type)
+}
+
 function uid(prefix = 'id') {
   return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`
 }
@@ -2683,7 +2699,28 @@ function BuilderPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
-                {!isDraftSession && quizMode && selected.questionId ? (
+                {!isDraftSession && selected.questionId && builderQuestionSupportsResults(selected) ? (
+                  <HostQuestionActionButton
+                    disabled={questionLeaderboardMutation.isPending}
+                    onClick={() =>
+                      questionLeaderboardMutation.mutate({
+                        questionId: selected.questionId,
+                        visible: !selected.showLeaderboard,
+                      })
+                    }
+                    icon={BarChart3}
+                    label={selected.showLeaderboard ? 'Hide results' : 'Show results'}
+                    title={
+                      selected.showLeaderboard
+                        ? 'Hide results on participant screens'
+                        : quizMode
+                          ? 'Show anonymous results and rankings to participants'
+                          : 'Show anonymous results on participant screens'
+                    }
+                    active={selected.showLeaderboard}
+                    tone="sky"
+                  />
+                ) : !isDraftSession && quizMode && selected.questionId ? (
                   <HostQuestionActionButton
                     disabled={questionLeaderboardMutation.isPending}
                     onClick={() =>
@@ -2701,27 +2738,6 @@ function BuilderPage() {
                     }
                     active={selected.showLeaderboard}
                     tone="amber"
-                  />
-                ) : null}
-
-                {!isDraftSession && selected.type === 'Survey' && selected.questionId ? (
-                  <HostQuestionActionButton
-                    disabled={questionLeaderboardMutation.isPending}
-                    onClick={() =>
-                      questionLeaderboardMutation.mutate({
-                        questionId: selected.questionId,
-                        visible: !selected.showLeaderboard,
-                      })
-                    }
-                    icon={BarChart3}
-                    label={selected.showLeaderboard ? 'Hide results' : 'Show results'}
-                    title={
-                      selected.showLeaderboard
-                        ? 'Hide anonymous survey results on participant screens'
-                        : 'Show anonymous survey results on participant screens'
-                    }
-                    active={selected.showLeaderboard}
-                    tone="sky"
                   />
                 ) : null}
 

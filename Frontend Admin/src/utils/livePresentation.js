@@ -65,23 +65,30 @@ export function sessionIsStandalonePollOnly(questions) {
   return questions.every((q) => (q.rawType ?? q.question_type) === 'poll')
 }
 
-/** Open-text survey answers are not aggregated for participant-facing results. */
+/** Open-text / fill-blank answers are not aggregated for participant-facing charts. */
+const PARTICIPANT_RESULTS_EXCLUDED_TYPES = new Set(['open_text', 'fill_blank'])
+
+/** Formats that can show anonymous aggregate results on participant screens. */
+export function questionSupportsParticipantResults(question) {
+  if (!question) return false
+  const chartType = getQuestionChartRawType(question)
+  if (!chartType || PARTICIPANT_RESULTS_EXCLUDED_TYPES.has(chartType)) return false
+  return (
+    chartType === 'mcq' ||
+    chartType === 'poll' ||
+    chartType === 'true_false' ||
+    chartType === 'ranking' ||
+    chartType === 'rating' ||
+    chartType === 'word_cloud' ||
+    chartType === 'emoji_reaction'
+  )
+}
+
+/** @deprecated Prefer questionSupportsParticipantResults — kept for survey-specific call sites. */
 export function surveySupportsParticipantResults(question) {
   const isSurvey = Boolean(question?.isSurvey || question?.rawType === 'survey')
   if (!isSurvey) return false
-  const subType = question?.surveySubType ?? question?.survey_subtype ?? getQuestionChartRawType(question)
-  return subType !== 'open_text'
-}
-
-/** Poll, rating, and non-open-text surveys can show anonymous aggregate results. */
-export function questionSupportsParticipantResults(question) {
-  if (!question) return false
-  const rawType = question.rawType ?? question.question_type
-  if (rawType === 'poll' || rawType === 'rating' || rawType === 'emoji_reaction') return true
-  if (rawType === 'survey' || question.isSurvey) {
-    return surveySupportsParticipantResults(question)
-  }
-  return false
+  return questionSupportsParticipantResults(question)
 }
 
 /** Session-wide Q&A leaderboard requires at least one scorable quiz question. */

@@ -105,7 +105,31 @@ export function HostQuestionControls({
             size={size}
           />
         ) : null}
-        {canEditLive && question.isQuizMode && questionSupportsLeaderboard(question) ? (
+        {canEditLive && questionSupportsParticipantResults(question) ? (
+          <HostQuestionActionButton
+            disabled={!isActiveQuestion || questionLeaderboardMutation.isPending}
+            onClick={() =>
+              questionLeaderboardMutation.mutate({
+                questionId: question.id,
+                visible: !question.showLeaderboard,
+              })
+            }
+            icon={BarChart3}
+            label={question.showLeaderboard ? 'Hide results' : 'Show results'}
+            title={
+              !isActiveQuestion
+                ? 'Activate this question before showing results to participants'
+                : question.showLeaderboard
+                  ? 'Hide results on participant screens'
+                  : question.isQuizMode && questionSupportsLeaderboard(question)
+                    ? 'Show anonymous results and question rankings to participants'
+                    : 'Show anonymous results on participant screens'
+            }
+            active={question.showLeaderboard}
+            tone="sky"
+            size={size}
+          />
+        ) : canEditLive && question.isQuizMode && questionSupportsLeaderboard(question) ? (
           <HostQuestionActionButton
             disabled={!isActiveQuestion || questionLeaderboardMutation.isPending}
             onClick={() =>
@@ -125,29 +149,6 @@ export function HostQuestionControls({
             }
             active={question.showLeaderboard}
             tone="indigo"
-            size={size}
-          />
-        ) : null}
-        {canEditLive && questionSupportsParticipantResults(question) ? (
-          <HostQuestionActionButton
-            disabled={!isActiveQuestion || questionLeaderboardMutation.isPending}
-            onClick={() =>
-              questionLeaderboardMutation.mutate({
-                questionId: question.id,
-                visible: !question.showLeaderboard,
-              })
-            }
-            icon={BarChart3}
-            label={question.showLeaderboard ? 'Hide results' : 'Show results'}
-            title={
-              !isActiveQuestion
-                ? 'Activate this question before showing results to participants'
-                : question.showLeaderboard
-                  ? 'Hide anonymous results on participant screens'
-                  : 'Show anonymous results on participant screens'
-            }
-            active={question.showLeaderboard}
-            tone="sky"
             size={size}
           />
         ) : null}

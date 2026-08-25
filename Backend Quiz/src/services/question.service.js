@@ -693,13 +693,29 @@ async function setQuestionAnswerRevealed({ questionId, user, revealed }) {
 async function setQuestionLeaderboardVisibility({ questionId, user, visible }) {
   const question = await getQuestionById({ questionId, user });
   const session = await getSessionForQuestionFlow(question.session_id);
-  const isSurvey = question.question_type === "survey";
-  const isPoll = question.question_type === "poll";
-  const isRating = question.question_type === "rating";
-  const isEmojiReaction = question.question_type === "emoji_reaction";
+  const effectiveType =
+    question.question_type === "survey"
+      ? question.survey_subtype || "mcq"
+      : question.question_type;
+  const allowsAggregate =
+    Boolean(effectiveType) &&
+    effectiveType !== "open_text" &&
+    effectiveType !== "fill_blank" &&
+    [
+      "mcq",
+      "poll",
+      "true_false",
+      "ranking",
+      "rating",
+      "word_cloud",
+      "emoji_reaction"
+    ].includes(effectiveType);
+  const allowsQuizRankings = Boolean(question.is_quiz_mode);
 
-  if (!question.is_quiz_mode && !isSurvey && !isPoll && !isRating && !isEmojiReaction) {
-    const error = new Error("Results can be shown only for quiz, poll, rating, or survey questions");
+  if (!allowsQuizRankings && !allowsAggregate) {
+    const error = new Error(
+      "Results can be shown only for quiz, poll, rating, ranking, word cloud, or survey questions"
+    );
     error.statusCode = 400;
     throw error;
   }

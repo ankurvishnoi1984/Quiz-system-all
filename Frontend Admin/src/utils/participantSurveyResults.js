@@ -41,7 +41,11 @@ function buildOptionRows(question, results) {
 export function buildParticipantSurveyResultsView(question, results) {
   if (!question || !results) return null
 
-  const effectiveType = results.effective_type || question.surveySubType || 'mcq'
+  const effectiveType =
+    results.effective_type ||
+    getQuestionChartRawType(question) ||
+    question.surveySubType ||
+    'mcq'
   const totalResponses = Number(results.total_responses || 0)
 
   if (effectiveType === 'mcq' || effectiveType === 'poll' || effectiveType === 'true_false') {
