@@ -1,4 +1,5 @@
 import { Crown } from 'lucide-react'
+import { normalizeLeaderboardEntries } from '../../utils/leaderboard'
 
 /**
  * @param {{ entries: Array<{ participant_id: number|string, name?: string, nickname?: string, score: number }>, emptyMessage?: string }} props
@@ -8,7 +9,9 @@ export function LeaderboardTable({
   emptyMessage = 'No scores yet.',
   compact = false,
 }) {
-  if (!entries?.length) {
+  const rows = normalizeLeaderboardEntries(entries)
+
+  if (!rows.length) {
     return <p className="py-4 text-center text-sm text-slate-500">{emptyMessage}</p>
   }
 
@@ -17,7 +20,7 @@ export function LeaderboardTable({
 
   return (
     <div className="space-y-2">
-      {entries.map((row, idx) => (
+      {rows.map((row, idx) => (
         <div
           key={row.participant_id}
           className={`flex items-center justify-between rounded-2xl border border-amber-200/60 bg-amber-50/40 ${rowPadding}`}
@@ -29,7 +32,7 @@ export function LeaderboardTable({
               {idx === 0 ? <Crown className={compact ? 'size-3.5' : 'size-4'} /> : idx + 1}
             </div>
             <p className="truncate font-semibold text-navy-900">
-              {row.name || row.nickname || 'Anonymous'}
+              {row.name || 'Anonymous'}
             </p>
           </div>
           <p className="shrink-0 text-sm font-bold tabular-nums text-navy-900">{row.score}</p>

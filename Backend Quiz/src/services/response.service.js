@@ -177,6 +177,14 @@ async function buildSessionLeaderboard(sessionId, limit = 10) {
     })
     .sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
+      // Faster average response time ranks higher on a score tie.
+      const timeA = a.avgResponseTimeMs;
+      const timeB = b.avgResponseTimeMs;
+      if (timeA != null || timeB != null) {
+        if (timeA == null) return 1;
+        if (timeB == null) return -1;
+        if (timeA !== timeB) return timeA - timeB;
+      }
       const nameCompare = a.displayName.localeCompare(b.displayName, undefined, {
         sensitivity: "base"
       });
@@ -200,7 +208,11 @@ async function buildQuestionLeaderboard(questionId, limit = 10) {
         attributes: ["participant_id", "nickname", "email", "is_anonymous"]
       }
     ],
-    order: [["points_earned", "DESC"], ["submitted_at", "ASC"]],
+    order: [
+      ["points_earned", "DESC"],
+      ["response_time_ms", "ASC"],
+      ["submitted_at", "ASC"]
+    ],
     limit: 50
   });
   const byParticipant = new Map();
@@ -231,7 +243,22 @@ async function buildQuestionLeaderboard(questionId, limit = 10) {
         responseTimeMs: value.responseTimeMs
       })
     )
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      // Faster answer ranks higher on a score tie.
+      const timeA = a.response_time_ms != null ? Number(a.response_time_ms) : null;
+      const timeB = b.response_time_ms != null ? Number(b.response_time_ms) : null;
+      if (timeA != null || timeB != null) {
+        if (timeA == null) return 1;
+        if (timeB == null) return -1;
+        if (timeA !== timeB) return timeA - timeB;
+      }
+      const nameA = String(a.name || a.nickname || "").trim();
+      const nameB = String(b.name || b.nickname || "").trim();
+      const nameCompare = nameA.localeCompare(nameB, undefined, { sensitivity: "base" });
+      if (nameCompare !== 0) return nameCompare;
+      return Number(a.participant_id) - Number(b.participant_id);
+    })
     .slice(0, limit);
 }
 
