@@ -2,8 +2,12 @@ const { Op } = require("sequelize");
 const { Session } = require("../models");
 const { buildAutoEndAt } = require("../utils/sessionDateTime");
 const { endSessionBySystem } = require("./session.service");
-const { buildSessionLeaderboard } = require("./response.service");
-const { notifySessionUpdate } = require("./websocket.service");
+const { isSessionRandomQuestionOrderEnabled } = require("../utils/sessionFlags");
+const {
+  notifySessionUpdate,
+  notifySessionSettings,
+  notifyQuestionLeaderboardVisibility
+} = require("./websocket.service");
 
 const AUTO_END_POLL_MS = Number(process.env.SESSION_AUTO_END_POLL_MS) || 30000;
 
@@ -34,11 +38,20 @@ async function processDueAutoEndSessions() {
     endedCount += 1;
 
     try {
-      const extra = {};
-      if (ended.leaderboard_enabled) {
-        extra.leaderboard = await buildSessionLeaderboard(ended.session_id);
+      notifySessionUpdate(ended.session_code, ended.status);
+      notifySessionSettings(ended.session_code, {
+        leaderboard_enabled: ended.leaderboard_enabled,
+        survey_results_enabled: ended.survey_results_enabled,
+        show_participant_count: ended.show_participant_count,
+        show_question_leaderboard: ended.show_question_leaderboard,
+        participant_navigation_enabled: ended.participant_navigation_enabled !== false,
+        quiz_total_time_minutes: ended.quiz_total_time_minutes ?? null,
+        random_question_order_enabled: isSessionRandomQuestionOrderEnabled(ended),
+        allow_late_join: Boolean(ended.allow_late_join)
+      });
+      for (const questionId of ended.hiddenQuestionResultIds || []) {
+        notifyQuestionLeaderboardVisibility(ended.session_code, questionId, false);
       }
-      notifySessionUpdate(ended.session_code, ended.status, extra);
     } catch (error) {
       console.warn("[auto-end] Failed to notify session end:", error.message);
     }

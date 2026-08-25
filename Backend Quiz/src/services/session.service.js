@@ -586,6 +586,29 @@ async function resetSessionResponses({ sessionId, user }) {
   return result;
 }
 
+async function hideQuestionResultsForSession(sessionId) {
+  const visibleQuestions = await Question.findAll({
+    where: { session_id: sessionId, show_leaderboard: true },
+    attributes: ["question_id"]
+  });
+  const hiddenQuestionIds = visibleQuestions.map((row) => Number(row.question_id));
+  if (hiddenQuestionIds.length) {
+    await Question.update(
+      { show_leaderboard: false },
+      { where: { session_id: sessionId, show_leaderboard: true } }
+    );
+  }
+  return hiddenQuestionIds;
+}
+
+/** Close overall rankings and per-question Show results when a session ends. */
+async function clearParticipantFacingDisplaysOnEnd(session) {
+  session.leaderboard_enabled = false;
+  const hiddenQuestionIds = await hideQuestionResultsForSession(session.session_id);
+  session.hiddenQuestionResultIds = hiddenQuestionIds;
+  return hiddenQuestionIds;
+}
+
 async function endSessionBySystem(session, endedAt = new Date()) {
   if (!session || !["live", "paused"].includes(session.status)) {
     return null;
@@ -593,6 +616,7 @@ async function endSessionBySystem(session, endedAt = new Date()) {
 
   session.status = "completed";
   session.ended_at = endedAt;
+  await clearParticipantFacingDisplaysOnEnd(session);
   await session.save();
   return session;
 }
@@ -630,7 +654,10 @@ async function transitionSessionStatus({ sessionId, user, action }) {
   if (action === "start" || action === "resume" || action === "pause") {
     session.last_activity_at = new Date();
   }
-  if (action === "end") session.ended_at = new Date();
+  if (action === "end") {
+    session.ended_at = new Date();
+    await clearParticipantFacingDisplaysOnEnd(session);
+  }
   await session.save();
 
   if (action === "start") {

@@ -426,11 +426,27 @@ function LivePage() {
 
   const transitionMutation = useMutation({
     mutationFn: ({ action }) => transitionSessionApi(accessToken, sessionId, action),
-    onSuccess: (updated) => {
+    onSuccess: (updated, variables) => {
       if (updated) {
+        const ended = variables?.action === 'end'
         queryClient.setQueryData(['live-session', sessionId], (old) =>
-          old ? { ...old, ...updated, status: updated.status } : updated,
+          old
+            ? {
+                ...old,
+                ...updated,
+                status: updated.status,
+                ...(ended ? { leaderboard_enabled: false } : {}),
+              }
+            : updated,
         )
+        if (ended) {
+          const hideResults = (old) =>
+            Array.isArray(old)
+              ? old.map((q) => ({ ...q, show_leaderboard: false }))
+              : old
+          queryClient.setQueryData(['live-questions', sessionId], hideResults)
+          queryClient.setQueryData(['live-questions', sessionId, 'host'], hideResults)
+        }
       }
       queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
       queryClient.invalidateQueries({ queryKey: ['live-questions', sessionId] })

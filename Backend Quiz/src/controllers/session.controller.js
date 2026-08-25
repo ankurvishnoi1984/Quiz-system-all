@@ -25,7 +25,8 @@ const {
   notifySessionSettings,
   notifyLeaderboard,
   notifyQuestionChange,
-  notifyAllQuestionsSubmissionsClosed
+  notifyAllQuestionsSubmissionsClosed,
+  notifyQuestionLeaderboardVisibility
 } = require("../services/websocket.service");
 const { buildSessionLeaderboard } = require("../services/response.service");
 const {
@@ -190,10 +191,22 @@ function lifecycleAction(action) {
       if (session?.session_code) {
         (async () => {
           const extra = {};
-          if (action === "end" && session.leaderboard_enabled) {
-            extra.leaderboard = await buildSessionLeaderboard(session.session_id);
-          }
           notifySessionUpdate(session.session_code, session.status, extra);
+          if (action === "end") {
+            notifySessionSettings(session.session_code, {
+              leaderboard_enabled: session.leaderboard_enabled,
+              survey_results_enabled: session.survey_results_enabled,
+              show_participant_count: session.show_participant_count,
+              show_question_leaderboard: session.show_question_leaderboard,
+              participant_navigation_enabled: session.participant_navigation_enabled !== false,
+              quiz_total_time_minutes: session.quiz_total_time_minutes ?? null,
+              random_question_order_enabled: isSessionRandomQuestionOrderEnabled(session),
+              allow_late_join: Boolean(session.allow_late_join)
+            });
+            for (const questionId of session.hiddenQuestionResultIds || []) {
+              notifyQuestionLeaderboardVisibility(session.session_code, questionId, false);
+            }
+          }
         })().catch(() => {});
       }
       return successResponse(
