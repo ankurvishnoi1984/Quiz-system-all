@@ -1,6 +1,6 @@
 /**
- * Create notification_recipients and seed website-signup admin emails.
- * Usage: node scripts/add-notification-recipients-table.js
+ * Create job_runs and seed weekly_summary notification recipients.
+ * Usage: node scripts/add-weekly-summary-job-runs.js
  */
 require("dotenv").config();
 const { sequelize } = require("../src/config/database");
@@ -25,32 +25,28 @@ async function main() {
   try {
     await sequelize.authenticate();
 
-    if (!(await tableExists("notification_recipients"))) {
+    if (!(await tableExists("job_runs"))) {
       await sequelize.query(`
-        CREATE TABLE notification_recipients (
+        CREATE TABLE job_runs (
           id INT NOT NULL AUTO_INCREMENT,
-          purpose VARCHAR(80) NOT NULL,
-          email VARCHAR(255) NOT NULL,
-          is_active TINYINT(1) NOT NULL DEFAULT 1,
-          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          job_name VARCHAR(80) NOT NULL,
+          run_key VARCHAR(40) NOT NULL,
+          ran_at DATETIME NOT NULL,
           PRIMARY KEY (id),
-          UNIQUE KEY notification_recipients_purpose_email_unique (purpose, email)
+          UNIQUE KEY job_runs_job_name_run_key_unique (job_name, run_key)
         )
       `);
-      console.log("Created notification_recipients");
+      console.log("Created job_runs");
     } else {
-      console.log("notification_recipients already exists");
+      console.log("job_runs already exists");
     }
 
-    for (const email of ADMIN_EMAILS) {
-      await sequelize.query(
-        `INSERT INTO notification_recipients (purpose, email, is_active)
-         VALUES ('website_signup', ?, 1)
-         ON DUPLICATE KEY UPDATE is_active = 1`,
-        { replacements: [email] }
+    if (!(await tableExists("notification_recipients"))) {
+      console.error(
+        "notification_recipients is missing. Run scripts/add-notification-recipients-table.js first."
       );
-      console.log(`Ensured website_signup recipient ${email}`);
+      process.exitCode = 1;
+      return;
     }
 
     for (const email of ADMIN_EMAILS) {

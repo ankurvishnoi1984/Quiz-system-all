@@ -16,6 +16,7 @@ const QaUpvote = require("./qa-upvote.model");
 const MediaAsset = require("./media-asset.model");
 const MailConfig = require("./mail-config.model");
 const NotificationRecipient = require("./notification-recipient.model");
+const JobRun = require("./job-run.model");
 const AuditLog = require("./audit-log.model");
 const registerAuditHooks = require("./register-audit-hooks");
 
@@ -98,6 +99,7 @@ const models = {
   MediaAsset,
   MailConfig,
   NotificationRecipient,
+  JobRun,
   AuditLog
 };
 

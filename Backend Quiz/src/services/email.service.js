@@ -6,6 +6,7 @@ const {
   renderPasswordResetEmail,
   renderNewUserWelcomeEmail,
   renderWebsiteSignupWelcomeEmail,
+  renderWeeklySummaryEmail,
   renderParticipantLimitExceededEmail,
   renderPlanExpiredEmail,
   EMAIL_LOGO_CID
@@ -278,12 +279,60 @@ async function sendWebsiteSignupWelcomeEmail({
   if (userSendError) throw userSendError;
 }
 
+async function listWeeklySummaryEmails() {
+  try {
+    const rows = await NotificationRecipient.findAll({
+      where: {
+        purpose: NotificationRecipient.WEEKLY_SUMMARY_PURPOSE,
+        is_active: true
+      },
+      attributes: ["email"]
+    });
+    const seen = new Set();
+    return rows
+      .map((row) => String(row.email || "").trim().toLowerCase())
+      .filter((address) => {
+        if (!address || seen.has(address)) return false;
+        seen.add(address);
+        return true;
+      });
+  } catch (err) {
+    console.error("listWeeklySummaryEmails failed:", err);
+    return [];
+  }
+}
+
+async function sendWeeklySummaryEmail(summary) {
+  const recipients = await listWeeklySummaryEmails();
+  if (!recipients.length) {
+    const error = new Error("No active weekly_summary notification recipients");
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const config = await getActiveMailConfig();
+  const logoAttachment = getEmailLogoAttachment();
+  const { subject, text, html } = renderWeeklySummaryEmail({
+    ...summary,
+    logoCid: logoAttachment ? EMAIL_LOGO_CID : null
+  });
+
+  await sendMailWithConfig(config, {
+    to: recipients.join(", "),
+    subject,
+    text,
+    html,
+    attachments: logoAttachment ? [logoAttachment] : []
+  });
+}
+
 module.exports = {
   getActiveMailConfig,
   sendMail,
   sendPasswordResetEmail,
   sendNewUserWelcomeEmail,
   sendWebsiteSignupWelcomeEmail,
+  sendWeeklySummaryEmail,
   sendParticipantLimitExceededEmail,
   sendPlanExpiredEmail
 };

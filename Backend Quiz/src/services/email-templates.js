@@ -814,12 +814,146 @@ GETTING STARTED
   };
 }
 
+function renderMetricRow(label, value) {
+  return `
+    <tr>
+      <td style="padding:10px 0;font-size:14px;color:${BRAND.slateLight};border-bottom:1px solid ${BRAND.border};">${escapeHtml(label)}</td>
+      <td style="padding:10px 0;font-size:14px;font-weight:700;color:${BRAND.navy};text-align:right;border-bottom:1px solid ${BRAND.border};">${escapeHtml(String(value))}</td>
+    </tr>`;
+}
+
+function renderWeeklySummaryEmail(summary) {
+  const platformName = "Quiz Platform";
+  const periodLabel = `${summary.weekStartLabel} to ${summary.weekEndLabel}`;
+  const netLabel =
+    summary.netPaidChange > 0
+      ? `+${summary.netPaidChange}`
+      : String(summary.netPaidChange);
+
+  const planRowsHtml =
+    summary.purchasesByPlan.length === 0
+      ? `<tr><td colspan="3" style="padding:10px 0;font-size:14px;color:${BRAND.slateLight};">No paid purchases this week.</td></tr>`
+      : summary.purchasesByPlan
+          .map(
+            (row) => `
+    <tr>
+      <td style="padding:8px 0;font-size:14px;color:${BRAND.navy};border-bottom:1px solid ${BRAND.border};">${escapeHtml(row.planName)}</td>
+      <td style="padding:8px 0;font-size:14px;color:${BRAND.slate};text-align:right;border-bottom:1px solid ${BRAND.border};">${row.count}</td>
+      <td style="padding:8px 0;font-size:14px;font-weight:600;color:${BRAND.navy};text-align:right;border-bottom:1px solid ${BRAND.border};">${escapeHtml(row.revenueLabel)}</td>
+    </tr>`
+          )
+          .join("");
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px;font-size:16px;line-height:1.65;color:${BRAND.slate};">Hello,</p>
+    <p style="margin:0 0 24px;font-size:16px;line-height:1.65;color:${BRAND.slate};">
+      Here is the weekly Quiz Platform summary for <strong>${escapeHtml(periodLabel)}</strong> (Asia/Kolkata).
+    </p>
+
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px;">
+      <tr>
+        <td style="background-color:${BRAND.surface};border:1px solid ${BRAND.border};border-radius:12px;padding:20px 22px;">
+          <p style="margin:0 0 14px;font-size:14px;font-weight:700;color:${BRAND.navy};">This week</p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+            ${renderMetricRow("Paid purchases", summary.purchasesCount)}
+            ${renderMetricRow("Revenue", summary.revenueLabel)}
+            ${renderMetricRow("New host signups", summary.newHostSignups)}
+            ${renderMetricRow("Failed payments", summary.failedPaymentsCount)}
+            ${renderMetricRow("Paid but not signed up", summary.paidNotSignedUp)}
+            ${renderMetricRow("Sessions created", summary.sessionsCreated)}
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px;">
+      <tr>
+        <td style="background-color:${BRAND.surface};border:1px solid ${BRAND.border};border-radius:12px;padding:20px 22px;">
+          <p style="margin:0 0 14px;font-size:14px;font-weight:700;color:${BRAND.navy};">Purchases by plan</p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+            <tr>
+              <td style="padding:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:${BRAND.slateLight};">Plan</td>
+              <td style="padding:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:${BRAND.slateLight};text-align:right;">Count</td>
+              <td style="padding:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:${BRAND.slateLight};text-align:right;">Revenue</td>
+            </tr>
+            ${planRowsHtml}
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 8px;">
+      <tr>
+        <td style="background-color:${BRAND.surface};border:1px solid ${BRAND.border};border-radius:12px;padding:20px 22px;">
+          <p style="margin:0 0 14px;font-size:14px;font-weight:700;color:${BRAND.navy};">Users &amp; growth</p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+            ${renderMetricRow("Total active users", summary.totalActiveUsers)}
+            ${renderMetricRow("Total paid users (now)", summary.totalPaidUsers)}
+            ${renderMetricRow("New paid users this week", summary.newPaidUsers)}
+            ${renderMetricRow("Plans expired this week", summary.expiredPaidUsers)}
+            ${renderMetricRow("Net paid change", netLabel)}
+            ${renderMetricRow("Plans expiring in next 7 days", summary.plansExpiringSoon)}
+          </table>
+        </td>
+      </tr>
+    </table>`;
+
+  const html = renderEmailLayout({
+    preheader: `Weekly summary ${periodLabel}: ${summary.purchasesCount} purchases, ${summary.revenueLabel} revenue.`,
+    brandName: platformName,
+    title: "Weekly platform summary",
+    bodyHtml,
+    footerNote: "You received this email because you are listed as a weekly summary recipient.",
+    logoCid: summary.logoCid,
+    logoUrl: summary.logoUrl
+  });
+
+  const planText =
+    summary.purchasesByPlan.length === 0
+      ? "No paid purchases this week."
+      : summary.purchasesByPlan
+          .map((row) => `- ${row.planName}: ${row.count} (${row.revenueLabel})`)
+          .join("\n");
+
+  const text = `Hello,
+
+Weekly Quiz Platform summary for ${periodLabel} (Asia/Kolkata).
+
+THIS WEEK
+Paid purchases: ${summary.purchasesCount}
+Revenue: ${summary.revenueLabel}
+New host signups: ${summary.newHostSignups}
+Failed payments: ${summary.failedPaymentsCount}
+Paid but not signed up: ${summary.paidNotSignedUp}
+Sessions created: ${summary.sessionsCreated}
+
+PURCHASES BY PLAN
+${planText}
+
+USERS & GROWTH
+Total active users: ${summary.totalActiveUsers}
+Total paid users (now): ${summary.totalPaidUsers}
+New paid users this week: ${summary.newPaidUsers}
+Plans expired this week: ${summary.expiredPaidUsers}
+Net paid change: ${netLabel}
+Plans expiring in next 7 days: ${summary.plansExpiringSoon}
+
+— ${platformName}`;
+
+  return {
+    subject: `Weekly Quiz Platform summary (${periodLabel})`,
+    text,
+    html
+  };
+}
+
 module.exports = {
   escapeHtml,
   renderEmailLayout,
   renderPasswordResetEmail,
   renderNewUserWelcomeEmail,
   renderWebsiteSignupWelcomeEmail,
+  renderWeeklySummaryEmail,
   renderParticipantLimitExceededEmail,
   renderPlanExpiredEmail,
   buildLoginUrl,
