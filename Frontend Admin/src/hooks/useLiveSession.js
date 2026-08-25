@@ -297,6 +297,10 @@ export function useLiveSession(accessToken, sessionId, options = {}) {
             data.survey_results_enabled !== undefined
               ? Boolean(data.survey_results_enabled)
               : old.survey_results_enabled,
+          show_participant_count:
+            data.show_participant_count !== undefined
+              ? Boolean(data.show_participant_count)
+              : old.show_participant_count,
           participant_navigation_enabled:
             data.participant_navigation_enabled !== undefined
               ? data.participant_navigation_enabled

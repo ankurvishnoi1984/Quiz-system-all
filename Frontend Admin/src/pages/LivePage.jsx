@@ -521,6 +521,37 @@ function LivePage() {
       setErrorMessage(error.message || 'Unable to update overall rankings setting'),
   })
 
+  const sessionParticipantCountMutation = useMutation({
+    mutationFn: (enabled) =>
+      updateSessionApi(accessToken, sessionId, { show_participant_count: enabled }),
+    onSuccess: (updated) => {
+      if (updated) {
+        queryClient.setQueryData(['live-session', sessionId], (old) =>
+          old
+            ? {
+                ...old,
+                ...updated,
+                show_participant_count: updated.show_participant_count,
+              }
+            : updated,
+        )
+        queryClient.setQueryData(['live-session', sessionId, 'host'], (old) =>
+          old
+            ? {
+                ...old,
+                ...updated,
+                show_participant_count: updated.show_participant_count,
+              }
+            : old,
+        )
+      }
+      queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['live-dept-sessions'] })
+    },
+    onError: (error) =>
+      setErrorMessage(error.message || 'Unable to update participant count setting'),
+  })
+
   const sessionSurveyResultsMutation = useMutation({
     mutationFn: async (enabled) => {
       if (enabled) await deactivateAllLiveQuestions()
@@ -1094,6 +1125,27 @@ function LivePage() {
                 tone="sky"
                 onClick={() =>
                   sessionSurveyResultsMutation.mutate(!session?.survey_results_enabled)
+                }
+              />
+            ) : null}
+            {showSessionControls ? (
+              <HostQuestionActionButton
+                disabled={sessionParticipantCountMutation.isPending}
+                icon={Users}
+                label={
+                  sessionParticipantCountMutation.isPending
+                    ? 'Updating…'
+                    : 'Participant count'
+                }
+                title={
+                  session?.show_participant_count
+                    ? 'Hide participant count from participant screens'
+                    : 'Show participant count on participant screens (count only, no names)'
+                }
+                active={Boolean(session?.show_participant_count)}
+                tone="indigo"
+                onClick={() =>
+                  sessionParticipantCountMutation.mutate(!session?.show_participant_count)
                 }
               />
             ) : null}

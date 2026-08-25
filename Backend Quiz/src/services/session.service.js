@@ -205,6 +205,7 @@ async function createSession({ deptId, input, user }) {
      allow_late_join: false,
      leaderboard_enabled: input.leaderboard_enabled ?? false,
      survey_results_enabled: input.survey_results_enabled ?? false,
+     show_participant_count: input.show_participant_count ?? false,
      show_question_leaderboard: input.show_question_leaderboard ?? false,
      participant_navigation_enabled:
        input.participant_navigation_enabled !== undefined
@@ -285,6 +286,7 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
         allow_late_join: source.allow_late_join ?? false,
         leaderboard_enabled: source.leaderboard_enabled ?? false,
         survey_results_enabled: source.survey_results_enabled ?? false,
+        show_participant_count: source.show_participant_count ?? false,
         show_question_leaderboard: source.show_question_leaderboard ?? false,
         participant_navigation_enabled: source.participant_navigation_enabled ?? true,
         quiz_total_time_minutes: source.quiz_total_time_minutes ?? null,
@@ -401,14 +403,20 @@ async function updateSession({ sessionId, input, user }) {
   assertSessionWriteAccess(user, session);
   await assertHostCanRunSessions(session.host_id);
 
-  const liveSettingsOnly = ["leaderboard_enabled", "survey_results_enabled", "title", "logo_url"];
+  const liveSettingsOnly = [
+    "leaderboard_enabled",
+    "survey_results_enabled",
+    "show_participant_count",
+    "title",
+    "logo_url"
+  ];
   const inputKeys = Object.keys(input || {});
 
   if (session.status !== "draft") {
     const disallowed = inputKeys.filter((key) => !liveSettingsOnly.includes(key));
     if (disallowed.length > 0) {
       const error = new Error(
-        "Only session title, logo, and leaderboard settings can be updated while the session is live"
+        "Only session title, logo, rankings, survey results, and participant count settings can be updated while the session is live"
       );
       error.statusCode = 400;
       throw error;
@@ -459,6 +467,10 @@ async function updateSession({ sessionId, input, user }) {
       input.survey_results_enabled !== undefined
         ? Boolean(input.survey_results_enabled)
         : session.survey_results_enabled,
+    show_participant_count:
+      input.show_participant_count !== undefined
+        ? Boolean(input.show_participant_count)
+        : session.show_participant_count,
     show_question_leaderboard:
       input.show_question_leaderboard !== undefined
         ? Boolean(input.show_question_leaderboard)

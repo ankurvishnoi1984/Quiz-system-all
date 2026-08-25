@@ -447,6 +447,14 @@ function notifySessionSettings(sessionCode, settings) {
           Buffer.isBuffer(settings.survey_results_enabled) &&
           settings.survey_results_enabled[0])
     ),
+    show_participant_count: Boolean(
+      settings.show_participant_count === true ||
+        settings.show_participant_count === 1 ||
+        settings.show_participant_count === "1" ||
+        (typeof Buffer !== "undefined" &&
+          Buffer.isBuffer(settings.show_participant_count) &&
+          settings.show_participant_count[0])
+    ),
     show_question_leaderboard: Boolean(settings.show_question_leaderboard),
     participant_navigation_enabled: settings.participant_navigation_enabled !== false,
     random_question_order_enabled: Boolean(settings.random_question_order_enabled),

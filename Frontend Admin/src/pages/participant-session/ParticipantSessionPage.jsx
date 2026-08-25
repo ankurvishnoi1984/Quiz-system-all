@@ -961,6 +961,11 @@ function ParticipantSessionPage() {
         data.survey_results_enabled !== undefined
           ? Boolean(data.survey_results_enabled)
           : wasSurveyResultsEnabled
+      const wasParticipantCountVisible = Boolean(previousSession?.show_participant_count)
+      const isParticipantCountVisible =
+        data.show_participant_count !== undefined
+          ? Boolean(data.show_participant_count)
+          : wasParticipantCountVisible
 
       queryClient.setQueryData(['participant-session', effectiveSessionCode], (old) =>
         old
@@ -968,6 +973,10 @@ function ParticipantSessionPage() {
               ...old,
               leaderboard_enabled: isLeaderboardEnabled,
               survey_results_enabled: isSurveyResultsEnabled,
+              show_participant_count: isParticipantCountVisible,
+              participants_count: isParticipantCountVisible
+                ? old.participants_count
+                : null,
               participant_navigation_enabled:
                 data.participant_navigation_enabled ?? old.participant_navigation_enabled,
               random_question_order_enabled:
@@ -977,6 +986,10 @@ function ParticipantSessionPage() {
             }
           : old,
       )
+
+      if (!wasParticipantCountVisible && isParticipantCountVisible) {
+        queryClient.invalidateQueries({ queryKey: ['participant-session', effectiveSessionCode] })
+      }
 
         if (!wasLeaderboardEnabled && isLeaderboardEnabled) {
         playLeaderboardShown()
@@ -1004,6 +1017,28 @@ function ParticipantSessionPage() {
       if (wasSurveyResultsEnabled && !isSurveyResultsEnabled) {
         setStep((current) => (current === 'surveyEnding' ? 'active' : current))
       }
+    })
+
+    const offSessionProgress = client.on(RealtimeEvent.SESSION_PROGRESS, (data) => {
+      if (data?.participants_count == null) return
+      queryClient.setQueryData(['participant-session', effectiveSessionCode], (old) => {
+        if (!old?.show_participant_count) return old
+        return {
+          ...old,
+          participants_count: Number(data.participants_count) || 0,
+        }
+      })
+    })
+
+    const offParticipantJoined = client.on(RealtimeEvent.PARTICIPANT_JOINED, () => {
+      queryClient.setQueryData(['participant-session', effectiveSessionCode], (old) => {
+        if (!old?.show_participant_count) return old
+        const current = Number(old.participants_count)
+        return {
+          ...old,
+          participants_count: Number.isFinite(current) ? current + 1 : old.participants_count,
+        }
+      })
     })
 
     const offQuestionLbVisibility = client.on(
@@ -1043,6 +1078,8 @@ function ParticipantSessionPage() {
       offResp()
       offLeaderboard()
       offSessionSettings()
+      offSessionProgress()
+      offParticipantJoined()
       offQuestionLbVisibility()
       client.disconnect()
     }

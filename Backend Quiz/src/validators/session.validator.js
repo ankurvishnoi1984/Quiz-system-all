@@ -167,6 +167,7 @@ function validateUpdateSessionPayload(payload) {
     "show_results_to_participants",
     "leaderboard_enabled",
     "survey_results_enabled",
+    "show_participant_count",
     "show_question_leaderboard",
     "participant_navigation_enabled",
     "quiz_total_time_minutes",

@@ -90,6 +90,11 @@ const Session = sequelize.define(
       allowNull: false,
       defaultValue: false
     },
+    show_participant_count: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
     show_question_leaderboard: {
       type: DataTypes.BOOLEAN,
       allowNull: false,

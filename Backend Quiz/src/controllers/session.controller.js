@@ -33,7 +33,7 @@ const {
   closeAllQuestionSubmissionsForSession
 } = require("../services/question.service");
 const { getSessionSummaryReport, getSessionQuestionsReport, getSessionParticipantsReport, getSessionQaReport } = require("../services/session-report.service");
-const { Session } = require("../models");
+const { Session, Participant } = require("../models");
 const { getFrontendPublicUrl } = require("../config/publicAppUrl");
 const { isSessionRandomQuestionOrderEnabled } = require("../utils/sessionFlags");
 const {
@@ -114,6 +114,7 @@ async function update(req, res) {
       notifySessionSettings(session.session_code, {
         leaderboard_enabled: session.leaderboard_enabled,
         survey_results_enabled: session.survey_results_enabled,
+        show_participant_count: session.show_participant_count,
         show_question_leaderboard: session.show_question_leaderboard,
         participant_navigation_enabled: session.participant_navigation_enabled !== false,
         quiz_total_time_minutes: session.quiz_total_time_minutes ?? null,
@@ -228,6 +229,11 @@ async function lookupByCode(req, res) {
   try {
     const session = await getSessionByCode(req.params.code);
     const joinBlock = await getSessionJoinBlockInfo(session);
+    const showParticipantCount = Boolean(session.show_participant_count);
+    let participantsCount = null;
+    if (showParticipantCount) {
+      participantsCount = await Participant.count({ where: { session_id: session.session_id } });
+    }
     res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     res.set("Pragma", "no-cache");
     res.set("Expires", "0");
@@ -247,6 +253,8 @@ async function lookupByCode(req, res) {
           logo_url: session.logo_url || null,
           leaderboard_enabled: Boolean(session.leaderboard_enabled),
           survey_results_enabled: Boolean(session.survey_results_enabled),
+          show_participant_count: showParticipantCount,
+          participants_count: showParticipantCount ? participantsCount : null,
           show_question_leaderboard: Boolean(session.show_question_leaderboard),
           participant_navigation_enabled: session.participant_navigation_enabled !== false,
           quiz_total_time_minutes: session.quiz_total_time_minutes ?? null,
