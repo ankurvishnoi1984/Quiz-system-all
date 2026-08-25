@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const nodemailer = require("nodemailer");
-const { MailConfig } = require("../models");
+const { MailConfig, NotificationRecipient } = require("../models");
 const {
   renderPasswordResetEmail,
   renderNewUserWelcomeEmail,
@@ -193,6 +193,30 @@ async function sendPlanExpiredEmail({
   });
 }
 
+async function listWebsiteSignupAdminEmails(excludeEmail) {
+  try {
+    const rows = await NotificationRecipient.findAll({
+      where: {
+        purpose: NotificationRecipient.WEBSITE_SIGNUP_PURPOSE,
+        is_active: true
+      },
+      attributes: ["email"]
+    });
+    const exclude = String(excludeEmail || "").trim().toLowerCase();
+    const seen = new Set();
+    return rows
+      .map((row) => String(row.email || "").trim().toLowerCase())
+      .filter((address) => {
+        if (!address || address === exclude || seen.has(address)) return false;
+        seen.add(address);
+        return true;
+      });
+  } catch (err) {
+    console.error("listWebsiteSignupAdminEmails failed:", err);
+    return [];
+  }
+}
+
 async function sendWebsiteSignupWelcomeEmail({
   to,
   fullName,
@@ -205,7 +229,8 @@ async function sendWebsiteSignupWelcomeEmail({
   const config = await getActiveMailConfig();
   const brandName = config?.sender_name || "Quiz Platform";
   const logoAttachment = getEmailLogoAttachment();
-  const { subject, text, html } = renderWebsiteSignupWelcomeEmail({
+  const attachments = logoAttachment ? [logoAttachment] : [];
+  const templateInput = {
     fullName,
     email,
     password,
@@ -214,15 +239,43 @@ async function sendWebsiteSignupWelcomeEmail({
     companyName,
     brandName,
     logoCid: logoAttachment ? EMAIL_LOGO_CID : null
-  });
+  };
+  const userMail = renderWebsiteSignupWelcomeEmail(templateInput);
 
-  await sendMailWithConfig(config, {
-    to,
-    subject,
-    text,
-    html,
-    attachments: logoAttachment ? [logoAttachment] : []
-  });
+  let userSendError = null;
+  try {
+    await sendMailWithConfig(config, {
+      to,
+      subject: userMail.subject,
+      text: userMail.text,
+      html: userMail.html,
+      attachments
+    });
+  } catch (err) {
+    userSendError = err;
+  }
+
+  const adminEmails = await listWebsiteSignupAdminEmails(to || email);
+  if (adminEmails.length) {
+    const adminMail = renderWebsiteSignupWelcomeEmail({
+      ...templateInput,
+      password: undefined,
+      omitCredentials: true
+    });
+    try {
+      await sendMailWithConfig(config, {
+        to: adminEmails.join(", "),
+        subject: adminMail.subject,
+        text: adminMail.text,
+        html: adminMail.html,
+        attachments
+      });
+    } catch (err) {
+      console.error("website signup admin notification failed:", err);
+    }
+  }
+
+  if (userSendError) throw userSendError;
 }
 
 module.exports = {

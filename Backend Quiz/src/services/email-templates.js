@@ -645,18 +645,30 @@ function renderWebsiteSignupWelcomeEmail({
   companyName,
   brandName,
   logoCid,
-  logoUrl
+  logoUrl,
+  omitCredentials = false
 }) {
-  const greeting = fullName ? `Hello ${fullName},` : "Hello,";
+  const greeting = omitCredentials
+    ? "Hello,"
+    : fullName
+      ? `Hello ${fullName},`
+      : "Hello,";
   const loginUrl = buildLoginUrl();
   const supportEmail = process.env.SUPPORT_EMAIL || "techsupport@netcastservice.com";
   const safeGreeting = escapeHtml(greeting);
   const safeEmail = escapeHtml(email);
-  const safePassword = escapeHtml(password);
+  const safePassword = omitCredentials ? "" : escapeHtml(password);
   const safePlan = escapeHtml(planName || "Paid plan");
   const safeExpiry = planExpiresAt ? escapeHtml(planExpiresAt) : "Does not expire";
+  const introHtml = omitCredentials
+    ? `A new host registered on "Quiz Platform". Account details are below. The host received their sign-in password separately.`
+    : `Your host account on "Quiz Platform" is ready. Keep this email for your sign-in details and plan information.`;
+  const signInStepHtml = omitCredentials
+    ? `The host signs in with <strong>${safeEmail}</strong>. Their password was sent only to them.`
+    : `Sign in with <strong>${safeEmail}</strong> and the password above.`;
 
   const assignmentRows = [
+    renderAssignmentDetail("Name", omitCredentials ? fullName : null),
     renderAssignmentDetail("Email", email),
     renderAssignmentDetail("Role", "Host"),
     renderAssignmentDetail("Plan", planName || "Paid plan"),
@@ -666,10 +678,26 @@ function renderWebsiteSignupWelcomeEmail({
     .filter(Boolean)
     .join("");
 
+  const passwordHtml = omitCredentials
+    ? ""
+    : `
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 28px;">
+      <tr>
+        <td style="background-color:${BRAND.amberLight};border:1px solid ${BRAND.amberBorder};border-radius:12px;padding:24px;text-align:center;">
+          <p style="margin:0 0 10px;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${BRAND.amber};">
+            Password
+          </p>
+          <p class="password-box" style="margin:0;font-family:'SF Mono',SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;font-size:28px;font-weight:700;letter-spacing:0.18em;color:${BRAND.navy};word-break:break-all;">
+            ${safePassword}
+          </p>
+        </td>
+      </tr>
+    </table>`;
+
   const bodyHtml = `
     <p style="margin:0 0 16px;font-size:16px;line-height:1.65;color:${BRAND.slate};">${safeGreeting}</p>
     <p style="margin:0 0 24px;font-size:16px;line-height:1.65;color:${BRAND.slate};">
-      Your host account on "Quiz Platform" is ready. Keep this email for your sign-in details and plan information.
+      ${introHtml}
     </p>
 
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px;">
@@ -682,19 +710,7 @@ function renderWebsiteSignupWelcomeEmail({
         </td>
       </tr>
     </table>
-
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 28px;">
-      <tr>
-        <td style="background-color:${BRAND.amberLight};border:1px solid ${BRAND.amberBorder};border-radius:12px;padding:24px;text-align:center;">
-          <p style="margin:0 0 10px;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${BRAND.amber};">
-            Password
-          </p>
-          <p class="password-box" style="margin:0;font-family:'SF Mono',SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;font-size:28px;font-weight:700;letter-spacing:0.18em;color:${BRAND.navy};word-break:break-all;">
-            ${safePassword}
-          </p>
-        </td>
-      </tr>
-    </table>
+    ${passwordHtml}
 
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 28px;">
       <tr>
@@ -707,7 +723,7 @@ function renderWebsiteSignupWelcomeEmail({
             </tr>
             <tr>
               <td style="padding:0 0 10px;vertical-align:top;width:28px;font-size:14px;font-weight:700;color:${BRAND.blue};">2.</td>
-              <td style="padding:0 0 10px;font-size:14px;line-height:1.55;color:${BRAND.slate};">Sign in with <strong>${safeEmail}</strong> and the password above.</td>
+              <td style="padding:0 0 10px;font-size:14px;line-height:1.55;color:${BRAND.slate};">${signInStepHtml}</td>
             </tr>
             <tr>
               <td style="padding:0;vertical-align:top;width:28px;font-size:14px;font-weight:700;color:${BRAND.blue};">3.</td>
@@ -743,38 +759,56 @@ function renderWebsiteSignupWelcomeEmail({
       </tr>
     </table>`;
 
+  const platformName = "Quiz Platform";
+
   const html = renderEmailLayout({
-    preheader: `Your ${brandName || "Quiz Platform"} host account is ready. Sign in with ${email}.`,
-    brandName,
-    title: "Your host account is ready",
+    preheader: omitCredentials
+      ? `A new host registered: ${email}.`
+      : `Your ${platformName} host account is ready. Sign in with ${email}.`,
+    brandName: platformName,
+    title: omitCredentials ? "New host registration" : "Your host account is ready",
     bodyHtml,
-    footerNote: "You received this email because you created a host account on our website.",
+    footerNote: omitCredentials
+      ? "You received this email because you are listed as a website signup recipient."
+      : "You received this email because you created a host account on our website.",
     logoCid,
     logoUrl
   });
 
+  const passwordText = omitCredentials
+    ? ""
+    : `
+PASSWORD
+${password}
+`;
+  const introText = omitCredentials
+    ? `A new host registered on "${platformName}". Account details are below. The host received their sign-in password separately.`
+    : `Your host account on "${platformName}" is ready.`;
+  const signInStepText = omitCredentials
+    ? `The host signs in with ${email}. Their password was sent only to them.`
+    : "Sign in with your email and the password above.";
+
   const text = `${greeting}
 
-Your host account on "Quiz Platform" is ready.
+${introText}
 
 ACCOUNT DETAILS
-Email: ${email}
+${fullName && omitCredentials ? `Name: ${fullName}\n` : ""}Email: ${email}
 Role: Host
 Plan: ${planName || "Paid plan"}
 Plan valid until: ${planExpiresAt || "Does not expire"}
-${companyName ? `Company: ${companyName}\n` : ""}
-PASSWORD
-${password}
-
+${companyName ? `Company: ${companyName}\n` : ""}${passwordText}
 GETTING STARTED
 1. Open the host portal: ${loginUrl}
-2. Sign in with your email and the password above.
+2. ${signInStepText}
 3. Create a session, add questions, and go live. Need help? ${supportEmail}
 
-— ${brandName || "Quiz Platform"}`;
+— ${platformName}`;
 
   return {
-    subject: `Your ${brandName || "Quiz Platform"} host account is ready`,
+    subject: omitCredentials
+      ? `New host registration on ${platformName}`
+      : `Your ${platformName} host account is ready`,
     text,
     html
   };
