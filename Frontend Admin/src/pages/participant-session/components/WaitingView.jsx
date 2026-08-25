@@ -19,9 +19,11 @@ export function WaitingView({ session, transitioningLive }) {
         </h1>
         <p className="text-slate-600">{session.title}</p>
         <div className="mx-auto flex max-w-md items-center justify-center gap-6 rounded-xl bg-blue-50 p-3 text-sm font-semibold text-blue-900">
-          <span className="inline-flex items-center gap-2">
-            <Users className="size-4" /> {session.participant_count || 0} participants
-          </span>
+          {session?.show_participant_count ? (
+            <span className="inline-flex items-center gap-2">
+              <Users className="size-4" /> {Number(session.participants_count || 0)} participants
+            </span>
+          ) : null}
           <span>Fun fact: Participants respond 2x faster with visuals.</span>
         </div>
       </div>

@@ -397,6 +397,7 @@ export const RealtimeEvent = {
   ANSWER_REVEALED: 'answer_revealed',
   QUESTION_LEADERBOARD_VISIBILITY: 'question_leaderboard_visibility',
   SESSION_SETTINGS_UPDATED: 'session_settings_updated',
+  SESSION_PROGRESS: 'session_progress',
   LEADERBOARD_UPDATE: 'leaderboard_update',
   RANKING_RESPONSE_SUBMITTED: 'ranking-response-submitted',
   PARTICIPANT_JOINED: 'participant_joined',

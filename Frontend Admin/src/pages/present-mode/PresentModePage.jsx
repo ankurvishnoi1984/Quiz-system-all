@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BarChart3, Layers, Maximize2, Minimize2, Play, Trophy } from 'lucide-react'
+import { BarChart3, Layers, Maximize2, Minimize2, Play, Trophy, Users } from 'lucide-react'
 import { HostAlertModal } from '../../components/live/HostAlertModal'
 import { HostSessionInactivityModal } from '../../components/session/HostSessionInactivityModal'
 import { HostQuestionActionButton } from '../../components/live/HostQuestionActionButton'
@@ -264,6 +264,43 @@ function PresentModePage({
         variant: 'error',
         title: 'Could not update survey results',
         message: 'Unable to update the survey results setting. Please try again.',
+        confirmLabel: 'Close',
+      })
+    },
+  })
+
+  const sessionParticipantCountMutation = useMutation({
+    mutationFn: (enabled) =>
+      updateSessionApi(hostAccessToken, sessionId, { show_participant_count: enabled }),
+    onSuccess: (updated) => {
+      if (updated) {
+        queryClient.setQueryData(['live-session', sessionId], (old) =>
+          old
+            ? {
+                ...old,
+                ...updated,
+                show_participant_count: updated.show_participant_count,
+              }
+            : updated,
+        )
+        queryClient.setQueryData(['live-session', sessionId, 'host'], (old) =>
+          old
+            ? {
+                ...old,
+                ...updated,
+                show_participant_count: updated.show_participant_count,
+              }
+            : old,
+        )
+      }
+      queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['live-dept-sessions'] })
+    },
+    onError: () => {
+      setHostAlert({
+        variant: 'error',
+        title: 'Could not update participant count',
+        message: 'Unable to update the participant count setting. Please try again.',
         confirmLabel: 'Close',
       })
     },
@@ -744,6 +781,28 @@ function PresentModePage({
               tone="sky"
               onClick={() =>
                 sessionSurveyResultsMutation.mutate(!session?.survey_results_enabled)
+              }
+            />
+          ) : null}
+          {!readOnly && showSessionControls ? (
+            <HostQuestionActionButton
+              disabled={sessionParticipantCountMutation.isPending}
+              icon={Users}
+              size="compact"
+              label={
+                sessionParticipantCountMutation.isPending
+                  ? 'Updating…'
+                  : 'Participant count'
+              }
+              title={
+                session?.show_participant_count
+                  ? 'Hide participant count from participant screens'
+                  : 'Show participant count on participant screens (count only, no names)'
+              }
+              active={Boolean(session?.show_participant_count)}
+              tone="indigo"
+              onClick={() =>
+                sessionParticipantCountMutation.mutate(!session?.show_participant_count)
               }
             />
           ) : null}
