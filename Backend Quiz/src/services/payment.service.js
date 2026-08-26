@@ -1,5 +1,7 @@
 const { Plan, Payment, User } = require("../models");
 const { randomBytes } = require("crypto");
+const { isPaymentOtpEnabled } = require("../config/auth-features");
+const { PURPOSES, assertOtpVerifiedToken } = require("./otp.service");
 
 const PAYMENT_TTL_MS = 30 * 60 * 1000;
 const DUMMY_FAILURE_RATE = 0;
@@ -182,6 +184,16 @@ async function initiatePayment(input) {
 
   const plan = await getPlanForCheckout(planId);
   const email = normalizeEmail(input.email);
+
+  if (isPaymentOtpEnabled()) {
+    const otpToken = input.otp_token || input.otpToken;
+    if (!otpToken) {
+      const error = new Error("Email OTP verification is required before payment");
+      error.statusCode = 401;
+      throw error;
+    }
+    assertOtpVerifiedToken(otpToken, { purpose: PURPOSES.PAYMENT, email });
+  }
 
   const existingUser = await User.findOne({ where: { email } });
   if (existingUser) {

@@ -14,6 +14,11 @@ async function authMiddleware(req, res, next) {
 
   try {
     const decoded = verifyAccessToken(token);
+
+    if (decoded?.typ) {
+      return errorResponse(res, "Invalid or expired token", 401);
+    }
+
     const user = await User.findByPk(decoded.user_id);
 
     if (!user || !user.is_active) {

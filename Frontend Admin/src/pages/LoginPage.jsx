@@ -1,6 +1,7 @@
 import { Eye, EyeOff, LoaderCircle, Lock, User } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { resendLoginOtpApi } from '../services/authApi'
 import { useAuthStore } from '../store/authStore'
 import { getWebsiteUrl } from '../utils/websiteUrl'
 
@@ -11,7 +12,13 @@ function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [signupSuccess, setSignupSuccess] = useState(false)
+  const [otpStep, setOtpStep] = useState(false)
+  const [otpCode, setOtpCode] = useState('')
+  const [challengeToken, setChallengeToken] = useState('')
+  const [otpEmail, setOtpEmail] = useState('')
+  const [resending, setResending] = useState(false)
   const login = useAuthStore((state) => state.login)
+  const verifyLoginOtp = useAuthStore((state) => state.verifyLoginOtp)
   const loading = useAuthStore((state) => state.isLoading)
 
   useEffect(() => {
@@ -29,21 +36,57 @@ function LoginPage() {
     event.preventDefault()
     setSubmitError('')
 
-    // Previous mock-only flow retained for reference while integrating APIs.
-    // setLoading(true)
-    // setTimeout(() => {
-    //   setLoading(false)
-    //   onLogin()
-    // }, 900)
-
     try {
-      await login({
+      const result = await login({
         email: identifier,
         password,
         rememberMe,
       })
+
+      if (result?.requires_otp) {
+        setOtpStep(true)
+        setChallengeToken(result.challenge_token || '')
+        setOtpEmail(result.email || identifier)
+        setOtpCode('')
+        setSignupSuccess(false)
+      }
     } catch (error) {
       setSubmitError(error.message || 'Unable to login')
+    }
+  }
+
+  const handleOtpSubmit = async (event) => {
+    event.preventDefault()
+    setSubmitError('')
+
+    const code = otpCode.trim()
+    if (!/^\d{6}$/.test(code)) {
+      setSubmitError('Enter the 6-digit code from your email.')
+      return
+    }
+
+    try {
+      await verifyLoginOtp({
+        challengeToken,
+        code,
+        email: otpEmail || identifier,
+        rememberMe,
+      })
+    } catch (error) {
+      setSubmitError(error.message || 'Unable to verify code')
+    }
+  }
+
+  const handleResendOtp = async () => {
+    setSubmitError('')
+    setResending(true)
+    try {
+      await resendLoginOtpApi({ challenge_token: challengeToken })
+      setOtpCode('')
+    } catch (error) {
+      setSubmitError(error.message || 'Unable to resend code')
+    } finally {
+      setResending(false)
     }
   }
 
@@ -61,90 +104,150 @@ function LoginPage() {
             <img src="/log5.png" alt="Company logo" className="h-16 w-auto max-w-[220px] object-contain sm:h-20" />
           </div>
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-navy-700">Host Portal</p>
-          {/* <h1 className="text-2xl font-bold text-navy-900 sm:text-3xl">Welcome back</h1> */}
-          <p className="text-sm text-slate-600">Sign in to manage your quiz, poll, and survey sessions.</p>
+          <p className="text-sm text-slate-600">
+            {otpStep
+              ? `Enter the 6-digit code sent to ${otpEmail || identifier}.`
+              : 'Sign in to manage your quiz, poll, and survey sessions.'}
+          </p>
         </div>
 
-        {signupSuccess ? (
+        {signupSuccess && !otpStep ? (
           <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
             Account created successfully. Sign in with the email and password you registered.
           </div>
         ) : null}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <label htmlFor="identifier" className="text-sm font-medium text-slate-700">
-              Email / Username
-            </label>
-            <div className="relative">
-              <User className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+        {otpStep ? (
+          <form onSubmit={handleOtpSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <label htmlFor="otpCode" className="text-sm font-medium text-slate-700">
+                Email verification code
+              </label>
               <input
-                id="identifier"
+                id="otpCode"
                 type="text"
-                value={identifier}
-                onChange={(event) => setIdentifier(event.target.value)}
-                className="input-modern pl-10"
-                placeholder="you@company.com"
-                autoComplete="username"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                value={otpCode}
+                onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                className="input-modern tracking-[0.35em]"
+                placeholder="••••••"
                 required
               />
             </div>
-          </div>
 
-          <div className="space-y-1.5">
-            <label htmlFor="password" className="text-sm font-medium text-slate-700">
-              Password
-            </label>
-            <div className="relative">
-              <Lock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-              <input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className="input-modern pl-10 pr-12"
-                placeholder="Enter your password"
-                autoComplete="current-password"
-                required
-              />
+            <button type="submit" disabled={loading} className="btn-gradient mt-2">
+              {loading ? (
+                <>
+                  <LoaderCircle className="size-4 animate-spin" />
+                  Verifying...
+                </>
+              ) : (
+                'Verify & sign in'
+              )}
+            </button>
+            {submitError ? <p className="text-sm text-red-600">{submitError}</p> : null}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-1 text-sm">
               <button
                 type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="font-medium text-navy-700 transition hover:text-navy-900"
+                onClick={() => {
+                  setOtpStep(false)
+                  setOtpCode('')
+                  setChallengeToken('')
+                  setSubmitError('')
+                }}
               >
-                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                Back to password
+              </button>
+              <button
+                type="button"
+                disabled={resending || !challengeToken}
+                className="font-medium text-navy-700 transition hover:text-navy-900 disabled:opacity-60"
+                onClick={handleResendOtp}
+              >
+                {resending ? 'Sending…' : 'Resend code'}
               </button>
             </div>
-          </div>
+          </form>
+        ) : (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-1.5">
+              <label htmlFor="identifier" className="text-sm font-medium text-slate-700">
+                Email / Username
+              </label>
+              <div className="relative">
+                <User className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  id="identifier"
+                  type="text"
+                  value={identifier}
+                  onChange={(event) => setIdentifier(event.target.value)}
+                  className="input-modern pl-10"
+                  placeholder="you@company.com"
+                  autoComplete="username"
+                  required
+                />
+              </div>
+            </div>
 
-          <div className="flex items-center justify-between gap-3 pt-1">
-            <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-slate-600">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(event) => setRememberMe(event.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 bg-white text-navy-700 focus:ring-blue-500/40"
-              />
-              Remember Me
-            </label>
-            <Link to="/forgot-password" className="text-sm font-medium text-navy-700 transition hover:text-navy-900">
-              Forgot password?
-            </Link>
-          </div>
+            <div className="space-y-1.5">
+              <label htmlFor="password" className="text-sm font-medium text-slate-700">
+                Password
+              </label>
+              <div className="relative">
+                <Lock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  className="input-modern pl-10 pr-12"
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+            </div>
 
-          <button type="submit" disabled={loading} className="btn-gradient mt-2">
-            {loading ? (
-              <>
-                <LoaderCircle className="size-4 animate-spin" />
-                Logging in...
-              </>
-            ) : (
-              'Login'
-            )}
-          </button>
-          {submitError ? <p className="text-sm text-red-600">{submitError}</p> : null}
-        </form>
+            <div className="flex items-center justify-between gap-3 pt-1">
+              <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(event) => setRememberMe(event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 bg-white text-navy-700 focus:ring-blue-500/40"
+                />
+                Remember Me
+              </label>
+              <Link to="/forgot-password" className="text-sm font-medium text-navy-700 transition hover:text-navy-900">
+                Forgot password?
+              </Link>
+            </div>
+
+            <button type="submit" disabled={loading} className="btn-gradient mt-2">
+              {loading ? (
+                <>
+                  <LoaderCircle className="size-4 animate-spin" />
+                  Logging in...
+                </>
+              ) : (
+                'Login'
+              )}
+            </button>
+            {submitError ? <p className="text-sm text-red-600">{submitError}</p> : null}
+          </form>
+        )}
 
         <p className="mt-6 text-center text-sm text-slate-600">
           New here?{' '}

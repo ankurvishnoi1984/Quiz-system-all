@@ -100,10 +100,60 @@ function validateSignupPayload(payload) {
   return errors;
 }
 
+function validateSendOtpPayload(payload) {
+  const errors = [];
+  const purpose = String(payload?.purpose || "").toLowerCase();
+  if (!["payment", "login"].includes(purpose)) {
+    errors.push("purpose must be payment or login");
+  }
+  if (purpose === "login") {
+    if (!payload?.challenge_token || typeof payload.challenge_token !== "string") {
+      errors.push("challenge_token is required to resend login OTP");
+    }
+  } else if (!payload?.email || typeof payload.email !== "string" || !payload.email.trim()) {
+    errors.push("email is required");
+  }
+  if (payload?.full_name != null && typeof payload.full_name !== "string") {
+    errors.push("full_name must be a string");
+  }
+  return errors;
+}
+
+function validateVerifyOtpPayload(payload) {
+  const errors = [];
+  if (!payload?.email || typeof payload.email !== "string" || !payload.email.trim()) {
+    errors.push("email is required");
+  }
+  const purpose = String(payload?.purpose || "").toLowerCase();
+  if (!["payment", "login"].includes(purpose)) {
+    errors.push("purpose must be payment or login");
+  }
+  const code = String(payload?.code || "").trim();
+  if (!/^\d{6}$/.test(code)) {
+    errors.push("code must be a 6-digit number");
+  }
+  return errors;
+}
+
+function validateVerifyLoginOtpPayload(payload) {
+  const errors = [];
+  if (!payload?.challenge_token || typeof payload.challenge_token !== "string") {
+    errors.push("challenge_token is required");
+  }
+  const code = String(payload?.code || "").trim();
+  if (!/^\d{6}$/.test(code)) {
+    errors.push("code must be a 6-digit number");
+  }
+  return errors;
+}
+
 module.exports = {
   validateRegisterPayload,
   validateLoginPayload,
   validateForgotPasswordPayload,
   validateChangePasswordPayload,
-  validateSignupPayload
+  validateSignupPayload,
+  validateSendOtpPayload,
+  validateVerifyOtpPayload,
+  validateVerifyLoginOtpPayload
 };

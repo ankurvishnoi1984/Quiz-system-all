@@ -4,6 +4,7 @@ const nodemailer = require("nodemailer");
 const { MailConfig, NotificationRecipient } = require("../models");
 const {
   renderPasswordResetEmail,
+  renderEmailOtpEmail,
   renderNewUserWelcomeEmail,
   renderWebsiteSignupWelcomeEmail,
   renderWeeklySummaryEmail,
@@ -97,6 +98,28 @@ async function sendPasswordResetEmail({ to, fullName, temporaryPassword }) {
   const { subject, text, html } = renderPasswordResetEmail({
     fullName,
     temporaryPassword,
+    brandName,
+    logoCid: logoAttachment ? EMAIL_LOGO_CID : null
+  });
+
+  await sendMailWithConfig(config, {
+    to,
+    subject,
+    text,
+    html,
+    attachments: logoAttachment ? [logoAttachment] : []
+  });
+}
+
+async function sendEmailOtpMail({ to, fullName, code, purpose, expiresInMinutes }) {
+  const config = await getActiveMailConfig();
+  const brandName = "Quiz Platform";
+  const logoAttachment = getEmailLogoAttachment();
+  const { subject, text, html } = renderEmailOtpEmail({
+    fullName,
+    code,
+    purpose,
+    expiresInMinutes,
     brandName,
     logoCid: logoAttachment ? EMAIL_LOGO_CID : null
   });
@@ -330,6 +353,7 @@ module.exports = {
   getActiveMailConfig,
   sendMail,
   sendPasswordResetEmail,
+  sendEmailOtpMail,
   sendNewUserWelcomeEmail,
   sendWebsiteSignupWelcomeEmail,
   sendWeeklySummaryEmail,

@@ -14,6 +14,14 @@ const {
   signRefreshToken,
   verifyRefreshToken
 } = require("../utils/jwt");
+const { isLoginOtpEnabled } = require("../config/auth-features");
+const {
+  PURPOSES,
+  sendOtp,
+  verifyOtp,
+  signLoginChallengeToken,
+  verifyLoginChallengeToken
+} = require("./otp.service");
 
 const FORGOT_PASSWORD_SUCCESS_MESSAGE =
   "Reset credentials have been sent to your email. Please check your inbox.";
@@ -195,6 +203,64 @@ async function loginUser(input) {
     throw error;
   }
 
+  if (isLoginOtpEnabled()) {
+    await sendOtp({
+      email: user.email,
+      purpose: PURPOSES.LOGIN,
+      fullName: user.full_name
+    });
+
+    return {
+      requires_otp: true,
+      challenge_token: signLoginChallengeToken(user),
+      email: user.email,
+      expires_in_seconds: 600
+    };
+  }
+
+  user.last_login_at = new Date();
+  await user.save();
+
+  const payload = buildUserPayload(user);
+  const tokens = buildAuthTokens(payload);
+  return { user: payload, tokens };
+}
+
+async function verifyLoginOtp(input) {
+  if (!isLoginOtpEnabled()) {
+    const error = new Error("Login email OTP is disabled");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const challenge = verifyLoginChallengeToken(input.challenge_token);
+  const email = String(input.email || challenge.email || "").toLowerCase().trim();
+
+  if (email !== String(challenge.email || "").toLowerCase()) {
+    const error = new Error("Email does not match this login challenge");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  await verifyOtp({
+    email,
+    purpose: PURPOSES.LOGIN,
+    code: input.code
+  });
+
+  const user = await User.findByPk(challenge.user_id);
+  if (!user || !user.is_active) {
+    const error = new Error("User not found or inactive");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  if (String(user.email || "").toLowerCase() !== email) {
+    const error = new Error("Login verification mismatch");
+    error.statusCode = 401;
+    throw error;
+  }
+
   user.last_login_at = new Date();
   await user.save();
 
@@ -326,6 +392,7 @@ module.exports = {
   registerUser,
   signupUser,
   loginUser,
+  verifyLoginOtp,
   refreshAccessToken,
   requestPasswordReset,
   changePassword,

@@ -61,3 +61,36 @@ export async function confirmPaymentApi(payload) {
   })
   return response?.data?.payment
 }
+
+export async function fetchAuthFeaturesApi() {
+  const response = await request('/auth/features')
+  return (
+    response?.data || {
+      payment_otp_enabled: true,
+      login_otp_enabled: true,
+    }
+  )
+}
+
+export async function sendPaymentOtpApi({ email, fullName }) {
+  return request('/auth/otp/send', {
+    method: 'POST',
+    body: JSON.stringify({
+      email,
+      purpose: 'payment',
+      full_name: fullName,
+    }),
+  })
+}
+
+export async function verifyPaymentOtpApi({ email, code }) {
+  const response = await request('/auth/otp/verify', {
+    method: 'POST',
+    body: JSON.stringify({
+      email,
+      purpose: 'payment',
+      code,
+    }),
+  })
+  return response?.data
+}

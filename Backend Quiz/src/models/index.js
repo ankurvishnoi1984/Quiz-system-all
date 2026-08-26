@@ -18,6 +18,7 @@ const MediaAsset = require("./media-asset.model");
 const MailConfig = require("./mail-config.model");
 const NotificationRecipient = require("./notification-recipient.model");
 const JobRun = require("./job-run.model");
+const EmailOtp = require("./email-otp.model");
 const AuditLog = require("./audit-log.model");
 const registerAuditHooks = require("./register-audit-hooks");
 
@@ -104,6 +105,7 @@ const models = {
   MailConfig,
   NotificationRecipient,
   JobRun,
+  EmailOtp,
   AuditLog
 };
 

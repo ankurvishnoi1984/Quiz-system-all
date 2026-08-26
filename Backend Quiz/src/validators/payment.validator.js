@@ -18,6 +18,10 @@ function validateInitiatePaymentPayload(payload) {
     errors.push("company_name must be a string");
   }
 
+  if (payload?.otp_token != null && typeof payload.otp_token !== "string") {
+    errors.push("otp_token must be a string");
+  }
+
   return errors;
 }
 

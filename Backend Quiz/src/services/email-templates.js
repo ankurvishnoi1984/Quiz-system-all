@@ -844,6 +844,23 @@ function renderWeeklySummaryEmail(summary) {
           )
           .join("");
 
+  const newHosts = Array.isArray(summary.newHostSignupHosts)
+    ? summary.newHostSignupHosts
+    : [];
+  const newHostsRowsHtml =
+    newHosts.length === 0
+      ? `<tr><td style="padding:10px 0;font-size:14px;color:${BRAND.slateLight};">No new host signups this week.</td></tr>`
+      : newHosts
+          .map((host) => {
+            const detail = [host.email, host.planName].filter(Boolean).join(" · ");
+            return `
+    <tr>
+      <td style="padding:8px 0;font-size:14px;font-weight:600;color:${BRAND.navy};border-bottom:1px solid ${BRAND.border};">${escapeHtml(host.fullName || "Unnamed host")}</td>
+      <td style="padding:8px 0;font-size:13px;color:${BRAND.slate};text-align:right;border-bottom:1px solid ${BRAND.border};">${escapeHtml(detail || "—")}</td>
+    </tr>`;
+          })
+          .join("");
+
   const bodyHtml = `
     <p style="margin:0 0 16px;font-size:16px;line-height:1.65;color:${BRAND.slate};">Hello,</p>
     <p style="margin:0 0 24px;font-size:16px;line-height:1.65;color:${BRAND.slate};">
@@ -861,6 +878,17 @@ function renderWeeklySummaryEmail(summary) {
             ${renderMetricRow("Failed payments", summary.failedPaymentsCount)}
             ${renderMetricRow("Paid but not signed up", summary.paidNotSignedUp)}
             ${renderMetricRow("Sessions created", summary.sessionsCreated)}
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px;">
+      <tr>
+        <td style="background-color:${BRAND.surface};border:1px solid ${BRAND.border};border-radius:12px;padding:20px 22px;">
+          <p style="margin:0 0 14px;font-size:14px;font-weight:700;color:${BRAND.navy};">New host signups</p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+            ${newHostsRowsHtml}
           </table>
         </td>
       </tr>
@@ -915,6 +943,16 @@ function renderWeeklySummaryEmail(summary) {
           .map((row) => `- ${row.planName}: ${row.count} (${row.revenueLabel})`)
           .join("\n");
 
+  const newHostsText =
+    newHosts.length === 0
+      ? "No new host signups this week."
+      : newHosts
+          .map((host) => {
+            const detail = [host.email, host.planName].filter(Boolean).join(" · ");
+            return `- ${host.fullName || "Unnamed host"}${detail ? ` (${detail})` : ""}`;
+          })
+          .join("\n");
+
   const text = `Hello,
 
 Weekly Quiz Platform summary for ${periodLabel} (Asia/Kolkata).
@@ -926,6 +964,9 @@ New host signups: ${summary.newHostSignups}
 Failed payments: ${summary.failedPaymentsCount}
 Paid but not signed up: ${summary.paidNotSignedUp}
 Sessions created: ${summary.sessionsCreated}
+
+NEW HOST SIGNUPS
+${newHostsText}
 
 PURCHASES BY PLAN
 ${planText}
@@ -947,10 +988,79 @@ Plans expiring in next 7 days: ${summary.plansExpiringSoon}
   };
 }
 
+function renderEmailOtpEmail({ fullName, code, purpose, expiresInMinutes, brandName, logoCid, logoUrl }) {
+  const greeting = fullName ? `Hello ${fullName},` : "Hello,";
+  const safeGreeting = escapeHtml(greeting);
+  const safeCode = escapeHtml(code);
+  const minutes = Math.max(1, Number(expiresInMinutes) || 10);
+  const purposeLabel =
+    purpose === "login" ? "sign-in verification" : purpose === "payment" ? "payment verification" : "verification";
+  const title = purpose === "login" ? "Your login code" : purpose === "payment" ? "Your payment verification code" : "Your verification code";
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px;font-size:16px;line-height:1.65;color:${BRAND.slate};">${safeGreeting}</p>
+    <p style="margin:0 0 24px;font-size:16px;line-height:1.65;color:${BRAND.slate};">
+      Use the one-time code below to complete ${escapeHtml(purposeLabel)}. This code expires in ${minutes} minutes.
+    </p>
+
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 28px;">
+      <tr>
+        <td style="background-color:${BRAND.amberLight};border:1px solid ${BRAND.amberBorder};border-radius:12px;padding:24px;text-align:center;">
+          <p style="margin:0 0 10px;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${BRAND.amber};">
+            One-time code
+          </p>
+          <p class="password-box" style="margin:0;font-family:'SF Mono',SFMono-Regular,Menlo,Monaco,Consolas,'Liberation Mono','Courier New',monospace;font-size:32px;font-weight:700;letter-spacing:0.28em;color:${BRAND.navy};word-break:break-all;">
+            ${safeCode}
+          </p>
+        </td>
+      </tr>
+    </table>
+
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:8px;">
+      <tr>
+        <td style="background-color:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:16px 18px;">
+          <p style="margin:0;font-size:13px;line-height:1.6;color:#991b1b;">
+            <strong>Didn&rsquo;t request this?</strong> Ignore this email. Do not share this code with anyone.
+          </p>
+        </td>
+      </tr>
+    </table>`;
+
+  const html = renderEmailLayout({
+    preheader: `Your verification code is ${code}. It expires in ${minutes} minutes.`,
+    brandName,
+    title,
+    bodyHtml,
+    footerNote: "You received this email because a verification code was requested.",
+    logoCid,
+    logoUrl
+  });
+
+  const text = `${greeting}
+
+Use this one-time code to complete ${purposeLabel}:
+
+${code}
+
+This code expires in ${minutes} minutes.
+
+If you did not request this, ignore this email.
+
+— ${brandName || "Quiz Platform"}
+`;
+
+  return {
+    subject: `${title} — Quiz Platform`,
+    text,
+    html
+  };
+}
+
 module.exports = {
   escapeHtml,
   renderEmailLayout,
   renderPasswordResetEmail,
+  renderEmailOtpEmail,
   renderNewUserWelcomeEmail,
   renderWebsiteSignupWelcomeEmail,
   renderWeeklySummaryEmail,

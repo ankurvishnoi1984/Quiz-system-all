@@ -3,7 +3,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import DemoPaymentForm from '../components/checkout/DemoPaymentForm'
-import { fetchPublicPlansApi, signupApi } from '../services/publicApi'
+import {
+  fetchAuthFeaturesApi,
+  fetchPublicPlansApi,
+  sendPaymentOtpApi,
+  signupApi,
+  verifyPaymentOtpApi,
+} from '../services/publicApi'
 import { getPlanDisplayPrice, formatPlanParticipantLimitShort, formatPlanParticipantLimit } from '../constants/siteContent'
 import { getAdminPortalUrl, redirectToAdminLoginAfterSignup } from '../utils/adminPortal'
 import {
@@ -42,12 +48,22 @@ function RegisterPage() {
   const [step, setStep] = useState('register')
   const [loading, setLoading] = useState(false)
   const [paidPayment, setPaidPayment] = useState(null)
+  const [otpCode, setOtpCode] = useState('')
+  const [otpToken, setOtpToken] = useState('')
+  const [otpSending, setOtpSending] = useState(false)
 
   const plansQuery = useQuery({
     queryKey: ['public-plans'],
     queryFn: fetchPublicPlansApi,
   })
 
+  const featuresQuery = useQuery({
+    queryKey: ['auth-features'],
+    queryFn: fetchAuthFeaturesApi,
+    staleTime: 60_000,
+  })
+
+  const paymentOtpEnabled = featuresQuery.data?.payment_otp_enabled !== false
   const plans = plansQuery.data || []
 
   useEffect(() => {
@@ -83,7 +99,7 @@ function RegisterPage() {
     return !hasValidationErrors(errors)
   }
 
-  const handleRegisterSubmit = (event) => {
+  const handleRegisterSubmit = async (event) => {
     event.preventDefault()
     setSubmitError('')
 
@@ -92,7 +108,66 @@ function RegisterPage() {
       return
     }
 
-    setStep('payment')
+    if (!paymentOtpEnabled) {
+      setOtpToken('')
+      setStep('payment')
+      return
+    }
+
+    setOtpSending(true)
+    try {
+      await sendPaymentOtpApi({
+        email: email.trim(),
+        fullName: fullName.trim(),
+      })
+      setOtpCode('')
+      setOtpToken('')
+      setStep('otp')
+    } catch (error) {
+      setSubmitError(error.message || 'Unable to send verification code')
+    } finally {
+      setOtpSending(false)
+    }
+  }
+
+  const handleOtpSubmit = async (event) => {
+    event.preventDefault()
+    setSubmitError('')
+    const code = otpCode.trim()
+    if (!/^\d{6}$/.test(code)) {
+      setSubmitError('Enter the 6-digit code from your email.')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const verified = await verifyPaymentOtpApi({
+        email: email.trim(),
+        code,
+      })
+      setOtpToken(verified?.otp_token || '')
+      setStep('payment')
+    } catch (error) {
+      setSubmitError(error.message || 'Invalid verification code')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleResendOtp = async () => {
+    setSubmitError('')
+    setOtpSending(true)
+    try {
+      await sendPaymentOtpApi({
+        email: email.trim(),
+        fullName: fullName.trim(),
+      })
+      setOtpCode('')
+    } catch (error) {
+      setSubmitError(error.message || 'Unable to resend code')
+    } finally {
+      setOtpSending(false)
+    }
   }
 
   const handlePaymentSuccess = async (payment) => {
@@ -119,20 +194,29 @@ function RegisterPage() {
 
   const price = selectedPlan ? getPlanDisplayPrice(selectedPlan) : null
   const stepTitle =
-    step === 'register' ? 'Create your host account' : step === 'payment' ? 'Complete payment' : 'Confirm your plan'
+    step === 'register'
+      ? 'Create your host account'
+      : step === 'otp'
+        ? 'Verify your email'
+        : step === 'payment'
+          ? 'Complete payment'
+          : 'Confirm your plan'
+
+  const stepSubtitle =
+    step === 'register'
+      ? 'Register on this website, verify your email, pay for your plan, then continue in the host admin portal.'
+      : step === 'otp'
+        ? `We sent a 6-digit code to ${email.trim()}. Enter it to continue to payment.`
+        : step === 'payment'
+          ? 'Use demo card or UPI checkout. Your account is created only after payment succeeds.'
+          : 'Review your details before payment.'
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
       <div className="mb-8 text-center">
         <p className="eyebrow">Get started</p>
         <h1 className="section-heading mt-3">{stepTitle}</h1>
-        <p className="section-subheading mx-auto max-w-2xl">
-          {step === 'register'
-            ? 'Register on this website, pay for your plan, then continue in the host admin portal.'
-            : step === 'payment'
-              ? 'Use demo card or UPI checkout. Your account is created only after payment succeeds.'
-              : 'Review your details before payment.'}
-        </p>
+        <p className="section-subheading mx-auto max-w-2xl">{stepSubtitle}</p>
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
@@ -307,9 +391,77 @@ function RegisterPage() {
                 </p>
               ) : null}
 
-              <button type="submit" className="btn-primary mt-2 w-full">
-                Continue to payment
+              <button type="submit" disabled={otpSending} className="btn-primary mt-2 w-full">
+                {otpSending ? (
+                  <>
+                    <LoaderCircle className="mr-2 inline size-4 animate-spin" />
+                    Sending code...
+                  </>
+                ) : paymentOtpEnabled ? (
+                  'Continue to email verification'
+                ) : (
+                  'Continue to payment'
+                )}
               </button>
+            </form>
+          ) : step === 'otp' ? (
+            <form onSubmit={handleOtpSubmit} className="space-y-4" noValidate>
+              <div className="space-y-1.5">
+                <label htmlFor="otpCode" className="text-sm font-medium text-slate-700">
+                  Verification code *
+                </label>
+                <input
+                  id="otpCode"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={otpCode}
+                  onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="input-modern tracking-[0.35em]"
+                  placeholder="••••••"
+                  required
+                />
+              </div>
+
+              {submitError ? (
+                <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+                  {submitError}
+                </p>
+              ) : null}
+
+              <button type="submit" disabled={loading} className="btn-primary mt-2 w-full">
+                {loading ? (
+                  <>
+                    <LoaderCircle className="mr-2 inline size-4 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  'Verify & continue to payment'
+                )}
+              </button>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                <button
+                  type="button"
+                  className="font-medium text-navy-800 hover:text-navy-950"
+                  onClick={() => {
+                    setStep('register')
+                    setSubmitError('')
+                    setOtpCode('')
+                  }}
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  disabled={otpSending}
+                  className="font-medium text-navy-800 hover:text-navy-950 disabled:opacity-60"
+                  onClick={handleResendOtp}
+                >
+                  {otpSending ? 'Sending…' : 'Resend code'}
+                </button>
+              </div>
             </form>
           ) : step === 'payment' ? (
             <div className="space-y-6">
@@ -324,9 +476,10 @@ function RegisterPage() {
                   payerName={fullName}
                   companyName={companyName}
                   plan={selectedPlan}
+                  otpToken={otpToken || undefined}
                   onPaid={handlePaymentSuccess}
                   onBack={() => {
-                    setStep('register')
+                    setStep(paymentOtpEnabled ? 'otp' : 'register')
                     setSubmitError('')
                   }}
                   submitError={submitError}

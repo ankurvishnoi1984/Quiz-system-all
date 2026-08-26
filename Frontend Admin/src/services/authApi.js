@@ -41,6 +41,33 @@ export async function loginApi({ email, password }) {
   })
 }
 
+export async function verifyLoginOtpApi({ challenge_token, code, email }) {
+  return request('/auth/login/verify-otp', {
+    method: 'POST',
+    body: JSON.stringify({ challenge_token, code, email }),
+  })
+}
+
+export async function resendLoginOtpApi({ challenge_token }) {
+  return request('/auth/otp/send', {
+    method: 'POST',
+    body: JSON.stringify({
+      purpose: 'login',
+      challenge_token,
+    }),
+  })
+}
+
+export async function fetchAuthFeaturesApi() {
+  const response = await request('/auth/features')
+  return (
+    response?.data || {
+      payment_otp_enabled: true,
+      login_otp_enabled: true,
+    }
+  )
+}
+
 export async function forgotPasswordApi({ email }) {
   return request('/auth/forgot-password', {
     method: 'POST',

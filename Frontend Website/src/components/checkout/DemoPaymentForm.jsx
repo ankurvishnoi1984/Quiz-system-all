@@ -13,7 +13,7 @@ function formatExpiry(value) {
   return `${digits.slice(0, 2)}/${digits.slice(2)}`
 }
 
-function DemoPaymentForm({ email, payerName, companyName, plan, onPaid, onBack, submitError, setSubmitError }) {
+function DemoPaymentForm({ email, payerName, companyName, plan, otpToken, onPaid, onBack, submitError, setSubmitError }) {
   const [method, setMethod] = useState('card')
   const [loading, setLoading] = useState(false)
   const [payment, setPayment] = useState(null)
@@ -37,6 +37,7 @@ function DemoPaymentForm({ email, payerName, companyName, plan, onPaid, onBack, 
           email: email.trim(),
           payer_name: payerName.trim(),
           company_name: companyName?.trim() || undefined,
+          ...(otpToken ? { otp_token: otpToken } : {}),
         })
         if (!cancelled) setPayment(initiated)
       } catch (error) {
@@ -53,7 +54,7 @@ function DemoPaymentForm({ email, payerName, companyName, plan, onPaid, onBack, 
     return () => {
       cancelled = true
     }
-  }, [plan?.plan_id, email, payerName, companyName, setSubmitError])
+  }, [plan?.plan_id, email, payerName, companyName, otpToken, setSubmitError])
 
   const handlePay = async () => {
     if (!payment?.payment_id) {

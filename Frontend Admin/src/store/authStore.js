@@ -6,6 +6,7 @@ import {
   meApi,
   refreshApi,
   setHintsCompletedApi,
+  verifyLoginOtpApi,
 } from '../services/authApi'
 
 const AUTH_STORAGE_KEY = 'auth-storage'
@@ -91,6 +92,48 @@ export const useAuthStore = create(
         set({ isLoading: true, error: null })
         try {
           const response = await loginApi({ email, password })
+          const data = response?.data || {}
+
+          if (data.requires_otp) {
+            set({ isLoading: false, error: null })
+            return {
+              requires_otp: true,
+              challenge_token: data.challenge_token,
+              email: data.email || email,
+              expires_in_seconds: data.expires_in_seconds,
+            }
+          }
+
+          const user = data.user || null
+          const tokens = data.tokens || {}
+
+          set({
+            user,
+            accessToken: tokens.access_token || null,
+            refreshToken: tokens.refresh_token || null,
+            isLoading: false,
+            error: null,
+          })
+
+          return user
+        } catch (error) {
+          set({
+            isLoading: false,
+            error: error.message || 'Login failed',
+          })
+          throw error
+        }
+      },
+      verifyLoginOtp: async ({ challengeToken, code, email, rememberMe = false }) => {
+        localStorage.setItem(REMEMBER_ME_KEY, rememberMe ? 'true' : 'false')
+
+        set({ isLoading: true, error: null })
+        try {
+          const response = await verifyLoginOtpApi({
+            challenge_token: challengeToken,
+            code,
+            email,
+          })
           const user = response?.data?.user || null
           const tokens = response?.data?.tokens || {}
 
@@ -106,7 +149,7 @@ export const useAuthStore = create(
         } catch (error) {
           set({
             isLoading: false,
-            error: error.message || 'Login failed',
+            error: error.message || 'OTP verification failed',
           })
           throw error
         }

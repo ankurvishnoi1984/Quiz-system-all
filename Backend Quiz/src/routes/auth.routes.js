@@ -5,9 +5,13 @@ const authorizeRoles = require("../middlewares/role.middleware");
 
 const router = express.Router();
 
+router.get("/features", authController.features);
 router.post("/signup", authController.signup);
 router.post("/register", authMiddleware, authorizeRoles("super_admin"), authController.register);
 router.post("/login", authController.login);
+router.post("/login/verify-otp", authController.verifyLoginOtp);
+router.post("/otp/send", authController.sendOtp);
+router.post("/otp/verify", authController.verifyOtp);
 router.post("/refresh", authController.refresh);
 router.post("/forgot-password", authController.forgotPassword);
 router.get("/me", authMiddleware, authController.me);

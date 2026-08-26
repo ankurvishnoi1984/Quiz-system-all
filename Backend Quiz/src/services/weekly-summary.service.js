@@ -104,7 +104,7 @@ async function buildWeeklySummary(now = new Date()) {
 
   const [
     failedPaymentsCount,
-    newHostSignups,
+    newHostRows,
     totalActiveUsers,
     totalPaidUsers,
     newPaidUsers,
@@ -119,11 +119,17 @@ async function buildWeeklySummary(now = new Date()) {
         failed_at: weekRange
       }
     }),
-    User.count({
+    User.findAll({
       where: {
         role: "host",
         created_at: weekRange
-      }
+      },
+      attributes: ["user_id", "full_name", "email", "created_at"],
+      include: [{ model: Plan, as: "plan", attributes: ["name"], required: false }],
+      order: [
+        ["created_at", "ASC"],
+        ["user_id", "ASC"]
+      ]
     }),
     User.count({ where: { is_active: true } }),
     User.count({
@@ -196,6 +202,13 @@ async function buildWeeklySummary(now = new Date()) {
     })
   ]);
 
+  const newHostSignups = newHostRows.length;
+  const newHostSignupHosts = newHostRows.map((user) => ({
+    fullName: user.full_name || "Unnamed host",
+    email: user.email || null,
+    planName: user.plan?.name || null
+  }));
+
   const netPaidChange = newPaidUsers - expiredPaidUsers;
   const revenueInr = paiseToInr(revenuePaise);
 
@@ -217,6 +230,7 @@ async function buildWeeklySummary(now = new Date()) {
     failedPaymentsCount,
     paidNotSignedUp,
     newHostSignups,
+    newHostSignupHosts,
     totalActiveUsers,
     totalPaidUsers,
     newPaidUsers,
