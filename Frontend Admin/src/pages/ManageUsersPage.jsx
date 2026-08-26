@@ -9,13 +9,16 @@ import { useAuthStore } from '../store/authStore'
 import { listClientsApi, listDepartmentsApi } from '../services/dashboardApi'
 import {
   adjustUserExtraParticipantsApi,
+  adjustUserExtraQuestionsApi,
   assignUserPlanApi,
   createUserApi,
   setUserStatusApi,
   listPlansApi,
   listUserExtraParticipantsApi,
+  listUserExtraQuestionsApi,
   listUsersApi,
   uploadExtraSeatAttachmentApi,
+  uploadExtraQuestionAttachmentApi,
 } from '../services/managementApi'
 import { filterUsersByShell } from '../utils/shellFilterPaths'
 import { resolveQuestionMediaUrl } from '../utils/questionMedia'
@@ -101,6 +104,11 @@ function ManageUsersPage() {
   const [extraNote, setExtraNote] = useState('')
   const [extraFile, setExtraFile] = useState(null)
   const [extraFileError, setExtraFileError] = useState('')
+  const [extraQuestionsUser, setExtraQuestionsUser] = useState(null)
+  const [extraQuestions, setExtraQuestions] = useState('10')
+  const [extraQuestionsNote, setExtraQuestionsNote] = useState('')
+  const [extraQuestionsFile, setExtraQuestionsFile] = useState(null)
+  const [extraQuestionsFileError, setExtraQuestionsFileError] = useState('')
   const [planEditUser, setPlanEditUser] = useState(null)
   const [planEditForm, setPlanEditForm] = useState({ plan_id: '', plan_expires_at: '' })
   // const [passwordVault, setPasswordVault] = useState(() => getStoredUserPasswords())
@@ -223,6 +231,12 @@ function ManageUsersPage() {
     enabled: Boolean(accessToken && extraUser?.user_id),
   })
 
+  const extraQuestionsHistoryQuery = useQuery({
+    queryKey: ['user-extra-questions', extraQuestionsUser?.user_id],
+    queryFn: () => listUserExtraQuestionsApi(accessToken, extraQuestionsUser.user_id),
+    enabled: Boolean(accessToken && extraQuestionsUser?.user_id),
+  })
+
   const extraMutation = useMutation({
     mutationFn: async ({ userId, payload, file }) => {
       const nextPayload = { ...payload }
@@ -253,6 +267,42 @@ function ManageUsersPage() {
       setAlert({
         variant: 'error',
         title: 'Could not update extra seats',
+        message: error.message || 'Please try again.',
+        confirmLabel: 'Close',
+      })
+    },
+  })
+
+  const extraQuestionsMutation = useMutation({
+    mutationFn: async ({ userId, payload, file }) => {
+      const nextPayload = { ...payload }
+      if (file) {
+        const uploaded = await uploadExtraQuestionAttachmentApi(userId, file)
+        nextPayload.attachment_url = uploaded?.file_path || null
+        nextPayload.attachment_filename = uploaded?.original_filename || file.name
+      }
+      return adjustUserExtraQuestionsApi(accessToken, userId, nextPayload)
+    },
+    onSuccess: (user) => {
+      queryClient.invalidateQueries({ queryKey: ['manage-users'] })
+      queryClient.invalidateQueries({ queryKey: ['user-extra-questions', user?.user_id] })
+      queryClient.invalidateQueries({ queryKey: ['plan-usage'] })
+      setExtraQuestionsUser((prev) => (prev && user ? { ...prev, ...user } : prev))
+      setExtraQuestions('10')
+      setExtraQuestionsNote('')
+      setExtraQuestionsFile(null)
+      setExtraQuestionsFileError('')
+      setAlert({
+        variant: 'success',
+        title: 'Extra questions updated',
+        message: `"${user?.full_name || 'User'}" now has ${Number(user?.extra_questions || 0).toLocaleString()} extra questions per session.`,
+        confirmLabel: 'OK',
+      })
+    },
+    onError: (error) => {
+      setAlert({
+        variant: 'error',
+        title: 'Could not update extra questions',
         message: error.message || 'Please try again.',
         confirmLabel: 'Close',
       })
@@ -368,7 +418,9 @@ function ManageUsersPage() {
               <th className="px-4 py-3 font-semibold text-slate-700">Plan</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Expires</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Participants</th>
+              <th className="px-4 py-3 font-semibold text-slate-700">Questions / session</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Extra seats</th>
+              <th className="px-4 py-3 font-semibold text-slate-700">Extra questions</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Status</th>
             </tr>
           </thead>
@@ -421,6 +473,14 @@ function ManageUsersPage() {
                       ).toLocaleString()}`
                     : `${Number(user.participants_used || 0).toLocaleString()} / Unlimited`}
                 </td>
+                <td className="px-4 py-3 text-slate-700">
+                  {user.plan?.max_questions_per_session != null
+                    ? (
+                        Number(user.plan.max_questions_per_session) +
+                        Number(user.extra_questions || 0)
+                      ).toLocaleString()
+                    : 'Unlimited'}
+                </td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-slate-700">
@@ -434,6 +494,26 @@ function ManageUsersPage() {
                         setExtraNote('')
                         setExtraFile(null)
                         setExtraFileError('')
+                      }}
+                      className="rounded-lg border border-blue-200/70 bg-white px-2 py-1 text-[11px] font-semibold text-navy-800 transition hover:bg-blue-50"
+                    >
+                      Add extra
+                    </button>
+                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-slate-700">
+                      {Number(user.extra_questions || 0).toLocaleString()}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExtraQuestionsUser(user)
+                        setExtraQuestions('10')
+                        setExtraQuestionsNote('')
+                        setExtraQuestionsFile(null)
+                        setExtraQuestionsFileError('')
                       }}
                       className="rounded-lg border border-blue-200/70 bg-white px-2 py-1 text-[11px] font-semibold text-navy-800 transition hover:bg-blue-50"
                     >
@@ -461,7 +541,7 @@ function ManageUsersPage() {
             ))}
             {!usersQuery.isLoading && !filteredUsers.length ? (
               <tr>
-                <td colSpan={10} className="px-4 py-10 text-center text-slate-600">
+                <td colSpan={12} className="px-4 py-10 text-center text-slate-600">
                   {(usersQuery.data || []).length
                     ? 'No users match the selected client or department.'
                     : 'No users found.'}
@@ -839,6 +919,200 @@ function ManageUsersPage() {
               className="h-11 rounded-xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 text-sm font-semibold text-white shadow-lg shadow-blue-900/25 transition hover:brightness-110 disabled:opacity-60"
             >
               {extraMutation.isPending ? 'Saving…' : 'Add extra seats'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={Boolean(extraQuestionsUser)}
+        title={
+          extraQuestionsUser
+            ? `Extra questions — ${extraQuestionsUser.full_name}`
+            : 'Extra questions'
+        }
+        onClose={() => {
+          if (extraQuestionsMutation.isPending) return
+          setExtraQuestionsUser(null)
+          setExtraQuestionsFile(null)
+          setExtraQuestionsFileError('')
+          setExtraQuestionsNote('')
+        }}
+      >
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault()
+            const add = Number(extraQuestions)
+            if (!extraQuestionsUser || !Number.isInteger(add) || add === 0) return
+            extraQuestionsMutation.mutate({
+              userId: extraQuestionsUser.user_id,
+              payload: { add, note: extraQuestionsNote.trim() || null },
+              file: extraQuestionsFile,
+            })
+          }}
+        >
+          <p className="text-sm text-slate-600">
+            Current extra questions:{' '}
+            <strong className="text-navy-900">
+              {Number(extraQuestionsUser?.extra_questions || 0).toLocaleString()}
+            </strong>
+            {extraQuestionsUser?.plan?.max_questions_per_session != null ? (
+              <>
+                {' '}
+                · Plan {Number(extraQuestionsUser.plan.max_questions_per_session).toLocaleString()} +
+                extra ={' '}
+                <strong className="text-navy-900">
+                  {(
+                    Number(extraQuestionsUser.plan.max_questions_per_session) +
+                    Number(extraQuestionsUser.extra_questions || 0)
+                  ).toLocaleString()}
+                </strong>
+              </>
+            ) : null}
+          </p>
+          <div>
+            <label className="text-sm font-semibold text-slate-700">Add extra questions</label>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={extraQuestions}
+              onChange={(e) => setExtraQuestions(e.target.value)}
+              className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+              placeholder="10"
+              required
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Example: plan 15 + extra 10 = 25 questions per session. Record this after the user pays
+              you.
+            </p>
+          </div>
+          <div>
+            <label className="text-sm font-semibold text-slate-700">Note (optional)</label>
+            <textarea
+              value={extraQuestionsNote}
+              onChange={(e) => setExtraQuestionsNote(e.target.value)}
+              rows={3}
+              className="mt-1 w-full rounded-xl border border-blue-200/70 bg-white px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+              placeholder="Reason for extra questions, payment details, invoice number…"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-semibold text-slate-700">Attachment (optional)</label>
+            {extraQuestionsFile ? (
+              <div className="mt-1 flex items-center gap-2 rounded-xl border border-blue-200/70 bg-white px-3 py-2 text-sm">
+                <span className="min-w-0 flex-1 truncate text-slate-700">
+                  {extraQuestionsFile.name}
+                </span>
+                <button
+                  type="button"
+                  disabled={extraQuestionsMutation.isPending}
+                  onClick={() => {
+                    setExtraQuestionsFile(null)
+                    setExtraQuestionsFileError('')
+                  }}
+                  className="rounded-lg p-1 text-slate-500 hover:bg-slate-100"
+                  aria-label="Remove attachment"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            ) : (
+              <label className="mt-1 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-dashed border-blue-200 bg-blue-50/50 px-3 py-2 text-sm font-semibold text-navy-800 transition hover:bg-blue-50">
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
+                  className="hidden"
+                  disabled={extraQuestionsMutation.isPending}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] || null
+                    const error = extraAttachmentError(file)
+                    setExtraQuestionsFileError(error)
+                    setExtraQuestionsFile(error ? null : file)
+                    event.target.value = ''
+                  }}
+                />
+                Choose file
+              </label>
+            )}
+            {extraQuestionsFileError ? (
+              <p className="mt-1 text-xs text-red-600">{extraQuestionsFileError}</p>
+            ) : null}
+          </div>
+          {extraQuestionsHistoryQuery.data?.length ? (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">History</p>
+              <ul className="mt-2 max-h-40 space-y-2 overflow-y-auto text-xs text-slate-600">
+                {extraQuestionsHistoryQuery.data.map((row) => {
+                  const attachmentUrl = resolveQuestionMediaUrl(row.attachment_url)
+                  return (
+                    <li
+                      key={row.addon_id}
+                      className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-2"
+                    >
+                      <p>
+                        <span className="font-semibold text-navy-900">
+                          {row.questions > 0 ? '+' : ''}
+                          {Number(row.questions).toLocaleString()} questions
+                        </span>
+                        {row.created_at ? (
+                          <span className="text-slate-500">
+                            {' '}
+                            · {new Date(row.created_at).toLocaleString()}
+                          </span>
+                        ) : null}
+                      </p>
+                      {row.note ? (
+                        <p className="mt-1 whitespace-pre-wrap text-slate-700">{row.note}</p>
+                      ) : null}
+                      {attachmentUrl ? (
+                        <a
+                          href={attachmentUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-flex items-center gap-1 font-semibold text-navy-800 hover:underline"
+                        >
+                          <Paperclip className="size-3" aria-hidden />
+                          {row.attachment_filename || 'View attachment'}
+                        </a>
+                      ) : null}
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          ) : null}
+          <div className="flex flex-wrap justify-end gap-2 pt-2">
+            {Number(extraQuestionsUser?.extra_questions || 0) > 0 ? (
+              <button
+                type="button"
+                disabled={extraQuestionsMutation.isPending}
+                onClick={() =>
+                  extraQuestionsMutation.mutate({
+                    userId: extraQuestionsUser.user_id,
+                    payload: { set: 0, note: 'Cleared extra questions' },
+                  })
+                }
+                className="h-11 rounded-xl border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
+              >
+                Clear extra
+              </button>
+            ) : null}
+            <button
+              type="button"
+              disabled={extraQuestionsMutation.isPending}
+              onClick={() => setExtraQuestionsUser(null)}
+              className="h-11 rounded-xl border border-blue-200/70 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-blue-50 disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={extraQuestionsMutation.isPending || Boolean(extraQuestionsFileError)}
+              className="h-11 rounded-xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 text-sm font-semibold text-white shadow-lg shadow-blue-900/25 transition hover:brightness-110 disabled:opacity-60"
+            >
+              {extraQuestionsMutation.isPending ? 'Saving…' : 'Add extra questions'}
             </button>
           </div>
         </form>

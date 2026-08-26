@@ -94,6 +94,30 @@ function MyPlanPage() {
                 : Number(usageQuery.data?.extra_participants || 0).toLocaleString()}
             </dd>
           </div>
+          <div className="bg-white px-4 py-3">
+            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Questions per session
+            </dt>
+            <dd className="mt-1 text-sm font-semibold text-navy-900">
+              {usageQuery.data?.plan_expired || usageQuery.data?.has_active_plan === false
+                ? 'Paused while plan is inactive'
+                : usageQuery.data?.unrestricted
+                  ? 'No account-wide question cap'
+                  : usageQuery.data?.max_questions_per_session != null
+                    ? Number(usageQuery.data.max_questions_per_session).toLocaleString()
+                    : '—'}
+            </dd>
+          </div>
+          <div className="bg-white px-4 py-3">
+            <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Extra questions
+            </dt>
+            <dd className="mt-1 text-sm font-semibold text-navy-900">
+              {usageQuery.data?.plan_expired || usageQuery.data?.has_active_plan === false
+                ? 'Paused while plan is inactive'
+                : Number(usageQuery.data?.extra_questions || 0).toLocaleString()}
+            </dd>
+          </div>
         </dl>
       </div>
     </section>

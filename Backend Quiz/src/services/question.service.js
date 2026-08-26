@@ -14,7 +14,7 @@ const {
   isSessionRandomQuestionOrderEnabled
 } = require("../utils/sessionFlags");
 const { validateCreateQuestionPayload } = require("../validators/question.validator");
-const { assertHostCanRunSessions } = require("./plan.service");
+const { assertHostCanRunSessions, assertSessionQuestionCapacity } = require("./plan.service");
 
 function isParticipantNavigationEnabled(session) {
   return session.participant_navigation_enabled !== false;
@@ -142,7 +142,11 @@ async function listSessionQuestions({ sessionId, user, publicView = false }) {
 async function createQuestion({ sessionId, input, user }) {
   const session = await getSessionForQuestionFlow(sessionId);
   assertScopeAccess(user, session);
-  await assertHostCanRunSessions(session.host_id);
+  await assertSessionQuestionCapacity({
+    hostId: session.host_id,
+    sessionId: session.session_id,
+    additionalCount: 1
+  });
 
   if (session.status !== "draft") {
     const error = new Error("Questions can be created only for draft sessions");
@@ -276,6 +280,20 @@ async function importQuestions({ sessionId, questions, mode = "append", user }) 
     error.statusCode = 400;
     error.details = validation.rows;
     throw error;
+  }
+
+  if (mode === "replace") {
+    await assertSessionQuestionCapacity({
+      hostId: validation.session.host_id,
+      sessionId,
+      absoluteCount: questions.length
+    });
+  } else {
+    await assertSessionQuestionCapacity({
+      hostId: validation.session.host_id,
+      sessionId,
+      additionalCount: questions.length
+    });
   }
 
   const createdCount = await sequelize.transaction(async (transaction) => {

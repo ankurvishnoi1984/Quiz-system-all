@@ -20,6 +20,20 @@ export function PlanUsageCard({ usage, compact = false }) {
   const used = Number(usage.used || 0)
   const remaining = usage.remaining
   const percent = Math.min(100, Number(usage.percent_used || 0))
+  const questionCap =
+    usage.max_questions_per_session != null
+      ? Number(usage.max_questions_per_session)
+      : usage.plan?.max_questions_per_session != null
+        ? Number(usage.plan.max_questions_per_session) +
+          Number(usage.extra_questions || 0)
+        : null
+  const planQuestionLimit =
+    usage.plan_question_limit != null
+      ? Number(usage.plan_question_limit)
+      : usage.plan?.max_questions_per_session != null
+        ? Number(usage.plan.max_questions_per_session)
+        : null
+  const extraQuestions = Number(usage.extra_questions || 0)
   const planName =
     expired && usage.assigned_plan?.name
       ? `${usage.assigned_plan.name} (expired)`
@@ -104,6 +118,19 @@ export function PlanUsageCard({ usage, compact = false }) {
           <div className="rounded-xl border border-white/70 bg-white/80 px-3 py-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Sessions</p>
             <p className="mt-1 text-xl font-bold text-navy-900">{formatCount(usage.sessions_count)}</p>
+          </div>
+        ) : null}
+        {!compact && questionCap != null ? (
+          <div className="rounded-xl border border-white/70 bg-white/80 px-3 py-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Questions / session
+            </p>
+            <p className="mt-1 text-xl font-bold text-navy-900">{formatCount(questionCap)}</p>
+            {extraQuestions > 0 && planQuestionLimit != null ? (
+              <p className="mt-1 text-xs text-slate-500">
+                Plan {formatCount(planQuestionLimit)} + extra {formatCount(extraQuestions)}
+              </p>
+            ) : null}
           </div>
         ) : null}
       </div>

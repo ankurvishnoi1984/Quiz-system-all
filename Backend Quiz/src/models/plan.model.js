@@ -22,6 +22,11 @@ const Plan = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false
     },
+    max_questions_per_session: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 15
+    },
     is_free: {
       type: DataTypes.BOOLEAN,
       allowNull: false,

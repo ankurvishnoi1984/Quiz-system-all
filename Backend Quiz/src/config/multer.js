@@ -71,7 +71,29 @@ const uploadExtraSeatAttachment = multer({
   }
 });
 
+const extraQuestionStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    const destinationPath = path.join(uploadsRoot, "extra-questions");
+    fs.mkdirSync(destinationPath, { recursive: true });
+    cb(null, destinationPath);
+  },
+  filename: (_req, file, cb) => {
+    const extension = path.extname(file.originalname || "");
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    cb(null, `${uniqueSuffix}${extension}`);
+  }
+});
+
+const uploadExtraQuestionAttachment = multer({
+  storage: extraQuestionStorage,
+  fileFilter: extraSeatFileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024
+  }
+});
+
 module.exports = {
   uploadMedia,
-  uploadExtraSeatAttachment
+  uploadExtraSeatAttachment,
+  uploadExtraQuestionAttachment
 };

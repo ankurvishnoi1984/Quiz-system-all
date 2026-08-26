@@ -73,6 +73,18 @@ export function formatPlanParticipantLimitShort(maxParticipants) {
   return `${count.toLocaleString()} at a time`
 }
 
+export function formatPlanQuestionLimit(maxQuestions) {
+  const count = Number(maxQuestions)
+  if (!Number.isFinite(count) || count <= 0) return 'Custom question limit'
+  return `Up to ${count.toLocaleString()} questions per session`
+}
+
+export function formatPlanQuestionLimitShort(maxQuestions) {
+  const count = Number(maxQuestions)
+  if (!Number.isFinite(count) || count <= 0) return 'Custom'
+  return `${count.toLocaleString()} / session`
+}
+
 export const HERO_STATS = [
   { value: 'Live', label: 'Concurrent participant limits' },
   { value: 'Real-time', label: 'Live results & leaderboards' },

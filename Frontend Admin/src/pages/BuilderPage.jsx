@@ -1521,6 +1521,27 @@ function BuilderPage() {
     }
   }, [sessionQuery.data])
 
+  const sessionQuestionType = questions[0]?.type ?? null
+  const maxQuestionsPerSession =
+    user?.role === 'super_admin'
+      ? null
+      : planUsageQuery.data?.max_questions_per_session != null
+        ? Number(planUsageQuery.data.max_questions_per_session)
+        : planUsageQuery.data?.plan?.max_questions_per_session != null
+          ? Number(planUsageQuery.data.plan.max_questions_per_session)
+          : null
+  const questionLimitReached =
+    maxQuestionsPerSession != null && questions.length >= maxQuestionsPerSession
+  const questionLimitLabel =
+    maxQuestionsPerSession == null
+      ? null
+      : `Questions ${questions.length} / ${maxQuestionsPerSession}`
+  const questionLimitMessage =
+    maxQuestionsPerSession == null
+      ? null
+      : Number(planUsageQuery.data?.extra_questions || 0) > 0
+        ? `${planUsageQuery.data?.plan?.name || 'Your plan'} allows ${maxQuestionsPerSession} questions per session (plan ${planUsageQuery.data?.plan_question_limit ?? planUsageQuery.data?.plan?.max_questions_per_session} + extra ${Number(planUsageQuery.data.extra_questions)}).`
+        : `${planUsageQuery.data?.plan?.name || 'Your plan'} allows ${maxQuestionsPerSession} questions per session.`
   const isDraftSession = session?.rawStatus === 'draft'
   const sessionQuizTotalTimeEnabled = isSessionQuizTotalTimeEnabled(sessionQuery.data)
   const sessionQuizTotalTimeMinutes = sessionQuizTotalTimeEnabled
@@ -1548,7 +1569,6 @@ function BuilderPage() {
       setCustomTime(normalizeTimeLimitSeconds(selected.timeLimitSeconds) || 45)
     }
   }, [selected?.id, selected?.timeLimitSeconds, selected?.type])
-  const sessionQuestionType = questions[0]?.type ?? null
   const hasMixedQuestionTypes = useMemo(() => {
     if (questions.length <= 1) return false
     if (sessionQuestionType === 'Survey') return false
@@ -1604,6 +1624,13 @@ function BuilderPage() {
 
   const addQuestion = (type, targetSetId = activeSetId) => {
     if (!session || session.rawStatus !== 'draft') return
+    if (
+      maxQuestionsPerSession != null &&
+      questions.length >= maxQuestionsPerSession
+    ) {
+      setSaveError(questionLimitMessage)
+      return
+    }
     if (sessionQuestionType && sessionQuestionType !== type) {
       setSaveError(`Only one question type is allowed per session. This session is using ${sessionQuestionType}.`)
       return
@@ -1651,6 +1678,15 @@ function BuilderPage() {
     if (!session || session.rawStatus !== 'draft') return
     if (!Array.isArray(generatedList) || generatedList.length === 0) return
 
+    const remaining =
+      maxQuestionsPerSession == null
+        ? generatedList.length
+        : Math.max(0, maxQuestionsPerSession - questions.length)
+    if (remaining <= 0) {
+      setSaveError(questionLimitMessage)
+      return
+    }
+
     const firstType = generatedList[0]?.type
     if (sessionQuestionType && firstType && sessionQuestionType !== firstType) {
       setSaveError(
@@ -1663,7 +1699,8 @@ function BuilderPage() {
       ? 0
       : resolveDefaultTimeLimitForNewQuestion(questions)
 
-    const mapped = generatedList.map((item) => {
+    const accepted = generatedList.slice(0, remaining)
+    const mapped = accepted.map((item) => {
       const type = item.type || firstType || 'MCQ'
       const options = Array.isArray(item.options)
         ? item.options.map((opt) => ({
@@ -1703,8 +1740,11 @@ function BuilderPage() {
     setDirty(true)
     setQuestions((prev) => [...prev, ...mapped])
     setSelectedId(mapped[0]?.id || null)
+    const truncated = generatedList.length > accepted.length
     setSaveSuccess(
-      `${mapped.length} AI question${mapped.length === 1 ? '' : 's'} added — save the session to keep them.`,
+      truncated
+        ? `${mapped.length} AI question${mapped.length === 1 ? '' : 's'} added (plan limit ${maxQuestionsPerSession}). Save the session to keep them.`
+        : `${mapped.length} AI question${mapped.length === 1 ? '' : 's'} added — save the session to keep them.`,
     )
   }
 
@@ -1713,7 +1753,8 @@ function BuilderPage() {
     addQuestion(sessionQuestionType)
   }
 
-  const canQuickAddQuestion = isDraftSession && Boolean(sessionQuestionType)
+  const canQuickAddQuestion =
+    isDraftSession && Boolean(sessionQuestionType) && !questionLimitReached
 
   const canManageSets =
     QUESTION_SETS_UI_ENABLED &&
@@ -2286,13 +2327,15 @@ function BuilderPage() {
           <button
             type="button"
             onClick={() => setQuestionImportOpen(true)}
-            disabled={!isDraftSession || dirty}
+            disabled={!isDraftSession || dirty || questionLimitReached}
             title={
               !isDraftSession
                 ? 'Question upload is available only for draft sessions.'
                 : dirty
                   ? 'Save or discard your unsaved changes before importing questions.'
-                  : 'Upload questions from an Excel workbook'
+                  : questionLimitReached
+                    ? questionLimitMessage
+                    : 'Upload questions from an Excel workbook'
             }
             className="inline-flex items-center gap-2 rounded-2xl border border-blue-200/70 bg-white/90 px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm shadow-blue-900/5 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -2303,11 +2346,13 @@ function BuilderPage() {
           <button
             type="button"
             onClick={() => setAiGenerateOpen(true)}
-            disabled={!isDraftSession}
+            disabled={!isDraftSession || questionLimitReached}
             title={
               !isDraftSession
                 ? 'AI generate is available only for draft sessions.'
-                : 'Generate questions with Cursor AI'
+                : questionLimitReached
+                  ? questionLimitMessage
+                  : 'Generate questions with Cursor AI'
             }
             className="inline-flex items-center gap-2 rounded-2xl border border-violet-200/80 bg-violet-50/90 px-4 py-3 text-sm font-semibold text-violet-900 shadow-sm shadow-violet-900/5 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -2372,6 +2417,16 @@ function BuilderPage() {
                     ? `Session type locked to ${sessionQuestionType}. Use the button or pick the type again.`
                     : 'Choose a type below to start, or use Add question after the first one.'}
                 </p>
+                {questionLimitLabel ? (
+                  <p
+                    className={`mt-1 text-xs font-semibold ${
+                      questionLimitReached ? 'text-amber-800' : 'text-slate-500'
+                    }`}
+                  >
+                    {questionLimitLabel}
+                    {questionLimitReached ? ' — limit reached' : ''}
+                  </p>
+                ) : null}
               </div>
               <button
                 type="button"
@@ -2381,9 +2436,11 @@ function BuilderPage() {
                 title={
                   !isDraftSession
                     ? 'Add questions is available only while the session is in draft.'
-                    : !sessionQuestionType
-                      ? 'Add your first question by choosing a type below.'
-                      : `Add another ${sessionQuestionType} question`
+                    : questionLimitReached
+                      ? questionLimitMessage
+                      : !sessionQuestionType
+                        ? 'Add your first question by choosing a type below.'
+                        : `Add another ${sessionQuestionType} question`
                 }
                 className="inline-flex shrink-0 items-center gap-2 self-center rounded-2xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-900/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -2394,7 +2451,10 @@ function BuilderPage() {
             <div data-tour="question-types" className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
               {QUESTION_TYPES.map((t) => {
                 const Icon = t.icon
-                const isDisabled = Boolean(sessionQuestionType && sessionQuestionType !== t.type) || !isDraftSession
+                const isDisabled =
+                  Boolean(sessionQuestionType && sessionQuestionType !== t.type) ||
+                  !isDraftSession ||
+                  questionLimitReached
                 return (
                   <button
                     key={t.type}
@@ -2409,9 +2469,11 @@ function BuilderPage() {
                     title={
                       !isDraftSession
                         ? 'Add questions is available only while the session is in draft.'
-                        : isDisabled
-                          ? `Session locked to ${sessionQuestionType}. Remove existing questions to switch type.`
-                          : t.description
+                        : questionLimitReached
+                          ? questionLimitMessage
+                          : isDisabled
+                            ? `Session locked to ${sessionQuestionType}. Remove existing questions to switch type.`
+                            : t.description
                     }
                   >
                     <span
@@ -3049,6 +3111,7 @@ function BuilderPage() {
         sessionId={sessionId}
         existingQuestionCount={questions.length}
         sessionQuestionType={sessionQuestionType}
+        maxQuestionsPerSession={maxQuestionsPerSession}
         onImported={async (result) => {
           if (Array.isArray(result?.questions)) {
             queryClient.setQueryData(['builder-questions', sessionId], result.questions)
@@ -3071,6 +3134,11 @@ function BuilderPage() {
         onClose={() => setAiGenerateOpen(false)}
         accessToken={accessToken}
         lockedType={sessionQuestionType}
+        remainingSlots={
+          maxQuestionsPerSession == null
+            ? null
+            : Math.max(0, maxQuestionsPerSession - questions.length)
+        }
         onAddSelected={addAiGeneratedQuestions}
       />
 

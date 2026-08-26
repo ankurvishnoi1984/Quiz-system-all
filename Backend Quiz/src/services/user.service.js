@@ -1,6 +1,6 @@
 const bcrypt = require("bcryptjs");
 const path = require("path");
-const { User, Client, Department, Plan, UserParticipantAddon } = require("../models");
+const { User, Client, Department, Plan, UserParticipantAddon, UserQuestionAddon } = require("../models");
 const { sendNewUserWelcomeEmail } = require("./email.service");
 const {
   getPlanOrThrow,
@@ -32,6 +32,7 @@ function buildUserPayload(user, extras = {}) {
     plan_expires_at: planExpiresAt,
     plan_expired: isPlanExpired(planExpiresAt, { isFree: Boolean(plan?.is_free) }),
     extra_participants: Math.max(0, Number(user.extra_participants || 0)),
+    extra_questions: Math.max(0, Number(user.extra_questions || 0)),
     participants_used: extras.participants_used ?? 0,
     is_active: Boolean(user.is_active)
   };
@@ -60,6 +61,7 @@ async function listUsers() {
       "plan_id",
       "plan_expires_at",
       "extra_participants",
+      "extra_questions",
       "is_active",
       "last_login_at",
       "created_at"
@@ -195,6 +197,17 @@ function toAddonPayload(row) {
   };
 }
 
+function toQuestionAddonPayload(row) {
+  return {
+    addon_id: row.addon_id,
+    questions: Number(row.questions),
+    note: row.note || null,
+    attachment_url: row.attachment_url || null,
+    attachment_filename: row.attachment_filename || null,
+    created_at: row.created_at
+  };
+}
+
 async function listUserParticipantAddons(userId) {
   const user = await User.findByPk(userId, { attributes: ["user_id"] });
   if (!user) {
@@ -213,6 +226,26 @@ async function listUserParticipantAddons(userId) {
   });
 
   return rows.map(toAddonPayload);
+}
+
+async function listUserQuestionAddons(userId) {
+  const user = await User.findByPk(userId, { attributes: ["user_id"] });
+  if (!user) {
+    const error = new Error("User not found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const rows = await UserQuestionAddon.findAll({
+    where: { user_id: userId },
+    order: [
+      ["created_at", "DESC"],
+      ["addon_id", "DESC"]
+    ],
+    limit: 20
+  });
+
+  return rows.map(toQuestionAddonPayload);
 }
 
 async function adjustUserExtraParticipants({
@@ -275,6 +308,65 @@ async function adjustUserExtraParticipants({
   return reloadUserAccountPayload(user);
 }
 
+async function adjustUserExtraQuestions({
+  userId,
+  add,
+  set,
+  note,
+  attachmentUrl,
+  attachmentFilename,
+  adminUser
+}) {
+  const user = await User.findByPk(userId);
+  if (!user) {
+    const error = new Error("User not found");
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const current = Math.max(0, Number(user.extra_questions || 0));
+  let next = current;
+  let questionsDelta = 0;
+
+  if (set !== undefined) {
+    next = Number(set);
+    questionsDelta = next - current;
+  } else {
+    questionsDelta = Number(add);
+    next = current + questionsDelta;
+  }
+
+  if (!Number.isInteger(next) || next < 0) {
+    const error = new Error("extra questions cannot be negative");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (questionsDelta === 0) {
+    return reloadUserAccountPayload(user);
+  }
+
+  user.extra_questions = next;
+  await user.save();
+
+  const trimmedNote = note ? String(note).trim().slice(0, 2000) : null;
+  const trimmedUrl = attachmentUrl ? String(attachmentUrl).trim() : null;
+  const trimmedFilename = attachmentFilename
+    ? String(attachmentFilename).trim().slice(0, 255)
+    : null;
+
+  await UserQuestionAddon.create({
+    user_id: user.user_id,
+    questions: questionsDelta,
+    note: trimmedNote,
+    attachment_url: trimmedUrl || null,
+    attachment_filename: trimmedFilename || null,
+    created_by: adminUser?.user_id || null
+  });
+
+  return reloadUserAccountPayload(user);
+}
+
 async function saveExtraParticipantAttachment({ userId, file }) {
   const user = await User.findByPk(userId, { attributes: ["user_id"] });
   if (!user) {
@@ -293,6 +385,10 @@ async function saveExtraParticipantAttachment({ userId, file }) {
     file_path: filePath,
     original_filename: file.originalname || "attachment"
   };
+}
+
+async function saveExtraQuestionAttachment({ userId, file }) {
+  return saveExtraParticipantAttachment({ userId, file });
 }
 
 async function setUserActiveStatus({ userId, isActive, adminUser }) {
@@ -325,7 +421,10 @@ module.exports = {
   createUserByAdmin,
   assignUserPlan,
   listUserParticipantAddons,
+  listUserQuestionAddons,
   adjustUserExtraParticipants,
+  adjustUserExtraQuestions,
   saveExtraParticipantAttachment,
+  saveExtraQuestionAttachment,
   setUserActiveStatus
 };

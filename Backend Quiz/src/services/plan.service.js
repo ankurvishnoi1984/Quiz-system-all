@@ -80,6 +80,7 @@ function toPlanPayload(plan) {
     name: plan.name,
     description: plan.description || null,
     max_participants: Number(plan.max_participants),
+    max_questions_per_session: Number(plan.max_questions_per_session || 15),
     is_active: Boolean(plan.is_active),
     is_free: Boolean(plan.is_free),
     default_duration_days:
@@ -143,6 +144,7 @@ async function getFreeDemoPlan() {
     description:
       "Fallback demo access after a paid plan expires. Up to 10 participants connected at once — enough for trials and small demos.",
     max_participants: FREE_DEMO_MAX_PARTICIPANTS,
+    max_questions_per_session: 15,
     is_active: true,
     is_free: true,
     default_duration_days: null
@@ -182,6 +184,7 @@ async function createPlan(input) {
     name,
     description: input.description ? String(input.description).trim() : null,
     max_participants: Number(input.max_participants),
+    max_questions_per_session: Number(input.max_questions_per_session),
     is_active: input.is_active !== undefined ? Boolean(input.is_active) : true,
     is_free: isFree,
     default_duration_days: isFree ? null : defaultDurationDays,
@@ -217,6 +220,10 @@ async function updatePlan({ planId, input }) {
 
   if (input.max_participants !== undefined) {
     plan.max_participants = Number(input.max_participants);
+  }
+
+  if (input.max_questions_per_session !== undefined) {
+    plan.max_questions_per_session = Number(input.max_questions_per_session);
   }
 
   if (input.is_active !== undefined) {
@@ -315,6 +322,7 @@ async function getHostPlanUsage(hostId) {
       "full_name",
       "plan_id",
       "extra_participants",
+      "extra_questions",
       "plan_limit_email_sent_at",
       "plan_expires_at",
       "plan_expiry_email_sent_at",
@@ -332,11 +340,14 @@ async function getHostPlanUsage(hostId) {
       used: 0,
       plan_limit: null,
       extra_participants: 0,
+      extra_questions: 0,
       limit: null,
       remaining: null,
       exceeded: false,
       unrestricted: true,
       sessions_count: 0,
+      max_questions_per_session: null,
+      plan_question_limit: null,
       percent_used: 0,
       plan_expires_at: null,
       plan_expired: false,
@@ -357,6 +368,9 @@ async function getHostPlanUsage(hostId) {
   let extraParticipants = hasActivePlan
     ? Math.max(0, Number(user.extra_participants || 0))
     : 0;
+  let extraQuestions = hasActivePlan
+    ? Math.max(0, Number(user.extra_questions || 0))
+    : 0;
 
   const used = await countParticipantsForHost(hostId);
   const sessionsCount = await Session.count({ where: { host_id: hostId } });
@@ -365,6 +379,14 @@ async function getHostPlanUsage(hostId) {
   const remaining = limit == null ? null : Math.max(0, limit - used);
   const exceeded = limit != null && used >= limit;
   const percentUsed = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  const planQuestionLimit =
+    unrestricted || !effectivePlan
+      ? null
+      : Number(effectivePlan.max_questions_per_session || 15);
+  const maxQuestionsPerSession =
+    unrestricted || planQuestionLimit == null
+      ? null
+      : planQuestionLimit + extraQuestions;
 
   return {
     host: user,
@@ -374,11 +396,14 @@ async function getHostPlanUsage(hostId) {
     used,
     plan_limit: planLimit,
     extra_participants: extraParticipants,
+    extra_questions: extraQuestions,
     limit,
     remaining,
     exceeded,
     unrestricted,
     sessions_count: sessionsCount,
+    plan_question_limit: planQuestionLimit,
+    max_questions_per_session: maxQuestionsPerSession,
     percent_used: percentUsed,
     plan_expires_at: planExpiresAt,
     plan_expired: expired,
@@ -490,11 +515,18 @@ async function getCurrentUserPlanUsage(userId) {
     used: usage.used,
     plan_limit: usage.plan_limit,
     extra_participants: Number(usage.extra_participants || 0),
+    extra_questions: Number(usage.extra_questions || 0),
     limit: usage.limit,
     remaining: usage.remaining,
     exceeded: usage.exceeded,
     unrestricted: Boolean(usage.unrestricted),
     sessions_count: Number(usage.sessions_count || 0),
+    plan_question_limit:
+      usage.plan_question_limit == null ? null : Number(usage.plan_question_limit),
+    max_questions_per_session:
+      usage.max_questions_per_session == null
+        ? null
+        : Number(usage.max_questions_per_session),
     percent_used: Number(usage.percent_used || 0),
     plan_expires_at: usage.plan_expires_at,
     plan_expired: Boolean(usage.plan_expired),
@@ -517,6 +549,66 @@ async function assertHostCanRunSessions(hostId) {
   error.statusCode = 403;
   error.code = usage.plan_expired ? "plan_expired" : "plan_inactive";
   error.usage = usage;
+  throw error;
+}
+
+/**
+ * Enforce plan max_questions_per_session for a session.
+ * @param {{ hostId: number, sessionId: number, additionalCount?: number, absoluteCount?: number }} args
+ * absoluteCount: when set (e.g. import replace / duplicate), compare this total to the limit instead of current+additional.
+ */
+async function assertSessionQuestionCapacity({
+  hostId,
+  sessionId = null,
+  additionalCount = 0,
+  absoluteCount = null
+}) {
+  const usage = await assertHostCanRunSessions(hostId);
+  if (usage.unrestricted || usage.max_questions_per_session == null) {
+    return usage;
+  }
+
+  const limit = Number(usage.max_questions_per_session);
+  if (!Number.isInteger(limit) || limit <= 0) {
+    return usage;
+  }
+
+  const { Question } = require("../models");
+  const currentCount =
+    sessionId == null
+      ? 0
+      : await Question.count({ where: { session_id: sessionId } });
+  const nextCount =
+    absoluteCount != null
+      ? Number(absoluteCount)
+      : currentCount + Math.max(0, Number(additionalCount) || 0);
+
+  if (nextCount <= limit) {
+    return { ...usage, current_question_count: currentCount, question_limit: limit };
+  }
+
+  const planName = usage.plan?.name || "Your plan";
+  const remaining = Math.max(0, limit - currentCount);
+  const planBase = usage.plan_question_limit;
+  const extras = Number(usage.extra_questions || 0);
+  const limitDetail =
+    extras > 0 && planBase != null
+      ? `${planBase} from plan + ${extras} extra`
+      : String(limit);
+  const error = new Error(
+    absoluteCount != null
+      ? `${planName} allows ${limitDetail} questions per session. This action needs ${nextCount}.`
+      : `${planName} allows ${limitDetail} questions per session. You have ${currentCount} and can add ${remaining} more.`
+  );
+  error.statusCode = 403;
+  error.code = "plan_question_limit";
+  error.usage = usage;
+  error.details = {
+    current: currentCount,
+    limit,
+    remaining,
+    requested: nextCount
+  };
   throw error;
 }
 
@@ -571,5 +663,6 @@ module.exports = {
   notifyHostPlanExpiredIfNeeded,
   getCurrentUserPlanUsage,
   assertHostCanRunSessions,
+  assertSessionQuestionCapacity,
   resolvePlanExpiresAt
 };

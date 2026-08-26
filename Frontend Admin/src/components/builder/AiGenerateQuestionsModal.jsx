@@ -50,6 +50,7 @@ export function AiGenerateQuestionsModal({
   onClose,
   accessToken,
   lockedType = null,
+  remainingSlots = null,
   onAddSelected,
 }) {
   const availableTypes = useMemo(() => {
@@ -61,6 +62,13 @@ export function AiGenerateQuestionsModal({
     }
     return AI_QUESTION_TYPES
   }, [lockedType])
+
+  const maxGenerateCount = useMemo(() => {
+    if (remainingSlots == null) return 20
+    return Math.max(0, Math.min(20, Number(remainingSlots) || 0))
+  }, [remainingSlots])
+
+  const quotaExhausted = remainingSlots != null && maxGenerateCount <= 0
 
   const [topic, setTopic] = useState('')
   const [count, setCount] = useState(5)
@@ -76,7 +84,7 @@ export function AiGenerateQuestionsModal({
   useEffect(() => {
     if (!open) return
     setTopic('')
-    setCount(5)
+    setCount(maxGenerateCount > 0 ? Math.min(5, maxGenerateCount) : 1)
     setQuestionType(availableTypes[0] || 'MCQ')
     setDifficulty('mixed')
     setStep('form')
@@ -85,24 +93,52 @@ export function AiGenerateQuestionsModal({
     setCandidates([])
     setSelectedKeys(new Set())
     setLastTopic('')
-  }, [open, availableTypes])
+  }, [open, availableTypes, maxGenerateCount])
+
+  useEffect(() => {
+    if (maxGenerateCount <= 0) return
+    setCount((prev) => Math.min(Math.max(1, prev), maxGenerateCount))
+  }, [maxGenerateCount])
 
   const toggleKey = (key) => {
     setSelectedKeys((prev) => {
       const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
+      if (next.has(key)) {
+        next.delete(key)
+        return next
+      }
+      if (remainingSlots != null && next.size >= remainingSlots) {
+        setError(
+          `You can only add ${remainingSlots} more question${remainingSlots === 1 ? '' : 's'} on your plan. Deselect some first, or delete existing questions.`,
+        )
+        return prev
+      }
+      setError('')
+      next.add(key)
       return next
     })
   }
 
   const selectAll = () => {
-    setSelectedKeys(new Set(candidates.map((_, i) => String(i))))
+    const limit = remainingSlots == null ? candidates.length : remainingSlots
+    setSelectedKeys(
+      new Set(candidates.slice(0, Math.max(0, limit)).map((_, i) => String(i))),
+    )
+    setError('')
   }
 
-  const selectNone = () => setSelectedKeys(new Set())
+  const selectNone = () => {
+    setSelectedKeys(new Set())
+    setError('')
+  }
 
   const handleGenerate = async () => {
+    if (quotaExhausted) {
+      setError(
+        'Your plan question limit is full. Delete some existing questions before generating more.',
+      )
+      return
+    }
     const trimmed = topic.trim()
     if (!trimmed) {
       setError('Enter a topic so AI knows what to write about.')
@@ -112,12 +148,22 @@ export function AiGenerateQuestionsModal({
       setError('Choose a question type for this batch.')
       return
     }
+    const requested = Math.min(
+      maxGenerateCount,
+      Math.max(1, Number(count) || 1),
+    )
+    if (requested < 1) {
+      setError(
+        'Your plan question limit is full. Delete some existing questions before generating more.',
+      )
+      return
+    }
     setError('')
     setGenerating(true)
     try {
       const data = await generateQuestionsWithAiApi(accessToken, {
         topic: trimmed,
-        count: Number(count) || 5,
+        count: requested,
         questionType,
         difficulty,
       })
@@ -126,10 +172,17 @@ export function AiGenerateQuestionsModal({
         setError('No questions came back. Try a clearer topic or a smaller count.')
         return
       }
-      setCandidates(list)
-      setSelectedKeys(new Set(list.map((_, i) => String(i))))
+      const capped =
+        remainingSlots == null ? list : list.slice(0, Math.max(0, remainingSlots))
+      setCandidates(capped)
+      setSelectedKeys(new Set(capped.map((_, i) => String(i))))
       setLastTopic(trimmed)
       setStep('results')
+      if (list.length > capped.length) {
+        setError(
+          `Only ${capped.length} question${capped.length === 1 ? '' : 's'} fit your remaining plan quota.`,
+        )
+      }
     } catch (err) {
       setError(err?.message || 'Generation failed. Check CURSOR_API_KEY on the server.')
     } finally {
@@ -143,7 +196,20 @@ export function AiGenerateQuestionsModal({
       setError('Select at least one question to add to your session.')
       return
     }
-    onAddSelected?.(picked)
+    const allowed =
+      remainingSlots == null ? picked : picked.slice(0, Math.max(0, remainingSlots))
+    if (!allowed.length) {
+      setError(
+        'Your plan question limit is full. Delete some existing questions before adding more.',
+      )
+      return
+    }
+    if (allowed.length < picked.length) {
+      setError(
+        `Only ${allowed.length} question${allowed.length === 1 ? '' : 's'} fit your remaining plan quota.`,
+      )
+    }
+    onAddSelected?.(allowed)
     onClose?.()
   }
 
@@ -200,6 +266,29 @@ export function AiGenerateQuestionsModal({
               </div>
             </div>
 
+            {remainingSlots != null ? (
+              <div
+                className={`rounded-2xl border px-4 py-3 text-sm ${
+                  quotaExhausted
+                    ? 'border-amber-200 bg-amber-50 text-amber-950'
+                    : 'border-blue-200/70 bg-blue-50/80 text-navy-900'
+                }`}
+              >
+                {quotaExhausted ? (
+                  <p className="font-semibold">
+                    Plan question limit reached. Delete existing questions before generating more.
+                  </p>
+                ) : (
+                  <p>
+                    <span className="font-semibold">
+                      {remainingSlots} question{remainingSlots === 1 ? '' : 's'} remaining
+                    </span>{' '}
+                    on your plan for this session.
+                  </p>
+                )}
+              </div>
+            ) : null}
+
             <label className="block space-y-1.5">
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Topic
@@ -210,7 +299,7 @@ export function AiGenerateQuestionsModal({
                 onChange={(e) => setTopic(e.target.value)}
                 placeholder="e.g. JavaScript basics for beginners"
                 className="input-modern"
-                disabled={generating}
+                disabled={generating || quotaExhausted}
                 autoFocus
               />
               <span className="block text-xs text-slate-500">
@@ -226,13 +315,26 @@ export function AiGenerateQuestionsModal({
                 <input
                   type="number"
                   min={1}
-                  max={20}
+                  max={Math.max(1, maxGenerateCount)}
                   value={count}
-                  onChange={(e) => setCount(Math.min(20, Math.max(1, Number(e.target.value) || 1)))}
+                  onChange={(e) =>
+                    setCount(
+                      Math.min(
+                        Math.max(1, maxGenerateCount || 1),
+                        Math.max(1, Number(e.target.value) || 1),
+                      ),
+                    )
+                  }
                   className="input-modern"
-                  disabled={generating}
+                  disabled={generating || quotaExhausted}
                 />
-                <span className="block text-xs text-slate-500">1–20 questions</span>
+                <span className="block text-xs text-slate-500">
+                  {remainingSlots == null
+                    ? '1–20 questions'
+                    : quotaExhausted
+                      ? 'No slots left'
+                      : `1–${maxGenerateCount} (plan remaining)`}
+                </span>
               </label>
 
               <label className="block space-y-1.5 sm:col-span-2">
@@ -243,7 +345,7 @@ export function AiGenerateQuestionsModal({
                   value={questionType}
                   onChange={(e) => setQuestionType(e.target.value)}
                   className="input-modern"
-                  disabled={generating || Boolean(lockedType)}
+                  disabled={generating || Boolean(lockedType) || quotaExhausted}
                 >
                   {availableTypes.map((type) => (
                     <option key={type} value={type}>
@@ -269,7 +371,7 @@ export function AiGenerateQuestionsModal({
                     <button
                       key={item.id}
                       type="button"
-                      disabled={generating}
+                      disabled={generating || quotaExhausted}
                       onClick={() => setDifficulty(item.id)}
                       className={`rounded-2xl border px-3 py-3 text-left transition ${
                         active
@@ -301,7 +403,9 @@ export function AiGenerateQuestionsModal({
                     {candidates.length} question{candidates.length === 1 ? '' : 's'} ready
                   </p>
                   <p className="mt-0.5 text-xs text-emerald-900/80">
-                    {selectedKeys.size} selected · {questionType}
+                    {selectedKeys.size} selected
+                    {remainingSlots != null ? ` · up to ${remainingSlots} can be added` : ''} ·{' '}
+                    {questionType}
                     {lastTopic ? ` · ${lastTopic}` : ''}
                   </p>
                 </div>
@@ -312,7 +416,9 @@ export function AiGenerateQuestionsModal({
                   onClick={selectAll}
                   className="rounded-xl border border-emerald-300/80 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-900 transition hover:bg-emerald-50"
                 >
-                  Select all
+                  {remainingSlots != null && remainingSlots < candidates.length
+                    ? `Select first ${remainingSlots}`
+                    : 'Select all'}
                 </button>
                 <button
                   type="button"
@@ -462,7 +568,12 @@ export function AiGenerateQuestionsModal({
               <button
                 type="button"
                 onClick={handleGenerate}
-                disabled={generating}
+                disabled={generating || quotaExhausted}
+                title={
+                  quotaExhausted
+                    ? 'Delete existing questions to free plan quota before generating.'
+                    : undefined
+                }
                 className="inline-flex items-center gap-2 rounded-xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {generating ? (

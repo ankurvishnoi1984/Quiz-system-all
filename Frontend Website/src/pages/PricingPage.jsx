@@ -7,6 +7,8 @@ import {
   getPlanDisplayPrice,
   formatPlanParticipantLimit,
   formatPlanParticipantLimitShort,
+  formatPlanQuestionLimit,
+  formatPlanQuestionLimitShort,
 } from '../constants/siteContent'
 import CTASection from '../components/marketing/CTASection'
 import { getAdminPortalUrl } from '../utils/adminPortal'
@@ -39,6 +41,12 @@ function PricingPage() {
       {
         feature: 'Live participants at once',
         values: plans.map((plan) => formatPlanParticipantLimitShort(plan.max_participants)),
+      },
+      {
+        feature: 'Questions per session',
+        values: plans.map((plan) =>
+          formatPlanQuestionLimitShort(plan.max_questions_per_session),
+        ),
       },
       ...SHARED_FEATURES.map((feature) => ({
         feature,
@@ -122,6 +130,10 @@ function PricingPage() {
                     <li className="flex items-start gap-2">
                       <Check className="mt-0.5 size-4 shrink-0 text-navy-700" />
                       {formatPlanParticipantLimit(plan.max_participants)}
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check className="mt-0.5 size-4 shrink-0 text-navy-700" />
+                      {formatPlanQuestionLimit(plan.max_questions_per_session)}
                     </li>
                     {SHARED_FEATURES.map((feature) => (
                       <li key={feature} className="flex items-start gap-2">

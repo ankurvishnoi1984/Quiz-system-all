@@ -27,7 +27,8 @@ const {
 const {
   getPlanJoinBlock,
   notifyHostPlanLimitIfNeeded,
-  assertHostCanRunSessions
+  assertHostCanRunSessions,
+  assertSessionQuestionCapacity
 } = require("./plan.service");
 
 function canAccessDepartment(user, department) {
@@ -257,6 +258,14 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
   }
 
   await assertHostCanRunSessions(hostId);
+
+  const sourceQuestionCount = await Question.count({
+    where: { session_id: sourceSessionId }
+  });
+  await assertSessionQuestionCapacity({
+    hostId,
+    absoluteCount: sourceQuestionCount
+  });
 
   const rawTitle =
     typeof input.title === "string" && input.title.trim().length > 0

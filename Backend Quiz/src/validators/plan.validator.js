@@ -17,6 +17,11 @@ function validateCreatePlanPayload(payload) {
     errors.push("max_participants must be a positive whole number");
   }
 
+  const maxQuestions = Number(payload?.max_questions_per_session);
+  if (!Number.isInteger(maxQuestions) || maxQuestions <= 0) {
+    errors.push("max_questions_per_session must be a positive whole number");
+  }
+
   if (
     payload?.description != null &&
     payload.description !== "" &&
@@ -72,6 +77,7 @@ function validateUpdatePlanPayload(payload) {
     "name",
     "description",
     "max_participants",
+    "max_questions_per_session",
     "is_active",
     "is_free",
     "default_duration_days",
@@ -93,6 +99,13 @@ function validateUpdatePlanPayload(payload) {
     const maxParticipants = Number(payload.max_participants);
     if (!Number.isInteger(maxParticipants) || maxParticipants <= 0) {
       errors.push("max_participants must be a positive whole number");
+    }
+  }
+
+  if (payload.max_questions_per_session !== undefined) {
+    const maxQuestions = Number(payload.max_questions_per_session);
+    if (!Number.isInteger(maxQuestions) || maxQuestions <= 0) {
+      errors.push("max_questions_per_session must be a positive whole number");
     }
   }
 

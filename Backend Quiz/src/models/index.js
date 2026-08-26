@@ -1,6 +1,7 @@
 const User = require("./user.model");
 const Plan = require("./plan.model");
 const UserParticipantAddon = require("./user-participant-addon.model");
+const UserQuestionAddon = require("./user-question-addon.model");
 const Payment = require("./payment.model");
 const Client = require("./client.model");
 const Department = require("./department.model");
@@ -28,6 +29,8 @@ User.hasMany(Payment, { foreignKey: "user_id", as: "payments" });
 Payment.belongsTo(User, { foreignKey: "user_id", as: "user" });
 User.hasMany(UserParticipantAddon, { foreignKey: "user_id", as: "participant_addons" });
 UserParticipantAddon.belongsTo(User, { foreignKey: "user_id", as: "user" });
+User.hasMany(UserQuestionAddon, { foreignKey: "user_id", as: "question_addons" });
+UserQuestionAddon.belongsTo(User, { foreignKey: "user_id", as: "user" });
 
 Client.hasMany(Department, { foreignKey: "client_id" });
 Department.belongsTo(Client, { foreignKey: "client_id" });
@@ -85,6 +88,7 @@ const models = {
   Plan,
   Payment,
   UserParticipantAddon,
+  UserQuestionAddon,
   Client,
   Department,
   Session,

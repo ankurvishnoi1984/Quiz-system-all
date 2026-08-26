@@ -14,6 +14,7 @@ const emptyForm = {
   name: '',
   description: '',
   max_participants: '100',
+  max_questions_per_session: '40',
   default_duration_days: '',
   price_monthly: '',
   currency: 'INR',
@@ -89,6 +90,8 @@ function ManagePlansPage() {
     if (!form.name.trim()) return
     const maxParticipants = Number(form.max_participants)
     if (!Number.isInteger(maxParticipants) || maxParticipants <= 0) return
+    const maxQuestions = Number(form.max_questions_per_session)
+    if (!Number.isInteger(maxQuestions) || maxQuestions <= 0) return
 
     const durationRaw = String(form.default_duration_days || '').trim()
     let defaultDurationDays = null
@@ -108,6 +111,7 @@ function ManagePlansPage() {
       name: form.name.trim(),
       description: form.description.trim() || null,
       max_participants: maxParticipants,
+      max_questions_per_session: maxQuestions,
       is_active: Boolean(form.is_active),
       is_free: false,
       default_duration_days: defaultDurationDays,
@@ -130,6 +134,7 @@ function ManagePlansPage() {
       name: plan.name || '',
       description: plan.description || '',
       max_participants: String(plan.max_participants ?? ''),
+      max_questions_per_session: String(plan.max_questions_per_session ?? '15'),
       default_duration_days:
         plan.default_duration_days != null ? String(plan.default_duration_days) : '',
       price_monthly: plan.price_monthly != null ? String(plan.price_monthly) : '',
@@ -146,8 +151,9 @@ function ManagePlansPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-navy-700">Administration</p>
           <h2 className="mt-1 text-2xl font-bold text-navy-900">Paid Plans</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Each plan sets how many participants can be connected at once. Set a default duration so
-            assigned users get an automatic end date. After expiry they have no active plan until you renew.
+            Each plan sets how many participants can be connected at once and how many questions a
+            host can add per session. Set a default duration so assigned users get an automatic end
+            date. After expiry they have no active plan until you renew.
           </p>
         </div>
         <button
@@ -182,6 +188,7 @@ function ManagePlansPage() {
             <tr>
               <th className="px-4 py-3 font-semibold text-slate-700">Plan</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Participant limit</th>
+              <th className="px-4 py-3 font-semibold text-slate-700">Questions / session</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Price</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Default duration</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Description</th>
@@ -197,6 +204,9 @@ function ManagePlansPage() {
                 </td>
                 <td className="px-4 py-3 text-slate-700">
                   {Number(plan.max_participants).toLocaleString()} connected at once
+                </td>
+                <td className="px-4 py-3 text-slate-700">
+                  {Number(plan.max_questions_per_session || 0).toLocaleString()}
                 </td>
                 <td className="px-4 py-3 text-slate-700">
                   {plan.is_free
@@ -241,7 +251,7 @@ function ManagePlansPage() {
             ))}
             {!plansQuery.isLoading && !(plansQuery.data || []).length ? (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-slate-600">
+                <td colSpan={8} className="px-4 py-10 text-center text-slate-600">
                   No plans yet. Create a plan, then assign it to a user.
                 </td>
               </tr>
@@ -284,6 +294,24 @@ function ManagePlansPage() {
             />
             <p className="mt-1 text-xs text-slate-500">
               Maximum connected participants at the same time across all of the user&apos;s sessions.
+            </p>
+          </div>
+          <div>
+            <label className="text-sm font-semibold text-slate-700">Questions per session</label>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={form.max_questions_per_session}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, max_questions_per_session: e.target.value }))
+              }
+              className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+              placeholder="40"
+              required
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Maximum questions a host can add in a single session on this plan.
             </p>
           </div>
           {!form.is_free ? (

@@ -44,6 +44,7 @@ export function QuestionImportModal({
   sessionId,
   existingQuestionCount = 0,
   sessionQuestionType = null,
+  maxQuestionsPerSession = null,
   onImported,
 }) {
   const inputRef = useRef(null)
@@ -138,6 +139,19 @@ export function QuestionImportModal({
 
   const handleImport = async () => {
     if (!preview || preview.invalid_rows > 0 || !preview.rows?.length) return
+    const incoming = Number(preview?.valid_rows || preview.rows.length || 0)
+    if (maxQuestionsPerSession != null) {
+      const nextTotal =
+        mode === 'replace' ? incoming : Number(existingQuestionCount || 0) + incoming
+      if (nextTotal > maxQuestionsPerSession) {
+        setError(
+          mode === 'replace'
+            ? `Your plan allows ${maxQuestionsPerSession} questions per session. This import has ${incoming}.`
+            : `Your plan allows ${maxQuestionsPerSession} questions per session. You have ${existingQuestionCount} and this import adds ${incoming}.`,
+        )
+        return
+      }
+    }
     setIsImporting(true)
     setError('')
     try {

@@ -47,6 +47,11 @@ const User = sequelize.define(
       allowNull: false,
       defaultValue: 0
     },
+    extra_questions: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0
+    },
     plan_limit_email_sent_at: {
       type: DataTypes.DATE,
       allowNull: true
