@@ -27,6 +27,7 @@ const {
 const {
   getPlanJoinBlock,
   notifyHostPlanLimitIfNeeded,
+  reservePlanJoinSlot,
   assertHostCanRunSessions,
   assertSessionQuestionCapacity
 } = require("./plan.service");
@@ -818,47 +819,56 @@ async function joinSession({ code, payload }) {
 
   assertSessionAcceptingJoin(session, { isReturning: false });
   await assertNewParticipantMayJoin(session);
-  await assertParticipantCapacity(session);
 
-  if (session.join_type === "name_email") {
-    const email = normalizeParticipantEmail(joinPayload.email);
-    const nickname = normalizeParticipantNickname(joinPayload.nickname);
-    if (!email || !nickname) {
-      const error = new Error("Name and email are required to join this session");
-      error.statusCode = 400;
-      throw error;
+  const releaseJoinSlot = await reservePlanJoinSlot(session);
+
+  try {
+    await assertParticipantCapacity(session);
+
+    if (session.join_type === "name_email") {
+      const email = normalizeParticipantEmail(joinPayload.email);
+      const nickname = normalizeParticipantNickname(joinPayload.nickname);
+      if (!email || !nickname) {
+        const error = new Error("Name and email are required to join this session");
+        error.statusCode = 400;
+        throw error;
+      }
     }
+
+    const isAnonymous = resolveParticipantAnonymous(session, joinPayload);
+    const nickname = isAnonymous
+      ? await nextAnonymousNickname(session.session_id)
+      : joinPayload.nickname || null;
+    const email =
+      session.join_type === "name_email" && joinPayload.email
+        ? normalizeParticipantEmail(joinPayload.email)
+        : joinPayload.email || null;
+
+    const participant = await Participant.create({
+      session_id: session.session_id,
+      dept_id: session.dept_id,
+      nickname,
+      email,
+      avatar_url: joinPayload.avatar_url || null,
+      is_anonymous: isAnonymous,
+      device_fingerprint: joinPayload.device_fingerprint || null,
+      session_state: null
+    });
+
+    const { assignRandomSetToParticipant } = require("./question-set.service");
+    const { assignRandomQuestionOrderToParticipant } = require("../utils/participantQuestionOrder");
+    await assignRandomSetToParticipant(session, participant);
+    await assignRandomQuestionOrderToParticipant(session, participant);
+
+    // Slot stays reserved until WebSocket connects (or TTL). Do not release here.
+    return finalizeParticipantJoin(session, participant, {
+      isReturning: false,
+      payload: joinPayload
+    });
+  } catch (err) {
+    releaseJoinSlot();
+    throw err;
   }
-
-  const isAnonymous = resolveParticipantAnonymous(session, joinPayload);
-  const nickname = isAnonymous
-    ? await nextAnonymousNickname(session.session_id)
-    : joinPayload.nickname || null;
-  const email =
-    session.join_type === "name_email" && joinPayload.email
-      ? normalizeParticipantEmail(joinPayload.email)
-      : joinPayload.email || null;
-
-  const participant = await Participant.create({
-    session_id: session.session_id,
-    dept_id: session.dept_id,
-    nickname,
-    email,
-    avatar_url: joinPayload.avatar_url || null,
-    is_anonymous: isAnonymous,
-    device_fingerprint: joinPayload.device_fingerprint || null,
-    session_state: null
-  });
-
-  const { assignRandomSetToParticipant } = require("./question-set.service");
-  const { assignRandomQuestionOrderToParticipant } = require("../utils/participantQuestionOrder");
-  await assignRandomSetToParticipant(session, participant);
-  await assignRandomQuestionOrderToParticipant(session, participant);
-
-  return finalizeParticipantJoin(session, participant, {
-    isReturning: false,
-    payload: joinPayload
-  });
 }
 
 async function getSessionQr({ sessionId, user, baseUrl }) {

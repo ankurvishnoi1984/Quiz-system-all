@@ -146,6 +146,79 @@ function setupWebSocketServer(server) {
           .catch(() => {});
       }
 
+      const finishHandshake = () => {
+        if (ws.readyState !== ws.OPEN) return;
+        send(ws, {
+          type: "connected",
+          session: sessionCode,
+          role: ws.role,
+          auth_status: ws.authStatus
+        });
+
+        wsLog("info", "handshake_complete", {
+          session: sessionCode,
+          role,
+          authStatus: ws.authStatus,
+          activeInBucket: activeConnections.get(connectionKey)?.size
+        });
+      };
+
+      const rejectParticipantOverPlan = (message) => {
+        wsLog("warn", "handshake_rejected", {
+          remote,
+          session: sessionCode,
+          role,
+          reason: "plan_limit",
+          code: 4003
+        });
+        const connSet = activeConnections.get(connectionKey);
+        if (connSet) {
+          connSet.delete(ws);
+          if (connSet.size === 0) activeConnections.delete(connectionKey);
+        }
+        try {
+          send(ws, {
+            type: "error",
+            code: "plan_limit",
+            message: message || "Participant limit exceeded"
+          });
+        } catch {
+          // ignore
+        }
+        try {
+          ws.close(4003, "Participant limit exceeded");
+        } catch {
+          // ignore
+        }
+      };
+
+      if (role === "participant" && decoded?.role === "participant" && decoded?.participant_id) {
+        const { Session } = require("../models");
+        const { assertParticipantWsWithinPlanLimit } = require("./plan.service");
+
+        Session.findByPk(decoded.session_id, {
+          attributes: ["session_id", "session_code", "host_id"]
+        })
+          .then(async (session) => {
+            if (!session || ws.readyState !== ws.OPEN) return;
+            const gate = await assertParticipantWsWithinPlanLimit(session);
+            if (!gate.allowed) {
+              rejectParticipantOverPlan(gate.message);
+              return;
+            }
+            finishHandshake();
+          })
+          .catch((err) => {
+            wsLog("error", "plan_limit_check_failed", {
+              session: sessionCode,
+              message: err.message
+            });
+            finishHandshake();
+          });
+      } else {
+        finishHandshake();
+      }
+
       ws.on("close", (code, reason) => {
         wsLog("info", "connection_closed", {
           session: sessionCode,
@@ -169,20 +242,6 @@ function setupWebSocketServer(server) {
           role,
           message: error.message
         });
-      });
-
-      send(ws, {
-        type: "connected",
-        session: sessionCode,
-        role: ws.role,
-        auth_status: authStatus
-      });
-
-      wsLog("info", "handshake_complete", {
-        session: sessionCode,
-        role,
-        authStatus,
-        activeInBucket: activeConnections.get(connectionKey)?.size
       });
     } catch (error) {
       wsLog("error", "handshake_exception", {

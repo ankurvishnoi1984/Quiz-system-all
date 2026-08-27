@@ -8,6 +8,11 @@ const {
   countLiveParticipantConnectionsForSessionCodes,
   countLiveParticipantConnectionsBySessionCodeMap
 } = require("./websocket.service");
+const {
+  getPendingJoinSlots,
+  tryAcquireJoinSlot,
+  consumeJoinReservation
+} = require("./plan-join-slots");
 
 const ACCOUNT_PLAN_LIMIT_MESSAGE =
   "Participant limit exceeded for this session. Please contact the session host.";
@@ -429,7 +434,12 @@ async function getPlanJoinBlock(session) {
       usage
     };
   }
-  if (!usage.exceeded) {
+
+  const pending = getPendingJoinSlots(session.host_id);
+  const effectivelyFull =
+    usage.limit != null && usage.used + pending >= usage.limit;
+
+  if (!effectivelyFull) {
     return { blocked: false, message: null, reason: null, usage };
   }
 
@@ -439,6 +449,67 @@ async function getPlanJoinBlock(session) {
     reason: "plan_limit",
     usage
   };
+}
+
+/**
+ * Check plan join rules and reserve a slot until the participant's WebSocket
+ * connects (or the reservation TTL expires / join fails).
+ * @returns {Promise<() => void>} release callback
+ */
+async function reservePlanJoinSlot(session) {
+  if (!session?.host_id) {
+    return () => {};
+  }
+
+  const usage = await getHostPlanUsage(session.host_id);
+  if (usage.plan_expired || (usage.assigned_plan && !usage.has_active_plan)) {
+    const error = new Error(PLAN_EXPIRED_JOIN_MESSAGE);
+    error.statusCode = 403;
+    throw error;
+  }
+
+  if (usage.limit == null) {
+    return () => {};
+  }
+
+  const slot = tryAcquireJoinSlot(session.host_id, {
+    liveUsed: usage.used,
+    limit: usage.limit
+  });
+
+  if (!slot.ok) {
+    void notifyHostPlanLimitIfNeeded(usage);
+    const error = new Error(ACCOUNT_PLAN_LIMIT_MESSAGE);
+    error.statusCode = 403;
+    throw error;
+  }
+
+  return slot.release;
+}
+
+/**
+ * After a participant WebSocket is registered, drop the HTTP join reservation
+ * and reject the socket if the host is over plan capacity.
+ * @returns {Promise<{ allowed: boolean, message?: string }>}
+ */
+async function assertParticipantWsWithinPlanLimit(session) {
+  if (!session?.host_id) {
+    return { allowed: true };
+  }
+
+  consumeJoinReservation(session.host_id);
+
+  const usage = await getHostPlanUsage(session.host_id);
+  if (usage.plan_expired || (usage.assigned_plan && !usage.has_active_plan)) {
+    return { allowed: false, message: PLAN_EXPIRED_JOIN_MESSAGE };
+  }
+
+  if (usage.limit != null && usage.used > usage.limit) {
+    void notifyHostPlanLimitIfNeeded(usage);
+    return { allowed: false, message: ACCOUNT_PLAN_LIMIT_MESSAGE };
+  }
+
+  return { allowed: true };
 }
 
 async function notifyHostPlanLimitIfNeeded(usage) {
@@ -659,6 +730,8 @@ module.exports = {
   countParticipantsByHostIds,
   getHostPlanUsage,
   getPlanJoinBlock,
+  reservePlanJoinSlot,
+  assertParticipantWsWithinPlanLimit,
   notifyHostPlanLimitIfNeeded,
   notifyHostPlanExpiredIfNeeded,
   getCurrentUserPlanUsage,
