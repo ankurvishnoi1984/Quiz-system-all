@@ -80,6 +80,11 @@ export async function getPlanUsageApi(accessToken) {
   return data?.usage || null
 }
 
+export async function getPlanAccountApi(accessToken) {
+  const data = await authRequest('/plans/account', accessToken)
+  return data || { summary: null, history: [], payments: [], addons: [] }
+}
+
 export async function listUserExtraParticipantsApi(accessToken, userId) {
   const data = await authRequest(`/users/${userId}/extra-participants`, accessToken)
   return data?.addons || []

@@ -6,6 +6,7 @@ const {
   updatePlan,
   getCurrentUserPlanUsage
 } = require("../services/plan.service");
+const { getPlanAccountOverview } = require("../services/plan-history.service");
 const {
   validateCreatePlanPayload,
   validateUpdatePlanPayload
@@ -71,10 +72,20 @@ async function usage(req, res) {
   }
 }
 
+async function account(req, res) {
+  try {
+    const data = await getPlanAccountOverview(req.user.user_id);
+    return successResponse(res, data, "Plan account overview fetched", 200);
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
 module.exports = {
   publicList,
   list,
   create,
   update,
-  usage
+  usage,
+  account
 };

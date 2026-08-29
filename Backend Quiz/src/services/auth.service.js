@@ -9,6 +9,7 @@ const {
 const { sendPasswordResetEmail, sendWebsiteSignupWelcomeEmail } = require("./email.service");
 const { generateTemporaryPassword } = require("../utils/password");
 const { addDaysToDateOnly, toDateOnlyString } = require("./plan.service");
+const { recordPlanAssignment, PLAN_HISTORY_SOURCES } = require("./plan-history.service");
 const {
   signAccessToken,
   signRefreshToken,
@@ -152,6 +153,15 @@ async function signupUser(input) {
     );
 
     await linkPaymentToUser(paymentId, user.user_id, { transaction });
+    await recordPlanAssignment({
+      userId: user.user_id,
+      planId: plan.plan_id,
+      plan,
+      expiresAt: planExpiresAt,
+      source: PLAN_HISTORY_SOURCES.SIGNUP,
+      paymentId,
+      transaction
+    });
 
     await transaction.commit();
   } catch (err) {

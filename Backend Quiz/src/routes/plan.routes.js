@@ -9,6 +9,7 @@ router.get("/public", planController.publicList);
 router.use(authMiddleware);
 
 router.get("/usage", planController.usage);
+router.get("/account", planController.account);
 router.get("/", authorizeRoles("super_admin"), planController.list);
 router.post("/", authorizeRoles("super_admin"), planController.create);
 router.put("/:planId", authorizeRoles("super_admin"), planController.update);

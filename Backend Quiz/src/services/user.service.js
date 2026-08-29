@@ -10,6 +10,7 @@ const {
   isPlanExpired,
   toDateOnlyString
 } = require("./plan.service");
+const { recordPlanAssignment, PLAN_HISTORY_SOURCES } = require("./plan-history.service");
 
 const ROLE_LABELS = {
   client_admin: "Client admin",
@@ -108,6 +109,15 @@ async function createUserByAdmin(input, adminUser) {
     must_change_password: false
   });
 
+  if (planId) {
+    await recordPlanAssignment({
+      userId: user.user_id,
+      planId,
+      expiresAt: planExpiresAt,
+      source: PLAN_HISTORY_SOURCES.ADMIN_ASSIGN
+    });
+  }
+
   let clientName = null;
   let deptName = null;
 
@@ -177,11 +187,31 @@ async function assignUserPlan({ userId, planId, planExpiresAt }) {
     planExpiresAt
   });
 
+  const previousPlanId = user.plan_id == null ? null : Number(user.plan_id);
+  const previousExpiresAt = toDateOnlyString(user.plan_expires_at);
+  const nextPlanIdNumber = nextPlanId == null ? null : Number(nextPlanId);
+  const nextExpiresAtNormalized = toDateOnlyString(nextExpiresAt);
+  const planChanged =
+    previousPlanId !== nextPlanIdNumber || previousExpiresAt !== nextExpiresAtNormalized;
+
   user.plan_id = nextPlanId;
   user.plan_expires_at = nextExpiresAt;
   user.plan_limit_email_sent_at = null;
   user.plan_expiry_email_sent_at = null;
   await user.save();
+
+  if (planChanged) {
+    let source = PLAN_HISTORY_SOURCES.ADMIN_ASSIGN;
+    if (nextPlanIdNumber && previousPlanId === nextPlanIdNumber) {
+      source = PLAN_HISTORY_SOURCES.RENEWAL;
+    }
+    await recordPlanAssignment({
+      userId: user.user_id,
+      planId: nextPlanId,
+      expiresAt: nextExpiresAt,
+      source
+    });
+  }
 
   return reloadUserAccountPayload(user);
 }

@@ -1,11 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
 import { PlanUsageCard } from '../components/dashboard/PlanUsageCard'
+import { PlanActivitySummary } from '../components/plan/PlanActivitySummary'
+import {
+  PlanAddonHistory,
+  PlanBillingTable,
+  PlanHistoryTable,
+} from '../components/plan/PlanHistoryTable'
 import {
   PlanExpiredBanner,
   hasNoActivePlan,
 } from '../components/dashboard/PlanExpiredNotice'
 import { useAuthStore } from '../store/authStore'
-import { getPlanUsageApi } from '../services/managementApi'
+import { getPlanAccountApi, getPlanUsageApi } from '../services/managementApi'
 
 function MyPlanPage() {
   const accessToken = useAuthStore((state) => state.accessToken)
@@ -17,14 +23,20 @@ function MyPlanPage() {
     enabled: Boolean(accessToken),
   })
 
+  const accountQuery = useQuery({
+    queryKey: ['plan-account'],
+    queryFn: () => getPlanAccountApi(accessToken),
+    enabled: Boolean(accessToken),
+  })
+
   return (
     <section className="space-y-6">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-navy-700">Account</p>
         <h2 className="mt-1 text-2xl font-bold text-navy-900">My Plan</h2>
         <p className="mt-1 text-sm text-slate-600">
-          See your current plan, expiry, how many participants are connected right now, and how many
-          join slots remain.
+          See your current plan, usage summary, session activity, and a history of plans assigned to
+          this account.
         </p>
       </div>
 
@@ -42,6 +54,21 @@ function MyPlanPage() {
 
       {hasNoActivePlan(usageQuery.data) ? <PlanExpiredBanner usage={usageQuery.data} /> : null}
       {usageQuery.data ? <PlanUsageCard usage={usageQuery.data} /> : null}
+      {accountQuery.data?.summary ? (
+        <PlanActivitySummary summary={accountQuery.data.summary} history={accountQuery.data.history || []} />
+      ) : null}
+
+      {accountQuery.isLoading ? (
+        <div className="rounded-2xl border border-blue-200/70 bg-white/70 p-8 text-center text-slate-600">
+          Loading plan history...
+        </div>
+      ) : null}
+
+      {accountQuery.error ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center text-red-700">
+          {accountQuery.error.message || 'Failed to load plan history'}
+        </div>
+      ) : null}
 
       <div className="overflow-hidden rounded-2xl border border-blue-200/70 bg-white/90 shadow-sm shadow-blue-900/5">
         <div className="border-b border-blue-100 bg-blue-50/50 px-4 py-3">
@@ -120,6 +147,14 @@ function MyPlanPage() {
           </div>
         </dl>
       </div>
+
+      {accountQuery.data ? (
+        <>
+          <PlanHistoryTable history={accountQuery.data.history} />
+          <PlanBillingTable payments={accountQuery.data.payments} />
+          <PlanAddonHistory addons={accountQuery.data.addons} />
+        </>
+      ) : null}
     </section>
   )
 }

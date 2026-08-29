@@ -19,6 +19,7 @@ const MailConfig = require("./mail-config.model");
 const NotificationRecipient = require("./notification-recipient.model");
 const JobRun = require("./job-run.model");
 const EmailOtp = require("./email-otp.model");
+const UserPlanHistory = require("./user-plan-history.model");
 const AuditLog = require("./audit-log.model");
 const registerAuditHooks = require("./register-audit-hooks");
 
@@ -32,6 +33,12 @@ User.hasMany(UserParticipantAddon, { foreignKey: "user_id", as: "participant_add
 UserParticipantAddon.belongsTo(User, { foreignKey: "user_id", as: "user" });
 User.hasMany(UserQuestionAddon, { foreignKey: "user_id", as: "question_addons" });
 UserQuestionAddon.belongsTo(User, { foreignKey: "user_id", as: "user" });
+User.hasMany(UserPlanHistory, { foreignKey: "user_id", as: "plan_history" });
+UserPlanHistory.belongsTo(User, { foreignKey: "user_id", as: "user" });
+Plan.hasMany(UserPlanHistory, { foreignKey: "plan_id", as: "plan_history" });
+UserPlanHistory.belongsTo(Plan, { foreignKey: "plan_id", as: "plan" });
+Payment.hasMany(UserPlanHistory, { foreignKey: "payment_id", as: "plan_history" });
+UserPlanHistory.belongsTo(Payment, { foreignKey: "payment_id", as: "payment" });
 
 Client.hasMany(Department, { foreignKey: "client_id" });
 Department.belongsTo(Client, { foreignKey: "client_id" });
@@ -106,6 +113,7 @@ const models = {
   NotificationRecipient,
   JobRun,
   EmailOtp,
+  UserPlanHistory,
   AuditLog
 };
 
