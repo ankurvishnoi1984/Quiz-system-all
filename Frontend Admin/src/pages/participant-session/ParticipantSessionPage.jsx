@@ -1445,12 +1445,7 @@ function ParticipantSessionPage() {
   const leaderboardQuery = useQuery({
     queryKey: ['participant-leaderboard', dbSessionId, participantToken],
     queryFn: () => getSessionLeaderboardApi(participantToken, dbSessionId),
-    enabled: Boolean(
-      participantToken &&
-        dbSessionId &&
-        showOverallLeaderboardTab &&
-        (hasAnyQuestionSaved || session?.status === 'completed' || step === 'leaderboard'),
-    ),
+    enabled: Boolean(participantToken && dbSessionId && showOverallLeaderboardTab),
     staleTime: 5000,
   })
 
@@ -2206,7 +2201,6 @@ function ParticipantSessionPage() {
         {showOverallLeaderboardTab ? (
           <OverallLeaderboardPanel
             leaderboard={leaderboard}
-            hasAnyQuestionSaved={hasAnyQuestionSaved}
             sessionStatus={session?.status}
             isLoading={leaderboardQuery.isLoading}
           />
