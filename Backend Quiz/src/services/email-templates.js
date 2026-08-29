@@ -636,6 +636,96 @@ Open host dashboard: ${loginUrl}
   };
 }
 
+function renderPlanExpiringSoonEmail({
+  fullName,
+  planName,
+  expiresAt,
+  daysLeft,
+  brandName,
+  logoCid,
+  logoUrl
+}) {
+  const greeting = fullName ? `Hello ${fullName},` : "Hello,";
+  const loginUrl = buildLoginUrl();
+  const safeGreeting = escapeHtml(greeting);
+  const safePlan = escapeHtml(planName || "your plan");
+  const days = Math.max(0, Number(daysLeft) || 0);
+  const daysLabel =
+    days === 1 ? "1 day" : days === 0 ? "today" : `${days} days`;
+  const urgency =
+    days <= 1 ? "final reminder" : days <= 3 ? "urgent reminder" : "friendly reminder";
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px;font-size:16px;line-height:1.65;color:${BRAND.slate};">${safeGreeting}</p>
+    <p style="margin:0 0 24px;font-size:16px;line-height:1.65;color:${BRAND.slate};">
+      This is a ${escapeHtml(urgency)}: your <strong>${safePlan}</strong> access
+      ${days === 0 ? "expires <strong>today</strong>" : `expires in <strong>${escapeHtml(daysLabel)}</strong>`}
+      ${expiresAt ? ` on <strong>${escapeHtml(String(expiresAt))}</strong>` : ""}.
+      Renew soon so creating sessions, launching, and managing questions stay available without interruption.
+    </p>
+
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px;">
+      <tr>
+        <td style="background-color:${BRAND.amberLight};border:1px solid ${BRAND.amberBorder};border-radius:12px;padding:20px 22px;">
+          <p style="margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${BRAND.amber};">
+            Plan expiring soon
+          </p>
+          <p style="margin:0;font-size:16px;line-height:1.6;color:${BRAND.navy};">
+            ${safePlan} ends ${days === 0 ? "today" : `in ${escapeHtml(daysLabel)}`}
+            ${expiresAt ? ` (${escapeHtml(String(expiresAt))})` : ""}.
+            Contact your administrator to renew or upgrade before the end date.
+          </p>
+        </td>
+      </tr>
+    </table>
+
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:0 auto 28px;">
+      <tr>
+        <td align="center" style="border-radius:12px;background:linear-gradient(135deg,${BRAND.navy} 0%,${BRAND.navyMid} 100%);">
+          <a class="cta-button" href="${escapeHtml(loginUrl)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:${BRAND.white};text-decoration:none;border-radius:12px;">
+            Open host dashboard
+          </a>
+        </td>
+      </tr>
+    </table>`;
+
+  const html = renderEmailLayout({
+    preheader: `Your ${planName || "plan"} expires ${days === 0 ? "today" : `in ${daysLabel}`}.`,
+    brandName,
+    title: "Plan expiring soon",
+    bodyHtml,
+    footerNote: "You received this email because your plan end date is approaching.",
+    logoCid,
+    logoUrl
+  });
+
+  const text = `${greeting}
+
+Your ${planName || "plan"} expires ${days === 0 ? "today" : `in ${daysLabel}`}${
+    expiresAt ? ` (${expiresAt})` : ""
+  }.
+
+Renew soon so creating sessions, launching, and managing questions stay available without interruption.
+Contact your administrator to renew or upgrade before the end date.
+
+Open host dashboard: ${loginUrl}
+
+— ${brandName || "Quiz Platform"}`;
+
+  const subjectDays =
+    days === 0
+      ? "expires today"
+      : days === 1
+        ? "expires in 1 day"
+        : `expires in ${days} days`;
+
+  return {
+    subject: `Reminder: your ${planName || "plan"} ${subjectDays}`,
+    text,
+    html
+  };
+}
+
 function renderWebsiteSignupWelcomeEmail({
   fullName,
   email,
@@ -1066,6 +1156,7 @@ module.exports = {
   renderWeeklySummaryEmail,
   renderParticipantLimitExceededEmail,
   renderPlanExpiredEmail,
+  renderPlanExpiringSoonEmail,
   buildLoginUrl,
   buildEmailLogoUrl,
   EMAIL_LOGO_CID

@@ -6,6 +6,12 @@ function formatCount(value) {
 
 function formatExpiryLabel(usage) {
   if (usage?.plan_expired) return `Expired ${usage.plan_expires_at || ''}`.trim()
+  const days = usage?.days_until_expiry
+  if (days != null && days >= 0 && days <= 7) {
+    if (days === 0) return `Expires today`
+    if (days === 1) return `Expires in 1 day`
+    return `Expires in ${days} days`
+  }
   if (usage?.plan_expires_at) return `Expires ${usage.plan_expires_at}`
   return null
 }
@@ -16,6 +22,8 @@ export function PlanUsageCard({ usage, compact = false }) {
   const unrestricted = Boolean(usage.unrestricted)
   const exceeded = Boolean(usage.exceeded)
   const expired = Boolean(usage.plan_expired)
+  const days =
+    usage.days_until_expiry == null ? null : Number(usage.days_until_expiry)
   const limit = usage.limit
   const used = Number(usage.used || 0)
   const remaining = usage.remaining
@@ -42,9 +50,11 @@ export function PlanUsageCard({ usage, compact = false }) {
 
   const statusClass = expired
     ? 'border-amber-200 bg-amber-50'
-    : exceeded
-      ? 'border-red-200 bg-red-50'
-      : 'border-blue-200/70 bg-white/90'
+    : days != null && days >= 0 && days <= 7
+      ? 'border-orange-200 bg-orange-50'
+      : exceeded
+        ? 'border-red-200 bg-red-50'
+        : 'border-blue-200/70 bg-white/90'
 
   return (
     <div className={`rounded-2xl border px-4 py-4 shadow-sm shadow-blue-900/5 ${statusClass}`}>
@@ -65,7 +75,11 @@ export function PlanUsageCard({ usage, compact = false }) {
           {expiryLabel ? (
             <span
               className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                expired ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'
+                expired
+                  ? 'bg-amber-100 text-amber-800'
+                  : days != null && days >= 0 && days <= 7
+                    ? 'bg-orange-100 text-orange-800'
+                    : 'bg-slate-100 text-slate-600'
               }`}
             >
               {expiryLabel}

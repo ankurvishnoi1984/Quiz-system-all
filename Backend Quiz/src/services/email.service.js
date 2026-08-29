@@ -10,6 +10,7 @@ const {
   renderWeeklySummaryEmail,
   renderParticipantLimitExceededEmail,
   renderPlanExpiredEmail,
+  renderPlanExpiringSoonEmail,
   EMAIL_LOGO_CID
 } = require("./email-templates");
 
@@ -198,12 +199,40 @@ async function sendPlanExpiredEmail({
   expiredAt
 }) {
   const config = await getActiveMailConfig();
-  const brandName = config?.sender_name || "Quiz Platform";
+  const brandName = "Quiz Platform";
   const logoAttachment = getEmailLogoAttachment();
   const { subject, text, html } = renderPlanExpiredEmail({
     fullName,
     planName,
     expiredAt,
+    brandName,
+    logoCid: logoAttachment ? EMAIL_LOGO_CID : null
+  });
+
+  await sendMailWithConfig(config, {
+    to,
+    subject,
+    text,
+    html,
+    attachments: logoAttachment ? [logoAttachment] : []
+  });
+}
+
+async function sendPlanExpiringSoonEmail({
+  to,
+  fullName,
+  planName,
+  expiresAt,
+  daysLeft
+}) {
+  const config = await getActiveMailConfig();
+  const brandName = "Quiz Platform";
+  const logoAttachment = getEmailLogoAttachment();
+  const { subject, text, html } = renderPlanExpiringSoonEmail({
+    fullName,
+    planName,
+    expiresAt,
+    daysLeft,
     brandName,
     logoCid: logoAttachment ? EMAIL_LOGO_CID : null
   });
@@ -358,5 +387,6 @@ module.exports = {
   sendWebsiteSignupWelcomeEmail,
   sendWeeklySummaryEmail,
   sendParticipantLimitExceededEmail,
-  sendPlanExpiredEmail
+  sendPlanExpiredEmail,
+  sendPlanExpiringSoonEmail
 };

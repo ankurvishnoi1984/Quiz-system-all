@@ -45,6 +45,18 @@ function isPlanExpired(planExpiresAt, { isFree = false } = {}) {
   return expires < todayDateOnlyUtc();
 }
 
+/** Calendar days from today (UTC date) until plan_expires_at. Null if no date. */
+function daysUntilPlanExpiry(planExpiresAt) {
+  const expires = toDateOnlyString(planExpiresAt);
+  if (!expires) return null;
+  const [ey, em, ed] = expires.split("-").map(Number);
+  const today = todayDateOnlyUtc();
+  const [ty, tm, td] = today.split("-").map(Number);
+  const expMs = Date.UTC(ey, em - 1, ed);
+  const todayMs = Date.UTC(ty, tm - 1, td);
+  return Math.round((expMs - todayMs) / (24 * 60 * 60 * 1000));
+}
+
 function addDaysToDateOnly(days) {
   const n = Number(days);
   if (!Number.isInteger(n) || n <= 0) return null;
@@ -356,6 +368,7 @@ async function getHostPlanUsage(hostId) {
       percent_used: 0,
       plan_expires_at: null,
       plan_expired: false,
+      days_until_expiry: null,
       has_active_plan: true,
       on_free_demo: false
     };
@@ -364,6 +377,8 @@ async function getHostPlanUsage(hostId) {
   const assignedPlan = user.plan ? toPlanPayload(user.plan) : null;
   const planExpiresAt = toDateOnlyString(user.plan_expires_at);
   const expired = isPlanExpired(planExpiresAt, { isFree: Boolean(assignedPlan?.is_free) });
+  const daysUntilExpiry =
+    assignedPlan && !assignedPlan.is_free && !expired ? daysUntilPlanExpiry(planExpiresAt) : null;
 
   // Expired paid plans have no active entitlement (no Free Demo fallback).
   const hasActivePlan = Boolean(assignedPlan) && !expired && !assignedPlan.is_free;
@@ -412,6 +427,7 @@ async function getHostPlanUsage(hostId) {
     percent_used: percentUsed,
     plan_expires_at: planExpiresAt,
     plan_expired: expired,
+    days_until_expiry: daysUntilExpiry,
     has_active_plan: unrestricted || hasActivePlan,
     on_free_demo: false
   };
@@ -601,6 +617,8 @@ async function getCurrentUserPlanUsage(userId) {
     percent_used: Number(usage.percent_used || 0),
     plan_expires_at: usage.plan_expires_at,
     plan_expired: Boolean(usage.plan_expired),
+    days_until_expiry:
+      usage.days_until_expiry == null ? null : Number(usage.days_until_expiry),
     has_active_plan: Boolean(usage.has_active_plan),
     on_free_demo: false
   };
@@ -717,6 +735,7 @@ module.exports = {
   toDateOnlyString,
   todayDateOnlyUtc,
   isPlanExpired,
+  daysUntilPlanExpiry,
   addDaysToDateOnly,
   formatPlanPriceLabel,
   toPlanPayload,

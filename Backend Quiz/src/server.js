@@ -4,6 +4,9 @@ const { connectDatabase } = require("./config/database");
 const { setupWebSocketServer } = require("./services/websocket.service");
 const { startSessionAutoEndScheduler } = require("./services/session-auto-end.service");
 const { startWeeklySummaryScheduler } = require("./services/weekly-summary-scheduler.service");
+const {
+  startPlanExpiryReminderScheduler
+} = require("./services/plan-expiry-reminder-scheduler.service");
 
 async function bootstrap() {
   try {
@@ -14,6 +17,7 @@ async function bootstrap() {
     setupWebSocketServer(server);
     startSessionAutoEndScheduler();
     startWeeklySummaryScheduler();
+    startPlanExpiryReminderScheduler();
     console.log("WebSocket server initialized");
   } catch (error) {
     console.error("Failed to start server:", error.message);
