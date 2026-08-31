@@ -17,7 +17,7 @@ const {
   todayDateOnlyUtc,
   isPlanExpired
 } = require("./plan.service");
-const { formatAmount } = require("./payment.service");
+const { formatAmount } = require("../utils/formatAmount");
 
 const PLAN_HISTORY_SOURCES = {
   SIGNUP: "signup",

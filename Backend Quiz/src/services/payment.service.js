@@ -4,6 +4,7 @@ const { isPaymentOtpEnabled } = require("../config/auth-features");
 const { PURPOSES, assertOtpVerifiedToken, assertPlanRenewToken } = require("./otp.service");
 const { resolvePlanExpiresAt, toDateOnlyString } = require("./plan.service");
 const { recordPlanAssignment, PLAN_HISTORY_SOURCES } = require("./plan-history.service");
+const { formatAmount } = require("../utils/formatAmount");
 const { sequelize } = require("../config/database");
 
 const PAYMENT_TTL_MS = 30 * 60 * 1000;
@@ -146,21 +147,6 @@ function toPaymentPayload(payment, plan = null) {
     paid_at: payment.paid_at,
     expires_at: payment.expires_at
   };
-}
-
-function formatAmount(amount, currency = "INR") {
-  const value = Number(amount || 0);
-  const code = String(currency || "INR").toUpperCase();
-  const major = value / 100;
-  try {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: code,
-      maximumFractionDigits: 0
-    }).format(major);
-  } catch {
-    return `${code} ${major}`;
-  }
 }
 
 async function getPlanForCheckout(planId) {
