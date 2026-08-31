@@ -8,7 +8,7 @@ const {
 } = require("./payment.service");
 const { sendPasswordResetEmail, sendWebsiteSignupWelcomeEmail } = require("./email.service");
 const { generateTemporaryPassword } = require("../utils/password");
-const { addDaysToDateOnly, toDateOnlyString } = require("./plan.service");
+const { addDaysToDateOnly, toDateOnlyString, getHostPlanUsage, canSelfServePlanChange } = require("./plan.service");
 const { recordPlanAssignment, PLAN_HISTORY_SOURCES } = require("./plan-history.service");
 const {
   signAccessToken,
@@ -399,13 +399,26 @@ async function setHintsCompleted(userId, completed) {
   return { user: buildUserPayload(user) };
 }
 
-function buildPlanRenewSessionResult(user) {
+function buildPlanRenewSessionResult(user, usage = null) {
+  const assigned = usage?.assigned_plan;
+  const planName = assigned?.name || usage?.plan?.name || null;
   return {
     renew_token: signPlanRenewToken(user),
     email: user.email,
     full_name: user.full_name,
-    user_id: user.user_id
+    user_id: user.user_id,
+    current_plan_id: assigned?.plan_id ?? user.plan_id ?? null,
+    current_plan_name: planName,
+    plan_expires_at: usage?.plan_expires_at ?? toDateOnlyString(user.plan_expires_at),
+    days_until_expiry:
+      usage?.days_until_expiry == null ? null : Number(usage.days_until_expiry),
+    can_self_serve_plan_change: usage ? canSelfServePlanChange(usage) : false
   };
+}
+
+async function buildPlanRenewSessionResultForUser(user) {
+  const usage = await getHostPlanUsage(user.user_id);
+  return buildPlanRenewSessionResult(user, usage);
 }
 
 async function startPlanRenew(input) {
@@ -448,7 +461,7 @@ async function startPlanRenew(input) {
     };
   }
 
-  return buildPlanRenewSessionResult(user);
+  return buildPlanRenewSessionResultForUser(user);
 }
 
 async function verifyPlanRenewOtp(input) {
@@ -488,7 +501,7 @@ async function verifyPlanRenewOtp(input) {
     throw error;
   }
 
-  return buildPlanRenewSessionResult(user);
+  return buildPlanRenewSessionResultForUser(user);
 }
 
 module.exports = {

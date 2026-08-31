@@ -590,11 +590,22 @@ async function notifyHostPlanExpiredIfNeeded(usage) {
   }
 }
 
+function canSelfServePlanChange(usage) {
+  if (!usage || usage.unrestricted) return false;
+  if (!usage.has_active_plan || usage.plan_expired) return false;
+  const assigned = usage.assigned_plan;
+  if (!assigned || assigned.is_free) return false;
+  return true;
+}
+
 async function getCurrentUserPlanUsage(userId) {
   const usage = await getHostPlanUsage(userId);
   if (usage.plan_expired) {
     await notifyHostPlanExpiredIfNeeded(usage);
   }
+  const assignedPlan = usage.assigned_plan;
+  const currentPlanPriceMonthly =
+    assignedPlan?.price_monthly == null ? null : Number(assignedPlan.price_monthly);
   return {
     plan: usage.plan,
     assigned_plan: usage.assigned_plan,
@@ -620,7 +631,11 @@ async function getCurrentUserPlanUsage(userId) {
     days_until_expiry:
       usage.days_until_expiry == null ? null : Number(usage.days_until_expiry),
     has_active_plan: Boolean(usage.has_active_plan),
-    on_free_demo: false
+    on_free_demo: false,
+    can_self_serve_plan_change: canSelfServePlanChange(usage),
+    current_plan_price_monthly: Number.isFinite(currentPlanPriceMonthly)
+      ? currentPlanPriceMonthly
+      : null
   };
 }
 
@@ -756,5 +771,6 @@ module.exports = {
   getCurrentUserPlanUsage,
   assertHostCanRunSessions,
   assertSessionQuestionCapacity,
-  resolvePlanExpiresAt
+  resolvePlanExpiresAt,
+  canSelfServePlanChange
 };

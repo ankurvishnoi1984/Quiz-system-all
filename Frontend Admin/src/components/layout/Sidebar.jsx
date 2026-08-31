@@ -39,7 +39,7 @@ function Sidebar({ collapsed, onToggle }) {
   const user = useAuthStore((state) => state.user)
   const sessionsQuery = useHostNavSessions()
   const sessions = sessionsQuery.data
-  const { planLocked } = usePlanLock()
+  const { planLocked, canManagePlan } = usePlanLock()
   const { active: tourActive, step: tourStep } = useHostOnboarding()
 
   const builderTo = useMemo(() => getBuilderNavTo(sessions), [sessions])
@@ -74,9 +74,12 @@ function Sidebar({ collapsed, onToggle }) {
           if (item.to === '/my-plan' && planLocked) {
             return { ...item, badge: 'Expired' }
           }
+          if (item.to === '/my-plan' && canManagePlan) {
+            return { ...item, badge: 'Manage' }
+          }
           return item
         }),
-    [builderTo, liveTo, planLocked, user?.role],
+    [builderTo, liveTo, planLocked, canManagePlan, user?.role],
   )
 
   const manageClientsItems = useMemo(() => {

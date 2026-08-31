@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../store/authStore'
 import { getPlanUsageApi } from '../services/managementApi'
-import { hasNoActivePlan } from '../components/dashboard/PlanExpiredNotice'
+import { hasNoActivePlan, canSelfServePlanChange } from '../components/dashboard/PlanExpiredNotice'
 
 /**
  * Shared plan-lock state for hosts/admins (not super_admin).
@@ -19,10 +19,12 @@ export function usePlanLock() {
 
   const planUsage = planUsageQuery.data
   const planLocked = !skip && hasNoActivePlan(planUsage)
+  const canManagePlan = !skip && canSelfServePlanChange(planUsage)
 
   return {
     planUsage,
     planLocked,
+    canManagePlan,
     planUsageQuery,
     isLoading: !skip && planUsageQuery.isLoading,
   }

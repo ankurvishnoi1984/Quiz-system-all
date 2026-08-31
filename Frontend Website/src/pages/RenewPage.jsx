@@ -48,6 +48,13 @@ function RenewPage() {
   const [loading, setLoading] = useState(false)
   const [otpSending, setOtpSending] = useState(false)
   const [fieldErrors, setFieldErrors] = useState({})
+  const [renewContext, setRenewContext] = useState({
+    currentPlanId: null,
+    currentPlanName: null,
+    planExpiresAt: null,
+    daysUntilExpiry: null,
+    canSelfServePlanChange: false,
+  })
 
   const plansQuery = useQuery({
     queryKey: ['public-plans'],
@@ -62,6 +69,35 @@ function RenewPage() {
 
   const loginOtpEnabled = featuresQuery.data?.login_otp_enabled !== false
   const plans = plansQuery.data || []
+  const sortedPlans = useMemo(
+    () =>
+      [...plans].sort(
+        (a, b) => Number(a.price_monthly || 0) - Number(b.price_monthly || 0),
+      ),
+    [plans],
+  )
+
+  const isManageMode =
+    renewContext.canSelfServePlanChange || searchParams.get('mode') === 'change'
+
+  function applyRenewSession(result) {
+    setRenewToken(result?.renew_token || '')
+    setFullName(result?.full_name || '')
+    setEmail(result?.email || email.trim())
+    setRenewContext({
+      currentPlanId: result?.current_plan_id ?? null,
+      currentPlanName: result?.current_plan_name ?? null,
+      planExpiresAt: result?.plan_expires_at ?? null,
+      daysUntilExpiry:
+        result?.days_until_expiry == null ? null : Number(result.days_until_expiry),
+      canSelfServePlanChange: Boolean(result?.can_self_serve_plan_change),
+    })
+  }
+
+  function planDurationDays(plan) {
+    const n = Number(plan?.default_duration_days)
+    return Number.isInteger(n) && n > 0 ? n : 30
+  }
 
   useEffect(() => {
     const planFromUrl = searchParams.get('plan')
@@ -81,27 +117,60 @@ function RenewPage() {
 
   const price = selectedPlan ? getPlanDisplayPrice(selectedPlan) : null
 
+  const isExtendingCurrentPlan =
+    renewContext.currentPlanId != null &&
+    String(selectedPlanId) === String(renewContext.currentPlanId)
+
+  const planChangeDisclaimer = useMemo(() => {
+    if (!isManageMode) return null
+    const name = renewContext.currentPlanName || 'your current plan'
+    const days = renewContext.daysUntilExpiry
+    const duration = planDurationDays(selectedPlan)
+    let prefix = `${name} is active. `
+    if (days != null && days >= 0) {
+      prefix =
+        days === 0
+          ? `${name} has less than a day left. `
+          : days === 1
+            ? `${name} has 1 day left. `
+            : `${name} has ${days} days left. `
+    }
+    return `${prefix}When you pay, your current period ends immediately — including if you choose the same plan again. Remaining days are not added. Your new period starts today with its full length (${duration} days).`
+  }, [isManageMode, renewContext, selectedPlan])
+
   const stepTitle =
     step === 'verify'
-      ? 'Renew your plan'
+      ? isManageMode
+        ? 'Manage your plan'
+        : 'Renew your plan'
       : step === 'otp'
         ? 'Verify your email'
         : step === 'plan'
-          ? 'Choose your plan'
+          ? isManageMode
+            ? 'Choose your next plan'
+            : 'Choose your plan'
           : step === 'payment'
             ? 'Complete payment'
-            : 'Plan renewed'
+            : isManageMode
+              ? 'Plan updated'
+              : 'Plan renewed'
 
   const stepSubtitle =
     step === 'verify'
-      ? 'Sign in with your existing host account to renew or change your plan. No new account is created.'
+      ? isManageMode
+        ? 'Sign in to renew, upgrade, or downgrade your plan. No new account is created.'
+        : 'Sign in with your existing host account to renew or change your plan. No new account is created.'
       : step === 'otp'
         ? `Enter the 6-digit code sent to ${otpEmail || email}.`
         : step === 'plan'
-          ? 'Pick the plan you want going forward — you can change from your current plan.'
+          ? isManageMode
+            ? 'Pick any paid plan — including your current plan to extend early, or a different tier to upgrade or downgrade.'
+            : 'Pick the plan you want going forward — you can change from your current plan.'
           : step === 'payment'
-            ? 'Pay for your selected plan. Your account stays the same; only the plan entitlement updates.'
-            : 'Your plan is active again. Continue in the host portal.'
+            ? isManageMode
+              ? 'Pay to start your new plan period. Your account stays the same.'
+              : 'Pay for your selected plan. Your account stays the same; only the plan entitlement updates.'
+            : 'Your plan is active. Continue in the host portal.'
 
   const handleVerifySubmit = async (event) => {
     event.preventDefault()
@@ -129,9 +198,7 @@ function RenewPage() {
         return
       }
 
-      setRenewToken(result?.renew_token || '')
-      setFullName(result?.full_name || '')
-      setEmail(result?.email || email.trim())
+      applyRenewSession(result)
       setStep('plan')
     } catch (error) {
       setSubmitError(error.message || 'Unable to verify account')
@@ -156,9 +223,7 @@ function RenewPage() {
         code,
         email: otpEmail || email.trim(),
       })
-      setRenewToken(result?.renew_token || '')
-      setFullName(result?.full_name || '')
-      setEmail(result?.email || email.trim())
+      applyRenewSession(result)
       setStep('plan')
     } catch (error) {
       setSubmitError(error.message || 'Unable to verify code')
@@ -374,6 +439,13 @@ function RenewPage() {
 
           {step === 'plan' ? (
             <form onSubmit={handlePlanContinue} className="space-y-4" noValidate>
+              {planChangeDisclaimer ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                  <p className="font-semibold text-amber-900">Before you continue</p>
+                  <p className="mt-1">{planChangeDisclaimer}</p>
+                </div>
+              ) : null}
+
               <div className="space-y-1.5">
                 <label htmlFor="plan" className="text-sm font-medium text-slate-700">
                   Select plan *
@@ -393,7 +465,7 @@ function RenewPage() {
                     }}
                     className={fieldInputClass(fieldErrors.plan)}
                   >
-                    {plans.map((plan) => {
+                    {sortedPlans.map((plan) => {
                       const planPrice = getPlanDisplayPrice(plan)
                       return (
                         <option key={plan.plan_id} value={plan.plan_id}>
@@ -446,6 +518,7 @@ function RenewPage() {
                   payerName={fullName || email}
                   plan={selectedPlan}
                   renewToken={renewToken}
+                  planChangeNotice={planChangeDisclaimer}
                   onPaid={handlePaymentSuccess}
                   onBack={() => {
                     setStep('plan')
@@ -460,7 +533,9 @@ function RenewPage() {
 
           {step === 'done' ? (
             <div className="space-y-4 text-center">
-              <p className="text-lg font-semibold text-navy-900">Your plan has been renewed</p>
+              <p className="text-lg font-semibold text-navy-900">
+                {isManageMode ? 'Your plan has been updated' : 'Your plan has been renewed'}
+              </p>
               <p className="text-sm text-slate-600">
                 {selectedPlan?.name ? `${selectedPlan.name} is now active on your account.` : 'Your plan is active.'}
               </p>
@@ -493,8 +568,29 @@ function RenewPage() {
           <aside className="space-y-4">
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-navy-900">Order summary</h2>
+              {isManageMode && renewContext.currentPlanName ? (
+                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Current plan
+                  </p>
+                  <p className="mt-1 font-semibold text-navy-900">{renewContext.currentPlanName}</p>
+                  {renewContext.planExpiresAt ? (
+                    <p className="text-xs text-slate-500">Expires {renewContext.planExpiresAt}</p>
+                  ) : null}
+                </div>
+              ) : null}
               {selectedPlan ? (
                 <div className="mt-4 space-y-3 text-sm text-slate-600">
+                  {isExtendingCurrentPlan ? (
+                    <p className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-900">
+                      Extend current plan — starts a new {planDurationDays(selectedPlan)}-day period
+                      from today.
+                    </p>
+                  ) : isManageMode ? (
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      New plan
+                    </p>
+                  ) : null}
                   <p>
                     <span className="font-semibold text-navy-900">{selectedPlan.name}</span>
                     <br />
@@ -515,6 +611,11 @@ function RenewPage() {
               ) : (
                 <p className="mt-4 text-sm text-slate-500">Select a plan to see pricing.</p>
               )}
+              {planChangeDisclaimer ? (
+                <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+                  {planChangeDisclaimer}
+                </p>
+              ) : null}
             </div>
 
             <p className="text-sm text-slate-500">

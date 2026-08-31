@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
-import { buildPlanRenewHref } from './PlanExpiredNotice'
+import { buildPlanRenewHref, canSelfServePlanChange } from './PlanExpiredNotice'
 
 function formatCount(value) {
   return Number(value || 0).toLocaleString()
@@ -28,6 +28,7 @@ export function PlanUsageCard({ usage, compact = false }) {
   const days =
     usage.days_until_expiry == null ? null : Number(usage.days_until_expiry)
   const renewHref = buildPlanRenewHref(usage, email)
+  const canManagePlan = canSelfServePlanChange(usage)
   const limit = usage.limit
   const used = Number(usage.used || 0)
   const remaining = usage.remaining
@@ -107,6 +108,15 @@ export function PlanUsageCard({ usage, compact = false }) {
               className="rounded-xl border border-amber-400 bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-700"
             >
               Renew plan
+            </a>
+          ) : canManagePlan ? (
+            <a
+              href={renewHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-xl border border-blue-400 bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-800"
+            >
+              Manage plan
             </a>
           ) : null}
           {compact ? (
