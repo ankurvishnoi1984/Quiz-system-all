@@ -66,7 +66,31 @@ function validateConfirmPaymentPayload(payload) {
   return errors;
 }
 
+function validateInitiateRenewalPaymentPayload(payload) {
+  const errors = [];
+
+  const planId = Number(payload?.plan_id);
+  if (!payload?.plan_id || Number.isNaN(planId) || planId < 1) {
+    errors.push("plan_id is required");
+  }
+
+  if (!payload?.renew_token || typeof payload.renew_token !== "string") {
+    errors.push("renew_token is required");
+  }
+
+  if (payload?.payer_name != null && typeof payload.payer_name !== "string") {
+    errors.push("payer_name must be a string");
+  }
+
+  if (payload?.company_name != null && typeof payload.company_name !== "string") {
+    errors.push("company_name must be a string");
+  }
+
+  return errors;
+}
+
 module.exports = {
   validateInitiatePaymentPayload,
-  validateConfirmPaymentPayload
+  validateConfirmPaymentPayload,
+  validateInitiateRenewalPaymentPayload
 };

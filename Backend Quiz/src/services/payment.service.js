@@ -1,7 +1,10 @@
 const { Plan, Payment, User } = require("../models");
 const { randomBytes } = require("crypto");
 const { isPaymentOtpEnabled } = require("../config/auth-features");
-const { PURPOSES, assertOtpVerifiedToken } = require("./otp.service");
+const { PURPOSES, assertOtpVerifiedToken, assertPlanRenewToken } = require("./otp.service");
+const { resolvePlanExpiresAt, toDateOnlyString } = require("./plan.service");
+const { recordPlanAssignment, PLAN_HISTORY_SOURCES } = require("./plan-history.service");
+const { sequelize } = require("../config/database");
 
 const PAYMENT_TTL_MS = 30 * 60 * 1000;
 const DUMMY_FAILURE_RATE = 0;
@@ -359,13 +362,192 @@ async function linkPaymentToUser(paymentId, userId, { transaction } = {}) {
   return payment;
 }
 
+const PAYMENT_PURPOSE_RENEWAL = "plan_renewal";
+
+async function initiateRenewalPayment(input) {
+  const renewToken = input.renew_token || input.renewToken;
+  if (!renewToken) {
+    const error = new Error("Renewal session is required");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  const decoded = assertPlanRenewToken(renewToken);
+  const user = await User.findByPk(decoded.user_id);
+  if (!user || !user.is_active) {
+    const error = new Error("User not found or inactive");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  if (normalizeEmail(user.email) !== normalizeEmail(decoded.email)) {
+    const error = new Error("Renewal session does not match this account");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  const planId = Number(input.plan_id);
+  const plan = await getPlanForCheckout(planId);
+  const payerName =
+    String(input.payer_name || "").trim() || String(user.full_name || "").trim() || "Host";
+  const companyName = input.company_name ? String(input.company_name).trim() : null;
+
+  const amount = planAmountInSmallestUnit(plan);
+  const currency = String(plan.currency || "INR").toUpperCase();
+  const expiresAt = new Date(Date.now() + PAYMENT_TTL_MS);
+
+  const payment = await Payment.create({
+    payment_reference: generatePaymentReference(),
+    purpose: PAYMENT_PURPOSE_RENEWAL,
+    plan_id: plan.plan_id,
+    payer_email: normalizeEmail(user.email),
+    payer_name: payerName,
+    company_name: companyName,
+    amount,
+    currency,
+    status: PAYMENT_STATUSES.PENDING,
+    provider: "dummy",
+    provider_order_id: `dummy_ord_${randomBytes(6).toString("hex")}`,
+    expires_at: expiresAt,
+    metadata: {
+      source: "website_renew",
+      plan_name: plan.name,
+      renew_user_id: user.user_id
+    }
+  });
+
+  return toPaymentPayload(payment, plan);
+}
+
+async function assertPaymentEligibleForRenewal({ paymentId, userId, planId }) {
+  const payment = await getPaymentOrThrow(paymentId);
+  assertPaymentNotExpired(payment);
+
+  if (payment.status !== PAYMENT_STATUSES.PAID) {
+    const error = new Error("A successful payment is required before renewing");
+    error.statusCode = 402;
+    throw error;
+  }
+
+  if (payment.purpose !== PAYMENT_PURPOSE_RENEWAL) {
+    const error = new Error("Invalid payment purpose for renewal");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (payment.user_id) {
+    const error = new Error("This payment has already been applied to a plan");
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const metaUserId = Number(payment.metadata?.renew_user_id);
+  if (metaUserId && metaUserId !== Number(userId)) {
+    const error = new Error("Payment does not belong to this account");
+    error.statusCode = 403;
+    throw error;
+  }
+
+  if (Number(planId) !== Number(payment.plan_id)) {
+    const error = new Error("Selected plan does not match the paid plan");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return payment;
+}
+
+async function applyPlanRenewal({ renew_token, payment_id, plan_id }) {
+  const renewToken = renew_token;
+  if (!renewToken) {
+    const error = new Error("Renewal session is required");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  const decoded = assertPlanRenewToken(renewToken);
+  const user = await User.findByPk(decoded.user_id);
+  if (!user || !user.is_active) {
+    const error = new Error("User not found or inactive");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  const planId = Number(plan_id);
+  const payment = await assertPaymentEligibleForRenewal({
+    paymentId: payment_id,
+    userId: user.user_id,
+    planId
+  });
+
+  if (normalizeEmail(payment.payer_email) !== normalizeEmail(user.email)) {
+    const error = new Error("Payment email must match your account email");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const plan = await Plan.findByPk(planId);
+  if (!plan || !plan.is_active || plan.is_free) {
+    const error = new Error("Selected plan is not available");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const planExpiresAt = await resolvePlanExpiresAt({ planId: plan.plan_id });
+
+  const transaction = await sequelize.transaction();
+  try {
+    user.plan_id = plan.plan_id;
+    user.plan_expires_at = planExpiresAt;
+    user.plan_limit_email_sent_at = null;
+    user.plan_expiry_email_sent_at = null;
+    await user.save({ transaction });
+
+    await linkPaymentToUser(payment.payment_id, user.user_id, { transaction });
+
+    await recordPlanAssignment({
+      userId: user.user_id,
+      planId: plan.plan_id,
+      expiresAt: planExpiresAt,
+      source: PLAN_HISTORY_SOURCES.RENEWAL,
+      paymentId: payment.payment_id,
+      transaction
+    });
+
+    await transaction.commit();
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
+
+  await payment.reload();
+  return {
+    user: {
+      user_id: user.user_id,
+      email: user.email,
+      full_name: user.full_name,
+      plan_id: user.plan_id,
+      plan_expires_at: toDateOnlyString(user.plan_expires_at)
+    },
+    plan: {
+      plan_id: plan.plan_id,
+      name: plan.name
+    },
+    payment: toPaymentPayload(payment, plan)
+  };
+}
+
 module.exports = {
   PAYMENT_STATUSES,
   PAYMENT_METHODS,
+  PAYMENT_PURPOSE_RENEWAL,
   formatAmount,
   initiatePayment,
+  initiateRenewalPayment,
   confirmDummyPayment,
   assertPaymentEligibleForSignup,
+  assertPaymentEligibleForRenewal,
+  applyPlanRenewal,
   linkPaymentToUser,
   toPaymentPayload
 };

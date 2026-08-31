@@ -147,6 +147,26 @@ function validateVerifyLoginOtpPayload(payload) {
   return errors;
 }
 
+function validateRenewStartPayload(payload) {
+  return validateLoginPayload(payload);
+}
+
+function validateRenewApplyPayload(payload) {
+  const errors = [];
+  if (!payload?.renew_token || typeof payload.renew_token !== "string") {
+    errors.push("renew_token is required");
+  }
+  const paymentId = Number(payload?.payment_id);
+  if (!payload?.payment_id || Number.isNaN(paymentId) || paymentId < 1) {
+    errors.push("payment_id is required");
+  }
+  const planId = Number(payload?.plan_id);
+  if (!payload?.plan_id || Number.isNaN(planId) || planId < 1) {
+    errors.push("plan_id is required");
+  }
+  return errors;
+}
+
 module.exports = {
   validateRegisterPayload,
   validateLoginPayload,
@@ -155,5 +175,7 @@ module.exports = {
   validateSignupPayload,
   validateSendOtpPayload,
   validateVerifyOtpPayload,
-  validateVerifyLoginOtpPayload
+  validateVerifyLoginOtpPayload,
+  validateRenewStartPayload,
+  validateRenewApplyPayload
 };

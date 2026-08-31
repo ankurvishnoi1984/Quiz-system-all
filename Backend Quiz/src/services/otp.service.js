@@ -19,6 +19,7 @@ const OTP_RESEND_COOLDOWN_MS = 45 * 1000;
 const MAX_VERIFY_ATTEMPTS = 5;
 const VERIFIED_TOKEN_TTL = "15m";
 const LOGIN_CHALLENGE_TTL = "10m";
+const PLAN_RENEW_TOKEN_TTL = "30m";
 
 function normalizeEmail(email) {
   return String(email || "")
@@ -292,6 +293,36 @@ function verifyLoginChallengeToken(token) {
   return decoded;
 }
 
+function signPlanRenewToken(user) {
+  return signAccessToken(
+    {
+      typ: "plan_renew",
+      user_id: user.user_id,
+      email: normalizeEmail(user.email)
+    },
+    { expiresIn: PLAN_RENEW_TOKEN_TTL }
+  );
+}
+
+function assertPlanRenewToken(token) {
+  let decoded;
+  try {
+    decoded = verifyAccessToken(token);
+  } catch {
+    const error = new Error("Renewal session expired. Please verify your account again.");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  if (decoded?.typ !== "plan_renew" || !decoded.user_id) {
+    const error = new Error("Renewal session expired. Please verify your account again.");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  return decoded;
+}
+
 module.exports = {
   PURPOSES,
   sendOtp,
@@ -299,5 +330,7 @@ module.exports = {
   assertOtpVerifiedToken,
   signLoginChallengeToken,
   verifyLoginChallengeToken,
+  signPlanRenewToken,
+  assertPlanRenewToken,
   normalizeEmail
 };

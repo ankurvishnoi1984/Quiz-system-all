@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom'
 import { HostAlertModal } from '../live/HostAlertModal'
+import { useAuthStore } from '../../store/authStore'
+import { getPlanRenewUrl } from '../../utils/websiteUrl'
 
 export const PLAN_EXPIRY_WARNING_DAYS = 7
 
@@ -32,6 +34,12 @@ export function isPlanExpiringSoon(usage) {
   return days != null && days >= 0 && days <= PLAN_EXPIRY_WARNING_DAYS
 }
 
+export function buildPlanRenewHref(usage, email) {
+  const planId =
+    usage?.assigned_plan?.plan_id || usage?.plan?.plan_id || usage?.assigned_plan?.id || null
+  return getPlanRenewUrl({ email, planId })
+}
+
 export function formatNoActivePlanMessage(usage) {
   if (!hasNoActivePlan(usage)) return null
 
@@ -41,7 +49,7 @@ export function formatNoActivePlanMessage(usage) {
   if (usage.plan_expired) {
     return {
       title: 'No active plan',
-      message: `${assigned} ended${expiredAt ? ` on ${expiredAt}` : ''}. Creating sessions, sharing, editing, launching, and managing questions are paused until your administrator renews your plan.`,
+      message: `${assigned} ended${expiredAt ? ` on ${expiredAt}` : ''}. Renew or change your plan online to create sessions, share, launch, and manage questions again. You can also ask your administrator to renew for you.`,
       short: `${assigned} ended${expiredAt ? ` on ${expiredAt}` : ''}. Renew to create, share, launch, and manage sessions.`,
     }
   }
@@ -49,7 +57,7 @@ export function formatNoActivePlanMessage(usage) {
   return {
     title: 'No active plan',
     message:
-      'You do not have an active plan. Contact your administrator to assign or renew a plan before creating or managing sessions.',
+      'You do not have an active plan. Renew a plan online, or contact your administrator to assign one, before creating or managing sessions.',
     short: 'No active plan — renew to create, share, launch, and manage sessions.',
   }
 }
@@ -67,7 +75,7 @@ export function formatPlanExpiringSoonMessage(usage) {
     title: 'Plan expiring soon',
     message: `${planName} will expire ${daysLabel}${
       expiresAt ? ` (${expiresAt})` : ''
-    }. Contact your administrator to renew so hosting stays uninterrupted.`,
+    }. Renew or change your plan online so hosting stays uninterrupted.`,
     short:
       days === 0
         ? `${planName} expires today${expiresAt ? ` (${expiresAt})` : ''}. Renew to avoid interruption.`
@@ -85,7 +93,10 @@ export function formatPlanExpiryMessage(usage) {
 
 export function PlanExpiredBanner({ usage }) {
   const copy = formatNoActivePlanMessage(usage)
+  const email = useAuthStore((state) => state.user?.email)
   if (!copy) return null
+
+  const renewHref = buildPlanRenewHref(usage, email)
 
   return (
     <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 shadow-sm shadow-amber-900/5">
@@ -96,12 +107,22 @@ export function PlanExpiredBanner({ usage }) {
           </p>
           <p className="mt-1 font-semibold text-amber-950">{copy.short}</p>
         </div>
-        <Link
-          to="/my-plan"
-          className="rounded-xl border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition hover:bg-amber-100"
-        >
-          View plan
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            href={renewHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-xl border border-amber-400 bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-700"
+          >
+            Renew plan
+          </a>
+          <Link
+            to="/my-plan"
+            className="rounded-xl border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition hover:bg-amber-100"
+          >
+            View plan
+          </Link>
+        </div>
       </div>
     </div>
   )
@@ -109,7 +130,10 @@ export function PlanExpiredBanner({ usage }) {
 
 export function PlanExpiringSoonBanner({ usage }) {
   const copy = formatPlanExpiringSoonMessage(usage)
+  const email = useAuthStore((state) => state.user?.email)
   if (!copy) return null
+
+  const renewHref = buildPlanRenewHref(usage, email)
 
   return (
     <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-950 shadow-sm shadow-orange-900/5">
@@ -120,12 +144,22 @@ export function PlanExpiringSoonBanner({ usage }) {
           </p>
           <p className="mt-1 font-semibold text-orange-950">{copy.short}</p>
         </div>
-        <Link
-          to="/my-plan"
-          className="rounded-xl border border-orange-300 bg-white px-3 py-1.5 text-xs font-semibold text-orange-900 transition hover:bg-orange-100"
-        >
-          View plan
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            href={renewHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-xl border border-orange-400 bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-orange-700"
+          >
+            Renew plan
+          </a>
+          <Link
+            to="/my-plan"
+            className="rounded-xl border border-orange-300 bg-white px-3 py-1.5 text-xs font-semibold text-orange-900 transition hover:bg-orange-100"
+          >
+            View plan
+          </Link>
+        </div>
       </div>
     </div>
   )
@@ -133,6 +167,9 @@ export function PlanExpiringSoonBanner({ usage }) {
 
 export function PlanExpiredModal({ open, usage, onClose }) {
   const copy = formatNoActivePlanMessage(usage)
+  const email = useAuthStore((state) => state.user?.email)
+  const renewHref = buildPlanRenewHref(usage, email)
+
   return (
     <HostAlertModal
       open={Boolean(open && copy)}
@@ -140,6 +177,8 @@ export function PlanExpiredModal({ open, usage, onClose }) {
       title={copy?.title || 'No active plan'}
       message={copy?.message || ''}
       confirmLabel="Got it"
+      secondaryLabel="Renew plan"
+      secondaryHref={renewHref}
       onClose={onClose}
     />
   )
@@ -147,6 +186,9 @@ export function PlanExpiredModal({ open, usage, onClose }) {
 
 export function PlanExpiringSoonModal({ open, usage, onClose }) {
   const copy = formatPlanExpiringSoonMessage(usage)
+  const email = useAuthStore((state) => state.user?.email)
+  const renewHref = buildPlanRenewHref(usage, email)
+
   return (
     <HostAlertModal
       open={Boolean(open && copy)}
@@ -154,6 +196,8 @@ export function PlanExpiringSoonModal({ open, usage, onClose }) {
       title={copy?.title || 'Plan expiring soon'}
       message={copy?.message || ''}
       confirmLabel="Got it"
+      secondaryLabel="Renew plan"
+      secondaryHref={renewHref}
       onClose={onClose}
     />
   )

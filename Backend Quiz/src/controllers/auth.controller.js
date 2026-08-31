@@ -3,11 +3,14 @@ const {
   signupUser,
   loginUser,
   verifyLoginOtp,
+  startPlanRenew,
+  verifyPlanRenewOtp,
   refreshAccessToken,
   requestPasswordReset,
   changePassword,
   setHintsCompleted
 } = require("../services/auth.service");
+const { applyPlanRenewal } = require("../services/payment.service");
 const { sendOtp, verifyOtp, PURPOSES, verifyLoginChallengeToken } = require("../services/otp.service");
 const { getAuthFeatureFlags } = require("../config/auth-features");
 const {
@@ -17,7 +20,9 @@ const {
   validateSignupPayload,
   validateSendOtpPayload,
   validateVerifyOtpPayload,
-  validateVerifyLoginOtpPayload
+  validateVerifyLoginOtpPayload,
+  validateRenewStartPayload,
+  validateRenewApplyPayload
 } = require("../validators/auth.validator");
 const { successResponse, errorResponse } = require("../utils/response");
 
@@ -201,11 +206,59 @@ async function hintsCompleted(req, res) {
   }
 }
 
+async function renewStart(req, res) {
+  try {
+    const errors = validateRenewStartPayload(req.body);
+    if (errors.length > 0) {
+      return errorResponse(res, "Validation failed", 400, errors);
+    }
+
+    const result = await startPlanRenew(req.body);
+    const message = result.requires_otp
+      ? "Verification code sent to your email"
+      : "Account verified for renewal";
+    return successResponse(res, result, message, 200);
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
+async function renewVerifyOtp(req, res) {
+  try {
+    const errors = validateVerifyLoginOtpPayload(req.body);
+    if (errors.length > 0) {
+      return errorResponse(res, "Validation failed", 400, errors);
+    }
+
+    const result = await verifyPlanRenewOtp(req.body);
+    return successResponse(res, result, "Account verified for renewal", 200);
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
+async function renewApply(req, res) {
+  try {
+    const errors = validateRenewApplyPayload(req.body);
+    if (errors.length > 0) {
+      return errorResponse(res, "Validation failed", 400, errors);
+    }
+
+    const result = await applyPlanRenewal(req.body);
+    return successResponse(res, result, "Plan renewed successfully", 200);
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
 module.exports = {
   register,
   signup,
   login,
   verifyLoginOtp: verifyLoginOtpHandler,
+  renewStart,
+  renewVerifyOtp,
+  renewApply,
   sendOtp: sendOtpHandler,
   verifyOtp: verifyOtpHandler,
   features,

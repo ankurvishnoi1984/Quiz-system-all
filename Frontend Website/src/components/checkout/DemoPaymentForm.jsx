@@ -1,6 +1,6 @@
 import { CreditCard, Smartphone } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { confirmPaymentApi, initiatePaymentApi } from '../../services/publicApi'
+import { confirmPaymentApi, initiatePaymentApi, initiateRenewalPaymentApi } from '../../services/publicApi'
 
 function formatCardNumber(value) {
   const digits = String(value || '').replace(/\D/g, '').slice(0, 19)
@@ -13,7 +13,19 @@ function formatExpiry(value) {
   return `${digits.slice(0, 2)}/${digits.slice(2)}`
 }
 
-function DemoPaymentForm({ email, payerName, companyName, plan, otpToken, onPaid, onBack, submitError, setSubmitError }) {
+function DemoPaymentForm({
+  email,
+  payerName,
+  companyName,
+  plan,
+  otpToken,
+  renewToken,
+  mode = 'signup',
+  onPaid,
+  onBack,
+  submitError,
+  setSubmitError,
+}) {
   const [method, setMethod] = useState('card')
   const [loading, setLoading] = useState(false)
   const [payment, setPayment] = useState(null)
@@ -32,13 +44,23 @@ function DemoPaymentForm({ email, payerName, companyName, plan, otpToken, onPaid
       setSubmitError('')
       setLoading(true)
       try {
-        const initiated = await initiatePaymentApi({
-          plan_id: plan.plan_id,
-          email: email.trim(),
-          payer_name: payerName.trim(),
-          company_name: companyName?.trim() || undefined,
-          ...(otpToken ? { otp_token: otpToken } : {}),
-        })
+        let initiated
+        if (mode === 'renew') {
+          initiated = await initiateRenewalPaymentApi({
+            plan_id: plan.plan_id,
+            renew_token: renewToken,
+            payer_name: payerName.trim(),
+            company_name: companyName?.trim() || undefined,
+          })
+        } else {
+          initiated = await initiatePaymentApi({
+            plan_id: plan.plan_id,
+            email: email.trim(),
+            payer_name: payerName.trim(),
+            company_name: companyName?.trim() || undefined,
+            ...(otpToken ? { otp_token: otpToken } : {}),
+          })
+        }
         if (!cancelled) setPayment(initiated)
       } catch (error) {
         if (!cancelled) setSubmitError(error.message || 'Unable to start checkout')
@@ -47,14 +69,14 @@ function DemoPaymentForm({ email, payerName, companyName, plan, otpToken, onPaid
       }
     }
 
-    if (plan?.plan_id && email && payerName) {
+    if (plan?.plan_id && payerName && (mode === 'renew' ? renewToken : email)) {
       startCheckout()
     }
 
     return () => {
       cancelled = true
     }
-  }, [plan?.plan_id, email, payerName, companyName, otpToken, setSubmitError])
+  }, [plan?.plan_id, email, payerName, companyName, otpToken, renewToken, mode, setSubmitError])
 
   const handlePay = async () => {
     if (!payment?.payment_id) {

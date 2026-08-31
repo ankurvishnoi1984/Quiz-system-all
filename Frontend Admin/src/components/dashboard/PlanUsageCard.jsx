@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom'
+import { useAuthStore } from '../../store/authStore'
+import { buildPlanRenewHref } from './PlanExpiredNotice'
 
 function formatCount(value) {
   return Number(value || 0).toLocaleString()
@@ -17,6 +19,7 @@ function formatExpiryLabel(usage) {
 }
 
 export function PlanUsageCard({ usage, compact = false }) {
+  const email = useAuthStore((state) => state.user?.email)
   if (!usage) return null
 
   const unrestricted = Boolean(usage.unrestricted)
@@ -24,6 +27,7 @@ export function PlanUsageCard({ usage, compact = false }) {
   const expired = Boolean(usage.plan_expired)
   const days =
     usage.days_until_expiry == null ? null : Number(usage.days_until_expiry)
+  const renewHref = buildPlanRenewHref(usage, email)
   const limit = usage.limit
   const used = Number(usage.used || 0)
   const remaining = usage.remaining
@@ -94,6 +98,16 @@ export function PlanUsageCard({ usage, compact = false }) {
             <span className="inline-flex rounded-full bg-red-100 px-2.5 py-1 text-[11px] font-semibold text-red-700">
               Limit reached
             </span>
+          ) : null}
+          {expired ? (
+            <a
+              href={renewHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-xl border border-amber-400 bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-700"
+            >
+              Renew plan
+            </a>
           ) : null}
           {compact ? (
             <Link
@@ -168,7 +182,7 @@ export function PlanUsageCard({ usage, compact = false }) {
 
       <p className="mt-3 text-sm text-slate-600">
         {expired
-          ? 'Your plan has ended. Creating, sharing, editing, launching, and managing sessions are paused until your administrator renews your plan.'
+          ? 'Your plan has ended. Renew or change your plan online to create, share, launch, and manage sessions again.'
           : exceeded
             ? 'Your connected participant limit is full. New participants cannot join until someone disconnects or you upgrade your plan.'
             : unrestricted

@@ -54,12 +54,54 @@ export async function initiatePaymentApi(payload) {
   return response?.data?.payment
 }
 
+export async function initiateRenewalPaymentApi(payload) {
+  const response = await request('/payments/renew/initiate', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return response?.data?.payment
+}
+
 export async function confirmPaymentApi(payload) {
   const response = await request('/payments/confirm', {
     method: 'POST',
     body: JSON.stringify(payload),
   })
   return response?.data?.payment
+}
+
+export async function startPlanRenewApi({ email, password }) {
+  const response = await request('/auth/renew/start', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+  return response?.data
+}
+
+export async function verifyPlanRenewOtpApi({ challenge_token, code, email }) {
+  const response = await request('/auth/renew/verify-otp', {
+    method: 'POST',
+    body: JSON.stringify({ challenge_token, code, email }),
+  })
+  return response?.data
+}
+
+export async function applyPlanRenewApi({ renew_token, payment_id, plan_id }) {
+  const response = await request('/auth/renew/apply', {
+    method: 'POST',
+    body: JSON.stringify({ renew_token, payment_id, plan_id }),
+  })
+  return response?.data
+}
+
+export async function resendLoginOtpApi({ challenge_token }) {
+  return request('/auth/otp/send', {
+    method: 'POST',
+    body: JSON.stringify({
+      purpose: 'login',
+      challenge_token,
+    }),
+  })
 }
 
 export async function fetchAuthFeaturesApi() {

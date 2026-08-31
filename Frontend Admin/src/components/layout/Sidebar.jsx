@@ -71,6 +71,9 @@ function Sidebar({ collapsed, onToggle }) {
               disabledTitle: 'No active plan — renew to open Live Present Mode',
             }
           }
+          if (item.to === '/my-plan' && planLocked) {
+            return { ...item, badge: 'Expired' }
+          }
           return item
         }),
     [builderTo, liveTo, planLocked, user?.role],
@@ -168,12 +171,20 @@ function Sidebar({ collapsed, onToggle }) {
           <>
             <span className="truncate">{item.label}</span>
             <div className="ml-auto flex items-center gap-2">
+              {item.badge ? (
+                <span className="rounded-full bg-amber-400/90 px-2 py-0.5 text-[10px] font-semibold text-navy-950">
+                  {item.badge}
+                </span>
+              ) : null}
               {item.live && <span className="rounded-full bg-accent/25 px-2 py-0.5 text-[10px] font-semibold text-red-100">LIVE</span>}
               {item.isNew && <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold text-red-100">NEW</span>}
             </div>
           </>
         )}
         {collapsed && item.live && <span className="ml-auto size-2 rounded-full bg-red-500" />}
+        {collapsed && item.badge && !item.live ? (
+          <span className="ml-auto size-2 rounded-full bg-amber-400" title={item.badge} />
+        ) : null}
       </NavLink>
     )
   }

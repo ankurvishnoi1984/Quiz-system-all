@@ -46,6 +46,9 @@ export function HostAlertModal({
   title,
   message,
   confirmLabel,
+  secondaryLabel,
+  secondaryHref,
+  onSecondary,
   onClose,
 }) {
   useEffect(() => {
@@ -61,6 +64,7 @@ export function HostAlertModal({
 
   const theme = VARIANT_STYLES[variant] || VARIANT_STYLES.success
   const Icon = theme.Icon
+  const showSecondary = Boolean(secondaryLabel && (secondaryHref || onSecondary))
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -90,13 +94,42 @@ export function HostAlertModal({
           >
             {message}
           </p>
-          <button
-            type="button"
-            onClick={onClose}
-            className={`mt-6 h-11 w-full rounded-xl text-sm font-semibold text-white shadow-md transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-offset-2 ${theme.button}`}
-          >
-            {confirmLabel}
-          </button>
+          <div className="mt-6 space-y-2">
+            {showSecondary ? (
+              secondaryHref ? (
+                <a
+                  href={secondaryHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`inline-flex h-11 w-full items-center justify-center rounded-xl text-sm font-semibold text-white shadow-md transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-offset-2 ${theme.button}`}
+                >
+                  {secondaryLabel}
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSecondary?.()
+                    onClose?.()
+                  }}
+                  className={`h-11 w-full rounded-xl text-sm font-semibold text-white shadow-md transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-offset-2 ${theme.button}`}
+                >
+                  {secondaryLabel}
+                </button>
+              )
+            ) : null}
+            <button
+              type="button"
+              onClick={onClose}
+              className={
+                showSecondary
+                  ? 'h-11 w-full rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-700 transition hover:bg-slate-50'
+                  : `h-11 w-full rounded-xl text-sm font-semibold text-white shadow-md transition hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-offset-2 ${theme.button}`
+              }
+            >
+              {confirmLabel}
+            </button>
+          </div>
         </div>
       </div>
     </div>

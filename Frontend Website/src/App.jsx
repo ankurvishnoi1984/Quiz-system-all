@@ -4,6 +4,7 @@ import HomePage from './pages/HomePage'
 import FeaturesPage from './pages/FeaturesPage'
 import PricingPage from './pages/PricingPage'
 import RegisterPage from './pages/RegisterPage'
+import RenewPage from './pages/RenewPage'
 import AboutPage from './pages/AboutPage'
 
 function App() {
@@ -15,6 +16,7 @@ function App() {
           <Route path="/features" element={<FeaturesPage />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/renew" element={<RenewPage />} />
           <Route path="/about" element={<AboutPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

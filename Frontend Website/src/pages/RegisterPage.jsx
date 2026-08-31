@@ -66,14 +66,17 @@ function RegisterPage() {
   const paymentOtpEnabled = featuresQuery.data?.payment_otp_enabled !== false
   const plans = plansQuery.data || []
 
+  // Seed plan from URL once (or first plan). Do not re-apply when the user changes the dropdown.
   useEffect(() => {
     const planFromUrl = searchParams.get('plan')
     if (planFromUrl) {
-      setSelectedPlanId(planFromUrl)
-    } else if (plans.length > 0 && !selectedPlanId) {
-      setSelectedPlanId(String(plans[0].plan_id))
+      setSelectedPlanId((current) => current || planFromUrl)
+      return
     }
-  }, [searchParams, plans, selectedPlanId])
+    if (plans.length > 0) {
+      setSelectedPlanId((current) => current || String(plans[0].plan_id))
+    }
+  }, [searchParams, plans])
 
   const selectedPlan = useMemo(
     () => plans.find((plan) => String(plan.plan_id) === String(selectedPlanId)),

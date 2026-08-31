@@ -8,6 +8,7 @@ import {
 } from '../components/plan/PlanHistoryTable'
 import {
   PlanExpiredBanner,
+  buildPlanRenewHref,
   hasNoActivePlan,
 } from '../components/dashboard/PlanExpiredNotice'
 import { useAuthStore } from '../store/authStore'
@@ -29,15 +30,37 @@ function MyPlanPage() {
     enabled: Boolean(accessToken),
   })
 
+  const planLocked = hasNoActivePlan(usageQuery.data)
+  const renewHref = buildPlanRenewHref(usageQuery.data, user?.email)
+
   return (
     <section className="space-y-6">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-navy-700">Account</p>
-        <h2 className="mt-1 text-2xl font-bold text-navy-900">My Plan</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          See your current plan, usage summary, session activity, and a history of plans assigned to
-          this account.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-navy-700">Account</p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <h2 className="text-2xl font-bold text-navy-900">My Plan</h2>
+            {planLocked ? (
+              <span className="rounded-full border border-amber-300 bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-900">
+                Expired
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-1 text-sm text-slate-600">
+            See your current plan, usage summary, session activity, and a history of plans assigned to
+            this account.
+          </p>
+        </div>
+        {planLocked ? (
+          <a
+            href={renewHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center rounded-2xl bg-linear-to-r from-amber-600 to-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-110"
+          >
+            Renew / change plan
+          </a>
+        ) : null}
       </div>
 
       {usageQuery.isLoading ? (

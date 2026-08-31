@@ -1,11 +1,13 @@
 const { successResponse, errorResponse } = require("../utils/response");
 const {
   initiatePayment,
+  initiateRenewalPayment,
   confirmDummyPayment
 } = require("../services/payment.service");
 const {
   validateInitiatePaymentPayload,
-  validateConfirmPaymentPayload
+  validateConfirmPaymentPayload,
+  validateInitiateRenewalPaymentPayload
 } = require("../validators/payment.validator");
 
 async function initiate(req, res) {
@@ -17,6 +19,20 @@ async function initiate(req, res) {
 
     const payment = await initiatePayment(req.body);
     return successResponse(res, { payment }, "Payment initiated", 201);
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
+async function initiateRenewal(req, res) {
+  try {
+    const errors = validateInitiateRenewalPaymentPayload(req.body);
+    if (errors.length > 0) {
+      return errorResponse(res, "Validation failed", 400, errors);
+    }
+
+    const payment = await initiateRenewalPayment(req.body);
+    return successResponse(res, { payment }, "Renewal payment initiated", 201);
   } catch (err) {
     return errorResponse(res, err.message, err.statusCode || 500);
   }
@@ -38,5 +54,6 @@ async function confirm(req, res) {
 
 module.exports = {
   initiate,
+  initiateRenewal,
   confirm
 };
