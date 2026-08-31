@@ -8,10 +8,12 @@ import {
 } from '../components/plan/PlanHistoryTable'
 import {
   PlanExpiredBanner,
+  PlanExpiringSoonBanner,
   PlanManageBanner,
   buildPlanRenewHref,
   canSelfServePlanChange,
   hasNoActivePlan,
+  isPlanExpiringSoon,
 } from '../components/dashboard/PlanExpiredNotice'
 import { useAuthStore } from '../store/authStore'
 import { getPlanAccountApi, getPlanUsageApi } from '../services/managementApi'
@@ -34,6 +36,7 @@ function MyPlanPage() {
 
   const planLocked = hasNoActivePlan(usageQuery.data)
   const canManagePlan = canSelfServePlanChange(usageQuery.data)
+  const planExpiringSoon = isPlanExpiringSoon(usageQuery.data)
   const renewHref = buildPlanRenewHref(usageQuery.data, user?.email)
 
   return (
@@ -54,7 +57,16 @@ function MyPlanPage() {
             this account.
           </p>
         </div>
-        {canManagePlan ? (
+        {planExpiringSoon ? (
+          <a
+            href={renewHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center rounded-2xl bg-linear-to-r from-orange-600 to-amber-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-110"
+          >
+            Renew
+          </a>
+        ) : canManagePlan ? (
           <a
             href={renewHref}
             target="_blank"
@@ -88,7 +100,8 @@ function MyPlanPage() {
       ) : null}
 
       {hasNoActivePlan(usageQuery.data) ? <PlanExpiredBanner usage={usageQuery.data} /> : null}
-      {canManagePlan ? <PlanManageBanner usage={usageQuery.data} /> : null}
+      {planExpiringSoon ? <PlanExpiringSoonBanner usage={usageQuery.data} /> : null}
+      {canManagePlan && !planExpiringSoon ? <PlanManageBanner usage={usageQuery.data} /> : null}
       {usageQuery.data ? <PlanUsageCard usage={usageQuery.data} /> : null}
       {accountQuery.data?.summary ? (
         <PlanActivitySummary summary={accountQuery.data.summary} history={accountQuery.data.history || []} />

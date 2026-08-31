@@ -82,8 +82,9 @@ function AnalyticsPage() {
   const { sessions, isFetching: sessionsFetching } = useDepartmentSessionsList()
   const prevDepartmentIdRef = useRef(departmentId)
 
-  const [fromDate, setFromDate] = useState('')
-  const [toDate, setToDate] = useState('')
+  // Future: date filter on session picker
+  // const [fromDate, setFromDate] = useState('')
+  // const [toDate, setToDate] = useState('')
   const [selectedQuestionId, setSelectedQuestionId] = useState(null)
   const [chartView, setChartView] = useState('bar')
   const [activeReportView, setActiveReportView] = useState('summary')
@@ -442,13 +443,14 @@ function AnalyticsPage() {
   }
 
   const filteredSessions = sessions
-    .filter((s) => {
-      if (!fromDate && !toDate) return true
-      const d = new Date(s.date ?? '').getTime()
-      const from = fromDate ? new Date(fromDate).getTime() : -Infinity
-      const to = toDate ? new Date(toDate).getTime() : Infinity
-      return d >= from && d <= to
-    })
+    // Future: date filter on session picker
+    // .filter((s) => {
+    //   if (!fromDate && !toDate) return true
+    //   const d = new Date(s.date ?? '').getTime()
+    //   const from = fromDate ? new Date(fromDate).getTime() : -Infinity
+    //   const to = toDate ? new Date(toDate).getTime() : Infinity
+    //   return d >= from && d <= to
+    // })
     .sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime())
 
   const isLoading =
@@ -581,6 +583,7 @@ function AnalyticsPage() {
               </option>
             ))}
           </select>
+          {/* Future: date filter on session picker
           <input
             type="date"
             value={fromDate}
@@ -595,6 +598,7 @@ function AnalyticsPage() {
             className="hidden h-11 rounded-2xl border border-blue-200/70 bg-white/90 px-3 text-sm text-slate-700 shadow-sm shadow-blue-900/5 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15 lg:block"
             aria-label="To date"
           />
+          */}
 
           <button
             type="button"

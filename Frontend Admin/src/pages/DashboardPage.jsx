@@ -31,9 +31,6 @@ import {
   PlanExpiredModal,
   PlanExpiringSoonBanner,
   PlanExpiringSoonModal,
-  PlanManageBanner,
-  PlanManageModal,
-  canSelfServePlanChange,
   hasNoActivePlan,
   isPlanExpiringSoon,
   formatNoActivePlanMessage,
@@ -85,11 +82,8 @@ function DashboardPage() {
   const planLocked = user?.role !== 'super_admin' && hasNoActivePlan(planUsage)
   const planExpiringSoon =
     user?.role !== 'super_admin' && !planLocked && isPlanExpiringSoon(planUsage)
-  const canManagePlan =
-    user?.role !== 'super_admin' && !planLocked && canSelfServePlanChange(planUsage)
   const [planExpiryModalOpen, setPlanExpiryModalOpen] = useState(false)
   const [planExpiringSoonModalOpen, setPlanExpiringSoonModalOpen] = useState(false)
-  const [planManageModalOpen, setPlanManageModalOpen] = useState(false)
 
   useEffect(() => {
     if (!planLocked || !user?.user_id) return
@@ -106,14 +100,6 @@ function DashboardPage() {
     sessionStorage.setItem(key, '1')
     setPlanExpiringSoonModalOpen(true)
   }, [planExpiringSoon, planUsage?.plan_expires_at, user?.user_id])
-
-  useEffect(() => {
-    if (!canManagePlan || !user?.user_id) return
-    const key = `plan-manage-notice:${user.user_id}:${planUsage?.plan_expires_at || ''}`
-    if (sessionStorage.getItem(key) === '1') return
-    sessionStorage.setItem(key, '1')
-    setPlanManageModalOpen(true)
-  }, [canManagePlan, planUsage?.plan_expires_at, user?.user_id])
 
   const showPlanLockedAlert = () => {
     const copy = formatNoActivePlanMessage(planUsage)
@@ -648,10 +634,6 @@ function DashboardPage() {
         <PlanExpiringSoonBanner usage={planUsage} />
       ) : null}
 
-      {user?.role !== 'super_admin' && canManagePlan && !planExpiringSoon ? (
-        <PlanManageBanner usage={planUsage} />
-      ) : null}
-
       {/* Plan usage card on dashboard — re-enable when we want the "Your plan" summary here again.
       {user?.role !== 'super_admin' && planUsage ? (
         <PlanUsageCard usage={planUsage} compact />
@@ -915,12 +897,6 @@ function DashboardPage() {
         open={planExpiringSoonModalOpen}
         usage={planUsage}
         onClose={() => setPlanExpiringSoonModalOpen(false)}
-      />
-
-      <PlanManageModal
-        open={planManageModalOpen}
-        usage={planUsage}
-        onClose={() => setPlanManageModalOpen(false)}
       />
     </section>
   )
