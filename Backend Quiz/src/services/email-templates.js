@@ -1084,8 +1084,21 @@ function renderEmailOtpEmail({ fullName, code, purpose, expiresInMinutes, brandN
   const safeCode = escapeHtml(code);
   const minutes = Math.max(1, Number(expiresInMinutes) || 10);
   const purposeLabel =
-    purpose === "login" ? "sign-in verification" : purpose === "payment" ? "payment verification" : "verification";
-  const title = purpose === "login" ? "Your login code" : purpose === "payment" ? "Your payment verification code" : "Your verification code";
+    purpose === "login"
+      ? "sign-in verification"
+      : purpose === "payment"
+        ? "payment verification"
+        : purpose === "plan_renew"
+          ? "plan renewal verification"
+          : "verification";
+  const title =
+    purpose === "login"
+      ? "Your login code"
+      : purpose === "payment"
+        ? "Your payment verification code"
+        : purpose === "plan_renew"
+          ? "Your plan renewal code"
+          : "Your verification code";
 
   const bodyHtml = `
     <p style="margin:0 0 16px;font-size:16px;line-height:1.65;color:${BRAND.slate};">${safeGreeting}</p>

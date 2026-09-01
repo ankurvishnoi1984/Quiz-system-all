@@ -11,7 +11,8 @@ const env = require("../config/env");
 
 const PURPOSES = {
   PAYMENT: "payment",
-  LOGIN: "login"
+  LOGIN: "login",
+  PLAN_RENEW: "plan_renew"
 };
 
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -40,7 +41,7 @@ function generateOtpCode() {
 }
 
 function assertPurpose(purpose) {
-  if (![PURPOSES.PAYMENT, PURPOSES.LOGIN].includes(purpose)) {
+  if (![PURPOSES.PAYMENT, PURPOSES.LOGIN, PURPOSES.PLAN_RENEW].includes(purpose)) {
     const error = new Error("Invalid OTP purpose");
     error.statusCode = 400;
     throw error;
@@ -48,7 +49,10 @@ function assertPurpose(purpose) {
 }
 
 function assertFeatureEnabled(purpose) {
-  if (purpose === PURPOSES.PAYMENT && !isPaymentOtpEnabled()) {
+  if (
+    (purpose === PURPOSES.PAYMENT || purpose === PURPOSES.PLAN_RENEW) &&
+    !isPaymentOtpEnabled()
+  ) {
     const error = new Error("Payment email OTP is disabled");
     error.statusCode = 400;
     throw error;
@@ -76,6 +80,15 @@ async function sendOtp({ email, purpose, fullName }) {
     if (existing) {
       const error = new Error("Email already registered");
       error.statusCode = 409;
+      throw error;
+    }
+  }
+
+  if (purpose === PURPOSES.PLAN_RENEW) {
+    const user = await User.findOne({ where: { email: normalizedEmail } });
+    if (!user || !user.is_active) {
+      const error = new Error("No active host account found for this email");
+      error.statusCode = 404;
       throw error;
     }
   }
@@ -244,7 +257,7 @@ async function verifyOtp({ email, purpose, code }) {
   await record.save();
 
   let userId = null;
-  if (purpose === PURPOSES.LOGIN) {
+  if (purpose === PURPOSES.LOGIN || purpose === PURPOSES.PLAN_RENEW) {
     const user = await User.findOne({ where: { email: normalizedEmail } });
     userId = user?.user_id || null;
   }

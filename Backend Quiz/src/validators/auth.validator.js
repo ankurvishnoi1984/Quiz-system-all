@@ -103,8 +103,8 @@ function validateSignupPayload(payload) {
 function validateSendOtpPayload(payload) {
   const errors = [];
   const purpose = String(payload?.purpose || "").toLowerCase();
-  if (!["payment", "login"].includes(purpose)) {
-    errors.push("purpose must be payment or login");
+  if (!["payment", "login", "plan_renew"].includes(purpose)) {
+    errors.push("purpose must be payment, login, or plan_renew");
   }
   if (purpose === "login") {
     if (!payload?.challenge_token || typeof payload.challenge_token !== "string") {
@@ -125,8 +125,8 @@ function validateVerifyOtpPayload(payload) {
     errors.push("email is required");
   }
   const purpose = String(payload?.purpose || "").toLowerCase();
-  if (!["payment", "login"].includes(purpose)) {
-    errors.push("purpose must be payment or login");
+  if (!["payment", "login", "plan_renew"].includes(purpose)) {
+    errors.push("purpose must be payment, login, or plan_renew");
   }
   const code = String(payload?.code || "").trim();
   if (!/^\d{6}$/.test(code)) {
@@ -148,7 +148,23 @@ function validateVerifyLoginOtpPayload(payload) {
 }
 
 function validateRenewStartPayload(payload) {
-  return validateLoginPayload(payload);
+  const errors = [];
+  if (!payload?.email || typeof payload.email !== "string" || !payload.email.trim()) {
+    errors.push("email is required");
+  }
+  return errors;
+}
+
+function validateRenewVerifyOtpPayload(payload) {
+  const errors = [];
+  if (!payload?.email || typeof payload.email !== "string" || !payload.email.trim()) {
+    errors.push("email is required");
+  }
+  const code = String(payload?.code || "").trim();
+  if (!/^\d{6}$/.test(code)) {
+    errors.push("code must be a 6-digit number");
+  }
+  return errors;
 }
 
 function validateRenewApplyPayload(payload) {
@@ -177,5 +193,6 @@ module.exports = {
   validateVerifyOtpPayload,
   validateVerifyLoginOtpPayload,
   validateRenewStartPayload,
+  validateRenewVerifyOtpPayload,
   validateRenewApplyPayload
 };

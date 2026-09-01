@@ -22,6 +22,7 @@ const {
   validateVerifyOtpPayload,
   validateVerifyLoginOtpPayload,
   validateRenewStartPayload,
+  validateRenewVerifyOtpPayload,
   validateRenewApplyPayload
 } = require("../validators/auth.validator");
 const { successResponse, errorResponse } = require("../utils/response");
@@ -225,7 +226,7 @@ async function renewStart(req, res) {
 
 async function renewVerifyOtp(req, res) {
   try {
-    const errors = validateVerifyLoginOtpPayload(req.body);
+    const errors = validateRenewVerifyOtpPayload(req.body);
     if (errors.length > 0) {
       return errorResponse(res, "Validation failed", 400, errors);
     }

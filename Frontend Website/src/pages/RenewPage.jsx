@@ -1,4 +1,4 @@
-import { Eye, EyeOff, LoaderCircle, Lock, User } from 'lucide-react'
+import { LoaderCircle, User } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -7,9 +7,9 @@ import {
   applyPlanRenewApi,
   fetchAuthFeaturesApi,
   fetchPublicPlansApi,
-  resendLoginOtpApi,
-  startPlanRenewApi,
   verifyPlanRenewOtpApi,
+  sendRenewOtpApi,
+  startPlanRenewApi,
 } from '../services/publicApi'
 import {
   getPlanDisplayPrice,
@@ -36,14 +36,10 @@ function RenewPage() {
   const [searchParams] = useSearchParams()
   const [step, setStep] = useState('verify')
   const [email, setEmail] = useState(() => searchParams.get('email') || '')
-  const [password, setPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
   const [fullName, setFullName] = useState('')
   const [selectedPlanId, setSelectedPlanId] = useState('')
   const [renewToken, setRenewToken] = useState('')
-  const [challengeToken, setChallengeToken] = useState('')
   const [otpCode, setOtpCode] = useState('')
-  const [otpEmail, setOtpEmail] = useState('')
   const [submitError, setSubmitError] = useState('')
   const [loading, setLoading] = useState(false)
   const [otpSending, setOtpSending] = useState(false)
@@ -67,7 +63,7 @@ function RenewPage() {
     staleTime: 60_000,
   })
 
-  const loginOtpEnabled = featuresQuery.data?.login_otp_enabled !== false
+  const paymentOtpEnabled = featuresQuery.data?.payment_otp_enabled !== false
   const plans = plansQuery.data || []
   const sortedPlans = useMemo(
     () =>
@@ -158,10 +154,10 @@ function RenewPage() {
   const stepSubtitle =
     step === 'verify'
       ? isManageMode
-        ? 'Sign in to renew, upgrade, or downgrade your plan. No new account is created.'
-        : 'Sign in with your existing host account to renew or change your plan. No new account is created.'
+        ? 'Enter your host account email to renew, upgrade, or downgrade. No new account is created.'
+        : 'Enter your host account email to renew or change your plan. No new account is created.'
       : step === 'otp'
-        ? `Enter the 6-digit code sent to ${otpEmail || email}.`
+        ? `Enter the 6-digit code sent to ${email}.`
         : step === 'plan'
           ? isManageMode
             ? 'Pick any paid plan — including your current plan to extend early, or a different tier to upgrade or downgrade.'
@@ -176,9 +172,8 @@ function RenewPage() {
     event.preventDefault()
     setSubmitError('')
     const emailError = validateEmail(email)
-    const passwordError = password ? '' : 'Password is required'
-    setFieldErrors({ email: emailError, password: passwordError })
-    if (emailError || passwordError) {
+    setFieldErrors({ email: emailError })
+    if (emailError) {
       setSubmitError('Please fix the highlighted fields before continuing.')
       return
     }
@@ -187,12 +182,9 @@ function RenewPage() {
     try {
       const result = await startPlanRenewApi({
         email: email.trim(),
-        password,
       })
 
       if (result?.requires_otp) {
-        setChallengeToken(result.challenge_token || '')
-        setOtpEmail(result.email || email.trim())
         setOtpCode('')
         setStep('otp')
         return
@@ -219,9 +211,8 @@ function RenewPage() {
     setLoading(true)
     try {
       const result = await verifyPlanRenewOtpApi({
-        challenge_token: challengeToken,
         code,
-        email: otpEmail || email.trim(),
+        email: email.trim(),
       })
       applyRenewSession(result)
       setStep('plan')
@@ -236,7 +227,7 @@ function RenewPage() {
     setSubmitError('')
     setOtpSending(true)
     try {
-      await resendLoginOtpApi({ challenge_token: challengeToken })
+      await sendRenewOtpApi({ email: email.trim(), fullName: fullName || undefined })
       setOtpCode('')
     } catch (error) {
       setSubmitError(error.message || 'Unable to resend code')
@@ -319,41 +310,9 @@ function RenewPage() {
                 <FieldError id="email-error" message={fieldErrors.email} />
               </div>
 
-              <div className="space-y-1.5">
-                <label htmlFor="password" className="text-sm font-medium text-slate-700">
-                  Password *
-                </label>
-                <div className="relative">
-                  <Lock className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-                  <input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(event) => {
-                      setPassword(event.target.value)
-                      setFieldErrors((current) => ({ ...current, password: '' }))
-                    }}
-                    className={`${fieldInputClass(fieldErrors.password)} pl-10 pr-12`}
-                    placeholder="Your host portal password"
-                    autoComplete="current-password"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((prev) => !prev)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600"
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                  </button>
-                </div>
-                <FieldError id="password-error" message={fieldErrors.password} />
-              </div>
-
-              {loginOtpEnabled ? (
+              {paymentOtpEnabled ? (
                 <p className="text-xs text-slate-500">
-                  If email verification is enabled for login, we will send a one-time code after your password is
-                  checked.
+                  We will send a one-time verification code to this email before you choose a plan and pay.
                 </p>
               ) : null}
 
@@ -427,7 +386,7 @@ function RenewPage() {
                 </button>
                 <button
                   type="button"
-                  disabled={otpSending || !challengeToken}
+                  disabled={otpSending}
                   className="font-medium text-navy-800 hover:text-navy-950 disabled:opacity-60"
                   onClick={handleResendOtp}
                 >

@@ -70,18 +70,18 @@ export async function confirmPaymentApi(payload) {
   return response?.data?.payment
 }
 
-export async function startPlanRenewApi({ email, password }) {
+export async function startPlanRenewApi({ email }) {
   const response = await request('/auth/renew/start', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email }),
   })
   return response?.data
 }
 
-export async function verifyPlanRenewOtpApi({ challenge_token, code, email }) {
+export async function verifyPlanRenewOtpApi({ email, code }) {
   const response = await request('/auth/renew/verify-otp', {
     method: 'POST',
-    body: JSON.stringify({ challenge_token, code, email }),
+    body: JSON.stringify({ email, code }),
   })
   return response?.data
 }
@@ -92,6 +92,17 @@ export async function applyPlanRenewApi({ renew_token, payment_id, plan_id }) {
     body: JSON.stringify({ renew_token, payment_id, plan_id }),
   })
   return response?.data
+}
+
+export async function sendRenewOtpApi({ email, fullName }) {
+  return request('/auth/otp/send', {
+    method: 'POST',
+    body: JSON.stringify({
+      email,
+      purpose: 'plan_renew',
+      full_name: fullName,
+    }),
+  })
 }
 
 export async function resendLoginOtpApi({ challenge_token }) {

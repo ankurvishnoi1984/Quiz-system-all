@@ -15,7 +15,7 @@ const {
   signRefreshToken,
   verifyRefreshToken
 } = require("../utils/jwt");
-const { isLoginOtpEnabled } = require("../config/auth-features");
+const { isPaymentOtpEnabled, isLoginOtpEnabled } = require("../config/auth-features");
 const {
   PURPOSES,
   sendOtp,
@@ -428,15 +428,8 @@ async function startPlanRenew(input) {
   const user = await User.findOne({ where: { email } });
 
   if (!user) {
-    const error = new Error("Invalid email or password");
-    error.statusCode = 401;
-    throw error;
-  }
-
-  const isPasswordMatch = await bcrypt.compare(input.password, user.password_hash);
-  if (!isPasswordMatch) {
-    const error = new Error("Invalid email or password");
-    error.statusCode = 401;
+    const error = new Error("No host account found for this email");
+    error.statusCode = 404;
     throw error;
   }
 
@@ -446,16 +439,15 @@ async function startPlanRenew(input) {
     throw error;
   }
 
-  if (isLoginOtpEnabled()) {
+  if (isPaymentOtpEnabled()) {
     await sendOtp({
       email: user.email,
-      purpose: PURPOSES.LOGIN,
+      purpose: PURPOSES.PLAN_RENEW,
       fullName: user.full_name
     });
 
     return {
       requires_otp: true,
-      challenge_token: signLoginChallengeToken(user),
       email: user.email,
       expires_in_seconds: 600
     };
@@ -465,38 +457,25 @@ async function startPlanRenew(input) {
 }
 
 async function verifyPlanRenewOtp(input) {
-  if (!isLoginOtpEnabled()) {
-    const error = new Error("Login email OTP is disabled");
+  if (!isPaymentOtpEnabled()) {
+    const error = new Error("Payment email OTP is disabled");
     error.statusCode = 400;
     throw error;
   }
 
-  const challenge = verifyLoginChallengeToken(input.challenge_token);
-  const email = String(input.email || challenge.email || "")
+  const email = String(input.email || "")
     .toLowerCase()
     .trim();
 
-  if (email !== String(challenge.email || "").toLowerCase()) {
-    const error = new Error("Email does not match this verification challenge");
-    error.statusCode = 400;
-    throw error;
-  }
-
   await verifyOtp({
     email,
-    purpose: PURPOSES.LOGIN,
+    purpose: PURPOSES.PLAN_RENEW,
     code: input.code
   });
 
-  const user = await User.findByPk(challenge.user_id);
+  const user = await User.findOne({ where: { email } });
   if (!user || !user.is_active) {
     const error = new Error("User not found or inactive");
-    error.statusCode = 401;
-    throw error;
-  }
-
-  if (String(user.email || "").toLowerCase() !== email) {
-    const error = new Error("Verification mismatch");
     error.statusCode = 401;
     throw error;
   }
