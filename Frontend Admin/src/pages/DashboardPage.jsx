@@ -631,7 +631,7 @@ function DashboardPage() {
       ) : null}
 
       {user?.role !== 'super_admin' && planExpiringSoon ? (
-        <PlanExpiringSoonBanner usage={planUsage} />
+        <PlanExpiringSoonBanner usage={planUsage} showViewPlan />
       ) : null}
 
       {/* Plan usage card on dashboard — re-enable when we want the "Your plan" summary here again.

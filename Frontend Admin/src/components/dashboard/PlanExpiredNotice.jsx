@@ -148,28 +148,20 @@ export function PlanExpiredBanner({ usage }) {
           </p>
           <p className="mt-1 font-semibold text-amber-950">{copy.short}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <a
-            href={renewHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-xl border border-amber-400 bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-700"
-          >
-            Renew plan
-          </a>
-          <Link
-            to="/my-plan"
-            className="rounded-xl border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 transition hover:bg-amber-100"
-          >
-            View plan
-          </Link>
-        </div>
+        <a
+          href={renewHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-xl border border-amber-400 bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-700"
+        >
+          Renew plan
+        </a>
       </div>
     </div>
   )
 }
 
-export function PlanExpiringSoonBanner({ usage }) {
+export function PlanExpiringSoonBanner({ usage, showViewPlan = false }) {
   const copy = formatPlanExpiringSoonMessage(usage)
   const email = useAuthStore((state) => state.user?.email)
   if (!copy) return null
@@ -194,12 +186,14 @@ export function PlanExpiringSoonBanner({ usage }) {
           >
             Renew
           </a>
-          <Link
-            to="/my-plan"
-            className="rounded-xl border border-orange-300 bg-white px-3 py-1.5 text-xs font-semibold text-orange-900 transition hover:bg-orange-100"
-          >
-            View plan
-          </Link>
+          {showViewPlan ? (
+            <Link
+              to="/my-plan"
+              className="rounded-xl border border-orange-300 bg-white px-3 py-1.5 text-xs font-semibold text-orange-900 transition hover:bg-orange-100"
+            >
+              View plan
+            </Link>
+          ) : null}
         </div>
       </div>
     </div>
@@ -222,22 +216,14 @@ export function PlanManageBanner({ usage }) {
           </p>
           <p className="mt-1 font-semibold text-blue-950">{copy.short}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <a
-            href={renewHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-xl border border-blue-400 bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-800"
-          >
-            Renew
-          </a>
-          <Link
-            to="/my-plan"
-            className="rounded-xl border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-900 transition hover:bg-blue-100"
-          >
-            View plan
-          </Link>
-        </div>
+        <a
+          href={renewHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-xl border border-blue-400 bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-800"
+        >
+          Renew
+        </a>
       </div>
     </div>
   )
