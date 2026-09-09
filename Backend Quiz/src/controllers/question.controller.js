@@ -29,7 +29,10 @@ const {
   notifyLeaderboard
 } = require("../services/websocket.service");
 const { Session } = require("../models");
-const { buildQuestionLeaderboard } = require("../services/response.service");
+const {
+  buildQuestionLeaderboard,
+  buildSessionLeaderboard
+} = require("../services/response.service");
 
 async function listBySession(req, res) {
   try {
@@ -379,12 +382,16 @@ async function closeQuestion(req, res) {
 
 async function openForReattempt(req, res) {
   try {
-    const { question, deactivatedQuestionIds = [] } = await openQuestionForReattempt({
+    const {
+      question,
+      deactivatedQuestionIds = [],
+      responsesCleared = 0
+    } = await openQuestionForReattempt({
       questionId: Number(req.params.questionId),
       user: req.user
     });
     const session = await Session.findByPk(question.session_id, {
-      attributes: ["session_code"]
+      attributes: ["session_code", "leaderboard_enabled"]
     });
     if (session?.session_code) {
       for (const otherId of deactivatedQuestionIds) {
@@ -404,10 +411,15 @@ async function openForReattempt(req, res) {
           time_limit_seconds: question.time_limit_seconds
         }
       );
+      if (session.leaderboard_enabled) {
+        buildSessionLeaderboard(question.session_id)
+          .then((leaderboard) => notifyLeaderboard(session.session_code, { leaderboard }))
+          .catch(() => {});
+      }
     }
     return successResponse(
       res,
-      { question },
+      { question, responses_cleared: responsesCleared },
       "Question opened for reattempt",
       200
     );

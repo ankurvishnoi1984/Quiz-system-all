@@ -831,8 +831,8 @@ function ParticipantSessionPage() {
         variant: 'info',
         title: 'Question reopened',
         message: preview
-          ? `The host has reopened this question for another attempt:\n\n“${preview.slice(0, 120)}${preview.length > 120 ? '…' : ''}”\n\nYou can change your answer and submit again.`
-          : 'The host has reopened a question for another attempt. You can change your answer and submit again.',
+          ? `The host has reopened this question for another attempt:\n\n“${preview.slice(0, 120)}${preview.length > 120 ? '…' : ''}”\n\nYour previous answer was cleared. Submit a new response.`
+          : 'The host has reopened a question for another attempt. Your previous answer was cleared. Submit a new response.',
         confirmLabel: 'Go to question',
       })
       queryClient.invalidateQueries({ queryKey: ['participant-session', effectiveSessionCode] })

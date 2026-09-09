@@ -7,7 +7,9 @@ const {
   Session,
   Department,
   Client,
-  User
+  User,
+  Response,
+  Participant
 } = require("../models");
 const {
   isSessionQuizTotalTimeEnabled,
@@ -940,6 +942,42 @@ async function closeAllQuestionSubmissionsForSession({ sessionId, user }) {
   });
 }
 
+async function clearQuestionResponsesForReattempt(questionId, transaction) {
+  const existingResponses = await Response.findAll({
+    where: { question_id: questionId },
+    attributes: ["participant_id", "points_earned"],
+    transaction
+  });
+
+  const pointsByParticipant = new Map();
+  for (const row of existingResponses) {
+    const participantId = Number(row.participant_id);
+    const points = Number(row.points_earned || 0);
+    if (!Number.isFinite(participantId) || participantId <= 0 || points === 0) continue;
+    pointsByParticipant.set(
+      participantId,
+      (pointsByParticipant.get(participantId) || 0) + points
+    );
+  }
+
+  for (const [participantId, points] of pointsByParticipant) {
+    await Participant.update(
+      { score: sequelize.literal(`GREATEST(0, COALESCE(score, 0) - ${Number(points)})`) },
+      { where: { participant_id: participantId }, transaction }
+    );
+  }
+
+  // Hard-delete so the same participants can submit again without unique-index conflicts
+  // with soft-deleted rows (same approach as multi-select answer replacement).
+  const responsesCleared = await Response.destroy({
+    where: { question_id: questionId },
+    force: true,
+    transaction
+  });
+
+  return responsesCleared;
+}
+
 async function openQuestionForReattempt({ questionId, user }) {
   const question = await getQuestionById({ questionId, user });
   const session = await getSessionForQuestionFlow(question.session_id);
@@ -955,19 +993,29 @@ async function openQuestionForReattempt({ questionId, user }) {
     question.question_id
   );
 
-  question.is_live = true;
-  question.open_for_reattempt = true;
-  question.submissions_closed = false;
-  question.answer_revealed = false;
-  question.show_leaderboard = false;
-  question.live_activated_at = new Date();
-  await question.save();
+  const { saved, responsesCleared } = await sequelize.transaction(async (transaction) => {
+    const cleared = await clearQuestionResponsesForReattempt(
+      question.question_id,
+      transaction
+    );
 
-  const saved = await Question.findByPk(question.question_id, {
-    include: [{ model: QuestionOption, order: [["display_order", "ASC"]] }]
+    question.is_live = true;
+    question.open_for_reattempt = true;
+    question.submissions_closed = false;
+    question.answer_revealed = false;
+    question.show_leaderboard = false;
+    question.live_activated_at = new Date();
+    await question.save({ transaction });
+
+    const savedQuestion = await Question.findByPk(question.question_id, {
+      include: [{ model: QuestionOption, order: [["display_order", "ASC"]] }],
+      transaction
+    });
+
+    return { saved: savedQuestion, responsesCleared: cleared };
   });
 
-  return { question: saved, deactivatedQuestionIds };
+  return { question: saved, deactivatedQuestionIds, responsesCleared };
 }
 
 module.exports = {

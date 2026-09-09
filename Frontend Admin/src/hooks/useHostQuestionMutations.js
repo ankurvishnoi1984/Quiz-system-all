@@ -35,6 +35,12 @@ export function useHostQuestionMutations(
     queryClient.invalidateQueries({ queryKey: ['live-question-results'] })
   }
 
+  const invalidateResponsesAndLeaderboard = () => {
+    queryClient.invalidateQueries({ queryKey: ['live-responses', sessionId] })
+    queryClient.invalidateQueries({ queryKey: ['live-leaderboard', sessionId] })
+    queryClient.invalidateQueries({ queryKey: ['live-question-results'] })
+  }
+
   const ensureEndingScreensOff = async () => {
     if (typeof clearEndingScreensOnActivate !== 'function') return
     await clearEndingScreensOnActivate()
@@ -134,6 +140,7 @@ export function useHostQuestionMutations(
     },
     onSuccess: (_data, { questionText }) => {
       invalidateQuestions()
+      invalidateResponsesAndLeaderboard()
       onReattemptSuccess?.(questionText)
     },
     onError: (error) => {
