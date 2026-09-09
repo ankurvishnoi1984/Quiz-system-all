@@ -1,7 +1,15 @@
+const { randomUUID } = require("crypto");
 const { WebSocketServer } = require("ws");
 const { verifyAccessToken } = require("../utils/jwt");
 const { isIntegrationsEnabled } = require("../config/integrations");
 const { resolveEmbedToken } = require("./session-embed-token.service");
+const { extractRequestIp, normalizeIp, expandIpAliases } = require("../utils/ip");
+const { isIpBlocked } = require("./blocked-ip.service");
+
+const ADMIN_CLOSE_CODE = 4008;
+const ADMIN_CLOSE_REASON = "Closed by administrator";
+const IP_BLOCKED_CODE = 4009;
+const IP_BLOCKED_REASON = "IP address blocked";
 
 const activeConnections = new Map();
 
@@ -29,7 +37,7 @@ function setupWebSocketServer(server) {
   const wss = new WebSocketServer({ server, path: "/ws" });
 
   wss.on("connection", (ws, req) => {
-    const remote = req.socket?.remoteAddress || "unknown";
+    const remote = extractRequestIp(req) || normalizeIp(req.socket?.remoteAddress) || "unknown";
     let sessionCode = null;
     let role = null;
 
@@ -48,6 +56,21 @@ function setupWebSocketServer(server) {
         upgrade: req.headers.upgrade,
         connection: req.headers.connection
       });
+
+      if (remote !== "unknown" && isIpBlocked(remote)) {
+        wsLog("warn", "handshake_rejected", { remote, reason: "ip_blocked", code: IP_BLOCKED_CODE });
+        try {
+          send(ws, {
+            type: "error",
+            code: "ip_blocked",
+            message: "This IP address has been blocked by an administrator."
+          });
+        } catch {
+          // ignore
+        }
+        ws.close(IP_BLOCKED_CODE, IP_BLOCKED_REASON);
+        return;
+      }
 
       if (!sessionCode) {
         wsLog("warn", "handshake_rejected", { remote, reason: "missing_session_code", code: 4000 });
@@ -124,6 +147,9 @@ function setupWebSocketServer(server) {
       }
       activeConnections.get(connectionKey).add(ws);
 
+      ws.connectionId = randomUUID();
+      ws.connectedAt = Date.now();
+      ws.remoteAddress = remote === "unknown" ? null : remote;
       ws.sessionCode = sessionCode;
       ws.role = role;
       ws.user = decoded;
@@ -592,6 +618,114 @@ function notifyPresentSlideChanged(sessionCode, payload) {
   });
 }
 
+function closeConnectionsByIp(ipAddress) {
+  const wantedAliases = new Set(expandIpAliases(ipAddress));
+  if (!wantedAliases.size) {
+    const error = new Error("ip_address is required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const closed = [];
+  for (const [bucketKey, connSet] of activeConnections.entries()) {
+    const parsed = parseConnectionBucketKey(bucketKey);
+    for (const ws of [...connSet]) {
+      if (ws.readyState !== WS_OPEN) continue;
+      const socketIp = normalizeIp(ws.remoteAddress);
+      if (!socketIp || !wantedAliases.has(socketIp)) continue;
+
+      try {
+        send(ws, {
+          type: "connection_closed_by_admin",
+          session: parsed.sessionCode,
+          role: parsed.role,
+          message: "Your connection was closed because this IP was blocked."
+        });
+      } catch {
+        // ignore
+      }
+      try {
+        ws.close(IP_BLOCKED_CODE, IP_BLOCKED_REASON);
+      } catch {
+        // ignore
+      }
+      closed.push({
+        connection_id: ws.connectionId || null,
+        session_code: parsed.sessionCode,
+        role: parsed.role,
+        ip_address: socketIp
+      });
+    }
+  }
+
+  wsLog("info", "admin_blocked_ip_closed_connections", {
+    ip: normalizeIp(ipAddress),
+    aliases: [...wantedAliases],
+    closed: closed.length
+  });
+
+  return closed;
+}
+
+function closeMatchingConnections({ sessionCode, role, connectionId } = {}) {
+  const wantedCode = sessionCode ? String(sessionCode).trim() : "";
+  const wantedRole = role ? String(role).trim() : "";
+  const wantedId = connectionId ? String(connectionId).trim() : "";
+
+  if (!wantedCode && !wantedId) {
+    const error = new Error("session_code is required");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!wantedId && !wantedRole) {
+    const error = new Error("role is required");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const closed = [];
+  for (const [bucketKey, connSet] of activeConnections.entries()) {
+    const parsed = parseConnectionBucketKey(bucketKey);
+    if (wantedCode && parsed.sessionCode !== wantedCode) continue;
+    if (wantedRole && parsed.role !== wantedRole) continue;
+
+    for (const ws of [...connSet]) {
+      if (ws.readyState !== WS_OPEN) continue;
+      if (wantedId && String(ws.connectionId || "") !== wantedId) continue;
+
+      try {
+        send(ws, {
+          type: "connection_closed_by_admin",
+          session: parsed.sessionCode,
+          role: parsed.role,
+          message: "Your connection was closed by an administrator."
+        });
+      } catch {
+        // ignore
+      }
+      try {
+        ws.close(ADMIN_CLOSE_CODE, ADMIN_CLOSE_REASON);
+      } catch {
+        // ignore
+      }
+      closed.push({
+        connection_id: ws.connectionId || null,
+        session_code: parsed.sessionCode,
+        role: parsed.role
+      });
+    }
+  }
+
+  wsLog("info", "admin_closed_connections", {
+    session: wantedCode || null,
+    role: wantedRole || null,
+    connectionId: wantedId || null,
+    closed: closed.length
+  });
+
+  return closed;
+}
+
 function getConnectionCount(sessionCode) {
   let count = 0;
   activeConnections.forEach((connSet, key) => {
@@ -680,6 +814,10 @@ module.exports = {
   getLiveResults,
   getSessionProgress,
   getConnectionCount,
+  closeMatchingConnections,
+  closeConnectionsByIp,
+  ADMIN_CLOSE_CODE,
+  IP_BLOCKED_CODE,
   countLiveParticipantConnectionsForSessionCodes,
   countLiveParticipantConnectionsBySessionCodeMap,
   activeConnections

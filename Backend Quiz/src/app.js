@@ -82,6 +82,8 @@ app.get("/join/:code", (req, res) => {
   return res.redirect(302, `${frontendOrigin}${path}`);
 });
 
+const blockedIpMiddleware = require("./middlewares/blocked-ip.middleware");
+app.use("/api/v1", blockedIpMiddleware);
 app.use("/api/v1", apiRoutes);
 
 app.use((_req, res) => {

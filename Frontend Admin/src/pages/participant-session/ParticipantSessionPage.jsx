@@ -194,6 +194,7 @@ function ParticipantSessionPage() {
   const [questionLeaderboardByQuestion, setQuestionLeaderboardByQuestion] = useState({})
   const [questionLbVisibleByQuestion, setQuestionLbVisibleByQuestion] = useState({})
   const [answerRevealByQuestion, setAnswerRevealByQuestion] = useState({})
+  const [ipBlocked, setIpBlocked] = useState(false)
   const [unseenActivatedQuestionIds, setUnseenActivatedQuestionIds] = useState(
     () => new Set(),
   )
@@ -201,12 +202,13 @@ function ParticipantSessionPage() {
   const sessionQuery = useQuery({
     queryKey: ['participant-session', effectiveSessionCode],
     queryFn: () => lookupSessionApi(effectiveSessionCode),
-    enabled: Boolean(effectiveSessionCode),
+    enabled: Boolean(effectiveSessionCode) && !ipBlocked,
     retry: false,
     staleTime: 0,
     refetchOnWindowFocus: true,
     refetchIntervalInBackground: true,
     refetchInterval: (query) => {
+      if (ipBlocked) return false
       const status = query.state.data?.status
       const onJoinStep = step === 'join' && !participantToken && !canUseStoredJoin
       if (onJoinStep && !isSessionOpenForNewJoin(status)) return 3000
@@ -217,12 +219,23 @@ function ParticipantSessionPage() {
     },
   })
 
+  useEffect(() => {
+    const error = sessionQuery.error
+    if (!error || error.status !== 403) return
+    const code = error.details?.code
+    if (code === 'ip_blocked' || /blocked by an administrator/i.test(error.message || '')) {
+      setIpBlocked(true)
+      useParticipantStore.getState().clearParticipant?.()
+    }
+  }, [sessionQuery.error])
+
   const preJoinRealtimeEnabled = Boolean(
     participantHydrated &&
       effectiveSessionCode &&
       step === 'join' &&
       !participantToken &&
-      !canUseStoredJoin,
+      !canUseStoredJoin &&
+      !ipBlocked,
   )
 
   useParticipantPreJoinRealtime({
@@ -233,9 +246,19 @@ function ParticipantSessionPage() {
   const questionsQuery = useQuery({
     queryKey: ['participant-questions', sessionQuery.data?.session_id, participantToken],
     queryFn: () => listSessionQuestionsApi(participantToken, sessionQuery.data?.session_id),
-    enabled: Boolean(participantToken && sessionQuery.data?.session_id),
-    refetchInterval: step === 'active' || step === 'waiting' ? 5000 : false,
+    enabled: Boolean(participantToken && sessionQuery.data?.session_id) && !ipBlocked,
+    refetchInterval: !ipBlocked && (step === 'active' || step === 'waiting') ? 5000 : false,
   })
+
+  useEffect(() => {
+    const error = questionsQuery.error
+    if (!error || error.status !== 403) return
+    const code = error.details?.code
+    if (code === 'ip_blocked' || /blocked by an administrator/i.test(error.message || '')) {
+      setIpBlocked(true)
+      useParticipantStore.getState().clearParticipant?.()
+    }
+  }, [questionsQuery.error])
 
   // Q&A feature disabled — re-enable when bringing Q&A back
   // const qaQuery = useQuery({
@@ -727,6 +750,16 @@ function ParticipantSessionPage() {
       queryClient.invalidateQueries({ queryKey: ['participant-questions', dbSessionId] })
     })
 
+    const offIpBlocked = client.on(RealtimeEvent.CONNECTION_IP_BLOCKED, () => {
+      setIpBlocked(true)
+      useParticipantStore.getState().clearParticipant?.()
+      client.disconnect()
+    })
+
+    const offAdminClosed = client.on(RealtimeEvent.CONNECTION_CLOSED_BY_ADMIN, () => {
+      // Connection closed by admin — do not auto-rejoin until refresh
+    })
+
     const offSession = client.on(RealtimeEvent.SESSION_UPDATED, (data) => {
       if (data?.status) {
         queryClient.setQueryData(['participant-session', effectiveSessionCode], (old) =>
@@ -1069,6 +1102,8 @@ function ParticipantSessionPage() {
 
     return () => {
       offConnected()
+      offIpBlocked()
+      offAdminClosed()
       offSession()
       offQuestion()
       offReattempt()
@@ -2085,6 +2120,18 @@ function ParticipantSessionPage() {
     return (
       <PageCenteredShell>
         <p className="text-slate-600">Restoring session...</p>
+      </PageCenteredShell>
+    )
+  }
+
+  if (ipBlocked) {
+    return (
+      <PageCenteredShell>
+        <h1 className="text-2xl font-bold text-navy-900">Access blocked</h1>
+        <p className="mt-2 text-slate-600">
+          This IP address has been blocked by an administrator. You cannot join or stay in this
+          session from this network.
+        </p>
       </PageCenteredShell>
     )
   }

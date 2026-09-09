@@ -4,6 +4,8 @@ const RECONNECT_BASE_DELAY_MS = 1000
 const RECONNECT_MAX_DELAY_MS = 30000
 const MAX_RECONNECT_ATTEMPTS = 8
 const STRICT_MODE_CONNECT_DELAY_MS = 0
+const ADMIN_DISCONNECT_CODE = 4008
+const IP_BLOCKED_CODE = 4009
 
 /** Log in dev or when VITE_WS_DEBUG=true */
 const WS_DEBUG =
@@ -69,6 +71,7 @@ class RealtimeClient {
   #reconnectTimer = null
   #connectDelayTimer = null
   #label = 'client'
+  #adminClosed = false
 
   constructor(url, label = 'client') {
     this.#url = url
@@ -80,6 +83,7 @@ class RealtimeClient {
     if (this.#manualClose) {
       this.#manualClose = false
     }
+    this.#adminClosed = false
 
     if (this.#socket?.readyState === WebSocket.OPEN) {
       wsLog('debug', 'connect skipped — already OPEN', { label: this.#label })
@@ -139,6 +143,13 @@ class RealtimeClient {
         if (!this.#isActiveSocket(socket, gen)) return
         try {
           const data = JSON.parse(event.data)
+          if (
+            data?.type === 'connection_closed_by_admin' ||
+            data?.code === 'ip_blocked' ||
+            data?.type === 'connection_ip_blocked'
+          ) {
+            this.#adminClosed = true
+          }
           this.#emit(data.type, data)
         } catch {
           this.#emit('message', event.data)
@@ -174,6 +185,24 @@ class RealtimeClient {
         this.#isConnecting = false
         if (this.#socket === socket) {
           this.#socket = null
+        }
+
+        if (
+          this.#adminClosed ||
+          Number(event.code) === ADMIN_DISCONNECT_CODE ||
+          Number(event.code) === IP_BLOCKED_CODE
+        ) {
+          this.#manualClose = true
+          this.#emit(
+            Number(event.code) === IP_BLOCKED_CODE
+              ? 'connection_ip_blocked'
+              : 'connection_closed_by_admin',
+            {
+              code: event.code,
+              reason: event.reason || 'Closed by administrator',
+              generation: gen,
+            },
+          )
         }
 
         this.#emit('close', {
@@ -403,6 +432,8 @@ export const RealtimeEvent = {
   PARTICIPANT_JOINED: 'participant_joined',
   PARTICIPANT_LEFT: 'participant_left',
   PRESENT_SLIDE_CHANGED: 'present_slide_changed',
+  CONNECTION_CLOSED_BY_ADMIN: 'connection_closed_by_admin',
+  CONNECTION_IP_BLOCKED: 'connection_ip_blocked',
 }
 
 export default RealtimeClient

@@ -7,10 +7,12 @@ const { startWeeklySummaryScheduler } = require("./services/weekly-summary-sched
 const {
   startPlanExpiryReminderScheduler
 } = require("./services/plan-expiry-reminder-scheduler.service");
+const { loadBlockedIpCache } = require("./services/blocked-ip.service");
 
 async function bootstrap() {
   try {
     await connectDatabase();
+    await loadBlockedIpCache();
     const server = app.listen(env.port, () => {
       console.log(`Server is running on port ${env.port}`);
     });

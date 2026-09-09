@@ -20,6 +20,7 @@ const NotificationRecipient = require("./notification-recipient.model");
 const JobRun = require("./job-run.model");
 const EmailOtp = require("./email-otp.model");
 const UserPlanHistory = require("./user-plan-history.model");
+const BlockedIp = require("./blocked-ip.model");
 const AuditLog = require("./audit-log.model");
 const registerAuditHooks = require("./register-audit-hooks");
 
@@ -39,6 +40,8 @@ Plan.hasMany(UserPlanHistory, { foreignKey: "plan_id", as: "plan_history" });
 UserPlanHistory.belongsTo(Plan, { foreignKey: "plan_id", as: "plan" });
 Payment.hasMany(UserPlanHistory, { foreignKey: "payment_id", as: "plan_history" });
 UserPlanHistory.belongsTo(Payment, { foreignKey: "payment_id", as: "payment" });
+User.hasMany(BlockedIp, { foreignKey: "blocked_by", as: "blocked_ips" });
+BlockedIp.belongsTo(User, { foreignKey: "blocked_by", as: "blocker" });
 
 Client.hasMany(Department, { foreignKey: "client_id" });
 Department.belongsTo(Client, { foreignKey: "client_id" });
@@ -114,6 +117,7 @@ const models = {
   JobRun,
   EmailOtp,
   UserPlanHistory,
+  BlockedIp,
   AuditLog
 };
 

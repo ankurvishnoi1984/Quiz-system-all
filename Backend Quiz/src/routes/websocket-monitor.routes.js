@@ -13,4 +13,22 @@ router.get(
   websocketMonitorController.getMonitorStats
 );
 
+router.post(
+  "/monitor/websockets/close",
+  authorizeRoles("super_admin"),
+  websocketMonitorController.closeConnections
+);
+
+router.post(
+  "/monitor/websockets/block-ip",
+  authorizeRoles("super_admin"),
+  websocketMonitorController.blockIpAddress
+);
+
+router.post(
+  "/monitor/websockets/unblock-ip",
+  authorizeRoles("super_admin"),
+  websocketMonitorController.unblockIpAddress
+);
+
 module.exports = router;
