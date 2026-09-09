@@ -757,8 +757,8 @@ function LivePage() {
         variant: 'success',
         title: 'Opened for reattempt',
         message: preview
-          ? `Participants are being notified and can answer again:\n\n“${preview.slice(0, 120)}${preview.length > 120 ? '…' : ''}”`
-          : 'Participants are being notified and can answer this question again.',
+          ? `Past responses for this question were cleared. Participants can answer again:\n\n“${preview.slice(0, 120)}${preview.length > 120 ? '…' : ''}”`
+          : 'Past responses for this question were cleared. Participants can answer again.',
         confirmLabel: 'OK',
       })
     },
