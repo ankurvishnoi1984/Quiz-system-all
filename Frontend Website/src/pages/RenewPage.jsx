@@ -1,5 +1,5 @@
 import { LoaderCircle, User } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import DemoPaymentForm from '../components/checkout/DemoPaymentForm'
@@ -34,8 +34,12 @@ function FieldError({ id, message }) {
 
 function RenewPage() {
   const [searchParams] = useSearchParams()
+  const emailFromUrl = String(searchParams.get('email') || '').trim()
+  // validateEmail returns empty string when valid
+  const hasHostEmail = Boolean(emailFromUrl) && !validateEmail(emailFromUrl)
+
   const [step, setStep] = useState('verify')
-  const [email, setEmail] = useState(() => searchParams.get('email') || '')
+  const [email, setEmail] = useState(() => emailFromUrl || '')
   const [fullName, setFullName] = useState('')
   const [selectedPlanId, setSelectedPlanId] = useState('')
   const [renewToken, setRenewToken] = useState('')
@@ -51,6 +55,7 @@ function RenewPage() {
     daysUntilExpiry: null,
     canSelfServePlanChange: false,
   })
+  const autoStartRef = useRef(false)
 
   const plansQuery = useQuery({
     queryKey: ['public-plans'],
@@ -153,11 +158,15 @@ function RenewPage() {
 
   const stepSubtitle =
     step === 'verify'
-      ? isManageMode
-        ? 'Enter your host account email to renew, upgrade, or downgrade. No new account is created.'
-        : 'Enter your host account email to renew or change your plan. No new account is created.'
+      ? hasHostEmail
+        ? paymentOtpEnabled
+          ? 'Sending a verification code to your registered email…'
+          : 'Confirming your host account…'
+        : isManageMode
+          ? 'Enter your host account email to renew, upgrade, or downgrade. No new account is created.'
+          : 'Enter your host account email to renew or change your plan. No new account is created.'
       : step === 'otp'
-        ? `Enter the 6-digit code sent to ${email}.`
+        ? 'Enter the 6-digit code sent to your registered email.'
         : step === 'plan'
           ? isManageMode
             ? 'Pick any paid plan — including your current plan to extend early, or a different tier to upgrade or downgrade.'
@@ -167,6 +176,41 @@ function RenewPage() {
               ? 'Pay to start your new plan period. Your account stays the same.'
               : 'Pay for your selected plan. Your account stays the same; only the plan entitlement updates.'
             : 'Your plan is active. Continue in the host portal.'
+
+  const startRenewForEmail = async (nextEmail) => {
+    const result = await startPlanRenewApi({
+      email: String(nextEmail || '').trim(),
+    })
+
+    if (result?.requires_otp) {
+      setOtpCode('')
+      setStep('otp')
+      return
+    }
+
+    applyRenewSession(result)
+    setStep('plan')
+  }
+
+  useEffect(() => {
+    if (!hasHostEmail) return
+    if (!featuresQuery.isSuccess) return
+    if (autoStartRef.current) return
+    if (step !== 'verify') return
+
+    autoStartRef.current = true
+    setEmail(emailFromUrl)
+    setSubmitError('')
+    setLoading(true)
+    startRenewForEmail(emailFromUrl)
+      .catch((error) => {
+        autoStartRef.current = false
+        setSubmitError(error.message || 'Unable to verify account')
+      })
+      .finally(() => {
+        setLoading(false)
+      })
+  }, [hasHostEmail, emailFromUrl, featuresQuery.isSuccess, step])
 
   const handleVerifySubmit = async (event) => {
     event.preventDefault()
@@ -180,18 +224,7 @@ function RenewPage() {
 
     setLoading(true)
     try {
-      const result = await startPlanRenewApi({
-        email: email.trim(),
-      })
-
-      if (result?.requires_otp) {
-        setOtpCode('')
-        setStep('otp')
-        return
-      }
-
-      applyRenewSession(result)
-      setStep('plan')
+      await startRenewForEmail(email)
     } catch (error) {
       setSubmitError(error.message || 'Unable to verify account')
     } finally {
@@ -286,57 +319,98 @@ function RenewPage() {
       >
         <section className="glass-card p-6 sm:p-8">
           {step === 'verify' ? (
-            <form onSubmit={handleVerifySubmit} className="space-y-4" noValidate>
-              <div className="space-y-1.5">
-                <label htmlFor="email" className="text-sm font-medium text-slate-700">
-                  Work email *
-                </label>
-                <div className="relative">
-                  <User className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-                  <input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(event) => {
-                      setEmail(event.target.value)
-                      setFieldErrors((current) => ({ ...current, email: '' }))
-                    }}
-                    className={`${fieldInputClass(fieldErrors.email)} pl-10`}
-                    placeholder="you@company.com"
-                    autoComplete="email"
-                    required
-                  />
-                </div>
-                <FieldError id="email-error" message={fieldErrors.email} />
+            hasHostEmail && loading && !submitError ? (
+              <div className="flex flex-col items-center gap-3 py-6 text-center">
+                <LoaderCircle className="size-6 animate-spin text-navy-800" />
+                <p className="text-sm font-medium text-navy-900">
+                  {paymentOtpEnabled
+                    ? 'Sending a verification code to your registered email…'
+                    : 'Confirming your host account…'}
+                </p>
+                <p className="text-sm text-slate-600">{email}</p>
               </div>
+            ) : (
+              <form onSubmit={handleVerifySubmit} className="space-y-4" noValidate>
+                <div className="space-y-1.5">
+                  <label htmlFor="email" className="text-sm font-medium text-slate-700">
+                    {hasHostEmail ? 'Registered email' : 'Work email *'}
+                  </label>
+                  <div className="relative">
+                    <User className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(event) => {
+                        if (hasHostEmail) return
+                        setEmail(event.target.value)
+                        setFieldErrors((current) => ({ ...current, email: '' }))
+                      }}
+                      readOnly={hasHostEmail}
+                      disabled={hasHostEmail}
+                      className={`${fieldInputClass(fieldErrors.email)} pl-10 ${
+                        hasHostEmail ? 'cursor-not-allowed bg-slate-50 text-slate-600' : ''
+                      }`}
+                      placeholder="you@company.com"
+                      autoComplete="email"
+                      required
+                    />
+                  </div>
+                  <FieldError id="email-error" message={fieldErrors.email} />
+                </div>
 
-              {paymentOtpEnabled ? (
-                <p className="text-xs text-slate-500">
-                  We will send a one-time verification code to this email before you choose a plan and pay.
-                </p>
-              ) : null}
+                {paymentOtpEnabled ? (
+                  <p className="text-xs text-slate-500">
+                    {hasHostEmail
+                      ? 'A one-time verification code will be sent to this registered email.'
+                      : 'We will send a one-time verification code to this email before you choose a plan and pay.'}
+                  </p>
+                ) : null}
 
-              {submitError ? (
-                <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
-                  {submitError}
-                </p>
-              ) : null}
+                {submitError ? (
+                  <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+                    {submitError}
+                  </p>
+                ) : null}
 
-              <button type="submit" disabled={loading} className="btn-primary mt-2 w-full">
-                {loading ? (
-                  <>
-                    <LoaderCircle className="mr-2 inline size-4 animate-spin" />
-                    Verifying…
-                  </>
-                ) : (
-                  'Continue'
-                )}
-              </button>
-            </form>
+                <button type="submit" disabled={loading} className="btn-primary mt-2 w-full">
+                  {loading ? (
+                    <>
+                      <LoaderCircle className="mr-2 inline size-4 animate-spin" />
+                      {hasHostEmail ? 'Sending…' : 'Verifying…'}
+                    </>
+                  ) : hasHostEmail ? (
+                    'Send verification code'
+                  ) : (
+                    'Continue'
+                  )}
+                </button>
+              </form>
+            )
           ) : null}
 
           {step === 'otp' ? (
             <form onSubmit={handleOtpSubmit} className="space-y-4" noValidate>
+              <div className="space-y-1.5">
+                <label htmlFor="registeredEmail" className="text-sm font-medium text-slate-700">
+                  Registered email
+                </label>
+                <div className="relative">
+                  <User className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    id="registeredEmail"
+                    type="email"
+                    value={email}
+                    readOnly
+                    disabled
+                    className="input-modern cursor-not-allowed bg-slate-50 pl-10 text-slate-600"
+                  />
+                </div>
+                <p className="text-xs text-slate-500">
+                  OTP sent to your registered email. Enter the code below to continue.
+                </p>
+              </div>
+
               <div className="space-y-1.5">
                 <label htmlFor="otpCode" className="text-sm font-medium text-slate-700">
                   Verification code *
@@ -373,17 +447,21 @@ function RenewPage() {
               </button>
 
               <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-                <button
-                  type="button"
-                  className="font-medium text-navy-800 hover:text-navy-950"
-                  onClick={() => {
-                    setStep('verify')
-                    setSubmitError('')
-                    setOtpCode('')
-                  }}
-                >
-                  Back
-                </button>
+                {hasHostEmail ? (
+                  <span className="text-slate-400">Code sent to registered email</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="font-medium text-navy-800 hover:text-navy-950"
+                    onClick={() => {
+                      setStep('verify')
+                      setSubmitError('')
+                      setOtpCode('')
+                    }}
+                  >
+                    Back
+                  </button>
+                )}
                 <button
                   type="button"
                   disabled={otpSending}
