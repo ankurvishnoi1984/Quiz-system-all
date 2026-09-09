@@ -138,13 +138,16 @@ export function normalizeQuestionOptions(question) {
 
 /** Host API returns options with is_correct; participant API may send correct_option_ids. */
 export function resolveCorrectOptionIds(question, options) {
-  const fromApi = (question?.correct_option_ids || []).map(Number).filter(Boolean)
+  const fromApi = (question?.correct_option_ids || [])
+    .map(Number)
+    .filter((id) => Number.isFinite(id) && id > 0)
   if (fromApi.length) return fromApi
 
-  const revealed = Boolean(question?.answer_revealed ?? question?.answerRevealed)
-  if (!revealed) return []
-
-  return options.filter((option) => option.is_correct).map((option) => Number(option.option_id))
+  // Prefer option flags whenever present (host live payloads include is_correct).
+  return (options || [])
+    .filter((option) => option.is_correct)
+    .map((option) => Number(option.option_id))
+    .filter((id) => Number.isFinite(id) && id > 0)
 }
 
 export function mapLiveQuestions(questions) {
@@ -271,14 +274,21 @@ export function enrichOptionChartDataWithReveal(optionData, question) {
   const correctIds = new Set((question?.correctOptionIds || []).map(Number))
   const revealed = Boolean(question?.answerRevealed)
   const rawType = question?.chartRawType ?? question?.rawType
+  const options = question?.options || []
 
   return optionData.map((row, idx) => {
-    const matched = (question?.options || []).find(
-      (o) => String(o.option_text).trim() === String(row.name).trim(),
-    )
-    const isCorrect = matched ? correctIds.has(Number(matched.option_id)) : false
+    const matched =
+      row.optionId != null
+        ? options.find((o) => Number(o.option_id) === Number(row.optionId))
+        : options.find((o) => String(o.option_text).trim() === String(row.name).trim())
+    const isCorrect = matched
+      ? correctIds.size > 0
+        ? correctIds.has(Number(matched.option_id))
+        : Boolean(matched.is_correct)
+      : false
     return {
       ...row,
+      optionId: row.optionId ?? matched?.option_id ?? null,
       isCorrect: revealed && isCorrect,
       optionIndex: idx,
       color: getPresentOptionColor(row.name, idx, rawType),
@@ -362,6 +372,7 @@ export function buildOptionChartData(question, questionResults, currentResponses
   if (opts.length > 0) {
     let rows = opts.map((option) => ({
       name: option.option_text,
+      optionId: Number(option.option_id) || null,
       value: Number(byOption[String(option.option_id)] || 0),
     }))
     if (chartType === 'true_false') {

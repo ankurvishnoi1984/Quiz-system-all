@@ -60,10 +60,19 @@ export function PresentBarChart({ data, rawType, answerRevealed, compact = false
               return [`${value} (${pct}%)`, label]
             }}
           />
-          <Bar dataKey="value" radius={[12, 12, 0, 0]} maxBarSize={120} animationDuration={750} animationEasing="ease-out">
+          <Bar
+            dataKey="value"
+            radius={[12, 12, 0, 0]}
+            maxBarSize={120}
+            // Keep zero-response bars in the rect list so correct-answer ticks still render
+            // (Recharts otherwise drops height===0 bars and LabelList indexes drift).
+            minPointSize={answerRevealed ? 2 : 0}
+            animationDuration={750}
+            animationEasing="ease-out"
+          >
             {data.map((entry, idx) => (
               <Cell
-                key={entry.name}
+                key={entry.optionId ?? `${entry.name}-${idx}`}
                 fill={
                   entry.color ?? getPresentOptionColor(entry.name, idx, rawType)
                 }
@@ -73,10 +82,11 @@ export function PresentBarChart({ data, rawType, answerRevealed, compact = false
             ))}
             {answerRevealed ? (
               <LabelList
+                // Recharts 3 strips `payload` from Label props; pass the row via value instead.
+                valueAccessor={(entry) => entry?.payload ?? null}
                 content={(labelProps) => (
                   <PresentCorrectBarLabel
                     {...labelProps}
-                    data={data}
                     answerRevealed={answerRevealed}
                   />
                 )}
