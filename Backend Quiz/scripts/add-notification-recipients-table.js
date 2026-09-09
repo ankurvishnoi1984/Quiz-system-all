@@ -62,6 +62,16 @@ async function main() {
       );
       console.log(`Ensured weekly_summary recipient ${email}`);
     }
+
+    for (const email of ADMIN_EMAILS) {
+      await sequelize.query(
+        `INSERT INTO notification_recipients (purpose, email, is_active)
+         VALUES ('admin_action_otp', ?, 1)
+         ON DUPLICATE KEY UPDATE is_active = 1`,
+        { replacements: [email] }
+      );
+      console.log(`Ensured admin_action_otp recipient ${email}`);
+    }
   } catch (err) {
     console.error(err);
     process.exitCode = 1;

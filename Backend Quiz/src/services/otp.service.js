@@ -1,19 +1,24 @@
 const crypto = require("crypto");
 const { Op } = require("sequelize");
-const { EmailOtp, User } = require("../models");
+const { EmailOtp, User, NotificationRecipient } = require("../models");
 const { sendEmailOtpMail } = require("./email.service");
 const { signAccessToken, verifyAccessToken } = require("../utils/jwt");
 const {
   isPaymentOtpEnabled,
-  isLoginOtpEnabled
+  isLoginOtpEnabled,
+  isAdminActionOtpEnabled
 } = require("../config/auth-features");
 const env = require("../config/env");
 
 const PURPOSES = {
   PAYMENT: "payment",
   LOGIN: "login",
-  PLAN_RENEW: "plan_renew"
+  PLAN_RENEW: "plan_renew",
+  ADMIN_ACTION: "admin_action"
 };
+
+/** Stable storage key for admin-action OTPs (not a real mailbox). */
+const ADMIN_ACTION_OTP_STORAGE_EMAIL = "admin-action@otp.internal";
 
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_RESEND_COOLDOWN_MS = 45 * 1000;
@@ -41,7 +46,11 @@ function generateOtpCode() {
 }
 
 function assertPurpose(purpose) {
-  if (![PURPOSES.PAYMENT, PURPOSES.LOGIN, PURPOSES.PLAN_RENEW].includes(purpose)) {
+  if (
+    ![PURPOSES.PAYMENT, PURPOSES.LOGIN, PURPOSES.PLAN_RENEW, PURPOSES.ADMIN_ACTION].includes(
+      purpose
+    )
+  ) {
     const error = new Error("Invalid OTP purpose");
     error.statusCode = 400;
     throw error;
@@ -59,6 +68,11 @@ function assertFeatureEnabled(purpose) {
   }
   if (purpose === PURPOSES.LOGIN && !isLoginOtpEnabled()) {
     const error = new Error("Login email OTP is disabled");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (purpose === PURPOSES.ADMIN_ACTION && !isAdminActionOtpEnabled()) {
+    const error = new Error("Admin action OTP is disabled");
     error.statusCode = 400;
     throw error;
   }
@@ -336,6 +350,131 @@ function assertPlanRenewToken(token) {
   return decoded;
 }
 
+async function listAdminActionOtpEmails() {
+  const rows = await NotificationRecipient.findAll({
+    where: {
+      purpose: NotificationRecipient.ADMIN_ACTION_OTP_PURPOSE,
+      is_active: true
+    },
+    attributes: ["email"],
+    order: [["id", "ASC"]]
+  });
+  const seen = new Set();
+  return rows
+    .map((row) => normalizeEmail(row.email))
+    .filter((address) => {
+      if (!address || !address.includes("@") || seen.has(address)) return false;
+      seen.add(address);
+      return true;
+    });
+}
+
+async function sendAdminActionOtp({ fullName } = {}) {
+  assertFeatureEnabled(PURPOSES.ADMIN_ACTION);
+
+  const recipients = await listAdminActionOtpEmails();
+  if (!recipients.length) {
+    const error = new Error(
+      "No admin OTP recipients configured. Add active rows with purpose admin_action_otp in notification_recipients."
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const storageEmail = ADMIN_ACTION_OTP_STORAGE_EMAIL;
+  const purpose = PURPOSES.ADMIN_ACTION;
+
+  const latest = await EmailOtp.findOne({
+    where: {
+      email: storageEmail,
+      purpose,
+      consumed_at: null
+    },
+    order: [["created_at", "DESC"]]
+  });
+
+  if (latest) {
+    const ageMs = Date.now() - new Date(latest.created_at).getTime();
+    if (ageMs < OTP_RESEND_COOLDOWN_MS) {
+      const waitSec = Math.ceil((OTP_RESEND_COOLDOWN_MS - ageMs) / 1000);
+      const error = new Error(`Please wait ${waitSec}s before requesting another code`);
+      error.statusCode = 429;
+      throw error;
+    }
+  }
+
+  await EmailOtp.update(
+    { consumed_at: new Date() },
+    {
+      where: {
+        email: storageEmail,
+        purpose,
+        consumed_at: null
+      }
+    }
+  );
+
+  const code = generateOtpCode();
+  const expiresAt = new Date(Date.now() + OTP_TTL_MS);
+
+  await EmailOtp.create({
+    email: storageEmail,
+    purpose,
+    code_hash: hashOtpCode(code),
+    attempts: 0,
+    expires_at: expiresAt,
+    consumed_at: null
+  });
+
+  const sendErrors = [];
+  for (const to of recipients) {
+    try {
+      await sendEmailOtpMail({
+        to,
+        fullName: fullName || null,
+        code,
+        purpose,
+        expiresInMinutes: Math.round(OTP_TTL_MS / 60000)
+      });
+    } catch (err) {
+      console.error("sendAdminActionOtp mail failed:", to, err.message);
+      sendErrors.push(to);
+    }
+  }
+
+  if (sendErrors.length === recipients.length) {
+    const error = new Error("Unable to send verification code to configured admin emails");
+    error.statusCode = 502;
+    throw error;
+  }
+
+  return {
+    sent: true,
+    purpose,
+    recipient_count: recipients.length - sendErrors.length,
+    expires_in_seconds: Math.round(OTP_TTL_MS / 1000)
+  };
+}
+
+async function verifyAdminActionOtp({ code }) {
+  const result = await verifyOtp({
+    email: ADMIN_ACTION_OTP_STORAGE_EMAIL,
+    purpose: PURPOSES.ADMIN_ACTION,
+    code
+  });
+  return result;
+}
+
+function assertAdminActionOtpToken(token) {
+  if (!isAdminActionOtpEnabled()) return null;
+  if (!token || typeof token !== "string") {
+    const error = new Error("Verification code is required before saving this change");
+    error.statusCode = 401;
+    throw error;
+  }
+  return assertOtpVerifiedToken(token, { purpose: PURPOSES.ADMIN_ACTION });
+}
+
 module.exports = {
   PURPOSES,
   sendOtp,
@@ -345,5 +484,9 @@ module.exports = {
   verifyLoginChallengeToken,
   signPlanRenewToken,
   assertPlanRenewToken,
+  sendAdminActionOtp,
+  verifyAdminActionOtp,
+  assertAdminActionOtpToken,
+  listAdminActionOtpEmails,
   normalizeEmail
 };

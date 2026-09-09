@@ -1,5 +1,5 @@
-import { Eye, EyeOff, Paperclip, Plus, X } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { Eye, EyeOff, LoaderCircle, Paperclip, Plus, X } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Modal from '../components/ui/Modal'
 import { HostAlertModal } from '../components/live/HostAlertModal'
@@ -7,6 +7,7 @@ import { HostAlertModal } from '../components/live/HostAlertModal'
 import { useShell } from '../context/ShellContext'
 import { useAuthStore } from '../store/authStore'
 import { listClientsApi, listDepartmentsApi } from '../services/dashboardApi'
+import { fetchAuthFeaturesApi } from '../services/authApi'
 import {
   adjustUserExtraParticipantsApi,
   adjustUserExtraQuestionsApi,
@@ -17,6 +18,8 @@ import {
   listUserExtraParticipantsApi,
   listUserExtraQuestionsApi,
   listUsersApi,
+  sendAdminActionOtpApi,
+  verifyAdminActionOtpApi,
   uploadExtraSeatAttachmentApi,
   uploadExtraQuestionAttachmentApi,
 } from '../services/managementApi'
@@ -111,6 +114,12 @@ function ManageUsersPage() {
   const [extraQuestionsFileError, setExtraQuestionsFileError] = useState('')
   const [planEditUser, setPlanEditUser] = useState(null)
   const [planEditForm, setPlanEditForm] = useState({ plan_id: '', plan_expires_at: '' })
+  const [adminOtpOpen, setAdminOtpOpen] = useState(false)
+  const [adminOtpCode, setAdminOtpCode] = useState('')
+  const [adminOtpError, setAdminOtpError] = useState('')
+  const [adminOtpSending, setAdminOtpSending] = useState(false)
+  const [adminOtpVerifying, setAdminOtpVerifying] = useState(false)
+  const pendingAdminActionRef = useRef(null)
   // const [passwordVault, setPasswordVault] = useState(() => getStoredUserPasswords())
 
   const usersQuery = useQuery({
@@ -118,6 +127,13 @@ function ManageUsersPage() {
     queryFn: () => listUsersApi(accessToken),
     enabled: Boolean(accessToken),
   })
+
+  const authFeaturesQuery = useQuery({
+    queryKey: ['auth-features'],
+    queryFn: fetchAuthFeaturesApi,
+    staleTime: 60_000,
+  })
+  const adminActionOtpEnabled = authFeaturesQuery.data?.admin_action_otp_enabled !== false
 
   const clientsQuery = useQuery({
     queryKey: ['manage-clients'],
@@ -238,8 +254,9 @@ function ManageUsersPage() {
   })
 
   const extraMutation = useMutation({
-    mutationFn: async ({ userId, payload, file }) => {
+    mutationFn: async ({ userId, payload, file, otpToken }) => {
       const nextPayload = { ...payload }
+      if (otpToken) nextPayload.otp_token = otpToken
       if (file) {
         const uploaded = await uploadExtraSeatAttachmentApi(userId, file)
         nextPayload.attachment_url = uploaded?.file_path || null
@@ -274,8 +291,9 @@ function ManageUsersPage() {
   })
 
   const extraQuestionsMutation = useMutation({
-    mutationFn: async ({ userId, payload, file }) => {
+    mutationFn: async ({ userId, payload, file, otpToken }) => {
       const nextPayload = { ...payload }
+      if (otpToken) nextPayload.otp_token = otpToken
       if (file) {
         const uploaded = await uploadExtraQuestionAttachmentApi(userId, file)
         nextPayload.attachment_url = uploaded?.file_path || null
@@ -333,8 +351,8 @@ function ManageUsersPage() {
   })
 
   const assignPlanMutation = useMutation({
-    mutationFn: ({ userId, planId, planExpiresAt }) =>
-      assignUserPlanApi(accessToken, userId, planId, planExpiresAt),
+    mutationFn: ({ userId, planId, planExpiresAt, otpToken }) =>
+      assignUserPlanApi(accessToken, userId, planId, planExpiresAt, otpToken),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['manage-users'] })
       queryClient.invalidateQueries({ queryKey: ['plan-usage'] })
@@ -342,7 +360,7 @@ function ManageUsersPage() {
       setAlert({
         variant: 'success',
         title: 'Plan updated',
-        message: 'The user plan and expiry date were saved.',
+        message: 'The user plan was saved. Expiry follows the plan duration.',
         confirmLabel: 'OK',
       })
     },
@@ -355,6 +373,67 @@ function ManageUsersPage() {
       })
     },
   })
+
+  const requestAdminActionOtp = async (pendingAction) => {
+    if (!adminActionOtpEnabled) {
+      runPendingAdminAction(pendingAction, null)
+      return
+    }
+    pendingAdminActionRef.current = pendingAction
+    setAdminOtpCode('')
+    setAdminOtpError('')
+    setAdminOtpOpen(true)
+    setAdminOtpSending(true)
+    try {
+      await sendAdminActionOtpApi(accessToken)
+    } catch (error) {
+      setAdminOtpError(error.message || 'Unable to send verification code')
+    } finally {
+      setAdminOtpSending(false)
+    }
+  }
+
+  const runPendingAdminAction = (pendingAction, otpToken) => {
+    if (!pendingAction) return
+    if (pendingAction.type === 'plan') {
+      assignPlanMutation.mutate({ ...pendingAction.payload, otpToken })
+      return
+    }
+    if (pendingAction.type === 'seats') {
+      extraMutation.mutate({ ...pendingAction.payload, otpToken })
+      return
+    }
+    if (pendingAction.type === 'questions') {
+      extraQuestionsMutation.mutate({ ...pendingAction.payload, otpToken })
+    }
+  }
+
+  const confirmAdminActionOtp = async (event) => {
+    event.preventDefault()
+    const code = adminOtpCode.trim()
+    if (!/^\d{6}$/.test(code)) {
+      setAdminOtpError('Enter the 6-digit code from email.')
+      return
+    }
+    setAdminOtpVerifying(true)
+    setAdminOtpError('')
+    try {
+      const verified = await verifyAdminActionOtpApi(accessToken, code)
+      const otpToken = verified?.otp_token
+      if (!otpToken) {
+        setAdminOtpError('Verification succeeded but no token was returned.')
+        return
+      }
+      const pending = pendingAdminActionRef.current
+      pendingAdminActionRef.current = null
+      setAdminOtpOpen(false)
+      runPendingAdminAction(pending, otpToken)
+    } catch (error) {
+      setAdminOtpError(error.message || 'Unable to verify code')
+    } finally {
+      setAdminOtpVerifying(false)
+    }
+  }
 
   const openPlanEditor = (user) => {
     setPlanEditUser(user)
@@ -757,10 +836,13 @@ function ManageUsersPage() {
             event.preventDefault()
             const add = Number(extraSeats)
             if (!extraUser || !Number.isInteger(add) || add === 0) return
-            extraMutation.mutate({
-              userId: extraUser.user_id,
-              payload: { add, note: extraNote.trim() || null },
-              file: extraFile,
+            requestAdminActionOtp({
+              type: 'seats',
+              payload: {
+                userId: extraUser.user_id,
+                payload: { add, note: extraNote.trim() || null },
+                file: extraFile,
+              },
             })
           }}
         >
@@ -895,9 +977,12 @@ function ManageUsersPage() {
                 type="button"
                 disabled={extraMutation.isPending}
                 onClick={() =>
-                  extraMutation.mutate({
-                    userId: extraUser.user_id,
-                    payload: { set: 0, note: 'Cleared extra seats' },
+                  requestAdminActionOtp({
+                    type: 'seats',
+                    payload: {
+                      userId: extraUser.user_id,
+                      payload: { set: 0, note: 'Cleared extra seats' },
+                    },
                   })
                 }
                 className="h-11 rounded-xl border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
@@ -945,10 +1030,13 @@ function ManageUsersPage() {
             event.preventDefault()
             const add = Number(extraQuestions)
             if (!extraQuestionsUser || !Number.isInteger(add) || add === 0) return
-            extraQuestionsMutation.mutate({
-              userId: extraQuestionsUser.user_id,
-              payload: { add, note: extraQuestionsNote.trim() || null },
-              file: extraQuestionsFile,
+            requestAdminActionOtp({
+              type: 'questions',
+              payload: {
+                userId: extraQuestionsUser.user_id,
+                payload: { add, note: extraQuestionsNote.trim() || null },
+                file: extraQuestionsFile,
+              },
             })
           }}
         >
@@ -1089,9 +1177,12 @@ function ManageUsersPage() {
                 type="button"
                 disabled={extraQuestionsMutation.isPending}
                 onClick={() =>
-                  extraQuestionsMutation.mutate({
-                    userId: extraQuestionsUser.user_id,
-                    payload: { set: 0, note: 'Cleared extra questions' },
+                  requestAdminActionOtp({
+                    type: 'questions',
+                    payload: {
+                      userId: extraQuestionsUser.user_id,
+                      payload: { set: 0, note: 'Cleared extra questions' },
+                    },
                   })
                 }
                 className="h-11 rounded-xl border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
@@ -1131,12 +1222,15 @@ function ManageUsersPage() {
           onSubmit={(event) => {
             event.preventDefault()
             if (!planEditUser) return
-            assignPlanMutation.mutate({
-              userId: planEditUser.user_id,
-              planId: planEditForm.plan_id ? Number(planEditForm.plan_id) : null,
-              planExpiresAt: selectedPlanForEdit?.is_free
-                ? null
-                : planEditForm.plan_expires_at || null,
+            requestAdminActionOtp({
+              type: 'plan',
+              payload: {
+                userId: planEditUser.user_id,
+                planId: planEditForm.plan_id ? Number(planEditForm.plan_id) : null,
+                planExpiresAt: selectedPlanForEdit?.is_free
+                  ? null
+                  : planEditForm.plan_expires_at || null,
+              },
             })
           }}
         >
@@ -1176,13 +1270,12 @@ function ManageUsersPage() {
               <input
                 type="date"
                 value={planEditForm.plan_expires_at}
-                onChange={(e) =>
-                  setPlanEditForm((prev) => ({ ...prev, plan_expires_at: e.target.value }))
-                }
-                className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+                readOnly
+                disabled
+                className="mt-1 h-11 w-full cursor-not-allowed rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-600 outline-none"
               />
               <p className="mt-1 text-xs text-slate-500">
-                After this date the host has no active plan until you renew their access.
+                Set automatically from the plan duration when you change the plan. Not editable here.
               </p>
             </div>
           ) : null}
@@ -1202,6 +1295,98 @@ function ManageUsersPage() {
             >
               {assignPlanMutation.isPending ? 'Saving…' : 'Save plan'}
             </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={adminOtpOpen}
+        title="Verify admin action"
+        onClose={() => {
+          if (adminOtpSending || adminOtpVerifying) return
+          pendingAdminActionRef.current = null
+          setAdminOtpOpen(false)
+          setAdminOtpCode('')
+          setAdminOtpError('')
+        }}
+      >
+        <form className="space-y-4" onSubmit={confirmAdminActionOtp}>
+          <p className="text-sm text-slate-600">
+            A one-time code was sent to the configured admin OTP mailbox
+            {adminOtpSending ? '…' : '.'} Enter it to confirm this plan or quota change.
+          </p>
+          <div>
+            <label htmlFor="adminOtpCode" className="text-sm font-semibold text-slate-700">
+              Verification code
+            </label>
+            <input
+              id="adminOtpCode"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              value={adminOtpCode}
+              onChange={(e) => {
+                setAdminOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))
+                setAdminOtpError('')
+              }}
+              className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm tracking-[0.35em] outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+              placeholder="••••••"
+              required
+            />
+          </div>
+          {adminOtpError ? (
+            <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {adminOtpError}
+            </p>
+          ) : null}
+          <div className="flex flex-wrap justify-between gap-2 pt-1">
+            <button
+              type="button"
+              disabled={adminOtpSending || adminOtpVerifying}
+              onClick={async () => {
+                setAdminOtpSending(true)
+                setAdminOtpError('')
+                try {
+                  await sendAdminActionOtpApi(accessToken)
+                  setAdminOtpCode('')
+                } catch (error) {
+                  setAdminOtpError(error.message || 'Unable to resend code')
+                } finally {
+                  setAdminOtpSending(false)
+                }
+              }}
+              className="h-11 rounded-xl border border-blue-200/70 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-blue-50 disabled:opacity-60"
+            >
+              {adminOtpSending ? 'Sending…' : 'Resend code'}
+            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={adminOtpSending || adminOtpVerifying}
+                onClick={() => {
+                  pendingAdminActionRef.current = null
+                  setAdminOtpOpen(false)
+                }}
+                className="h-11 rounded-xl border border-blue-200/70 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-blue-50 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={adminOtpSending || adminOtpVerifying}
+                className="inline-flex h-11 items-center gap-2 rounded-xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 text-sm font-semibold text-white shadow-lg shadow-blue-900/25 transition hover:brightness-110 disabled:opacity-60"
+              >
+                {adminOtpVerifying ? (
+                  <>
+                    <LoaderCircle className="size-4 animate-spin" />
+                    Verifying…
+                  </>
+                ) : (
+                  'Confirm'
+                )}
+              </button>
+            </div>
           </div>
         </form>
       </Modal>

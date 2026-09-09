@@ -17,9 +17,14 @@ const {
   validateUserStatusPayload
 } = require("../validators/user.validator");
 const { validateAssignPlanPayload } = require("../validators/plan.validator");
+const { assertAdminActionOtpToken } = require("../services/otp.service");
 
 // Extra questions uses the same add/set/note/attachment payload shape as seats.
 const validateExtraQuestionsPayload = validateExtraParticipantsPayload;
+
+function requireAdminActionOtp(req) {
+  assertAdminActionOtpToken(req.body?.otp_token);
+}
 
 async function list(req, res) {
   try {
@@ -60,6 +65,8 @@ async function assignPlan(req, res) {
       return errorResponse(res, "Validation failed", 400, errors);
     }
 
+    requireAdminActionOtp(req);
+
     const user = await assignUserPlan({
       userId,
       planId: req.body.plan_id,
@@ -96,6 +103,8 @@ async function adjustExtraParticipants(req, res) {
     if (errors.length > 0) {
       return errorResponse(res, "Validation failed", 400, errors);
     }
+
+    requireAdminActionOtp(req);
 
     const user = await adjustUserExtraParticipants({
       userId,
@@ -185,6 +194,8 @@ async function adjustExtraQuestions(req, res) {
     if (errors.length > 0) {
       return errorResponse(res, "Validation failed", 400, errors);
     }
+
+    requireAdminActionOtp(req);
 
     const user = await adjustUserExtraQuestions({
       userId,

@@ -3,6 +3,7 @@ const { sequelize } = require("../config/database");
 
 const WEBSITE_SIGNUP_PURPOSE = "website_signup";
 const WEEKLY_SUMMARY_PURPOSE = "weekly_summary";
+const ADMIN_ACTION_OTP_PURPOSE = "admin_action_otp";
 
 const NotificationRecipient = sequelize.define(
   "notification_recipients",
@@ -36,5 +37,6 @@ const NotificationRecipient = sequelize.define(
 
 NotificationRecipient.WEBSITE_SIGNUP_PURPOSE = WEBSITE_SIGNUP_PURPOSE;
 NotificationRecipient.WEEKLY_SUMMARY_PURPOSE = WEEKLY_SUMMARY_PURPOSE;
+NotificationRecipient.ADMIN_ACTION_OTP_PURPOSE = ADMIN_ACTION_OTP_PURPOSE;
 
 module.exports = NotificationRecipient;

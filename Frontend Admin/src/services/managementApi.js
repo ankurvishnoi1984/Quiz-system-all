@@ -63,11 +63,12 @@ export async function setUserStatusApi(accessToken, userId, isActive) {
   return data?.user
 }
 
-export async function assignUserPlanApi(accessToken, userId, planId, planExpiresAt) {
+export async function assignUserPlanApi(accessToken, userId, planId, planExpiresAt, otpToken) {
   const body = { plan_id: planId }
   if (planExpiresAt !== undefined) {
     body.plan_expires_at = planExpiresAt || null
   }
+  if (otpToken) body.otp_token = otpToken
   const data = await authRequest(`/users/${userId}/plan`, accessToken, {
     method: 'PATCH',
     body: JSON.stringify(body),
@@ -150,6 +151,30 @@ export async function adjustUserExtraParticipantsApi(accessToken, userId, payloa
   return data?.user
 }
 
+export async function adjustUserExtraQuestionsApi(accessToken, userId, payload) {
+  const data = await authRequest(`/users/${userId}/extra-questions`, accessToken, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+  return data?.user
+}
+
+export async function sendAdminActionOtpApi(accessToken) {
+  const data = await authRequest('/auth/admin-action/otp/send', accessToken, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  })
+  return data
+}
+
+export async function verifyAdminActionOtpApi(accessToken, code) {
+  const data = await authRequest('/auth/admin-action/otp/verify', accessToken, {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  })
+  return data
+}
+
 export async function listUserExtraQuestionsApi(accessToken, userId) {
   const data = await authRequest(`/users/${userId}/extra-questions`, accessToken)
   return data?.addons || []
@@ -205,14 +230,6 @@ export async function uploadExtraQuestionAttachmentApi(userId, file) {
   }
 
   return execute(false)
-}
-
-export async function adjustUserExtraQuestionsApi(accessToken, userId, payload) {
-  const data = await authRequest(`/users/${userId}/extra-questions`, accessToken, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  })
-  return data?.user
 }
 
 // Legacy public registration (unused by User Management UI).

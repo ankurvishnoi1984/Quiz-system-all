@@ -13,6 +13,18 @@ router.post("/login/verify-otp", authController.verifyLoginOtp);
 router.post("/renew/start", authController.renewStart);
 router.post("/renew/verify-otp", authController.renewVerifyOtp);
 router.post("/renew/apply", authController.renewApply);
+router.post(
+  "/admin-action/otp/send",
+  authMiddleware,
+  authorizeRoles("super_admin"),
+  authController.sendAdminActionOtp
+);
+router.post(
+  "/admin-action/otp/verify",
+  authMiddleware,
+  authorizeRoles("super_admin"),
+  authController.verifyAdminActionOtp
+);
 router.post("/otp/send", authController.sendOtp);
 router.post("/otp/verify", authController.verifyOtp);
 router.post("/refresh", authController.refresh);

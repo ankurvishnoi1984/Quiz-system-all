@@ -11,7 +11,7 @@ const {
   setHintsCompleted
 } = require("../services/auth.service");
 const { applyPlanRenewal } = require("../services/payment.service");
-const { sendOtp, verifyOtp, PURPOSES, verifyLoginChallengeToken } = require("../services/otp.service");
+const { sendOtp, verifyOtp, PURPOSES, verifyLoginChallengeToken, sendAdminActionOtp, verifyAdminActionOtp } = require("../services/otp.service");
 const { getAuthFeatureFlags } = require("../config/auth-features");
 const {
   validateLoginPayload,
@@ -252,6 +252,30 @@ async function renewApply(req, res) {
   }
 }
 
+async function sendAdminActionOtpHandler(req, res) {
+  try {
+    const result = await sendAdminActionOtp({
+      fullName: req.user?.full_name || null
+    });
+    return successResponse(res, result, "Verification code sent to configured admin emails", 200);
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
+async function verifyAdminActionOtpHandler(req, res) {
+  try {
+    const code = String(req.body?.code || "").trim();
+    if (!/^\d{6}$/.test(code)) {
+      return errorResponse(res, "Validation failed", 400, ["code must be a 6-digit number"]);
+    }
+    const result = await verifyAdminActionOtp({ code });
+    return successResponse(res, result, "Admin action verified", 200);
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
 module.exports = {
   register,
   signup,
@@ -260,6 +284,8 @@ module.exports = {
   renewStart,
   renewVerifyOtp,
   renewApply,
+  sendAdminActionOtp: sendAdminActionOtpHandler,
+  verifyAdminActionOtp: verifyAdminActionOtpHandler,
   sendOtp: sendOtpHandler,
   verifyOtp: verifyOtpHandler,
   features,

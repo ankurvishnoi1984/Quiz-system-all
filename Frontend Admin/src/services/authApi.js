@@ -64,6 +64,7 @@ export async function fetchAuthFeaturesApi() {
     response?.data || {
       payment_otp_enabled: true,
       login_otp_enabled: true,
+      admin_action_otp_enabled: true,
     }
   )
 }

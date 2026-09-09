@@ -4,8 +4,9 @@
  * Set in Backend Quiz `.env` (or process environment):
  *   PAYMENT_OTP_ENABLED=true|false
  *   LOGIN_OTP_ENABLED=true|false
+ *   ADMIN_ACTION_OTP_ENABLED=true|false
  *
- * Defaults: both enabled. Set to false/0/off to skip OTP without code changes.
+ * Defaults: all enabled. Set to false/0/off to skip OTP without code changes.
  */
 const { parseFlag } = require("./integrations");
 
@@ -17,15 +18,21 @@ function isLoginOtpEnabled() {
   return parseFlag(process.env.LOGIN_OTP_ENABLED, true);
 }
 
+function isAdminActionOtpEnabled() {
+  return parseFlag(process.env.ADMIN_ACTION_OTP_ENABLED, true);
+}
+
 function getAuthFeatureFlags() {
   return {
     payment_otp_enabled: isPaymentOtpEnabled(),
-    login_otp_enabled: isLoginOtpEnabled()
+    login_otp_enabled: isLoginOtpEnabled(),
+    admin_action_otp_enabled: isAdminActionOtpEnabled()
   };
 }
 
 module.exports = {
   isPaymentOtpEnabled,
   isLoginOtpEnabled,
+  isAdminActionOtpEnabled,
   getAuthFeatureFlags
 };
