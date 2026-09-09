@@ -28,6 +28,7 @@ const defaultInitial = {
   quizTotalTimeEnabled: false,
   quizTotalTimeMinutes: 30,
   overallLeaderboard: false,
+  showParticipantCount: false,
   logoUrl: '',
 }
 
@@ -55,6 +56,9 @@ function SessionFormModal({
   const [quizTotalTimeEnabled, setQuizTotalTimeEnabled] = useState(defaultInitial.quizTotalTimeEnabled)
   const [quizTotalTimeMinutes, setQuizTotalTimeMinutes] = useState(defaultInitial.quizTotalTimeMinutes)
   const [overallLeaderboard, setOverallLeaderboard] = useState(defaultInitial.overallLeaderboard)
+  const [showParticipantCount, setShowParticipantCount] = useState(
+    defaultInitial.showParticipantCount,
+  )
   const [autoEndEnabled, setAutoEndEnabled] = useState(defaultInitial.autoEndEnabled)
   const [logoUrl, setLogoUrl] = useState('')
   const [logoUploading, setLogoUploading] = useState(false)
@@ -76,6 +80,7 @@ function SessionFormModal({
         : 30,
     )
     setOverallLeaderboard(initialValues.overallLeaderboard === true)
+    setShowParticipantCount(initialValues.showParticipantCount === true)
     setAutoEndEnabled(Boolean(initialValues.autoEndEnabled))
     setLogoUrl(initialValues.logoUrl || '')
     setLogoError('')
@@ -173,6 +178,7 @@ function SessionFormModal({
       quizTotalTimeEnabled: enableNavigation && quizTotalTimeEnabled,
       quizTotalTimeMinutes: enableNavigation && quizTotalTimeEnabled ? quizTotalTimeMinutes : null,
       overallLeaderboard,
+      showParticipantCount,
       autoEndEnabled: !liveSettingsOnly && autoEndEnabled,
       autoEndDate: !liveSettingsOnly && autoEndEnabled ? autoEndDate : '',
       autoEndTime: !liveSettingsOnly && autoEndEnabled ? autoEndTime : '',
@@ -345,6 +351,25 @@ function SessionFormModal({
                   <option value="name">Name only</option>
                   <option value="name_email">Name + Email</option>
                 </select>
+              </div>
+              <div className="md:col-span-2">
+                <label className="flex items-center justify-between gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-700">
+                      Show participant count to joiners
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      When enabled, participants see how many people have joined (count only, no
+                      names).
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={showParticipantCount}
+                    onChange={(event) => setShowParticipantCount(event.target.checked)}
+                    className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
+                  />
+                </label>
               </div>
               <div className="md:col-span-2">
                 <label className="text-sm font-semibold text-slate-700" htmlFor="question-availability">

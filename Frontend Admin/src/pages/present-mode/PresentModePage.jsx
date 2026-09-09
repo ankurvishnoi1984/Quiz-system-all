@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BarChart3, Layers, Maximize2, Minimize2, Play, Trophy, Users } from 'lucide-react'
+import { BarChart3, Layers, Maximize2, Minimize2, Play, Trophy } from 'lucide-react'
+// import { Users } from 'lucide-react' // Participant count live toggle (kept for future)
 import { HostAlertModal } from '../../components/live/HostAlertModal'
 import { HostSessionInactivityModal } from '../../components/session/HostSessionInactivityModal'
 import { HostQuestionActionButton } from '../../components/live/HostQuestionActionButton'
@@ -269,42 +270,43 @@ function PresentModePage({
     },
   })
 
-  const sessionParticipantCountMutation = useMutation({
-    mutationFn: (enabled) =>
-      updateSessionApi(hostAccessToken, sessionId, { show_participant_count: enabled }),
-    onSuccess: (updated) => {
-      if (updated) {
-        queryClient.setQueryData(['live-session', sessionId], (old) =>
-          old
-            ? {
-                ...old,
-                ...updated,
-                show_participant_count: updated.show_participant_count,
-              }
-            : updated,
-        )
-        queryClient.setQueryData(['live-session', sessionId, 'host'], (old) =>
-          old
-            ? {
-                ...old,
-                ...updated,
-                show_participant_count: updated.show_participant_count,
-              }
-            : old,
-        )
-      }
-      queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
-      queryClient.invalidateQueries({ queryKey: ['live-dept-sessions'] })
-    },
-    onError: () => {
-      setHostAlert({
-        variant: 'error',
-        title: 'Could not update participant count',
-        message: 'Unable to update the participant count setting. Please try again.',
-        confirmLabel: 'Close',
-      })
-    },
-  })
+  // Live toggle for participant count — set at session create instead; keep for future.
+  // const sessionParticipantCountMutation = useMutation({
+  //   mutationFn: (enabled) =>
+  //     updateSessionApi(hostAccessToken, sessionId, { show_participant_count: enabled }),
+  //   onSuccess: (updated) => {
+  //     if (updated) {
+  //       queryClient.setQueryData(['live-session', sessionId], (old) =>
+  //         old
+  //           ? {
+  //               ...old,
+  //               ...updated,
+  //               show_participant_count: updated.show_participant_count,
+  //             }
+  //           : updated,
+  //       )
+  //       queryClient.setQueryData(['live-session', sessionId, 'host'], (old) =>
+  //         old
+  //           ? {
+  //               ...old,
+  //               ...updated,
+  //               show_participant_count: updated.show_participant_count,
+  //             }
+  //           : old,
+  //       )
+  //     }
+  //     queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
+  //     queryClient.invalidateQueries({ queryKey: ['live-dept-sessions'] })
+  //   },
+  //   onError: () => {
+  //     setHostAlert({
+  //       variant: 'error',
+  //       title: 'Could not update participant count',
+  //       message: 'Unable to update the participant count setting. Please try again.',
+  //       confirmLabel: 'Close',
+  //     })
+  //   },
+  // })
 
   const {
     questionLiveMutation,
@@ -784,6 +786,7 @@ function PresentModePage({
               }
             />
           ) : null}
+          {/* Participant count live toggle — configure in New Session modal instead; keep for future.
           {!readOnly && showSessionControls ? (
             <HostQuestionActionButton
               disabled={sessionParticipantCountMutation.isPending}
@@ -806,6 +809,7 @@ function PresentModePage({
               }
             />
           ) : null}
+          */}
           {!readOnly && showActivateAllQuestionsButton ? (
             <HostQuestionActionButton
               disabled={activateAllQuestionsMutation.isPending}

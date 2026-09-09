@@ -537,36 +537,37 @@ function LivePage() {
       setErrorMessage(error.message || 'Unable to update overall rankings setting'),
   })
 
-  const sessionParticipantCountMutation = useMutation({
-    mutationFn: (enabled) =>
-      updateSessionApi(accessToken, sessionId, { show_participant_count: enabled }),
-    onSuccess: (updated) => {
-      if (updated) {
-        queryClient.setQueryData(['live-session', sessionId], (old) =>
-          old
-            ? {
-                ...old,
-                ...updated,
-                show_participant_count: updated.show_participant_count,
-              }
-            : updated,
-        )
-        queryClient.setQueryData(['live-session', sessionId, 'host'], (old) =>
-          old
-            ? {
-                ...old,
-                ...updated,
-                show_participant_count: updated.show_participant_count,
-              }
-            : old,
-        )
-      }
-      queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
-      queryClient.invalidateQueries({ queryKey: ['live-dept-sessions'] })
-    },
-    onError: (error) =>
-      setErrorMessage(error.message || 'Unable to update participant count setting'),
-  })
+  // Live toggle for participant count — set at session create instead; keep for future.
+  // const sessionParticipantCountMutation = useMutation({
+  //   mutationFn: (enabled) =>
+  //     updateSessionApi(accessToken, sessionId, { show_participant_count: enabled }),
+  //   onSuccess: (updated) => {
+  //     if (updated) {
+  //       queryClient.setQueryData(['live-session', sessionId], (old) =>
+  //         old
+  //           ? {
+  //               ...old,
+  //               ...updated,
+  //               show_participant_count: updated.show_participant_count,
+  //             }
+  //           : updated,
+  //       )
+  //       queryClient.setQueryData(['live-session', sessionId, 'host'], (old) =>
+  //         old
+  //           ? {
+  //               ...old,
+  //               ...updated,
+  //               show_participant_count: updated.show_participant_count,
+  //             }
+  //           : old,
+  //       )
+  //     }
+  //     queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
+  //     queryClient.invalidateQueries({ queryKey: ['live-dept-sessions'] })
+  //   },
+  //   onError: (error) =>
+  //     setErrorMessage(error.message || 'Unable to update participant count setting'),
+  // })
 
   const sessionSurveyResultsMutation = useMutation({
     mutationFn: async (enabled) => {
@@ -1144,6 +1145,7 @@ function LivePage() {
                 }
               />
             ) : null}
+            {/* Participant count live toggle — configure in New Session modal instead; keep for future.
             {showSessionControls ? (
               <HostQuestionActionButton
                 disabled={sessionParticipantCountMutation.isPending}
@@ -1165,6 +1167,7 @@ function LivePage() {
                 }
               />
             ) : null}
+            */}
             {showActivateAllQuestionsButton ? (
               <HostQuestionActionButton
                 dataTour="activate-question"
