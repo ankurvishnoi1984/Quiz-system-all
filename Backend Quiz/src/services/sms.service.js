@@ -2,30 +2,33 @@ const env = require("../config/env");
 const { mobileForSmsApi } = require("../utils/phone");
 
 /**
- * Build Flash49 (or compatible) SMS URL.
- * SMS_URL may include {0}=to and {1}=message text.
- * SMS_MSG may include {0}=otp code.
+ * Flash49 (or compatible) SMS gateway — same pattern as the other HV project.
+ *
+ * Env:
+ *   SMS_URL            GET URL with {0}=to and {1}=message
+ *   SMS_MSG_TEMPLATE   Message body with {0}=otp (alias: SMS_MSG)
+ *   SMS_OTP_ENABLED    optional kill-switch (false/0/off)
  */
-function buildSmsMessage(otpCode) {
+const DEFAULT_SMS_URL =
+  "https://api.flash49.com/fe/api/v1/send?username=hsplotp.trans&password=Jkrnk&unicode=false&from=HVSOPL&to={0}&text={1}&dltContentId=1107172983543962142";
+
+const DEFAULT_SMS_MSG_TEMPLATE =
+  "{0} is your otp to verify your number for doctor engagement survey activity. Thank you - Highvoltage Softwares Pvt Ltd.";
+
+function formatSmsMessage(otp) {
   const template =
+    process.env.SMS_MSG_TEMPLATE ||
     process.env.SMS_MSG ||
     env.sms?.messageTemplate ||
-    "{0} is your otp to verify your number. Thank you - Highvoltage Softwares Pvt Ltd.";
-  return String(template).replace(/\{0\}/g, String(otpCode));
+    DEFAULT_SMS_MSG_TEMPLATE;
+  return String(template).replace(/\{0\}/g, String(otp));
 }
 
-function buildSmsUrl(to, message) {
+function buildSmsUrl(mobile, message) {
   const urlTemplate =
-    process.env.SMS_URL ||
-    env.sms?.urlTemplate ||
-    "";
-  if (!urlTemplate) {
-    const error = new Error("SMS_URL is not configured");
-    error.statusCode = 500;
-    throw error;
-  }
+    process.env.SMS_URL || env.sms?.urlTemplate || DEFAULT_SMS_URL;
   return String(urlTemplate)
-    .replace(/\{0\}/g, encodeURIComponent(to))
+    .replace(/\{0\}/g, encodeURIComponent(mobile))
     .replace(/\{1\}/g, encodeURIComponent(message));
 }
 
@@ -34,12 +37,13 @@ function isSmsEnabled() {
     const raw = String(process.env.SMS_OTP_ENABLED).trim().toLowerCase();
     if (["0", "false", "off", "no", "disabled"].includes(raw)) return false;
   }
-  return Boolean(process.env.SMS_URL || env.sms?.urlTemplate);
+  return true;
 }
 
 /**
- * Send OTP SMS via configured HTTP GET gateway.
- * @returns {Promise<{ sent: boolean, to: string, skipped?: boolean }>}
+ * Send OTP SMS via Flash49-style HTTP GET gateway.
+ * @param {{ mobile: string, code: string }} params
+ * @returns {Promise<{ sent: boolean, to: string, skipped?: boolean, response?: unknown }>}
  */
 async function sendOtpSms({ mobile, code }) {
   const to = mobileForSmsApi(mobile);
@@ -50,14 +54,14 @@ async function sendOtpSms({ mobile, code }) {
   }
 
   if (!isSmsEnabled()) {
-    console.warn("[sms] SMS_URL not configured — skipping SMS send (dev)");
+    console.warn("[sms] SMS_OTP_ENABLED is off — skipping SMS send");
     if (process.env.NODE_ENV !== "production") {
       console.log(`[sms] DEV OTP for ${to}: ${code}`);
     }
     return { sent: false, to, skipped: true };
   }
 
-  const message = buildSmsMessage(code);
+  const message = formatSmsMessage(code);
   const url = buildSmsUrl(to, message);
 
   const controller = new AbortController();
@@ -78,7 +82,7 @@ async function sendOtpSms({ mobile, code }) {
     }
 
     console.log("[sms] sent", { to, status: response.status, body: bodyText.slice(0, 120) });
-    return { sent: true, to };
+    return { sent: true, to, response: bodyText };
   } catch (err) {
     if (err.statusCode) throw err;
     console.error("[sms] request failed", err.message);
@@ -93,6 +97,7 @@ async function sendOtpSms({ mobile, code }) {
 module.exports = {
   sendOtpSms,
   isSmsEnabled,
-  buildSmsMessage,
+  formatSmsMessage,
+  buildSmsMessage: formatSmsMessage,
   buildSmsUrl
 };

@@ -25,6 +25,10 @@ const Participant = sequelize.define(
       type: DataTypes.STRING(255),
       allowNull: true
     },
+    mobile: {
+      type: DataTypes.STRING(20),
+      allowNull: true
+    },
     avatar_url: {
       type: DataTypes.TEXT,
       allowNull: true

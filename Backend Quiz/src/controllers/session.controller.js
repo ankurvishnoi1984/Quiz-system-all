@@ -333,6 +333,41 @@ async function joinByCode(req, res) {
   }
 }
 
+async function sendJoinOtp(req, res) {
+  try {
+    const { sendSessionJoinOtp } = require("../services/otp.service");
+    const body = req.body || {};
+    const result = await sendSessionJoinOtp({
+      code: req.params.code,
+      nickname: body.nickname,
+      email: body.email,
+      mobile: body.mobile,
+      channel: body.channel
+    });
+    return successResponse(res, result, "Verification code sent", 200);
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
+async function verifyJoinOtp(req, res) {
+  try {
+    const { verifySessionJoinOtp } = require("../services/otp.service");
+    const body = req.body || {};
+    const result = await verifySessionJoinOtp({
+      code: req.params.code,
+      nickname: body.nickname,
+      email: body.email,
+      mobile: body.mobile,
+      channel: body.channel,
+      otp_code: body.code ?? body.otp_code
+    });
+    return successResponse(res, result, "Verification successful", 200);
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
 async function duplicate(req, res) {
   try {
     const sessionId = Number(req.params.sessionId);
@@ -572,6 +607,8 @@ module.exports = {
   pingActivity,
   lookupByCode,
   joinByCode,
+  sendJoinOtp,
+  verifyJoinOtp,
   qr,
   presentViewLink,
   embedLink,

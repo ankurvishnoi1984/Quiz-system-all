@@ -1,6 +1,6 @@
 const crypto = require("crypto");
 const { Op } = require("sequelize");
-const { EmailOtp, SmsOtp, User, NotificationRecipient } = require("../models");
+const { EmailOtp, SmsOtp, User, NotificationRecipient, Session } = require("../models");
 const { sendEmailOtpMail } = require("./email.service");
 const { sendOtpSms } = require("./sms.service");
 const { signAccessToken, verifyAccessToken } = require("../utils/jwt");
@@ -8,7 +8,8 @@ const { isValidMobile, normalizeMobile } = require("../utils/phone");
 const {
   isPaymentOtpEnabled,
   isLoginOtpEnabled,
-  isAdminActionOtpEnabled
+  isAdminActionOtpEnabled,
+  isParticipantJoinOtpEnabled
 } = require("../config/auth-features");
 const env = require("../config/env");
 
@@ -16,8 +17,12 @@ const PURPOSES = {
   PAYMENT: "payment",
   LOGIN: "login",
   PLAN_RENEW: "plan_renew",
-  ADMIN_ACTION: "admin_action"
+  ADMIN_ACTION: "admin_action",
+  SESSION_JOIN: "session_join"
 };
+
+const CONTACT_JOIN_TYPES = new Set(["name_email", "name_mobile", "name_email_mobile"]);
+const SESSION_STATE_JOIN_TYPES = CONTACT_JOIN_TYPES;
 
 /** Stable storage key for admin-action OTPs (not a real mailbox). */
 const ADMIN_ACTION_OTP_STORAGE_EMAIL = "admin-action@otp.internal";
@@ -49,9 +54,13 @@ function generateOtpCode() {
 
 function assertPurpose(purpose) {
   if (
-    ![PURPOSES.PAYMENT, PURPOSES.LOGIN, PURPOSES.PLAN_RENEW, PURPOSES.ADMIN_ACTION].includes(
-      purpose
-    )
+    ![
+      PURPOSES.PAYMENT,
+      PURPOSES.LOGIN,
+      PURPOSES.PLAN_RENEW,
+      PURPOSES.ADMIN_ACTION,
+      PURPOSES.SESSION_JOIN
+    ].includes(purpose)
   ) {
     const error = new Error("Invalid OTP purpose");
     error.statusCode = 400;
@@ -75,6 +84,11 @@ function assertFeatureEnabled(purpose) {
   }
   if (purpose === PURPOSES.ADMIN_ACTION && !isAdminActionOtpEnabled()) {
     const error = new Error("Admin action OTP is disabled");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (purpose === PURPOSES.SESSION_JOIN && !isParticipantJoinOtpEnabled()) {
+    const error = new Error("Participant join OTP is disabled");
     error.statusCode = 400;
     throw error;
   }
@@ -297,17 +311,28 @@ async function sendOtp({ email, purpose, fullName, mobile }) {
   };
 }
 
-function signVerifiedToken({ email, purpose, userId, mobile }) {
+function signVerifiedToken({ email, purpose, userId, mobile, sessionCode, channel, nickname }) {
   const payload = {
     typ: "otp_verified",
-    purpose,
-    email: normalizeEmail(email)
+    purpose
   };
+  if (email) {
+    payload.email = normalizeEmail(email);
+  }
   if (userId != null) {
     payload.user_id = Number(userId);
   }
   if (mobile) {
     payload.mobile = normalizeMobile(mobile);
+  }
+  if (sessionCode) {
+    payload.session_code = String(sessionCode).trim().toUpperCase();
+  }
+  if (channel) {
+    payload.channel = channel;
+  }
+  if (nickname) {
+    payload.nickname = String(nickname).trim();
   }
   return signAccessToken(payload, { expiresIn: VERIFIED_TOKEN_TTL });
 }
@@ -575,6 +600,232 @@ function assertAdminActionOtpToken(token) {
   return assertOtpVerifiedToken(token, { purpose: PURPOSES.ADMIN_ACTION });
 }
 
+function isContactJoinType(joinType) {
+  return CONTACT_JOIN_TYPES.has(joinType);
+}
+
+function supportsParticipantSessionState(joinType) {
+  return SESSION_STATE_JOIN_TYPES.has(joinType);
+}
+
+function normalizeJoinNickname(nickname) {
+  const value = String(nickname || "").trim();
+  return value || null;
+}
+
+function resolveSessionJoinChannel(joinType, channel) {
+  if (joinType === "name_email") return "email";
+  if (joinType === "name_mobile") return "mobile";
+  if (joinType === "name_email_mobile") {
+    const normalized = String(channel || "").trim().toLowerCase();
+    if (normalized !== "email" && normalized !== "mobile") {
+      const error = new Error("Choose email or mobile to receive your verification code");
+      error.statusCode = 400;
+      throw error;
+    }
+    return normalized;
+  }
+  const error = new Error("This session does not require a verification code");
+  error.statusCode = 400;
+  throw error;
+}
+
+function assertSessionJoinIdentityFields(joinType, { nickname, email, mobile }) {
+  const normalizedNickname = normalizeJoinNickname(nickname);
+  if (!normalizedNickname) {
+    const error = new Error("Name is required to join this session");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  let normalizedEmail = null;
+  let normalizedMobile = null;
+
+  if (joinType === "name_email" || joinType === "name_email_mobile") {
+    normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail || !normalizedEmail.includes("@")) {
+      const error = new Error("A valid email is required to join this session");
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  if (joinType === "name_mobile" || joinType === "name_email_mobile") {
+    if (!isValidMobile(mobile)) {
+      const error = new Error("A valid mobile number is required to join this session");
+      error.statusCode = 400;
+      throw error;
+    }
+    normalizedMobile = normalizeMobile(mobile);
+  }
+
+  return {
+    nickname: normalizedNickname,
+    email: normalizedEmail,
+    mobile: normalizedMobile
+  };
+}
+
+async function getSessionForJoinOtp(code) {
+  const session = await Session.findOne({
+    where: { session_code: String(code || "").trim().toUpperCase() },
+    attributes: ["session_id", "session_code", "join_type", "title", "status"]
+  });
+  if (!session) {
+    const error = new Error("Session not found");
+    error.statusCode = 404;
+    throw error;
+  }
+  if (!isContactJoinType(session.join_type)) {
+    const error = new Error("This session does not require a verification code");
+    error.statusCode = 400;
+    throw error;
+  }
+  return session;
+}
+
+async function sendSessionJoinOtp({ code, nickname, email, mobile, channel }) {
+  assertFeatureEnabled(PURPOSES.SESSION_JOIN);
+
+  const session = await getSessionForJoinOtp(code);
+  const identity = assertSessionJoinIdentityFields(session.join_type, {
+    nickname,
+    email,
+    mobile
+  });
+  const resolvedChannel = resolveSessionJoinChannel(session.join_type, channel);
+  const purpose = PURPOSES.SESSION_JOIN;
+
+  if (resolvedChannel === "email") {
+    await assertResendCooldown(EmailOtp, { email: identity.email, purpose });
+    await consumeOpenOtps(EmailOtp, { email: identity.email, purpose });
+    const otpCode = await createOtpRecord(EmailOtp, {
+      email: identity.email,
+      purpose
+    });
+    await sendEmailOtpMail({
+      to: identity.email,
+      fullName: identity.nickname,
+      code: otpCode,
+      purpose,
+      expiresInMinutes: Math.round(OTP_TTL_MS / 60000)
+    });
+    return {
+      sent: true,
+      channel: "email",
+      email: identity.email,
+      purpose,
+      expires_in_seconds: Math.round(OTP_TTL_MS / 1000)
+    };
+  }
+
+  await assertResendCooldown(SmsOtp, { mobile: identity.mobile, purpose });
+  await consumeOpenOtps(SmsOtp, { mobile: identity.mobile, purpose });
+  const otpCode = await createOtpRecord(SmsOtp, {
+    mobile: identity.mobile,
+    purpose
+  });
+  const smsResult = await sendOtpSms({ mobile: identity.mobile, code: otpCode });
+
+  return {
+    sent: true,
+    channel: "mobile",
+    mobile: identity.mobile,
+    sms_sent: Boolean(smsResult?.sent),
+    sms_skipped: Boolean(smsResult?.skipped),
+    purpose,
+    expires_in_seconds: Math.round(OTP_TTL_MS / 1000)
+  };
+}
+
+async function verifySessionJoinOtp({ code, nickname, email, mobile, channel, otp_code }) {
+  assertFeatureEnabled(PURPOSES.SESSION_JOIN);
+
+  const session = await getSessionForJoinOtp(code);
+  const identity = assertSessionJoinIdentityFields(session.join_type, {
+    nickname,
+    email,
+    mobile
+  });
+  const resolvedChannel = resolveSessionJoinChannel(session.join_type, channel);
+  const purpose = PURPOSES.SESSION_JOIN;
+
+  if (resolvedChannel === "email") {
+    await verifyOtpRecord(EmailOtp, { email: identity.email, purpose }, otp_code, "email");
+  } else {
+    await verifyOtpRecord(SmsOtp, { mobile: identity.mobile, purpose }, otp_code, "mobile");
+  }
+
+  const otp_token = signVerifiedToken({
+    purpose,
+    email: identity.email || undefined,
+    mobile: identity.mobile || undefined,
+    sessionCode: session.session_code,
+    channel: resolvedChannel,
+    nickname: identity.nickname
+  });
+
+  return {
+    verified: true,
+    channel: resolvedChannel,
+    email: identity.email || undefined,
+    mobile: identity.mobile || undefined,
+    purpose,
+    otp_token
+  };
+}
+
+function assertSessionJoinOtpToken(token, { sessionCode, nickname, email, mobile } = {}) {
+  if (!isParticipantJoinOtpEnabled()) return null;
+
+  if (!token || typeof token !== "string") {
+    const error = new Error("Verification is required before joining this session");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  const decoded = assertOtpVerifiedToken(token, { purpose: PURPOSES.SESSION_JOIN });
+  const expectedCode = String(sessionCode || "")
+    .trim()
+    .toUpperCase();
+  if (!expectedCode || decoded.session_code !== expectedCode) {
+    const error = new Error("Verification does not match this session. Please verify again.");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  const expectedNickname = normalizeJoinNickname(nickname);
+  if (
+    !expectedNickname ||
+    String(decoded.nickname || "").trim().toLowerCase() !== expectedNickname.toLowerCase()
+  ) {
+    const error = new Error("Verification does not match this name. Please verify again.");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  if (decoded.channel === "email") {
+    if (!email || normalizeEmail(decoded.email) !== normalizeEmail(email)) {
+      const error = new Error("Verification does not match this email. Please verify again.");
+      error.statusCode = 401;
+      throw error;
+    }
+  } else if (decoded.channel === "mobile") {
+    const expectedMobile = normalizeMobile(mobile);
+    if (!expectedMobile || decoded.mobile !== expectedMobile) {
+      const error = new Error("Verification does not match this mobile number. Please verify again.");
+      error.statusCode = 401;
+      throw error;
+    }
+  } else {
+    const error = new Error("Verification expired or invalid. Please verify again.");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  return decoded;
+}
+
 module.exports = {
   PURPOSES,
   sendOtp,
@@ -588,5 +839,11 @@ module.exports = {
   verifyAdminActionOtp,
   assertAdminActionOtpToken,
   listAdminActionOtpEmails,
-  normalizeEmail
+  normalizeEmail,
+  isContactJoinType,
+  supportsParticipantSessionState,
+  assertSessionJoinIdentityFields,
+  sendSessionJoinOtp,
+  verifySessionJoinOtp,
+  assertSessionJoinOtpToken
 };

@@ -1,6 +1,8 @@
 import { BrandLogoPair } from '../../../components/branding/BrandLogoPair'
 import { PageCenteredShell } from './PageCenteredShell'
 
+const CONTACT_JOIN_TYPES = new Set(['name_email', 'name_mobile', 'name_email_mobile'])
+
 export function JoinFormView({
   hasSessionCodeInUrl,
   sessionCodeInput,
@@ -15,6 +17,17 @@ export function JoinFormView({
   onNameChange,
   email,
   onEmailChange,
+  mobile,
+  onMobileChange,
+  otpEnabled = false,
+  otpChannel = 'email',
+  onOtpChannelChange,
+  otpCode = '',
+  onOtpCodeChange,
+  otpSent = false,
+  otpBusy = false,
+  joinBusy = false,
+  onSendOtp,
   joinError,
   joinBlocked = false,
   joinBlockedMessage = '',
@@ -22,6 +35,13 @@ export function JoinFormView({
   onSubmit,
 }) {
   const lockJoinFields = joinBlocked && joinBlockedReason !== 'plan_limit'
+  const showEmail =
+    joinRequirement === 'name_email' || joinRequirement === 'name_email_mobile'
+  const showMobile =
+    joinRequirement === 'name_mobile' || joinRequirement === 'name_email_mobile'
+  const needsOtp = otpEnabled && CONTACT_JOIN_TYPES.has(joinRequirement)
+  const showChannelPicker = needsOtp && joinRequirement === 'name_email_mobile'
+  const busy = otpBusy || joinBusy
 
   return (
     <PageCenteredShell maxWidth="max-w-lg">
@@ -86,7 +106,7 @@ export function JoinFormView({
               />
             </div>
 
-            {joinRequirement === 'name_email' ? (
+            {showEmail ? (
               <div>
                 <label className="text-sm font-semibold text-slate-700">Email</label>
                 <input
@@ -96,6 +116,75 @@ export function JoinFormView({
                   className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
                   placeholder="Enter your email"
                 />
+              </div>
+            ) : null}
+
+            {showMobile ? (
+              <div>
+                <label className="text-sm font-semibold text-slate-700">Mobile</label>
+                <input
+                  type="tel"
+                  value={mobile}
+                  onChange={(e) => onMobileChange(e.target.value)}
+                  className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+                  placeholder="10-digit mobile number"
+                  autoComplete="tel"
+                />
+              </div>
+            ) : null}
+
+            {needsOtp ? (
+              <div className="space-y-3 rounded-xl border border-blue-200/70 bg-slate-50/80 p-3">
+                <p className="text-sm font-semibold text-slate-700">Verify to join</p>
+                {showChannelPicker ? (
+                  <div className="flex flex-wrap gap-4">
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="radio"
+                        name="otp-channel"
+                        checked={otpChannel === 'email'}
+                        onChange={() => onOtpChannelChange?.('email')}
+                      />
+                      Email
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="radio"
+                        name="otp-channel"
+                        checked={otpChannel === 'mobile'}
+                        onChange={() => onOtpChannelChange?.('mobile')}
+                      />
+                      Mobile
+                    </label>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500">
+                    We&apos;ll send a code to your {joinRequirement === 'name_mobile' ? 'mobile' : 'email'}.
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={onSendOtp}
+                  disabled={busy}
+                  className="h-10 w-full rounded-xl border border-blue-300 bg-white text-sm font-semibold text-navy-800 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {otpBusy ? 'Sending…' : otpSent ? 'Resend code' : 'Send code'}
+                </button>
+
+                {otpSent ? (
+                  <div>
+                    <label className="text-sm font-semibold text-slate-700">Verification code</label>
+                    <input
+                      value={otpCode}
+                      onChange={(e) => onOtpCodeChange?.(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm tracking-widest outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+                      placeholder="6-digit code"
+                    />
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </>
@@ -122,10 +211,15 @@ export function JoinFormView({
 
         <button
           type="submit"
-          disabled={lockJoinFields || (!showJoinDetails && !effectiveSessionCode)}
+          disabled={
+            lockJoinFields ||
+            (!showJoinDetails && !effectiveSessionCode) ||
+            busy ||
+            (needsOtp && (!otpSent || String(otpCode || '').length !== 6))
+          }
           className="h-11 w-full rounded-xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 text-sm font-semibold text-white shadow-lg shadow-blue-900/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Join
+          {joinBusy ? 'Joining…' : needsOtp ? 'Verify & join' : 'Join'}
         </button>
       </form>
     </PageCenteredShell>

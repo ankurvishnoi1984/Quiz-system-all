@@ -61,6 +61,25 @@ export async function joinSessionApi(sessionCode, payload) {
   }
 }
 
+export async function sendSessionJoinOtpApi(sessionCode, payload) {
+  return publicRequest(`/sessions/join/${encodeURIComponent(sessionCode)}/otp/send`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function verifySessionJoinOtpApi(sessionCode, payload) {
+  const data = await publicRequest(`/sessions/join/${encodeURIComponent(sessionCode)}/otp/verify`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return {
+    otpToken: data?.otp_token || null,
+    channel: data?.channel || null,
+    verified: Boolean(data?.verified),
+  }
+}
+
 export async function getParticipantSessionStateApi(participantToken) {
   const data = await authRequest('/participants/me/session-state', participantToken)
   return data?.session_state || null

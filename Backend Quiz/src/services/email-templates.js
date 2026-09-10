@@ -1092,7 +1092,9 @@ function renderEmailOtpEmail({ fullName, code, purpose, expiresInMinutes, brandN
           ? "plan renewal verification"
           : purpose === "admin_action"
             ? "admin action verification"
-            : "verification";
+            : purpose === "session_join"
+              ? "session join verification"
+              : "verification";
   const title =
     purpose === "login"
       ? "Your login code"
@@ -1102,7 +1104,9 @@ function renderEmailOtpEmail({ fullName, code, purpose, expiresInMinutes, brandN
           ? "Your plan renewal code"
           : purpose === "admin_action"
             ? "Your admin action verification code"
-            : "Your verification code";
+            : purpose === "session_join"
+              ? "Your session join code"
+              : "Your verification code";
 
   const bodyHtml = `
     <p style="margin:0 0 16px;font-size:16px;line-height:1.65;color:${BRAND.slate};">${safeGreeting}</p>

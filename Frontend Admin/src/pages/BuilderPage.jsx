@@ -1384,7 +1384,7 @@ function BuilderPage() {
       maxParticipants: Number(sessionQuery.data.max_participants || 300),
       password: '',
     })
-    setJoinRequirement(sessionQuery.data.is_anonymous_default ? 'anonymous' : 'name')
+    setJoinRequirement(sessionQuery.data.join_type || (sessionQuery.data.is_anonymous_default ? 'anonymous' : 'name'))
   }, [sessionQuery.data])
 
   useEffect(() => {
@@ -2185,7 +2185,8 @@ function BuilderPage() {
       await updateSessionApi(accessToken, sessionNumericId, {
         ...(isDraft
           ? {
-              is_anonymous_default: settings.anonymous,
+              is_anonymous_default: joinRequirement === 'anonymous' || settings.anonymous,
+              join_type: joinRequirement || 'name',
               max_participants: settings.maxParticipants,
             }
           : {}),
@@ -3024,6 +3025,8 @@ function BuilderPage() {
                   <option value="anonymous">Anonymous (no name/email)</option>
                   <option value="name">Name only</option>
                   <option value="name_email">Name + Email</option>
+                  <option value="name_mobile">Name + Mobile</option>
+                  <option value="name_email_mobile">Name + Email + Mobile</option>
                 </select>
               </div>
 

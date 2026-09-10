@@ -115,9 +115,11 @@ function validateCreateSessionPayload(payload) {
 
   if (
     payload?.join_type !== undefined &&
-    !['name', 'anonymous', 'name_email'].includes(payload.join_type)
+    !['name', 'anonymous', 'name_email', 'name_mobile', 'name_email_mobile'].includes(payload.join_type)
   ) {
-    errors.push("join_type must be one of: name, anonymous, name_email");
+    errors.push(
+      "join_type must be one of: name, anonymous, name_email, name_mobile, name_email_mobile"
+    );
   }
 
   if (
@@ -205,9 +207,11 @@ function validateUpdateSessionPayload(payload) {
 
   if (
     payload?.join_type !== undefined &&
-    !["name", "anonymous", "name_email"].includes(payload.join_type)
+    !["name", "anonymous", "name_email", "name_mobile", "name_email_mobile"].includes(payload.join_type)
   ) {
-    errors.push("join_type must be one of: name, anonymous, name_email");
+    errors.push(
+      "join_type must be one of: name, anonymous, name_email, name_mobile, name_email_mobile"
+    );
   }
 
   const scheduledDateError = validateScheduledDate(payload?.scheduled_date);
@@ -246,10 +250,19 @@ function validateJoinSessionPayload(payload) {
   }
 
   if (
+    payload?.email !== undefined &&
     payload?.email !== null &&
     (typeof payload.email !== "string" || payload.email.trim().length === 0)
   ) {
-    errors.push("email must be a non-empty string when provided",payload.email);
+    errors.push("email must be a non-empty string when provided");
+  }
+
+  if (
+    payload?.mobile !== undefined &&
+    payload?.mobile !== null &&
+    (typeof payload.mobile !== "string" || payload.mobile.trim().length === 0)
+  ) {
+    errors.push("mobile must be a non-empty string when provided");
   }
 
   if (
@@ -257,6 +270,14 @@ function validateJoinSessionPayload(payload) {
     typeof payload.force_new_participant !== "boolean"
   ) {
     errors.push("force_new_participant must be a boolean when provided");
+  }
+
+  if (
+    payload?.otp_token !== undefined &&
+    payload?.otp_token !== null &&
+    typeof payload.otp_token !== "string"
+  ) {
+    errors.push("otp_token must be a string when provided");
   }
 
   return errors;

@@ -57,7 +57,7 @@ const Session = sequelize.define(
       defaultValue: "draft"
     },
     join_type: {
-      type: DataTypes.ENUM('name', 'anonymous', 'name_email'),
+      type: DataTypes.ENUM('name', 'anonymous', 'name_email', 'name_mobile', 'name_email_mobile'),
       allowNull: false,
       defaultValue: 'name'
     },

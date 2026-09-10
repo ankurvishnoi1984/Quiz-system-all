@@ -19,11 +19,19 @@ const {
   assertSessionAcceptingJoin,
   finalizeParticipantJoin,
   findParticipantByDeviceFingerprint,
-  findParticipantByNameEmail,
+  findParticipantByJoinIdentity,
   normalizeParticipantEmail,
+  normalizeParticipantMobile,
   wantsFreshParticipantIdentity,
   normalizeParticipantNickname
 } = require("./participant.service");
+const {
+  isContactJoinType,
+  assertSessionJoinIdentityFields,
+  assertSessionJoinOtpToken
+} = require("./otp.service");
+const { isParticipantJoinOtpEnabled } = require("../config/auth-features");
+const { isValidMobile } = require("../utils/phone");
 const {
   getPlanJoinBlock,
   notifyHostPlanLimitIfNeeded,
@@ -783,9 +791,43 @@ async function joinSession({ code, payload }) {
   const session = await getSessionByCode(code);
   const joinPayload = payload || {};
 
-  const existingByIdentity = await findParticipantByNameEmail(session, joinPayload);
+  let identity = {
+    nickname: normalizeParticipantNickname(joinPayload.nickname),
+    email: null,
+    mobile: null
+  };
+
+  if (isContactJoinType(session.join_type)) {
+    identity = assertSessionJoinIdentityFields(session.join_type, joinPayload);
+    if (isParticipantJoinOtpEnabled()) {
+      assertSessionJoinOtpToken(joinPayload.otp_token, {
+        sessionCode: session.session_code,
+        nickname: identity.nickname,
+        email: identity.email,
+        mobile: identity.mobile
+      });
+    }
+  } else if (session.join_type === "name") {
+    if (!identity.nickname) {
+      const error = new Error("Name is required to join this session");
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  const existingByIdentity = await findParticipantByJoinIdentity(session, {
+    nickname: identity.nickname,
+    email: identity.email || joinPayload.email,
+    mobile: identity.mobile || joinPayload.mobile
+  });
   if (existingByIdentity) {
     assertSessionAcceptingJoin(session, { isReturning: true });
+    if (identity.mobile && !existingByIdentity.mobile) {
+      await existingByIdentity.update({ mobile: identity.mobile });
+    }
+    if (identity.email && !existingByIdentity.email) {
+      await existingByIdentity.update({ email: identity.email });
+    }
     const { assignRandomSetToParticipant } = require("./question-set.service");
     const { assignRandomQuestionOrderToParticipant } = require("../utils/participantQuestionOrder");
     await assignRandomSetToParticipant(session, existingByIdentity);
@@ -796,14 +838,21 @@ async function joinSession({ code, payload }) {
     });
   }
 
-  if (joinPayload.device_fingerprint && !wantsFreshParticipantIdentity(joinPayload)) {
+  const skipDeviceRejoin =
+    isContactJoinType(session.join_type) && isParticipantJoinOtpEnabled();
+
+  if (
+    !skipDeviceRejoin &&
+    joinPayload.device_fingerprint &&
+    !wantsFreshParticipantIdentity(joinPayload)
+  ) {
     const existingByDevice = await findParticipantByDeviceFingerprint(
       session.session_id,
       joinPayload.device_fingerprint
     );
     const wantsFreshIdentity =
       Boolean(joinPayload.nickname || joinPayload.avatar_url) &&
-      session.join_type !== "name_email";
+      !isContactJoinType(session.join_type);
     if (existingByDevice && !wantsFreshIdentity) {
       assertSessionAcceptingJoin(session, { isReturning: true });
       const { assignRandomSetToParticipant } = require("./question-set.service");
@@ -825,30 +874,27 @@ async function joinSession({ code, payload }) {
   try {
     await assertParticipantCapacity(session);
 
-    if (session.join_type === "name_email") {
-      const email = normalizeParticipantEmail(joinPayload.email);
-      const nickname = normalizeParticipantNickname(joinPayload.nickname);
-      if (!email || !nickname) {
-        const error = new Error("Name and email are required to join this session");
-        error.statusCode = 400;
-        throw error;
-      }
-    }
-
     const isAnonymous = resolveParticipantAnonymous(session, joinPayload);
     const nickname = isAnonymous
       ? await nextAnonymousNickname(session.session_id)
-      : joinPayload.nickname || null;
-    const email =
-      session.join_type === "name_email" && joinPayload.email
+      : identity.nickname || joinPayload.nickname || null;
+    const email = identity.email
+      ? identity.email
+      : joinPayload.email
         ? normalizeParticipantEmail(joinPayload.email)
-        : joinPayload.email || null;
+        : null;
+    const mobile = identity.mobile
+      ? identity.mobile
+      : joinPayload.mobile && isValidMobile(joinPayload.mobile)
+        ? normalizeParticipantMobile(joinPayload.mobile)
+        : null;
 
     const participant = await Participant.create({
       session_id: session.session_id,
       dept_id: session.dept_id,
       nickname,
       email,
+      mobile,
       avatar_url: joinPayload.avatar_url || null,
       is_anonymous: isAnonymous,
       device_fingerprint: joinPayload.device_fingerprint || null,

@@ -485,7 +485,15 @@ export default function ShareSessionPanel({
           </div>
           <p className="rounded-xl border border-sky-200 bg-sky-50/80 px-3 py-2 text-xs leading-relaxed text-slate-600">
             Share the join page link and session code separately. Participants open the join page, enter the code,
-            then provide their name{session.join_type === 'name_email' ? ' and email' : ''} as required.
+            then provide their{' '}
+            {session.join_type === 'name_email_mobile'
+              ? 'name, email, and mobile'
+              : session.join_type === 'name_email'
+                ? 'name and email'
+                : session.join_type === 'name_mobile'
+                  ? 'name and mobile'
+                  : 'name'}{' '}
+            as required.
           </p>
         </div>
       )}

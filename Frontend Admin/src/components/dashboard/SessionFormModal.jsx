@@ -350,6 +350,8 @@ function SessionFormModal({
                   <option value="anonymous">Anonymous (no name/email)</option>
                   <option value="name">Name only</option>
                   <option value="name_email">Name + Email</option>
+                  <option value="name_mobile">Name + Mobile</option>
+                  <option value="name_email_mobile">Name + Email + Mobile</option>
                 </select>
               </div>
               <div className="md:col-span-2">

@@ -8,12 +8,15 @@ import {
   getParticipantSessionSurveySummaryApi,
   getParticipantSurveyQuestionResultsApi,
   joinSessionApi,
+  sendSessionJoinOtpApi,
+  verifySessionJoinOtpApi,
   // listQaQuestionsApi, // Q&A feature disabled
   listSessionQuestionsApi,
   lookupSessionApi,
   submitResponseApi,
   // upvoteQaApi, // Q&A feature disabled
 } from '../../services/participantApi'
+import { fetchAuthFeaturesApi } from '../../services/authApi'
 import { createRealtimeClient, RealtimeEvent } from '../../services/realtimeClient'
 import { useParticipantStore } from '../../store/participantStore'
 import { useParticipantProgressPersistence } from '../../hooks/useParticipantProgressPersistence'
@@ -172,6 +175,12 @@ function ParticipantSessionPage() {
   const [step, setStep] = useState('join')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [mobile, setMobile] = useState('')
+  const [otpChannel, setOtpChannel] = useState('email')
+  const [otpCode, setOtpCode] = useState('')
+  const [otpSent, setOtpSent] = useState(false)
+  const [otpBusy, setOtpBusy] = useState(false)
+  const [joinBusy, setJoinBusy] = useState(false)
   const [joinError, setJoinError] = useState('')
   const [transitioningLive, setTransitioningLive] = useState(false)
   const [tagsInput, setTagsInput] = useState('')
@@ -421,8 +430,18 @@ function ParticipantSessionPage() {
   ])
 
   const joinRequirement = session?.join_type || 'name'
+  const authFeaturesQuery = useQuery({
+    queryKey: ['auth-features'],
+    queryFn: fetchAuthFeaturesApi,
+    staleTime: 5 * 60 * 1000,
+  })
+  const participantJoinOtpEnabled = authFeaturesQuery.data?.participant_join_otp_enabled !== false
+  const contactJoinTypes = useMemo(
+    () => new Set(['name_email', 'name_mobile', 'name_email_mobile']),
+    [],
+  )
   useParticipantProgressPersistence({
-    enabled: joinRequirement === 'name_email' && Boolean(participantToken),
+    enabled: contactJoinTypes.has(joinRequirement) && Boolean(participantToken),
     participantToken,
   })
   const timeLimit = question?.timeLimit ?? 0
@@ -574,6 +593,12 @@ function ParticipantSessionPage() {
   useEffect(() => {
     setUnseenActivatedQuestionIds(new Set())
   }, [effectiveSessionCode])
+
+  useEffect(() => {
+    setOtpSent(false)
+    setOtpCode('')
+    setOtpChannel(joinRequirement === 'name_mobile' ? 'mobile' : 'email')
+  }, [effectiveSessionCode, joinRequirement])
 
   const liveUnseenSyncedRef = useRef(false)
   useEffect(() => {
@@ -1926,11 +1951,14 @@ function ParticipantSessionPage() {
     }
 
     try {
-      let nickname, checkEmail, isAnonymous
+      let nickname = null
+      let checkEmail = null
+      let checkMobile = null
+      let isAnonymous = false
+      const needsContactOtp =
+        participantJoinOtpEnabled && contactJoinTypes.has(joinRequirement)
 
       if (joinRequirement === 'anonymous') {
-        nickname = null
-        checkEmail = null
         isAnonymous = true
       } else if (joinRequirement === 'name') {
         if (!name?.trim()) {
@@ -1938,8 +1966,6 @@ function ParticipantSessionPage() {
           return
         }
         nickname = name.trim()
-        checkEmail = null
-        isAnonymous = false
       } else if (joinRequirement === 'name_email') {
         if (!name?.trim()) {
           setJoinError('Please enter your name')
@@ -1951,14 +1977,79 @@ function ParticipantSessionPage() {
         }
         nickname = name.trim()
         checkEmail = email.trim()
-        isAnonymous = false
+      } else if (joinRequirement === 'name_mobile') {
+        if (!name?.trim()) {
+          setJoinError('Please enter your name')
+          return
+        }
+        if (!mobile?.trim()) {
+          setJoinError('Please enter your mobile number')
+          return
+        }
+        nickname = name.trim()
+        checkMobile = mobile.trim()
+      } else if (joinRequirement === 'name_email_mobile') {
+        if (!name?.trim()) {
+          setJoinError('Please enter your name')
+          return
+        }
+        if (!email?.trim()) {
+          setJoinError('Please enter your email')
+          return
+        }
+        if (!mobile?.trim()) {
+          setJoinError('Please enter your mobile number')
+          return
+        }
+        nickname = name.trim()
+        checkEmail = email.trim()
+        checkMobile = mobile.trim()
+      } else {
+        setJoinError('Unsupported join requirement for this session')
+        return
+      }
+
+      let otpToken = null
+      if (needsContactOtp) {
+        const channel =
+          joinRequirement === 'name_mobile'
+            ? 'mobile'
+            : joinRequirement === 'name_email'
+              ? 'email'
+              : otpChannel
+        if (!otpSent) {
+          setJoinError('Send a verification code first')
+          return
+        }
+        if (!/^\d{6}$/.test(String(otpCode || '').trim())) {
+          setJoinError('Enter the 6-digit verification code')
+          return
+        }
+        setJoinBusy(true)
+        const verified = await verifySessionJoinOtpApi(effectiveSessionCode, {
+          nickname,
+          email: checkEmail,
+          mobile: checkMobile,
+          channel,
+          code: otpCode.trim(),
+        })
+        otpToken = verified.otpToken
+        if (!otpToken) {
+          setJoinError('Verification failed. Please try again.')
+          setJoinBusy(false)
+          return
+        }
+      } else {
+        setJoinBusy(true)
       }
 
       const joinPayload = {
         email: checkEmail,
+        mobile: checkMobile,
         is_anonymous: isAnonymous,
       }
       if (nickname) joinPayload.nickname = nickname
+      if (otpToken) joinPayload.otp_token = otpToken
 
       const result = await joinSessionApi(effectiveSessionCode, joinPayload)
       if (result.isReturning && result.sessionState) {
@@ -1972,6 +2063,7 @@ function ParticipantSessionPage() {
         participant: {
           name: result.participant.nickname || 'Anonymous',
           email: result.participant.email,
+          mobile: result.participant.mobile,
           anonymous: result.participant.is_anonymous,
         },
         sessionCode: effectiveSessionCode,
@@ -1987,6 +2079,58 @@ function ParticipantSessionPage() {
       playJoinedSession()
     } catch (err) {
       setJoinError(err.message || 'Failed to join session')
+    } finally {
+      setJoinBusy(false)
+    }
+  }
+
+  const handleSendJoinOtp = async () => {
+    setJoinError('')
+    if (!effectiveSessionCode || !session) {
+      setJoinError('Session not found. Check the code and try again.')
+      return
+    }
+
+    try {
+      if (!name?.trim()) {
+        setJoinError('Please enter your name')
+        return
+      }
+      if (
+        (joinRequirement === 'name_email' || joinRequirement === 'name_email_mobile') &&
+        !email?.trim()
+      ) {
+        setJoinError('Please enter your email')
+        return
+      }
+      if (
+        (joinRequirement === 'name_mobile' || joinRequirement === 'name_email_mobile') &&
+        !mobile?.trim()
+      ) {
+        setJoinError('Please enter your mobile number')
+        return
+      }
+
+      const channel =
+        joinRequirement === 'name_mobile'
+          ? 'mobile'
+          : joinRequirement === 'name_email'
+            ? 'email'
+            : otpChannel
+
+      setOtpBusy(true)
+      await sendSessionJoinOtpApi(effectiveSessionCode, {
+        nickname: name.trim(),
+        email: email?.trim() || undefined,
+        mobile: mobile?.trim() || undefined,
+        channel,
+      })
+      setOtpSent(true)
+      setOtpCode('')
+    } catch (err) {
+      setJoinError(err.message || 'Failed to send verification code')
+    } finally {
+      setOtpBusy(false)
     }
   }
 
@@ -2179,6 +2323,17 @@ function ParticipantSessionPage() {
         onNameChange={setName}
         email={email}
         onEmailChange={setEmail}
+        mobile={mobile}
+        onMobileChange={setMobile}
+        otpEnabled={participantJoinOtpEnabled}
+        otpChannel={otpChannel}
+        onOtpChannelChange={setOtpChannel}
+        otpCode={otpCode}
+        onOtpCodeChange={setOtpCode}
+        otpSent={otpSent}
+        otpBusy={otpBusy}
+        joinBusy={joinBusy}
+        onSendOtp={handleSendJoinOtp}
         joinError={joinError}
         joinBlocked={joinBlocked}
         joinBlockedMessage={joinBlockedMessage}

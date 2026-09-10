@@ -28,9 +28,12 @@ const env = {
   },
   sms: {
     // Flash49-style GET template: {0}=to, {1}=message. Prefer process.env.SMS_URL.
-    urlTemplate: process.env.SMS_URL || "",
-    // Message template: {0}=otp code. Prefer process.env.SMS_MSG.
+    urlTemplate:
+      process.env.SMS_URL ||
+      "https://api.flash49.com/fe/api/v1/send?username=hsplotp.trans&password=Jkrnk&unicode=false&from=HVSOPL&to={0}&text={1}&dltContentId=1107172983543962142",
+    // Message template: {0}=otp code. Prefer SMS_MSG_TEMPLATE / SMS_MSG.
     messageTemplate:
+      process.env.SMS_MSG_TEMPLATE ||
       process.env.SMS_MSG ||
       "{0} is your otp to verify your number for doctor engagement survey activity. Thank you - Highvoltage Softwares Pvt Ltd."
   }

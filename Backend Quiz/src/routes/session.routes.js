@@ -7,6 +7,8 @@ const router = express.Router();
 
 // Public join endpoints (no auth token required)
 router.get("/sessions/join/:code", sessionController.lookupByCode);
+router.post("/sessions/join/:code/otp/send", sessionController.sendJoinOtp);
+router.post("/sessions/join/:code/otp/verify", sessionController.verifyJoinOtp);
 router.post("/sessions/join/:code", sessionController.joinByCode);
 
 // Only protect session/department management routes in this router.

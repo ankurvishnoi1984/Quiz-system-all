@@ -97,26 +97,46 @@ async function assertParticipantCapacity(session) {
   }
 }
 
-async function findParticipantByNameEmail(session, payload) {
-  if (session.join_type !== "name_email") return null;
+async function findParticipantByJoinIdentity(session, payload) {
+  const joinType = session.join_type;
+  if (!["name_email", "name_mobile", "name_email_mobile"].includes(joinType)) {
+    return null;
+  }
 
-  const email = normalizeParticipantEmail(payload.email);
   const nickname = normalizeParticipantNickname(payload.nickname);
-  if (!email || !nickname) return null;
+  if (!nickname) return null;
 
-  const candidates = await Participant.findAll({
-    where: {
-      session_id: session.session_id,
-      email
-    }
-  });
+  const where = { session_id: session.session_id };
 
+  if (joinType === "name_email" || joinType === "name_email_mobile") {
+    const email = normalizeParticipantEmail(payload.email);
+    if (!email) return null;
+    where.email = email;
+  }
+
+  if (joinType === "name_mobile" || joinType === "name_email_mobile") {
+    const mobile = normalizeParticipantMobile(payload.mobile);
+    if (!mobile) return null;
+    where.mobile = mobile;
+  }
+
+  const candidates = await Participant.findAll({ where });
   const normalizedNickname = nickname.toLowerCase();
   return (
     candidates.find(
       (row) => normalizeParticipantNickname(row.nickname).toLowerCase() === normalizedNickname
     ) || null
   );
+}
+
+/** @deprecated Prefer findParticipantByJoinIdentity */
+async function findParticipantByNameEmail(session, payload) {
+  return findParticipantByJoinIdentity(session, payload);
+}
+
+function normalizeParticipantMobile(mobile) {
+  const { normalizeMobile } = require("../utils/phone");
+  return normalizeMobile(mobile);
 }
 
 async function findParticipantByDeviceFingerprint(sessionId, deviceFingerprint) {
@@ -171,8 +191,13 @@ async function assertNameEmailSessionStateAllowed(participantId) {
   const session = await Session.findByPk(participant.session_id, {
     attributes: ["join_type"]
   });
-  if (!session || session.join_type !== "name_email") {
-    const error = new Error("Session state persistence is only available for name + email sessions");
+  if (
+    !session ||
+    !["name_email", "name_mobile", "name_email_mobile"].includes(session.join_type)
+  ) {
+    const error = new Error(
+      "Session state persistence is only available for contact-based join sessions"
+    );
     error.statusCode = 400;
     throw error;
   }
@@ -190,7 +215,7 @@ async function finalizeParticipantJoin(session, participant, { isReturning = fal
     is_returning: isReturning
   };
 
-  if (session.join_type === "name_email") {
+  if (session.join_type === "name_email" || session.join_type === "name_mobile" || session.join_type === "name_email_mobile") {
     result.session_state = normalizeParticipantSessionState(refreshed.session_state);
   }
 
@@ -211,9 +236,11 @@ module.exports = {
   refreshParticipantAccessToken,
   finalizeParticipantJoin,
   findParticipantByDeviceFingerprint,
+  findParticipantByJoinIdentity,
   findParticipantByNameEmail,
   getParticipantSessionState,
   normalizeParticipantEmail,
+  normalizeParticipantMobile,
   normalizeParticipantNickname,
   saveParticipantSessionState,
   wantsFreshParticipantIdentity
