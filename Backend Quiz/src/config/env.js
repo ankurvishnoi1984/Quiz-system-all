@@ -25,6 +25,14 @@ const env = {
     accessExpiry: process.env.JWT_ACCESS_EXPIRY || "1h",
     refreshSecret: process.env.JWT_REFRESH_SECRET || "change_this_refresh_secret",
     refreshExpiry: process.env.JWT_REFRESH_EXPIRY || "7d"
+  },
+  sms: {
+    // Flash49-style GET template: {0}=to, {1}=message. Prefer process.env.SMS_URL.
+    urlTemplate: process.env.SMS_URL || "",
+    // Message template: {0}=otp code. Prefer process.env.SMS_MSG.
+    messageTemplate:
+      process.env.SMS_MSG ||
+      "{0} is your otp to verify your number for doctor engagement survey activity. Thank you - Highvoltage Softwares Pvt Ltd."
   }
 };
 

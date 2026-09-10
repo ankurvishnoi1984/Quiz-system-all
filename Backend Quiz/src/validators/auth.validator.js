@@ -66,6 +66,14 @@ function validateChangePasswordPayload(payload, { mustChangePassword = false } =
   return errors;
 }
 
+function isValidSignupMobile(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (digits.length === 10) return /^[6-9]\d{9}$/.test(digits);
+  if (digits.length === 12 && digits.startsWith("91")) return /^91[6-9]\d{9}$/.test(digits);
+  if (digits.startsWith("0") && digits.length === 11) return /^0[6-9]\d{9}$/.test(digits);
+  return false;
+}
+
 function validateSignupPayload(payload) {
   const errors = [];
 
@@ -75,6 +83,13 @@ function validateSignupPayload(payload) {
 
   if (!payload?.email || typeof payload.email !== "string" || !payload.email.trim()) {
     errors.push("email is required");
+  }
+
+  const mobile = payload?.mobile_number || payload?.mobile;
+  if (!mobile || typeof mobile !== "string" || !String(mobile).trim()) {
+    errors.push("mobile_number is required");
+  } else if (!isValidSignupMobile(mobile)) {
+    errors.push("mobile_number must be a valid 10-digit Indian mobile number");
   }
 
   if (!payload?.password || typeof payload.password !== "string") {
@@ -113,6 +128,14 @@ function validateSendOtpPayload(payload) {
   } else if (!payload?.email || typeof payload.email !== "string" || !payload.email.trim()) {
     errors.push("email is required");
   }
+  if (purpose === "payment") {
+    const mobile = payload?.mobile || payload?.mobile_number;
+    if (!mobile || typeof mobile !== "string" || !String(mobile).trim()) {
+      errors.push("mobile is required for payment verification");
+    } else if (!isValidSignupMobile(mobile)) {
+      errors.push("mobile must be a valid 10-digit Indian mobile number");
+    }
+  }
   if (payload?.full_name != null && typeof payload.full_name !== "string") {
     errors.push("full_name must be a string");
   }
@@ -128,9 +151,27 @@ function validateVerifyOtpPayload(payload) {
   if (!["payment", "login", "plan_renew"].includes(purpose)) {
     errors.push("purpose must be payment, login, or plan_renew");
   }
-  const code = String(payload?.code || "").trim();
-  if (!/^\d{6}$/.test(code)) {
-    errors.push("code must be a 6-digit number");
+
+  if (purpose === "payment") {
+    const mobile = payload?.mobile || payload?.mobile_number;
+    if (!mobile || typeof mobile !== "string" || !String(mobile).trim()) {
+      errors.push("mobile is required for payment verification");
+    } else if (!isValidSignupMobile(mobile)) {
+      errors.push("mobile must be a valid 10-digit Indian mobile number");
+    }
+    const emailCode = String(payload?.email_code || payload?.code || "").trim();
+    if (!/^\d{6}$/.test(emailCode)) {
+      errors.push("email_code must be a 6-digit number");
+    }
+    const mobileCode = String(payload?.mobile_code || "").trim();
+    if (!/^\d{6}$/.test(mobileCode)) {
+      errors.push("mobile_code must be a 6-digit number");
+    }
+  } else {
+    const code = String(payload?.code || "").trim();
+    if (!/^\d{6}$/.test(code)) {
+      errors.push("code must be a 6-digit number");
+    }
   }
   return errors;
 }

@@ -15,6 +15,19 @@ export function validateEmail(value) {
   return ''
 }
 
+export function validateMobile(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return 'Mobile number is required'
+  const digits = raw.replace(/\D/g, '')
+  let local = digits
+  if (local.startsWith('91') && local.length === 12) local = local.slice(2)
+  if (local.startsWith('0') && local.length === 11) local = local.slice(1)
+  if (!/^[6-9]\d{9}$/.test(local)) {
+    return 'Enter a valid 10-digit Indian mobile number'
+  }
+  return ''
+}
+
 export function validatePassword(value) {
   const password = String(value || '')
   if (!password) return 'Password is required'
@@ -37,6 +50,7 @@ export function validateRegisterForm(fields) {
   return {
     fullName: validateFullName(fields.fullName),
     email: validateEmail(fields.email),
+    mobile: validateMobile(fields.mobile),
     password: validatePassword(fields.password),
     plan: validatePlanId(fields.selectedPlanId),
     companyName: validateCompanyName(fields.companyName),

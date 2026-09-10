@@ -17,6 +17,7 @@ import {
   validateCompanyName,
   validateEmail,
   validateFullName,
+  validateMobile,
   validatePassword,
   validatePlanId,
   validateRegisterForm,
@@ -40,6 +41,7 @@ function RegisterPage() {
   const [fullName, setFullName] = useState('')
   const [companyName, setCompanyName] = useState('')
   const [email, setEmail] = useState('')
+  const [mobile, setMobile] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [selectedPlanId, setSelectedPlanId] = useState('')
@@ -48,7 +50,8 @@ function RegisterPage() {
   const [step, setStep] = useState('register')
   const [loading, setLoading] = useState(false)
   const [paidPayment, setPaidPayment] = useState(null)
-  const [otpCode, setOtpCode] = useState('')
+  const [emailOtpCode, setEmailOtpCode] = useState('')
+  const [mobileOtpCode, setMobileOtpCode] = useState('')
   const [otpToken, setOtpToken] = useState('')
   const [otpSending, setOtpSending] = useState(false)
 
@@ -94,6 +97,7 @@ function RegisterPage() {
     const errors = validateRegisterForm({
       fullName,
       email,
+      mobile,
       password,
       selectedPlanId,
       companyName,
@@ -122,8 +126,10 @@ function RegisterPage() {
       await sendPaymentOtpApi({
         email: email.trim(),
         fullName: fullName.trim(),
+        mobile: mobile.trim(),
       })
-      setOtpCode('')
+      setEmailOtpCode('')
+      setMobileOtpCode('')
       setOtpToken('')
       setStep('otp')
     } catch (error) {
@@ -136,9 +142,10 @@ function RegisterPage() {
   const handleOtpSubmit = async (event) => {
     event.preventDefault()
     setSubmitError('')
-    const code = otpCode.trim()
-    if (!/^\d{6}$/.test(code)) {
-      setSubmitError('Enter the 6-digit code from your email.')
+    const emailCode = emailOtpCode.trim()
+    const mobileCode = mobileOtpCode.trim()
+    if (!/^\d{6}$/.test(emailCode) || !/^\d{6}$/.test(mobileCode)) {
+      setSubmitError('Enter the 6-digit codes from your email and mobile.')
       return
     }
 
@@ -146,7 +153,9 @@ function RegisterPage() {
     try {
       const verified = await verifyPaymentOtpApi({
         email: email.trim(),
-        code,
+        mobile: mobile.trim(),
+        emailCode,
+        mobileCode,
       })
       setOtpToken(verified?.otp_token || '')
       setStep('payment')
@@ -164,8 +173,10 @@ function RegisterPage() {
       await sendPaymentOtpApi({
         email: email.trim(),
         fullName: fullName.trim(),
+        mobile: mobile.trim(),
       })
-      setOtpCode('')
+      setEmailOtpCode('')
+      setMobileOtpCode('')
     } catch (error) {
       setSubmitError(error.message || 'Unable to resend code')
     } finally {
@@ -183,6 +194,7 @@ function RegisterPage() {
         full_name: fullName.trim(),
         company_name: companyName.trim() || undefined,
         email: email.trim(),
+        mobile_number: mobile.trim(),
         password,
         plan_id: Number(selectedPlanId),
         payment_id: payment.payment_id,
@@ -200,16 +212,16 @@ function RegisterPage() {
     step === 'register'
       ? 'Create your host account'
       : step === 'otp'
-        ? 'Verify your email'
+        ? 'Verify email & mobile'
         : step === 'payment'
           ? 'Complete payment'
           : 'Confirm your plan'
 
   const stepSubtitle =
     step === 'register'
-      ? 'Register on this website, verify your email, pay for your plan, then continue in the host admin portal.'
+      ? 'Register on this website, verify your email and mobile, pay for your plan, then continue in the host admin portal.'
       : step === 'otp'
-        ? `We sent a 6-digit code to ${email.trim()}. Enter it to continue to payment.`
+        ? `We sent 6-digit codes to ${email.trim()} and ${mobile.trim()}. Enter both to continue to payment.`
         : step === 'payment'
           ? 'Use demo card or UPI checkout. Your account is created only after payment succeeds.'
           : 'Review your details before payment.'
@@ -310,6 +322,35 @@ function RegisterPage() {
               </div>
 
               <div className="space-y-1.5">
+                <label htmlFor="mobile" className="text-sm font-medium text-slate-700">
+                  Mobile number *
+                </label>
+                <input
+                  id="mobile"
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={10}
+                  value={mobile}
+                  onChange={(event) => {
+                    setMobile(event.target.value.replace(/\D/g, '').slice(0, 10))
+                    clearFieldError('mobile')
+                  }}
+                  onBlur={() =>
+                    setFieldErrors((current) => ({
+                      ...current,
+                      mobile: validateMobile(mobile),
+                    }))
+                  }
+                  className={fieldInputClass(fieldErrors.mobile)}
+                  placeholder="10-digit mobile number"
+                  autoComplete="tel"
+                  aria-invalid={Boolean(fieldErrors.mobile)}
+                  aria-describedby={fieldErrors.mobile ? 'mobile-error' : undefined}
+                />
+                <FieldError id="mobile-error" message={fieldErrors.mobile} />
+              </div>
+
+              <div className="space-y-1.5">
                 <label htmlFor="password" className="text-sm font-medium text-slate-700">
                   Password *
                 </label>
@@ -401,7 +442,7 @@ function RegisterPage() {
                     Sending code...
                   </>
                 ) : paymentOtpEnabled ? (
-                  'Continue to email verification'
+                  'Continue to verification'
                 ) : (
                   'Continue to payment'
                 )}
@@ -410,17 +451,35 @@ function RegisterPage() {
           ) : step === 'otp' ? (
             <form onSubmit={handleOtpSubmit} className="space-y-4" noValidate>
               <div className="space-y-1.5">
-                <label htmlFor="otpCode" className="text-sm font-medium text-slate-700">
-                  Verification code *
+                <label htmlFor="emailOtpCode" className="text-sm font-medium text-slate-700">
+                  Email verification code *
                 </label>
                 <input
-                  id="otpCode"
+                  id="emailOtpCode"
                   type="text"
                   inputMode="numeric"
                   autoComplete="one-time-code"
                   maxLength={6}
-                  value={otpCode}
-                  onChange={(event) => setOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                  value={emailOtpCode}
+                  onChange={(event) => setEmailOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="input-modern tracking-[0.35em]"
+                  placeholder="••••••"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="mobileOtpCode" className="text-sm font-medium text-slate-700">
+                  Mobile verification code *
+                </label>
+                <input
+                  id="mobileOtpCode"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={mobileOtpCode}
+                  onChange={(event) => setMobileOtpCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
                   className="input-modern tracking-[0.35em]"
                   placeholder="••••••"
                   required
@@ -451,7 +510,8 @@ function RegisterPage() {
                   onClick={() => {
                     setStep('register')
                     setSubmitError('')
-                    setOtpCode('')
+                    setEmailOtpCode('')
+                    setMobileOtpCode('')
                   }}
                 >
                   Back
@@ -462,7 +522,7 @@ function RegisterPage() {
                   className="font-medium text-navy-800 hover:text-navy-950 disabled:opacity-60"
                   onClick={handleResendOtp}
                 >
-                  {otpSending ? 'Sending…' : 'Resend code'}
+                  {otpSending ? 'Sending…' : 'Resend codes'}
                 </button>
               </div>
             </form>
@@ -512,6 +572,12 @@ function RegisterPage() {
                     Account: {fullName}
                     <br />
                     {email}
+                    {mobile ? (
+                      <>
+                        <br />
+                        {mobile}
+                      </>
+                    ) : null}
                   </p>
                 ) : null}
                 {paidPayment?.payment_reference ? (

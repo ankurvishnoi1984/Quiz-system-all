@@ -24,6 +24,7 @@ const {
   verifyLoginChallengeToken,
   signPlanRenewToken
 } = require("./otp.service");
+const { normalizeMobile, isValidMobile } = require("../utils/phone");
 
 const FORGOT_PASSWORD_SUCCESS_MESSAGE =
   "Reset credentials have been sent to your email. Please check your inbox.";
@@ -43,6 +44,7 @@ function buildUserPayload(user) {
   return {
     user_id: user.user_id,
     email: user.email,
+    mobile_number: user.mobile_number || null,
     full_name: user.full_name,
     role: user.role,
     client_id: user.client_id,
@@ -89,10 +91,25 @@ async function registerUser(input) {
 
 async function signupUser(input) {
   const email = input.email.toLowerCase().trim();
+  const mobileRaw = input.mobile_number || input.mobile;
+  if (!isValidMobile(mobileRaw)) {
+    const error = new Error("A valid mobile number is required");
+    error.statusCode = 400;
+    throw error;
+  }
+  const mobileNumber = normalizeMobile(mobileRaw);
+
   const existingUser = await User.findOne({ where: { email } });
 
   if (existingUser) {
     const error = new Error("Email already registered");
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const existingMobile = await User.findOne({ where: { mobile_number: mobileNumber } });
+  if (existingMobile) {
+    const error = new Error("Mobile number already registered");
     error.statusCode = 409;
     throw error;
   }
@@ -141,6 +158,7 @@ async function signupUser(input) {
       {
         full_name: input.full_name.trim(),
         email,
+        mobile_number: mobileNumber,
         password_hash,
         role: "host",
         client_id: client.client_id,

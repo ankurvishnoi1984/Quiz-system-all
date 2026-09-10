@@ -177,7 +177,7 @@ async function initiatePayment(input) {
   if (isPaymentOtpEnabled()) {
     const otpToken = input.otp_token || input.otpToken;
     if (!otpToken) {
-      const error = new Error("Email OTP verification is required before payment");
+      const error = new Error("Email and mobile OTP verification is required before payment");
       error.statusCode = 401;
       throw error;
     }

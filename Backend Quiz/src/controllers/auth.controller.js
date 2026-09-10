@@ -116,7 +116,8 @@ async function sendOtpHandler(req, res) {
     const result = await sendOtp({
       email: req.body.email,
       purpose,
-      fullName: req.body.full_name || req.body.fullName
+      fullName: req.body.full_name || req.body.fullName,
+      mobile: req.body.mobile || req.body.mobile_number
     });
     return successResponse(res, result, "Verification code sent", 200);
   } catch (err) {
@@ -139,9 +140,17 @@ async function verifyOtpHandler(req, res) {
     const result = await verifyOtp({
       email: req.body.email,
       purpose,
-      code: req.body.code
+      code: req.body.code,
+      email_code: req.body.email_code,
+      mobile: req.body.mobile || req.body.mobile_number,
+      mobile_code: req.body.mobile_code
     });
-    return successResponse(res, result, "Email verified", 200);
+    return successResponse(
+      res,
+      result,
+      purpose === PURPOSES.PAYMENT ? "Email and mobile verified" : "Email verified",
+      200
+    );
   } catch (err) {
     return errorResponse(res, err.message, err.statusCode || 500);
   }

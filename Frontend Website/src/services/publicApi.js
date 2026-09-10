@@ -125,24 +125,27 @@ export async function fetchAuthFeaturesApi() {
   )
 }
 
-export async function sendPaymentOtpApi({ email, fullName }) {
+export async function sendPaymentOtpApi({ email, fullName, mobile }) {
   return request('/auth/otp/send', {
     method: 'POST',
     body: JSON.stringify({
       email,
+      mobile,
       purpose: 'payment',
       full_name: fullName,
     }),
   })
 }
 
-export async function verifyPaymentOtpApi({ email, code }) {
+export async function verifyPaymentOtpApi({ email, mobile, emailCode, mobileCode }) {
   const response = await request('/auth/otp/verify', {
     method: 'POST',
     body: JSON.stringify({
       email,
+      mobile,
       purpose: 'payment',
-      code,
+      email_code: emailCode,
+      mobile_code: mobileCode,
     }),
   })
   return response?.data

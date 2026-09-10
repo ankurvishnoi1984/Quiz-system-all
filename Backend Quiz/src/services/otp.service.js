@@ -1,8 +1,10 @@
 const crypto = require("crypto");
 const { Op } = require("sequelize");
-const { EmailOtp, User, NotificationRecipient } = require("../models");
+const { EmailOtp, SmsOtp, User, NotificationRecipient } = require("../models");
 const { sendEmailOtpMail } = require("./email.service");
+const { sendOtpSms } = require("./sms.service");
 const { signAccessToken, verifyAccessToken } = require("../utils/jwt");
+const { isValidMobile, normalizeMobile } = require("../utils/phone");
 const {
   isPaymentOtpEnabled,
   isLoginOtpEnabled,
@@ -78,7 +80,95 @@ function assertFeatureEnabled(purpose) {
   }
 }
 
-async function sendOtp({ email, purpose, fullName }) {
+async function assertResendCooldown(Model, where) {
+  const latest = await Model.findOne({
+    where: { ...where, consumed_at: null },
+    order: [["created_at", "DESC"]]
+  });
+
+  if (latest) {
+    const ageMs = Date.now() - new Date(latest.created_at).getTime();
+    if (ageMs < OTP_RESEND_COOLDOWN_MS) {
+      const waitSec = Math.ceil((OTP_RESEND_COOLDOWN_MS - ageMs) / 1000);
+      const error = new Error(`Please wait ${waitSec}s before requesting another code`);
+      error.statusCode = 429;
+      throw error;
+    }
+  }
+}
+
+async function consumeOpenOtps(Model, where) {
+  await Model.update(
+    { consumed_at: new Date() },
+    { where: { ...where, consumed_at: null } }
+  );
+}
+
+async function createOtpRecord(Model, fields) {
+  const code = generateOtpCode();
+  const expiresAt = new Date(Date.now() + OTP_TTL_MS);
+  await Model.create({
+    ...fields,
+    code_hash: hashOtpCode(code),
+    attempts: 0,
+    expires_at: expiresAt,
+    consumed_at: null
+  });
+  return code;
+}
+
+async function verifyOtpRecord(Model, where, code, label) {
+  const normalizedCode = String(code || "").trim();
+  if (!/^\d{6}$/.test(normalizedCode)) {
+    const error = new Error(`Enter the 6-digit code from your ${label}`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const record = await Model.findOne({
+    where: {
+      ...where,
+      consumed_at: null,
+      expires_at: { [Op.gt]: new Date() }
+    },
+    order: [["created_at", "DESC"]]
+  });
+
+  if (!record) {
+    const error = new Error(
+      `${label === "email" ? "Email" : "Mobile"} verification code expired or not found. Request a new code.`
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (Number(record.attempts) >= MAX_VERIFY_ATTEMPTS) {
+    record.consumed_at = new Date();
+    await record.save();
+    const error = new Error("Too many incorrect attempts. Request a new code.");
+    error.statusCode = 429;
+    throw error;
+  }
+
+  if (record.code_hash !== hashOtpCode(normalizedCode)) {
+    record.attempts = Number(record.attempts) + 1;
+    await record.save();
+    const remaining = MAX_VERIFY_ATTEMPTS - record.attempts;
+    const error = new Error(
+      remaining > 0
+        ? `Incorrect ${label} code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`
+        : "Too many incorrect attempts. Request a new code."
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  record.consumed_at = new Date();
+  await record.save();
+  return record;
+}
+
+async function sendOtp({ email, purpose, fullName, mobile }) {
   assertPurpose(purpose);
   assertFeatureEnabled(purpose);
 
@@ -89,10 +179,25 @@ async function sendOtp({ email, purpose, fullName }) {
     throw error;
   }
 
+  let normalizedMobile = null;
   if (purpose === PURPOSES.PAYMENT) {
-    const existing = await User.findOne({ where: { email: normalizedEmail } });
-    if (existing) {
+    if (!isValidMobile(mobile)) {
+      const error = new Error("A valid mobile number is required");
+      error.statusCode = 400;
+      throw error;
+    }
+    normalizedMobile = normalizeMobile(mobile);
+
+    const existingEmail = await User.findOne({ where: { email: normalizedEmail } });
+    if (existingEmail) {
       const error = new Error("Email already registered");
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const existingMobile = await User.findOne({ where: { mobile_number: normalizedMobile } });
+    if (existingMobile) {
+      const error = new Error("Mobile number already registered");
       error.statusCode = 409;
       throw error;
     }
@@ -116,65 +221,55 @@ async function sendOtp({ email, purpose, fullName }) {
     }
   }
 
-  const latest = await EmailOtp.findOne({
-    where: {
-      email: normalizedEmail,
-      purpose,
-      consumed_at: null
-    },
-    order: [["created_at", "DESC"]]
-  });
-
-  if (latest) {
-    const ageMs = Date.now() - new Date(latest.created_at).getTime();
-    if (ageMs < OTP_RESEND_COOLDOWN_MS) {
-      const waitSec = Math.ceil((OTP_RESEND_COOLDOWN_MS - ageMs) / 1000);
-      const error = new Error(`Please wait ${waitSec}s before requesting another code`);
-      error.statusCode = 429;
-      throw error;
-    }
+  await assertResendCooldown(EmailOtp, { email: normalizedEmail, purpose });
+  if (normalizedMobile) {
+    await assertResendCooldown(SmsOtp, { mobile: normalizedMobile, purpose });
   }
 
-  await EmailOtp.update(
-    { consumed_at: new Date() },
-    {
-      where: {
-        email: normalizedEmail,
-        purpose,
-        consumed_at: null
-      }
-    }
-  );
+  await consumeOpenOtps(EmailOtp, { email: normalizedEmail, purpose });
+  if (normalizedMobile) {
+    await consumeOpenOtps(SmsOtp, { mobile: normalizedMobile, purpose });
+  }
 
-  const code = generateOtpCode();
-  const expiresAt = new Date(Date.now() + OTP_TTL_MS);
-
-  await EmailOtp.create({
+  const emailCode = await createOtpRecord(EmailOtp, {
     email: normalizedEmail,
-    purpose,
-    code_hash: hashOtpCode(code),
-    attempts: 0,
-    expires_at: expiresAt,
-    consumed_at: null
+    purpose
   });
+
+  let smsCode = null;
+  let smsResult = null;
+  if (normalizedMobile) {
+    smsCode = await createOtpRecord(SmsOtp, {
+      mobile: normalizedMobile,
+      purpose
+    });
+  }
 
   await sendEmailOtpMail({
     to: normalizedEmail,
     fullName: fullName || null,
-    code,
+    code: emailCode,
     purpose,
     expiresInMinutes: Math.round(OTP_TTL_MS / 60000)
   });
 
+  if (normalizedMobile && smsCode) {
+    smsResult = await sendOtpSms({ mobile: normalizedMobile, code: smsCode });
+  }
+
   return {
     sent: true,
     email: normalizedEmail,
+    mobile: normalizedMobile || undefined,
+    email_sent: true,
+    sms_sent: Boolean(smsResult?.sent),
+    sms_skipped: Boolean(smsResult?.skipped),
     purpose,
     expires_in_seconds: Math.round(OTP_TTL_MS / 1000)
   };
 }
 
-function signVerifiedToken({ email, purpose, userId }) {
+function signVerifiedToken({ email, purpose, userId, mobile }) {
   const payload = {
     typ: "otp_verified",
     purpose,
@@ -183,10 +278,13 @@ function signVerifiedToken({ email, purpose, userId }) {
   if (userId != null) {
     payload.user_id = Number(userId);
   }
+  if (mobile) {
+    payload.mobile = normalizeMobile(mobile);
+  }
   return signAccessToken(payload, { expiresIn: VERIFIED_TOKEN_TTL });
 }
 
-function assertOtpVerifiedToken(token, { purpose, email } = {}) {
+function assertOtpVerifiedToken(token, { purpose, email, mobile } = {}) {
   let decoded;
   try {
     decoded = verifyAccessToken(token);
@@ -214,61 +312,69 @@ function assertOtpVerifiedToken(token, { purpose, email } = {}) {
     throw error;
   }
 
+  if (mobile) {
+    const expected = normalizeMobile(mobile);
+    if (!expected || decoded.mobile !== expected) {
+      const error = new Error("Mobile verification does not match this account");
+      error.statusCode = 401;
+      throw error;
+    }
+  }
+
+  if (purpose === PURPOSES.PAYMENT && !decoded.mobile) {
+    const error = new Error("Mobile verification is required. Please verify again.");
+    error.statusCode = 401;
+    throw error;
+  }
+
   return decoded;
 }
 
-async function verifyOtp({ email, purpose, code }) {
+async function verifyOtp({ email, purpose, code, email_code, mobile, mobile_code }) {
   assertPurpose(purpose);
   assertFeatureEnabled(purpose);
 
   const normalizedEmail = normalizeEmail(email);
-  const normalizedCode = String(code || "").trim();
 
-  if (!/^\d{6}$/.test(normalizedCode)) {
-    const error = new Error("Enter the 6-digit code from your email");
-    error.statusCode = 400;
-    throw error;
-  }
+  if (purpose === PURPOSES.PAYMENT) {
+    if (!isValidMobile(mobile)) {
+      const error = new Error("A valid mobile number is required");
+      error.statusCode = 400;
+      throw error;
+    }
+    const normalizedMobile = normalizeMobile(mobile);
+    const emailCode = email_code != null && String(email_code).trim() !== "" ? email_code : code;
+    const mobileCode = mobile_code;
 
-  const record = await EmailOtp.findOne({
-    where: {
+    await verifyOtpRecord(
+      EmailOtp,
+      { email: normalizedEmail, purpose },
+      emailCode,
+      "email"
+    );
+    await verifyOtpRecord(
+      SmsOtp,
+      { mobile: normalizedMobile, purpose },
+      mobileCode,
+      "mobile"
+    );
+
+    const otp_token = signVerifiedToken({
       email: normalizedEmail,
       purpose,
-      consumed_at: null,
-      expires_at: { [Op.gt]: new Date() }
-    },
-    order: [["created_at", "DESC"]]
-  });
+      mobile: normalizedMobile
+    });
 
-  if (!record) {
-    const error = new Error("Verification code expired or not found. Request a new code.");
-    error.statusCode = 400;
-    throw error;
+    return {
+      verified: true,
+      email: normalizedEmail,
+      mobile: normalizedMobile,
+      purpose,
+      otp_token
+    };
   }
 
-  if (Number(record.attempts) >= MAX_VERIFY_ATTEMPTS) {
-    record.consumed_at = new Date();
-    await record.save();
-    const error = new Error("Too many incorrect attempts. Request a new code.");
-    error.statusCode = 429;
-    throw error;
-  }
-
-  if (record.code_hash !== hashOtpCode(normalizedCode)) {
-    record.attempts = Number(record.attempts) + 1;
-    await record.save();
-    const remaining = MAX_VERIFY_ATTEMPTS - record.attempts;
-    const error = new Error(
-      remaining > 0
-        ? `Incorrect code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`
-        : "Too many incorrect attempts. Request a new code."
-    );
-    error.statusCode = 400;
-    throw error;
-  }
-
-  record.consumed_at = new Date();
-  await record.save();
+  await verifyOtpRecord(EmailOtp, { email: normalizedEmail, purpose }, code, "email");
 
   let userId = null;
   if (purpose === PURPOSES.LOGIN || purpose === PURPOSES.PLAN_RENEW) {
@@ -384,46 +490,12 @@ async function sendAdminActionOtp({ fullName } = {}) {
   const storageEmail = ADMIN_ACTION_OTP_STORAGE_EMAIL;
   const purpose = PURPOSES.ADMIN_ACTION;
 
-  const latest = await EmailOtp.findOne({
-    where: {
-      email: storageEmail,
-      purpose,
-      consumed_at: null
-    },
-    order: [["created_at", "DESC"]]
-  });
+  await assertResendCooldown(EmailOtp, { email: storageEmail, purpose });
+  await consumeOpenOtps(EmailOtp, { email: storageEmail, purpose });
 
-  if (latest) {
-    const ageMs = Date.now() - new Date(latest.created_at).getTime();
-    if (ageMs < OTP_RESEND_COOLDOWN_MS) {
-      const waitSec = Math.ceil((OTP_RESEND_COOLDOWN_MS - ageMs) / 1000);
-      const error = new Error(`Please wait ${waitSec}s before requesting another code`);
-      error.statusCode = 429;
-      throw error;
-    }
-  }
-
-  await EmailOtp.update(
-    { consumed_at: new Date() },
-    {
-      where: {
-        email: storageEmail,
-        purpose,
-        consumed_at: null
-      }
-    }
-  );
-
-  const code = generateOtpCode();
-  const expiresAt = new Date(Date.now() + OTP_TTL_MS);
-
-  await EmailOtp.create({
+  const code = await createOtpRecord(EmailOtp, {
     email: storageEmail,
-    purpose,
-    code_hash: hashOtpCode(code),
-    attempts: 0,
-    expires_at: expiresAt,
-    consumed_at: null
+    purpose
   });
 
   const sendErrors = [];

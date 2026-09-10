@@ -19,6 +19,7 @@ const MailConfig = require("./mail-config.model");
 const NotificationRecipient = require("./notification-recipient.model");
 const JobRun = require("./job-run.model");
 const EmailOtp = require("./email-otp.model");
+const SmsOtp = require("./sms-otp.model");
 const UserPlanHistory = require("./user-plan-history.model");
 const BlockedIp = require("./blocked-ip.model");
 const AuditLog = require("./audit-log.model");
@@ -116,6 +117,7 @@ const models = {
   NotificationRecipient,
   JobRun,
   EmailOtp,
+  SmsOtp,
   UserPlanHistory,
   BlockedIp,
   AuditLog
