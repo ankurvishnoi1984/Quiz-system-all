@@ -57,34 +57,7 @@ function MyPlanPage() {
             this account.
           </p>
         </div>
-        {planExpiringSoon ? (
-          <a
-            href={renewHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center rounded-2xl bg-linear-to-r from-orange-600 to-amber-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-110"
-          >
-            Renew
-          </a>
-        ) : canManagePlan ? (
-          <a
-            href={renewHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center rounded-2xl bg-linear-to-r from-blue-700 to-navy-700 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-110"
-          >
-            Renew
-          </a>
-        ) : planLocked ? (
-          <a
-            href={renewHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center rounded-2xl bg-linear-to-r from-amber-600 to-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-110"
-          >
-            Renew
-          </a>
-        ) : null}
+      
       </div>
 
       {usageQuery.isLoading ? (
