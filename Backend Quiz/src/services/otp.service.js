@@ -119,8 +119,13 @@ async function createOtpRecord(Model, fields) {
 
 async function verifyOtpRecord(Model, where, code, label) {
   const normalizedCode = String(code || "").trim();
+  const channel = label === "email" ? "email" : "mobile";
   if (!/^\d{6}$/.test(normalizedCode)) {
-    const error = new Error(`Enter the 6-digit code from your ${label}`);
+    const error = new Error(
+      channel === "email"
+        ? "Enter the 6-digit code we sent to your email."
+        : "Enter the 6-digit code we sent to your mobile."
+    );
     error.statusCode = 400;
     throw error;
   }
@@ -135,9 +140,30 @@ async function verifyOtpRecord(Model, where, code, label) {
   });
 
   if (!record) {
-    const error = new Error(
-      `${label === "email" ? "Email" : "Mobile"} verification code expired or not found. Request a new code.`
-    );
+    const latest = await Model.findOne({
+      where,
+      order: [["created_at", "DESC"]]
+    });
+
+    let message;
+    if (!latest) {
+      message =
+        channel === "email"
+          ? "No email code was found for this address. Please tap Resend codes and try again."
+          : "No mobile code was found for this number. Please tap Resend codes and try again.";
+    } else if (latest.consumed_at) {
+      message =
+        channel === "email"
+          ? "This email code was already used. Please tap Resend codes to get a new one."
+          : "This mobile code was already used. Please tap Resend codes to get a new one.";
+    } else {
+      message =
+        channel === "email"
+          ? "This email code has expired. Please tap Resend codes to get a new one."
+          : "This mobile code has expired. Please tap Resend codes to get a new one.";
+    }
+
+    const error = new Error(message);
     error.statusCode = 400;
     throw error;
   }
@@ -145,7 +171,9 @@ async function verifyOtpRecord(Model, where, code, label) {
   if (Number(record.attempts) >= MAX_VERIFY_ATTEMPTS) {
     record.consumed_at = new Date();
     await record.save();
-    const error = new Error("Too many incorrect attempts. Request a new code.");
+    const error = new Error(
+      "Too many incorrect attempts for this code. Please tap Resend codes to get a new one."
+    );
     error.statusCode = 429;
     throw error;
   }
@@ -156,8 +184,8 @@ async function verifyOtpRecord(Model, where, code, label) {
     const remaining = MAX_VERIFY_ATTEMPTS - record.attempts;
     const error = new Error(
       remaining > 0
-        ? `Incorrect ${label} code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`
-        : "Too many incorrect attempts. Request a new code."
+        ? `Incorrect ${channel} code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`
+        : "Too many incorrect attempts for this code. Please tap Resend codes to get a new one."
     );
     error.statusCode = 400;
     throw error;

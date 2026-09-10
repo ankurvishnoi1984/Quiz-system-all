@@ -2,6 +2,10 @@ const express = require("express");
 const authController = require("../controllers/auth.controller");
 const authMiddleware = require("../middlewares/auth.middleware");
 const authorizeRoles = require("../middlewares/role.middleware");
+const {
+  otpSendIpRateLimit,
+  otpVerifyIpRateLimit
+} = require("../middlewares/otp-rate-limit.middleware");
 
 const router = express.Router();
 
@@ -9,9 +13,9 @@ router.get("/features", authController.features);
 router.post("/signup", authController.signup);
 router.post("/register", authMiddleware, authorizeRoles("super_admin"), authController.register);
 router.post("/login", authController.login);
-router.post("/login/verify-otp", authController.verifyLoginOtp);
-router.post("/renew/start", authController.renewStart);
-router.post("/renew/verify-otp", authController.renewVerifyOtp);
+router.post("/login/verify-otp", otpVerifyIpRateLimit, authController.verifyLoginOtp);
+router.post("/renew/start", otpSendIpRateLimit, authController.renewStart);
+router.post("/renew/verify-otp", otpVerifyIpRateLimit, authController.renewVerifyOtp);
 router.post("/renew/apply", authController.renewApply);
 router.post(
   "/admin-action/otp/send",
@@ -25,8 +29,8 @@ router.post(
   authorizeRoles("super_admin"),
   authController.verifyAdminActionOtp
 );
-router.post("/otp/send", authController.sendOtp);
-router.post("/otp/verify", authController.verifyOtp);
+router.post("/otp/send", otpSendIpRateLimit, authController.sendOtp);
+router.post("/otp/verify", otpVerifyIpRateLimit, authController.verifyOtp);
 router.post("/refresh", authController.refresh);
 router.post("/forgot-password", authController.forgotPassword);
 router.get("/me", authMiddleware, authController.me);
