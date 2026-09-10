@@ -73,7 +73,7 @@ function PresentModePage({
     setSlideIndex(Math.min(Math.max(0, idx), Math.max(0, total - 1)))
   }, [])
 
-  const { session, mappedQuestions, responses, participants, leaderboard, isLoading, isError } =
+  const { session, mappedQuestions, responses, participants, liveParticipantsCount, liveParticipantIds, leaderboard, isLoading, isError } =
     useLiveSession(accessToken, sessionId, {
       mode: readOnly ? 'viewer' : 'host',
       sessionSounds: HOST_EXTRA_SOUNDS_ENABLED,
@@ -690,6 +690,7 @@ function PresentModePage({
   const sessionTitle = session.title || 'Live session'
   const sessionLogoUrl = session?.logo_url || null
   const participantCount = participants.length
+  const liveParticipantCount = liveParticipantsCount
   const isSessionLive = session.status === 'live'
   const scheduledLabel = formatScheduledSessionForDisplay(
     session?.scheduled_date,
@@ -907,6 +908,7 @@ function PresentModePage({
               sessionTitle={sessionTitle}
               sessionLogoUrl={sessionLogoUrl}
               participantCount={participantCount}
+              liveParticipantCount={liveParticipantCount}
               // qaCount={qaCount} // Q&A feature disabled
               isSessionLive={false}
               onParticipantsClick={openParticipantsModal}
@@ -940,6 +942,7 @@ function PresentModePage({
           <ParticipantsSlide
             session={session}
             participantCount={participantCount}
+            liveParticipantCount={liveParticipantCount}
             // qaCount={qaCount} // Q&A feature disabled
             isSessionLive={isSessionLive}
             onParticipantsClick={openParticipantsModal}
@@ -959,6 +962,7 @@ function PresentModePage({
             questionNumber={currentSlide.questionNumber}
             allResponses={responses}
             participantCount={participantCount}
+            liveParticipantCount={liveParticipantCount}
             // qaCount={qaCount} // Q&A feature disabled
             isSessionLive={isSessionLive}
             onParticipantsClick={openParticipantsModal}
@@ -975,6 +979,7 @@ function PresentModePage({
             sessionLogoUrl={sessionLogoUrl}
             leaderboard={leaderboard}
             participantCount={participantCount}
+            liveParticipantCount={liveParticipantCount}
             // qaCount={qaCount} // Q&A feature disabled
             isSessionLive={isSessionLive}
             onParticipantsClick={openParticipantsModal}
@@ -991,6 +996,7 @@ function PresentModePage({
             summary={surveySummaryQuery.data}
             isLoading={surveySummaryQuery.isLoading}
             participantCount={participantCount}
+            liveParticipantCount={liveParticipantCount}
             // qaCount={qaCount} // Q&A feature disabled
             isSessionLive={isSessionLive}
             onParticipantsClick={openParticipantsModal}
@@ -1005,6 +1011,7 @@ function PresentModePage({
         open={participantsModalOpen}
         onClose={() => setParticipantsModalOpen(false)}
         participants={participants}
+        liveParticipantIds={liveParticipantIds}
         isSessionLive={isSessionLive}
         readOnly={readOnly}
       />

@@ -26,7 +26,9 @@ const {
   notifyLeaderboard,
   notifyQuestionChange,
   notifyAllQuestionsSubmissionsClosed,
-  notifyQuestionLeaderboardVisibility
+  notifyQuestionLeaderboardVisibility,
+  countLiveUniqueParticipantsForSessionCode,
+  getLiveUniqueParticipantIdsForSessionCode
 } = require("../services/websocket.service");
 const { buildSessionLeaderboard } = require("../services/response.service");
 const {
@@ -43,6 +45,16 @@ const {
   setPresentSlideIndex,
   getPresentSlideIndexForHost
 } = require("../services/present-view.service");
+
+function sessionWithLiveParticipantCount(session) {
+  if (!session) return session;
+  const plain = typeof session.toJSON === "function" ? session.toJSON() : { ...session };
+  const liveIds = getLiveUniqueParticipantIdsForSessionCode(plain.session_code);
+  plain.live_participant_ids = liveIds;
+  plain.live_participants_count =
+    liveIds.length || countLiveUniqueParticipantsForSessionCode(plain.session_code);
+  return plain;
+}
 
 async function listByDepartment(req, res) {
   try {
@@ -81,7 +93,12 @@ async function detail(req, res) {
       sessionId: Number(req.params.sessionId),
       user: req.user
     });
-    return successResponse(res, { session }, "Session fetched", 200);
+    return successResponse(
+      res,
+      { session: sessionWithLiveParticipantCount(session) },
+      "Session fetched",
+      200
+    );
   } catch (err) {
     return errorResponse(res, err.message, err.statusCode || 500);
   }

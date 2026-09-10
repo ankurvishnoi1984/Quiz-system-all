@@ -254,6 +254,28 @@ export function useLiveSession(accessToken, sessionId, options = {}) {
       scheduleParticipantsSync()
     })
 
+    const offParticipantPresence = client.on(RealtimeEvent.PARTICIPANT_PRESENCE, (data) => {
+      const liveCount = Number(data?.live_participants_count)
+      const liveIds = Array.isArray(data?.live_participant_ids)
+        ? data.live_participant_ids.map(Number).filter((id) => Number.isFinite(id) && id > 0)
+        : null
+      if ((!Number.isFinite(liveCount) || liveCount < 0) && !liveIds) return
+      queryClient.setQueryData(['live-session', sessionId, mode], (old) => {
+        if (!old) return old
+        const nextIds = liveIds ?? old.live_participant_ids ?? []
+        return {
+          ...old,
+          live_participant_ids: nextIds,
+          live_participants_count: Number.isFinite(liveCount)
+            ? liveCount
+            : nextIds.length,
+          ...(data.participants_count !== undefined
+            ? { participants_count: data.participants_count }
+            : {}),
+        }
+      })
+    })
+
     const offSessionProgress = client.on('session_progress', (data) => {
       queryClient.setQueryData(['live-session', sessionId, mode], (old) => {
         if (!old) return old
@@ -336,6 +358,7 @@ export function useLiveSession(accessToken, sessionId, options = {}) {
       offQuestionLb()
       offLeaderboard()
       offParticipantJoined()
+      offParticipantPresence()
       offSessionProgress()
       offConnected()
       offPresentSlide()
@@ -358,11 +381,25 @@ export function useLiveSession(accessToken, sessionId, options = {}) {
     : sessionQuery.isLoading || questionsQuery.isLoading || participantsQuery.isLoading
   const isError = !isLoading && !sessionQuery.data
 
+  const liveParticipantIds = useMemo(() => {
+    const raw = sessionQuery.data?.live_participant_ids
+    if (!Array.isArray(raw)) return []
+    return raw.map(Number).filter((id) => Number.isFinite(id) && id > 0)
+  }, [sessionQuery.data?.live_participant_ids])
+
+  const liveParticipantsCount = useMemo(() => {
+    const fromSession = Number(sessionQuery.data?.live_participants_count)
+    if (Number.isFinite(fromSession) && fromSession >= 0) return fromSession
+    return liveParticipantIds.length
+  }, [sessionQuery.data?.live_participants_count, liveParticipantIds])
+
   return {
     session: sessionQuery.data,
     mappedQuestions,
     responses,
     participants,
+    liveParticipantsCount,
+    liveParticipantIds,
     leaderboard,
     isLoading,
     isError,

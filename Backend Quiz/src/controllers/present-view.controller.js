@@ -10,6 +10,17 @@ const {
   getPresentViewLeaderboard,
   getPresentViewSurveySummary
 } = require("../services/present-view.service");
+const { countLiveUniqueParticipantsForSessionCode, getLiveUniqueParticipantIdsForSessionCode } = require("../services/websocket.service");
+
+function sessionWithLiveParticipantCount(session) {
+  if (!session) return session;
+  const plain = typeof session.toJSON === "function" ? session.toJSON() : { ...session };
+  const liveIds = getLiveUniqueParticipantIdsForSessionCode(plain.session_code);
+  plain.live_participant_ids = liveIds;
+  plain.live_participants_count =
+    liveIds.length || countLiveUniqueParticipantsForSessionCode(plain.session_code);
+  return plain;
+}
 
 async function sessionDetail(req, res) {
   try {
@@ -18,7 +29,12 @@ async function sessionDetail(req, res) {
       sessionId,
       viewer: req.presenterViewer
     });
-    return successResponse(res, { session }, "Session fetched", 200);
+    return successResponse(
+      res,
+      { session: sessionWithLiveParticipantCount(session) },
+      "Session fetched",
+      200
+    );
   } catch (err) {
     return errorResponse(res, err.message, err.statusCode || 500);
   }

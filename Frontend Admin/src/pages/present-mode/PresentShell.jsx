@@ -1,5 +1,4 @@
 import { Info, Trophy } from 'lucide-react'
-import { BrandLogoPair } from '../../components/branding/BrandLogoPair'
 // import { Info, MessageSquare, Trophy } from 'lucide-react' // MessageSquare was for Q&A tile
 
 export function PresentShell({ children, footer, embed = false }) {
@@ -31,13 +30,40 @@ export function PresentShell({ children, footer, embed = false }) {
   )
 }
 
+function PresentParticipantCounts({ joinedCount = 0, liveCount = 0, emphasize = false }) {
+  return (
+    <p
+      className={`mt-1 flex flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-[clamp(0.95rem,1.8vw,1.2rem)] font-bold tabular-nums ${
+        emphasize ? 'text-amber-900' : 'text-navy-700'
+      }`}
+    >
+      <span className={emphasize ? 'text-amber-800/80' : 'text-slate-600'}>
+        {joinedCount} joined
+      </span>
+      <span className={emphasize ? 'text-amber-700/50' : 'text-slate-300'} aria-hidden>
+        ·
+      </span>
+      <span className="inline-flex items-center gap-1.5 text-emerald-700">
+        <span className="relative flex size-2 shrink-0" aria-hidden>
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+          <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+        </span>
+        {liveCount} live
+      </span>
+    </p>
+  )
+}
+
 function PresentHeaderStatButton({
   label,
   count,
+  joinedCount,
+  liveCount,
   onClick,
   ariaLabel,
   icon: Icon = Info,
   active = false,
+  showParticipantBreakdown = false,
 }) {
   return (
     <button
@@ -67,7 +93,13 @@ function PresentHeaderStatButton({
           {label}
         </p>
       </div>
-      {count != null ? (
+      {showParticipantBreakdown ? (
+        <PresentParticipantCounts
+          joinedCount={joinedCount}
+          liveCount={liveCount}
+          emphasize={active}
+        />
+      ) : count != null ? (
         <p
           className={`mt-1 text-[clamp(1.25rem,2.4vw,1.75rem)] font-bold tabular-nums ${
             active ? 'text-amber-900' : 'text-navy-700'
@@ -105,6 +137,7 @@ export function PresentSlideHeader({
   sessionTitle,
   sessionLogoUrl,
   participantCount = 0,
+  liveParticipantCount = 0,
   // qaCount = 0, // Q&A feature disabled
   isSessionLive = false,
   onParticipantsClick,
@@ -119,6 +152,8 @@ export function PresentSlideHeader({
   // const showQaTile = Boolean(onQaClick) // Q&A feature disabled
   const showStatTiles = showParticipantsTile || showOverallRankingsTile
   // const showStatTiles = showParticipantsTile || showQaTile
+  const joined = Number(participantCount) || 0
+  const live = Number(liveParticipantCount) || 0
 
   return (
     <header className="mb-[clamp(1rem,3vh,2rem)] flex shrink-0 flex-wrap items-end justify-between gap-4">
@@ -163,10 +198,12 @@ export function PresentSlideHeader({
           {showParticipantsTile ? (
             <PresentHeaderStatButton
               label="Participants"
-              count={participantCount}
+              showParticipantBreakdown
+              joinedCount={joined}
+              liveCount={live}
               onClick={onParticipantsClick}
               icon={Info}
-              ariaLabel={`${participantCount} participants joined. View participant list.`}
+              ariaLabel={`${joined} joined, ${live} live. View participant list.`}
             />
           ) : null}
         </div>
@@ -178,9 +215,7 @@ export function PresentSlideHeader({
               Participants
             </p>
           </div>
-          <p className="text-[clamp(1.25rem,2.4vw,1.75rem)] font-bold tabular-nums text-navy-700">
-            {participantCount}
-          </p>
+          <PresentParticipantCounts joinedCount={joined} liveCount={live} />
         </div>
       )}
     </header>

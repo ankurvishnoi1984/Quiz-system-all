@@ -4,6 +4,7 @@ import { PresentJoinPanel } from './PresentJoinInfo'
 export function ParticipantsSlide({
   session,
   participantCount,
+  liveParticipantCount = 0,
   qaCount,
   isSessionLive,
   onParticipantsClick,
@@ -20,6 +21,7 @@ export function ParticipantsSlide({
         sessionTitle={sessionTitle}
         sessionLogoUrl={session?.logo_url}
         participantCount={participantCount}
+        liveParticipantCount={liveParticipantCount}
         qaCount={qaCount}
         isSessionLive={isSessionLive}
         onParticipantsClick={onParticipantsClick}

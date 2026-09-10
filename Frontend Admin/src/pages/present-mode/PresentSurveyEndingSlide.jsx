@@ -8,6 +8,7 @@ export function PresentSurveyEndingSlide({
   summary,
   isLoading,
   participantCount,
+  liveParticipantCount = 0,
   qaCount,
   isSessionLive,
   onParticipantsClick,
@@ -22,6 +23,7 @@ export function PresentSurveyEndingSlide({
         sessionTitle={sessionTitle}
         sessionLogoUrl={sessionLogoUrl}
         participantCount={participantCount}
+        liveParticipantCount={liveParticipantCount}
         qaCount={qaCount}
         isSessionLive={isSessionLive}
         onParticipantsClick={onParticipantsClick}

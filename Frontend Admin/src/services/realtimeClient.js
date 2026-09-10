@@ -431,6 +431,7 @@ export const RealtimeEvent = {
   RANKING_RESPONSE_SUBMITTED: 'ranking-response-submitted',
   PARTICIPANT_JOINED: 'participant_joined',
   PARTICIPANT_LEFT: 'participant_left',
+  PARTICIPANT_PRESENCE: 'participant_presence',
   PRESENT_SLIDE_CHANGED: 'present_slide_changed',
   CONNECTION_CLOSED_BY_ADMIN: 'connection_closed_by_admin',
   CONNECTION_IP_BLOCKED: 'connection_ip_blocked',

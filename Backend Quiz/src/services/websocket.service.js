@@ -187,6 +187,10 @@ function setupWebSocketServer(server) {
           authStatus: ws.authStatus,
           activeInBucket: activeConnections.get(connectionKey)?.size
         });
+
+        if (role === "participant" && ws.user?.participant_id) {
+          scheduleParticipantPresenceNotify(sessionCode);
+        }
       };
 
       const rejectParticipantOverPlan = (message) => {
@@ -253,12 +257,17 @@ function setupWebSocketServer(server) {
           code,
           reason: reason?.toString() || "(none)"
         });
+        const wasAuthenticatedParticipant =
+          role === "participant" && Boolean(ws.user?.participant_id);
         const connSet = activeConnections.get(connectionKey);
         if (connSet) {
           connSet.delete(ws);
           if (connSet.size === 0) {
             activeConnections.delete(connectionKey);
           }
+        }
+        if (wasAuthenticatedParticipant) {
+          scheduleParticipantPresenceNotify(sessionCode);
         }
       });
 
@@ -759,6 +768,27 @@ function countOpenConnectionsInSet(connSet, { authenticatedParticipantsOnly = fa
   return count;
 }
 
+/** Unique authenticated participants currently connected for a session (multi-tab = 1). */
+function getLiveUniqueParticipantIdsForSessionCode(sessionCode) {
+  if (!sessionCode) return [];
+  const ids = new Set();
+  const connectionKey = `${sessionCode}:participant`;
+  const connSet = activeConnections.get(connectionKey);
+  if (!connSet) return [];
+
+  for (const ws of connSet) {
+    if (ws.readyState !== WS_OPEN) continue;
+    const participantId = Number(ws.user?.participant_id);
+    if (!Number.isFinite(participantId) || participantId <= 0) continue;
+    ids.add(participantId);
+  }
+  return [...ids].sort((a, b) => a - b);
+}
+
+function countLiveUniqueParticipantsForSessionCode(sessionCode) {
+  return getLiveUniqueParticipantIdsForSessionCode(sessionCode).length;
+}
+
 function countLiveParticipantConnectionsForSessionCodes(sessionCodes) {
   const codeSet = new Set((sessionCodes || []).filter(Boolean));
   if (!codeSet.size) return 0;
@@ -792,6 +822,42 @@ function countLiveParticipantConnectionsBySessionCodeMap(sessionCodeToHostId) {
   return usage;
 }
 
+const PARTICIPANT_PRESENCE_DEBOUNCE_MS = Number(
+  process.env.PARTICIPANT_PRESENCE_DEBOUNCE_MS || 350
+);
+const participantPresenceNotifyTimers = new Map();
+
+function notifyParticipantPresence(sessionCode, extra = {}) {
+  if (!sessionCode) return;
+  const liveIds = Array.isArray(extra.live_participant_ids)
+    ? extra.live_participant_ids.map(Number).filter((id) => Number.isFinite(id) && id > 0)
+    : getLiveUniqueParticipantIdsForSessionCode(sessionCode);
+  const liveCount =
+    extra.live_participants_count != null
+      ? Number(extra.live_participants_count)
+      : liveIds.length;
+  const payload = {
+    type: "participant_presence",
+    live_participants_count: Number.isFinite(liveCount) ? liveCount : liveIds.length,
+    live_participant_ids: liveIds
+  };
+  if (extra.participants_count != null) {
+    payload.participants_count = Number(extra.participants_count);
+  }
+  broadcastToSession(sessionCode, payload);
+}
+
+function scheduleParticipantPresenceNotify(sessionCode) {
+  if (!sessionCode) return;
+  const existing = participantPresenceNotifyTimers.get(sessionCode);
+  if (existing) clearTimeout(existing);
+  const timer = setTimeout(() => {
+    participantPresenceNotifyTimers.delete(sessionCode);
+    notifyParticipantPresence(sessionCode);
+  }, PARTICIPANT_PRESENCE_DEBOUNCE_MS);
+  participantPresenceNotifyTimers.set(sessionCode, timer);
+}
+
 module.exports = {
   setupWebSocketServer,
   send,
@@ -809,6 +875,8 @@ module.exports = {
   notifyRankingResponseSubmitted,
   notifySessionSettings,
   notifyParticipantJoined,
+  notifyParticipantPresence,
+  scheduleParticipantPresenceNotify,
   notifySessionProgress,
   notifyPresentSlideChanged,
   getLiveResults,
@@ -818,6 +886,8 @@ module.exports = {
   closeConnectionsByIp,
   ADMIN_CLOSE_CODE,
   IP_BLOCKED_CODE,
+  countLiveUniqueParticipantsForSessionCode,
+  getLiveUniqueParticipantIdsForSessionCode,
   countLiveParticipantConnectionsForSessionCodes,
   countLiveParticipantConnectionsBySessionCodeMap,
   activeConnections

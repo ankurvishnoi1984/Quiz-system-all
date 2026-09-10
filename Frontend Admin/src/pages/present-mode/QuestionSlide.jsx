@@ -105,6 +105,7 @@ export function QuestionSlide({
   questionNumber,
   allResponses,
   participantCount,
+  liveParticipantCount = 0,
   qaCount,
   isSessionLive,
   onParticipantsClick,
@@ -317,6 +318,7 @@ export function QuestionSlide({
         sessionTitle={sessionTitle}
         sessionLogoUrl={session?.logo_url}
         participantCount={participantCount}
+        liveParticipantCount={liveParticipantCount}
         qaCount={qaCount}
         isSessionLive={isSessionLive}
         onParticipantsClick={onParticipantsClick}
