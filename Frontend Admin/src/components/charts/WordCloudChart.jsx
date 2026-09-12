@@ -104,10 +104,12 @@ export default function WordCloudChart({
             }}
           >
             <span
-              className="word-cloud__word select-none font-bold leading-none"
+              className="word-cloud__word select-none leading-none"
               style={{
                 fontSize: item.fontSize,
+                fontWeight: item.fontWeight ?? 400,
                 color: item.color,
+                fontFamily: item.fontFamily,
                 '--word-cloud-rotate': `${item.rotation}deg`,
                 transform: `rotate(${item.rotation}deg)`,
               }}

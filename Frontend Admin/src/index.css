@@ -147,10 +147,12 @@
   display: inline-block;
   transition:
     font-size 0.75s cubic-bezier(0.22, 1, 0.36, 1),
+    font-weight 0.75s cubic-bezier(0.22, 1, 0.36, 1),
     color 0.45s ease,
     transform 0.75s cubic-bezier(0.22, 1, 0.36, 1);
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
   will-change: font-size, transform;
+  font-synthesis: none;
 }
 
 .word-cloud__slot--new .word-cloud__word {
