@@ -3,6 +3,16 @@ import { BrandLogoPair } from '../../../components/branding/BrandLogoPair'
 import { PageCenteredShell } from './PageCenteredShell'
 
 export function WaitingView({ session, transitioningLive }) {
+  const showParticipantCount = Boolean(session?.show_participant_count)
+  const liveCount = Number(session?.live_participants_count)
+  const fallbackCount = Number(session?.participants_count)
+  const participantCount =
+    Number.isFinite(liveCount) && liveCount >= 0
+      ? liveCount
+      : Number.isFinite(fallbackCount) && fallbackCount >= 0
+        ? fallbackCount
+        : 0
+
   return (
     <PageCenteredShell maxWidth="max-w-2xl">
       <div className="quiz-enter space-y-4">
@@ -19,9 +29,9 @@ export function WaitingView({ session, transitioningLive }) {
         </h1>
         <p className="text-slate-600">{session.title}</p>
         <div className="mx-auto flex max-w-md items-center justify-center gap-6 rounded-xl bg-blue-50 p-3 text-sm font-semibold text-blue-900">
-          {session?.show_participant_count ? (
-            <span className="inline-flex items-center gap-2">
-              <Users className="size-4" /> {Number(session.participants_count || 0)} participants
+          {showParticipantCount ? (
+            <span className="inline-flex items-center gap-2" title="Participants currently connected">
+              <Users className="size-4" /> {participantCount} participants
             </span>
           ) : null}
           <span>Fun fact: Participants respond 2x faster with visuals.</span>

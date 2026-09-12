@@ -1035,6 +1035,9 @@ function ParticipantSessionPage() {
               participants_count: isParticipantCountVisible
                 ? old.participants_count
                 : null,
+              live_participants_count: isParticipantCountVisible
+                ? old.live_participants_count
+                : null,
               participant_navigation_enabled:
                 data.participant_navigation_enabled ?? old.participant_navigation_enabled,
               random_question_order_enabled:
@@ -1077,24 +1080,15 @@ function ParticipantSessionPage() {
       }
     })
 
-    const offSessionProgress = client.on(RealtimeEvent.SESSION_PROGRESS, (data) => {
-      if (data?.participants_count == null) return
+    const offParticipantPresence = client.on(RealtimeEvent.PARTICIPANT_PRESENCE, (data) => {
+      const liveCount = Number(data?.live_participants_count)
+      if (!Number.isFinite(liveCount) || liveCount < 0) return
       queryClient.setQueryData(['participant-session', effectiveSessionCode], (old) => {
         if (!old?.show_participant_count) return old
         return {
           ...old,
-          participants_count: Number(data.participants_count) || 0,
-        }
-      })
-    })
-
-    const offParticipantJoined = client.on(RealtimeEvent.PARTICIPANT_JOINED, () => {
-      queryClient.setQueryData(['participant-session', effectiveSessionCode], (old) => {
-        if (!old?.show_participant_count) return old
-        const current = Number(old.participants_count)
-        return {
-          ...old,
-          participants_count: Number.isFinite(current) ? current + 1 : old.participants_count,
+          live_participants_count: liveCount,
+          participants_count: liveCount,
         }
       })
     })
@@ -1138,8 +1132,7 @@ function ParticipantSessionPage() {
       offResp()
       offLeaderboard()
       offSessionSettings()
-      offSessionProgress()
-      offParticipantJoined()
+      offParticipantPresence()
       offQuestionLbVisibility()
       client.disconnect()
     }
@@ -2390,13 +2383,7 @@ function ParticipantSessionPage() {
   return (
     <main className="min-h-screen bg-linear-to-br from-sky-50 via-white to-indigo-50 p-4 md:p-6">
       <div className="mx-auto w-full max-w-4xl space-y-4">
-        <SessionHeader
-          session={session}
-          joinedUser={joinedUser}
-          step={step}
-          onStepChange={setStep}
-          rankingsOnlyMode={endingScreenOnlyMode}
-        />
+        <SessionHeader session={session} joinedUser={joinedUser} />
 
         {isSessionEnded && endingScreenOnlyMode ? <SessionEndedBanner /> : null}
 

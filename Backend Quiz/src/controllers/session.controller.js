@@ -36,7 +36,7 @@ const {
   closeAllQuestionSubmissionsForSession
 } = require("../services/question.service");
 const { getSessionSummaryReport, getSessionQuestionsReport, getSessionParticipantsReport, getSessionQaReport } = require("../services/session-report.service");
-const { Session, Participant } = require("../models");
+const { Session } = require("../models");
 const { getFrontendPublicUrl } = require("../config/publicAppUrl");
 const { isSessionRandomQuestionOrderEnabled } = require("../utils/sessionFlags");
 const {
@@ -260,9 +260,9 @@ async function lookupByCode(req, res) {
     const session = await getSessionByCode(req.params.code);
     const joinBlock = await getSessionJoinBlockInfo(session);
     const showParticipantCount = Boolean(session.show_participant_count);
-    let participantsCount = null;
+    let liveParticipantsCount = null;
     if (showParticipantCount) {
-      participantsCount = await Participant.count({ where: { session_id: session.session_id } });
+      liveParticipantsCount = countLiveUniqueParticipantsForSessionCode(session.session_code);
     }
     res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     res.set("Pragma", "no-cache");
@@ -284,7 +284,9 @@ async function lookupByCode(req, res) {
           leaderboard_enabled: Boolean(session.leaderboard_enabled),
           survey_results_enabled: Boolean(session.survey_results_enabled),
           show_participant_count: showParticipantCount,
-          participants_count: showParticipantCount ? participantsCount : null,
+          // Participant join page shows currently connected people only (not join history).
+          live_participants_count: showParticipantCount ? liveParticipantsCount : null,
+          participants_count: showParticipantCount ? liveParticipantsCount : null,
           show_question_leaderboard: Boolean(session.show_question_leaderboard),
           participant_navigation_enabled: session.participant_navigation_enabled !== false,
           quiz_total_time_minutes: session.quiz_total_time_minutes ?? null,
