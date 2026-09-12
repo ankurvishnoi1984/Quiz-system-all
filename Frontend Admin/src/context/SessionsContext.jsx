@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../store/authStore'
 import { listDepartmentSessionsApi } from '../services/dashboardApi'
 import { listDepartmentsApi } from '../services/dashboardApi'
+import { getDataScope } from '../utils/adminRoles'
 
 function uid(prefix = 'id') {
   return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`
@@ -79,23 +80,19 @@ export function SessionsProvider({ children }) {
 
   const userRole = user?.role
   const userDeptId = user?.dept_id
+  const dataScope = getDataScope(user)
 
   const { data: allSessions = [], isLoading } = useQuery({
-    queryKey: ['all-sessions', userRole, userDeptId],
+    queryKey: ['all-sessions', userRole, userDeptId, dataScope],
     queryFn: async () => {
       if (!accessToken) return []
 
-      if (userRole === 'host' && userDeptId) {
+      if ((dataScope === 'own_sessions' || dataScope === 'department') && userDeptId) {
         const sessions = await listDepartmentSessionsApi(accessToken, userDeptId)
         return sessions.map(mapApiSessionToLocal)
       }
 
-      if (userRole === 'dept_admin' && userDeptId) {
-        const sessions = await listDepartmentSessionsApi(accessToken, userDeptId)
-        return sessions.map(mapApiSessionToLocal)
-      }
-
-      if (userRole === 'super_admin' || userRole === 'client_admin') {
+      if (dataScope === 'platform' || dataScope === 'client') {
         const departments = await listDepartmentsApi(accessToken)
         if (departments.length === 0) return []
 

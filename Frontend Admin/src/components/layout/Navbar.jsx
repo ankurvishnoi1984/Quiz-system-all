@@ -20,6 +20,7 @@ const pageTitles = {
   '/manage/clients': 'Manage Clients',
   '/manage/departments': 'Manage Departments',
   '/manage/users': 'User Management',
+  '/manage/roles': 'Role Management',
   '/manage/plans': 'Paid Plans',
   '/my-plan': 'My Plan',
   '/monitor/websockets': 'Connection Monitor',
@@ -34,7 +35,7 @@ function Navbar() {
   const logout = useAuthStore((state) => state.logout)
   const { restart } = useHostOnboarding()
   const shellFiltersDisabled = isShellFilterDisabled(pathname)
-  const canSwitchDepartment = canSwitchShellDepartment(user?.role)
+  const canSwitchDepartment = canSwitchShellDepartment(user)
   const hideDepartment = isWebsiteSignupHost({ user, departments, departmentId })
   const departmentLabel =
     departments.find((d) => String(d.dept_id) === String(departmentId))?.name ||

@@ -33,35 +33,17 @@ const {
 const { isParticipantJoinOtpEnabled } = require("../config/auth-features");
 const { isValidMobile } = require("../utils/phone");
 const {
+  canAccessDepartment,
+  assertSessionWriteAccess
+} = require("../config/data-scope");
+const { getDataScope } = require("../config/user-rights");
+const {
   getPlanJoinBlock,
   notifyHostPlanLimitIfNeeded,
   reservePlanJoinSlot,
   assertHostCanRunSessions,
   assertSessionQuestionCapacity
 } = require("./plan.service");
-
-function canAccessDepartment(user, department) {
-  if (user.role === "super_admin") return true;
-  if (user.role === "client_admin") return Number(user.client_id) === Number(department.client_id);
-  if (user.role === "dept_admin" || user.role === "host") {
-    return Number(user.dept_id) === Number(department.dept_id);
-  }
-  return false;
-}
-
-function assertSessionWriteAccess(user, session) {
-  if (user.role === "super_admin") return;
-  if (user.role === "client_admin" && Number(user.client_id) === Number(session.department.client_id)) return;
-  if (
-    (user.role === "dept_admin" && Number(user.dept_id) === Number(session.dept_id)) ||
-    (user.role === "host" && Number(user.user_id) === Number(session.host_id))
-  ) {
-    return;
-  }
-  const error = new Error("Forbidden: session access denied");
-  error.statusCode = 403;
-  throw error;
-}
 
 async function getDepartmentOrThrow(deptId) {
   const department = await Department.findByPk(deptId);
@@ -118,7 +100,7 @@ async function listDepartmentSessions({ deptId, status, user }) {
 
   const where = { dept_id: deptId };
   if (status) where.status = status;
-  if (user.role === "host") where.host_id = user.user_id;
+  if (getDataScope(user) === "own_sessions") where.host_id = user.user_id;
 
   const sessions = await Session.findAll({
     where,

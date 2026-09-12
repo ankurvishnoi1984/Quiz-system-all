@@ -8,9 +8,15 @@ const { getDepartmentReport } = require("../services/department-report.service")
 const {
   validateCreateDepartmentPayload
 } = require("../validators/department.validator");
+const { canCreateDepartments } = require("../config/data-scope");
+const { getDataScope } = require("../config/user-rights");
 
 async function create(req, res) {
   try {
+    if (!canCreateDepartments(req.user)) {
+      return errorResponse(res, "Forbidden: insufficient permissions", 403);
+    }
+
     const errors = validateCreateDepartmentPayload(req.body);
     if (errors.length > 0) {
       return errorResponse(res, "Validation failed", 400, errors);
@@ -31,13 +37,14 @@ async function list(req, res) {
   try {
     const user = req.user;
     let clientId = req.query.client_id ? Number(req.query.client_id) : null;
+    const scope = getDataScope(user);
 
-    if (user.role === "client_admin") {
+    if (scope === "client") {
       if (!user.client_id) {
         return errorResponse(res, "Client admin has no client assigned", 403);
       }
       clientId = Number(user.client_id);
-    } else if (["dept_admin", "host"].includes(user.role) && user.dept_id) {
+    } else if ((scope === "department" || scope === "own_sessions") && user.dept_id) {
       const department = await getDepartmentById(user.dept_id);
       clientId = Number(department.client_id);
     }

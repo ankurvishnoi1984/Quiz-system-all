@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../store/authStore'
 import { listClientsApi, listDepartmentsApi } from '../services/dashboardApi'
+import { isPlatformScope, getDataScope } from '../utils/adminRoles'
 
 const ShellContext = createContext(null)
 
@@ -13,8 +14,8 @@ function findDepartment(departments, deptId) {
 export function ShellProvider({ children }) {
   const accessToken = useAuthStore((state) => state.accessToken)
   const user = useAuthStore((state) => state.user)
-  const isSuperAdmin = user?.role === 'super_admin'
-  const isClientAdmin = user?.role === 'client_admin'
+  const isSuperAdmin = isPlatformScope(user)
+  const isClientAdmin = getDataScope(user) === 'client'
 
   const [client, setClient] = useState('')
   const [clientId, setClientId] = useState('')

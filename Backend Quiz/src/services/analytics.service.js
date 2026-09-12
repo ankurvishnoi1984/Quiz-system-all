@@ -14,6 +14,7 @@ const {
   Department: require("../models/department.model"),
   Client: require("../models/client.model")
 };
+const { canAccessSession, isPlatformScope } = require("../config/data-scope");
 
 function createError(message, statusCode) {
   const error = new Error(message);
@@ -21,16 +22,13 @@ function createError(message, statusCode) {
   return error;
 }
 
-function assertDeptAccess(user, dept) {
-  if (user.role === "super_admin") return;
-  if (user.role === "client_admin" && Number(user.client_id) === Number(dept.client_id)) return;
-  if (Number(user.dept_id) === Number(dept.dept_id) && ["dept_admin", "host"].includes(user.role)) return;
+function assertDeptAccess(user) {
+  if (isPlatformScope(user)) return;
   throw createError("Forbidden: analytics access denied", 403);
 }
 
-function assertClientAccess(user, clientId) {
-  if (user.role === "super_admin") return;
-  if (user.role === "client_admin" && Number(user.client_id) === Number(clientId)) return;
+function assertClientAccess(user) {
+  if (isPlatformScope(user)) return;
   throw createError("Forbidden: analytics access denied", 403);
 }
 
@@ -119,7 +117,7 @@ async function getSessionSummariesByDept(deptId) {
 
 async function getDepartmentOverview({ deptId, user }) {
   const department = await getDepartmentOrThrow(deptId);
-  assertDeptAccess(user, department);
+  assertDeptAccess(user);
 
   const sessions = await getSessionSummariesByDept(deptId);
   const sessionIds = sessions.map((s) => s.session_id);
@@ -181,14 +179,14 @@ async function getDepartmentOverview({ deptId, user }) {
 
 async function getDepartmentSessionsAnalytics({ deptId, user }) {
   const department = await getDepartmentOrThrow(deptId);
-  assertDeptAccess(user, department);
+  assertDeptAccess(user);
   return getSessionSummariesByDept(deptId);
 }
 
 async function getClientOverview({ clientId, user }) {
   const client = await Client.findByPk(Number(clientId));
   if (!client) throw createError("Client not found", 404);
-  assertClientAccess(user, client.client_id);
+  assertClientAccess(user);
 
   const departments = await Department.findAll({
     where: { client_id: Number(clientId) },
@@ -234,7 +232,10 @@ async function getSessionReport({ sessionId, user }) {
   if (!session) throw createError("Session not found", 404);
 
   const dept = await getDepartmentOrThrow(session.dept_id);
-  assertDeptAccess(user, dept);
+  session.department = dept;
+  if (!canAccessSession(user, session)) {
+    throw createError("Forbidden: analytics access denied", 403);
+  }
 
   const [participantCount, responseCount, questionCount, uniqueResponders, questionRows] = await Promise.all([
     AnalyticsParticipant.count({ where: { session_id: session.session_id } }),

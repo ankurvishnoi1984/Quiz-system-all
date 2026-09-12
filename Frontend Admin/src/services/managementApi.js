@@ -63,6 +63,33 @@ export async function setUserStatusApi(accessToken, userId, isActive) {
   return data?.user
 }
 
+export async function listRolesApi(accessToken) {
+  const data = await authRequest('/roles', accessToken)
+  return data?.roles || []
+}
+
+export async function createRoleApi(accessToken, payload) {
+  const data = await authRequest('/roles', accessToken, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return data?.role
+}
+
+export async function updateRoleApi(accessToken, roleId, payload) {
+  const data = await authRequest(`/roles/${roleId}`, accessToken, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+  return data?.role
+}
+
+export async function deleteRoleApi(accessToken, roleId) {
+  return authRequest(`/roles/${roleId}`, accessToken, {
+    method: 'DELETE',
+  })
+}
+
 export async function assignUserPlanApi(accessToken, userId, planId, planExpiresAt, otpToken) {
   const body = { plan_id: planId }
   if (planExpiresAt !== undefined) {

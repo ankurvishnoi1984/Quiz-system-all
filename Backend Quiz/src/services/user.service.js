@@ -1,6 +1,6 @@
 const bcrypt = require("bcryptjs");
 const path = require("path");
-const { User, Client, Department, Plan, UserParticipantAddon, UserQuestionAddon } = require("../models");
+const { User, Client, Department, Plan, UserParticipantAddon, UserQuestionAddon, Role } = require("../models");
 const { sendNewUserWelcomeEmail } = require("./email.service");
 const {
   getPlanOrThrow,
@@ -11,6 +11,12 @@ const {
   toDateOnlyString
 } = require("./plan.service");
 const { recordPlanAssignment, PLAN_HISTORY_SOURCES } = require("./plan-history.service");
+const {
+  getEffectiveRights,
+  getDataScope
+} = require("../config/user-rights");
+const { needsClientOnUser, needsDepartmentOnUser } = require("../config/data-scope");
+const { getRoleBySlug } = require("./role.service");
 
 const ROLE_LABELS = {
   client_admin: "Client admin",
@@ -21,11 +27,15 @@ const ROLE_LABELS = {
 function buildUserPayload(user, extras = {}) {
   const plan = extras.plan !== undefined ? extras.plan : user.plan ? toPlanPayload(user.plan) : null;
   const planExpiresAt = toDateOnlyString(user.plan_expires_at);
+  const assignedRole = user.assignedRole || extras.assignedRole || null;
+  const userWithRole = assignedRole ? { ...user.get?.({ plain: true }), ...user, assignedRole } : user;
   return {
     user_id: user.user_id,
     email: user.email,
     full_name: user.full_name,
     role: user.role,
+    role_name: assignedRole?.name || user.role,
+    data_scope: getDataScope(userWithRole),
     client_id: user.client_id,
     dept_id: user.dept_id,
     plan_id: user.plan_id || null,
@@ -35,7 +45,8 @@ function buildUserPayload(user, extras = {}) {
     extra_participants: Math.max(0, Number(user.extra_participants || 0)),
     extra_questions: Math.max(0, Number(user.extra_questions || 0)),
     participants_used: extras.participants_used ?? 0,
-    is_active: Boolean(user.is_active)
+    is_active: Boolean(user.is_active),
+    rights: getEffectiveRights(userWithRole)
   };
 }
 
@@ -67,7 +78,10 @@ async function listUsers() {
       "last_login_at",
       "created_at"
     ],
-    include: [{ model: Plan, as: "plan", required: false }],
+    include: [
+      { model: Plan, as: "plan", required: false },
+      { model: Role, as: "assignedRole", required: false }
+    ],
     order: [["user_id", "DESC"]]
   });
 
@@ -76,7 +90,8 @@ async function listUsers() {
   return users.map((user) =>
     buildUserPayload(user, {
       plan: user.plan ? toPlanPayload(user.plan) : null,
-      participants_used: usageByHost.get(Number(user.user_id)) || 0
+      participants_used: usageByHost.get(Number(user.user_id)) || 0,
+      assignedRole: user.assignedRole
     })
   );
 }
@@ -91,6 +106,30 @@ async function createUserByAdmin(input, adminUser) {
     throw error;
   }
 
+  const assignedRole = await getRoleBySlug(input.role);
+  if (!assignedRole || !assignedRole.is_active) {
+    const error = new Error("Selected role is not available");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (assignedRole.slug === "super_admin") {
+    const error = new Error("super_admin cannot be created from this form");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const scope = assignedRole.data_scope;
+  if (needsClientOnUser(scope) && !input.client_id) {
+    const error = new Error("client_id is required for the selected role");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (needsDepartmentOnUser(scope) && !input.dept_id) {
+    const error = new Error("dept_id is required for the selected role");
+    error.statusCode = 400;
+    throw error;
+  }
+
   const planId = await resolveActivePlanId(input.plan_id);
   const planExpiresAt = await resolvePlanExpiresAt({
     planId,
@@ -101,9 +140,9 @@ async function createUserByAdmin(input, adminUser) {
     full_name: String(input.full_name).trim(),
     email: normalizedEmail,
     password_hash,
-    role: input.role,
-    client_id: input.client_id ? Number(input.client_id) : null,
-    dept_id: input.dept_id ? Number(input.dept_id) : null,
+    role: assignedRole.slug,
+    client_id: needsClientOnUser(scope) && input.client_id ? Number(input.client_id) : null,
+    dept_id: needsDepartmentOnUser(scope) && input.dept_id ? Number(input.dept_id) : null,
     plan_id: planId,
     plan_expires_at: planExpiresAt,
     must_change_password: false
@@ -141,7 +180,7 @@ async function createUserByAdmin(input, adminUser) {
       fullName: user.full_name,
       email: user.email,
       password: input.password,
-      roleLabel: ROLE_LABELS[user.role] || user.role,
+      roleLabel: assignedRole.name,
       clientName,
       deptName,
       createdByName: adminUser?.full_name || adminUser?.email || "Administrator"
@@ -157,7 +196,8 @@ async function createUserByAdmin(input, adminUser) {
   return {
     user: buildUserPayload(user, {
       plan: plan ? toPlanPayload(plan) : null,
-      participants_used: 0
+      participants_used: 0,
+      assignedRole
     }),
     email_sent: emailSent,
     email_error: emailSent ? null : emailError
@@ -165,11 +205,17 @@ async function createUserByAdmin(input, adminUser) {
 }
 
 async function reloadUserAccountPayload(user) {
-  const plan = user.plan_id ? await Plan.findByPk(user.plan_id) : null;
+  const fresh = await User.findByPk(user.user_id, {
+    include: [
+      { model: Plan, as: "plan", required: false },
+      { model: Role, as: "assignedRole", required: false }
+    ]
+  });
   const usageByHost = await countParticipantsByHostIds([user.user_id]);
-  return buildUserPayload(user, {
-    plan: plan ? toPlanPayload(plan) : null,
-    participants_used: usageByHost.get(Number(user.user_id)) || 0
+  return buildUserPayload(fresh || user, {
+    plan: fresh?.plan ? toPlanPayload(fresh.plan) : null,
+    participants_used: usageByHost.get(Number(user.user_id)) || 0,
+    assignedRole: fresh?.assignedRole
   });
 }
 

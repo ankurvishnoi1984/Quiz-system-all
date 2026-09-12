@@ -2,7 +2,8 @@ const express = require("express");
 const questionController = require("../controllers/question.controller");
 const questionSetController = require("../controllers/question-set.controller");
 const authMiddleware = require("../middlewares/auth.middleware");
-const authorizeRoles = require("../middlewares/role.middleware");
+const authorizeStaff = require("../middlewares/staff.middleware");
+const { authorizeRights, authorizeAnyRight } = require("../middlewares/rights.middleware");
 
 const router = express.Router();
 
@@ -11,102 +12,122 @@ router.use(["/sessions", "/questions"], authMiddleware);
 
 router.get(
   "/sessions/:sessionId/question-sets",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeAnyRight("builder", "present"),
   questionSetController.list
 );
 router.post(
   "/sessions/:sessionId/question-sets",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("builder"),
   questionSetController.create
 );
 router.put(
   "/sessions/:sessionId/question-sets/:setId",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("builder"),
   questionSetController.update
 );
 router.delete(
   "/sessions/:sessionId/question-sets/:setId",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("builder"),
   questionSetController.remove
 );
 router.get(
   "/sessions/:sessionId/questions",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeAnyRight("builder", "present", "reports"),
   questionController.listBySession
 );
 router.post(
   "/sessions/:sessionId/questions/import/preview",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("builder"),
   questionController.previewImport
 );
 router.post(
   "/sessions/:sessionId/questions/import",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("builder"),
   questionController.confirmImport
 );
 router.post(
   "/sessions/:sessionId/questions",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("builder"),
   questionController.createForSession
 );
 router.get(
   "/questions/:questionId",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeAnyRight("builder", "present", "reports"),
   questionController.detail
 );
 router.put(
   "/questions/:questionId",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("builder"),
   questionController.update
 );
 router.delete(
   "/questions/:questionId",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("builder"),
   questionController.remove
 );
 router.post(
   "/questions/reorder",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("builder"),
   questionController.reorder
 );
 router.post(
   "/questions/:questionId/activate",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("present"),
   questionController.activate
 );
 router.post(
   "/questions/:questionId/deactivate",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("present"),
   questionController.deactivate
 );
 router.post(
   "/questions/:questionId/reveal-answer",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("present"),
   questionController.revealAnswer
 );
 router.post(
   "/questions/:questionId/hide-answer",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("present"),
   questionController.hideAnswer
 );
 router.post(
   "/questions/:questionId/show-leaderboard",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("present"),
   questionController.showLeaderboard
 );
 router.post(
   "/questions/:questionId/hide-leaderboard",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("present"),
   questionController.hideLeaderboard
 );
 router.post(
   "/questions/:questionId/open-reattempt",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("present"),
   questionController.openForReattempt
 );
 router.post(
   "/questions/:questionId/close",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("present"),
   questionController.closeQuestion
 );
 

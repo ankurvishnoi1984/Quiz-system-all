@@ -35,7 +35,15 @@ function ProgressPill({ value, isLive }) {
 
 const PLAN_LOCKED_TITLE = 'No active plan — renew to use this action'
 
-function SessionCard({ session, onAction, planLocked = false }) {
+function SessionCard({
+  session,
+  onAction,
+  planLocked = false,
+  canSessions = true,
+  canBuilder = true,
+  canPresent = true,
+  canAnalytics = true,
+}) {
   const preview = useMemo(() => {
     const labels = session.tags?.join(', ') || 'Quiz'
     return `${labels} • ${session.participants} participants • Status: ${session.status}`
@@ -51,43 +59,9 @@ function SessionCard({ session, onAction, planLocked = false }) {
       : undefined
 
   const menuItems = useMemo(() => {
-    const items = [
-      {
-        id: 'edit-session',
-        label: 'Edit session',
-        icon: Pencil,
-        disabled: planLocked,
-        title: planLocked ? PLAN_LOCKED_TITLE : undefined,
-        onClick: () => onAction('edit-session', session),
-      },
-      {
-        id: 'builder',
-        label: 'Question builder',
-        icon: LayoutList,
-        disabled: planLocked,
-        title: planLocked ? PLAN_LOCKED_TITLE : undefined,
-        onClick: () => onAction('builder', session),
-      },
-      { id: 'analytics', label: 'Analytics', icon: BarChart3, onClick: () => onAction('analytics', session) },
-      {
-        id: 'duplicate',
-        label: 'Duplicate',
-        icon: Copy,
-        disabled: planLocked,
-        title: planLocked ? PLAN_LOCKED_TITLE : undefined,
-        onClick: () => onAction('duplicate', session),
-      },
-      {
-        id: 'reset-responses',
-        label: 'Reset responses',
-        icon: RotateCcw,
-        disabled: planLocked,
-        title: planLocked ? PLAN_LOCKED_TITLE : undefined,
-        onClick: () => onAction('reset-responses', session),
-      },
-    ]
-    if (!isCompleted) {
-      items.unshift({
+    const items = []
+    if (!isCompleted && canPresent) {
+      items.push({
         id: 'share',
         label: 'Share',
         icon: Share2,
@@ -96,17 +70,75 @@ function SessionCard({ session, onAction, planLocked = false }) {
         onClick: () => onAction('share', session),
       })
     }
-    if (!isLive) {
+    if (canSessions) {
       items.push({
-        id: 'delete',
-        label: 'Delete',
-        icon: Trash2,
-        variant: 'danger',
-        onClick: () => onAction('delete', session),
+        id: 'edit-session',
+        label: 'Edit session',
+        icon: Pencil,
+        disabled: planLocked,
+        title: planLocked ? PLAN_LOCKED_TITLE : undefined,
+        onClick: () => onAction('edit-session', session),
       })
     }
+    if (canBuilder) {
+      items.push({
+        id: 'builder',
+        label: 'Question builder',
+        icon: LayoutList,
+        disabled: planLocked,
+        title: planLocked ? PLAN_LOCKED_TITLE : undefined,
+        onClick: () => onAction('builder', session),
+      })
+    }
+    if (canAnalytics) {
+      items.push({
+        id: 'analytics',
+        label: 'Analytics',
+        icon: BarChart3,
+        onClick: () => onAction('analytics', session),
+      })
+    }
+    if (canSessions) {
+      items.push({
+        id: 'duplicate',
+        label: 'Duplicate',
+        icon: Copy,
+        disabled: planLocked,
+        title: planLocked ? PLAN_LOCKED_TITLE : undefined,
+        onClick: () => onAction('duplicate', session),
+      })
+      items.push({
+        id: 'reset-responses',
+        label: 'Reset responses',
+        icon: RotateCcw,
+        disabled: planLocked,
+        title: planLocked ? PLAN_LOCKED_TITLE : undefined,
+        onClick: () => onAction('reset-responses', session),
+      })
+      if (!isLive) {
+        items.push({
+          id: 'delete',
+          label: 'Delete',
+          icon: Trash2,
+          variant: 'danger',
+          onClick: () => onAction('delete', session),
+        })
+      }
+    }
     return items
-  }, [isCompleted, isLive, onAction, planLocked, session])
+  }, [
+    canAnalytics,
+    canBuilder,
+    canPresent,
+    canSessions,
+    isCompleted,
+    isLive,
+    onAction,
+    planLocked,
+    session,
+  ])
+
+  const showLaunch = canPresent && (isLive || canSessions)
 
   return (
     <div
@@ -139,19 +171,21 @@ function SessionCard({ session, onAction, planLocked = false }) {
         </div>
 
         <div className="flex flex-col items-end gap-2">
-          <button
-            type="button"
-            data-tour="launch-session"
-            disabled={launchDisabled}
-            title={launchTitle}
-            className="rounded-xl border border-blue-200/70 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
-            onClick={() => onAction('launch', session)}
-          >
-            <Rocket className="mr-2 inline size-4" />
-            Launch
-          </button>
+          {showLaunch ? (
+            <button
+              type="button"
+              data-tour="launch-session"
+              disabled={launchDisabled}
+              title={launchTitle}
+              className="rounded-xl border border-blue-200/70 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => onAction('launch', session)}
+            >
+              <Rocket className="mr-2 inline size-4" />
+              Launch
+            </button>
+          ) : null}
 
-          <KebabMenu items={menuItems} />
+          {menuItems.length ? <KebabMenu items={menuItems} /> : null}
         </div>
       </div>
 

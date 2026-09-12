@@ -15,6 +15,7 @@ import {
   createUserApi,
   setUserStatusApi,
   listPlansApi,
+  listRolesApi,
   listUserExtraParticipantsApi,
   listUserExtraQuestionsApi,
   listUsersApi,
@@ -25,16 +26,15 @@ import {
 } from '../services/managementApi'
 import { filterUsersByShell } from '../utils/shellFilterPaths'
 import { resolveQuestionMediaUrl } from '../utils/questionMedia'
+import { needsClientForScope, needsDepartmentForScope } from '../utils/adminRoles'
 // import { getStoredUserPasswords, setStoredUserPassword } from '../utils/userPasswordVault'
 
-const ROLE_OPTIONS = [
-  // { value: 'super_admin', label: 'Super admin' },
-  { value: 'client_admin', label: 'Client admin' },
-  // { value: 'dept_admin', label: 'Department admin' },
-  { value: 'host', label: 'Host' },
-]
-
-const ROLE_LABELS = Object.fromEntries(ROLE_OPTIONS.map((role) => [role.value, role.label]))
+const ROLE_LABELS = {
+  super_admin: 'Super admin',
+  client_admin: 'Client admin',
+  dept_admin: 'Department admin',
+  host: 'Host',
+}
 
 function StatusToggle({ checked, disabled, pending, onChange, activeLabel = 'Active', inactiveLabel = 'Inactive' }) {
   return (
@@ -128,6 +128,12 @@ function ManageUsersPage() {
     enabled: Boolean(accessToken),
   })
 
+  const rolesQuery = useQuery({
+    queryKey: ['manage-roles'],
+    queryFn: () => listRolesApi(accessToken),
+    enabled: Boolean(accessToken),
+  })
+
   const authFeaturesQuery = useQuery({
     queryKey: ['auth-features'],
     queryFn: fetchAuthFeaturesApi,
@@ -182,8 +188,13 @@ function ManageUsersPage() {
     [usersQuery.data, clientId, departmentId],
   )
 
-  const needsClient = ['client_admin', 'dept_admin', 'host'].includes(form.role)
-  const needsDepartment = ['dept_admin', 'host'].includes(form.role)
+  const assignableRoles = useMemo(
+    () => (rolesQuery.data || []).filter((role) => role.is_active && role.slug !== 'super_admin'),
+    [rolesQuery.data],
+  )
+  const selectedRole = assignableRoles.find((role) => role.slug === form.role) || null
+  const needsClient = needsClientForScope(selectedRole?.data_scope)
+  const needsDepartment = needsDepartmentForScope(selectedRole?.data_scope)
 
   const createMutation = useMutation({
     mutationFn: (payload) => createUserApi(accessToken, payload),
@@ -220,7 +231,7 @@ function ManageUsersPage() {
 
   const handleSubmit = (event) => {
     event.preventDefault()
-    if (!form.full_name.trim() || !form.email.trim() || !form.password.trim()) return
+    if (!form.full_name.trim() || !form.email.trim() || !form.password.trim() || !form.role) return
     if (needsClient && !form.client_id) return
     if (needsDepartment && !form.dept_id) return
 
@@ -457,8 +468,10 @@ function ManageUsersPage() {
         <button
           type="button"
           onClick={() => {
+            const defaultRole = assignableRoles.find((role) => role.slug === 'host') || assignableRoles[0]
             setForm({
               ...emptyForm,
+              role: defaultRole?.slug || '',
               client_id: clientId || '',
               dept_id: departmentId || '',
             })
@@ -511,7 +524,7 @@ function ManageUsersPage() {
                 {/* <td className="px-4 py-3">
                   <PasswordRevealCell password={passwordVault[String(user.user_id)]} />
                 </td> */}
-                <td className="px-4 py-3 text-slate-700">{ROLE_LABELS[user.role] || user.role}</td>
+                <td className="px-4 py-3 text-slate-700">{user.role_name || ROLE_LABELS[user.role] || user.role}</td>
                 <td className="px-4 py-3 text-slate-700">
                   {user.client_id
                     ? clientsById.get(String(user.client_id)) || `Client ${user.client_id}`
@@ -698,9 +711,9 @@ function ManageUsersPage() {
               }
               className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
             >
-              {ROLE_OPTIONS.map((role) => (
-                <option key={role.value} value={role.value}>
-                  {role.label}
+              {assignableRoles.map((role) => (
+                <option key={role.slug} value={role.slug}>
+                  {role.name}
                 </option>
               ))}
             </select>

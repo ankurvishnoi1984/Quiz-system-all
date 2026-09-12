@@ -17,6 +17,7 @@ const {
 } = require("../utils/sessionFlags");
 const { validateCreateQuestionPayload } = require("../validators/question.validator");
 const { assertHostCanRunSessions, assertSessionQuestionCapacity } = require("./plan.service");
+const { assertSessionWriteAccess } = require("../config/data-scope");
 
 function isParticipantNavigationEnabled(session) {
   return session.participant_navigation_enabled !== false;
@@ -63,22 +64,12 @@ async function deactivateOtherLiveQuestions(session, activeQuestionId) {
 }
 
 function assertScopeAccess(user, sessionWithDept) {
-  if (user.role === "super_admin") return;
-  if (
-    user.role === "client_admin" &&
-    Number(user.client_id) === Number(sessionWithDept.department.client_id)
-  ) {
-    return;
+  try {
+    assertSessionWriteAccess(user, sessionWithDept);
+  } catch (err) {
+    err.message = "Forbidden: question access denied";
+    throw err;
   }
-  if (user.role === "dept_admin" && Number(user.dept_id) === Number(sessionWithDept.dept_id)) {
-    return;
-  }
-  if (user.role === "host" && Number(user.user_id) === Number(sessionWithDept.host_id)) {
-    return;
-  }
-  const error = new Error("Forbidden: question access denied");
-  error.statusCode = 403;
-  throw error;
 }
 
 async function getSessionForQuestionFlow(sessionId) {

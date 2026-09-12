@@ -1,7 +1,8 @@
 const express = require("express");
 const sessionController = require("../controllers/session.controller");
 const authMiddleware = require("../middlewares/auth.middleware");
-const authorizeRoles = require("../middlewares/role.middleware");
+const authorizeStaff = require("../middlewares/staff.middleware");
+const { authorizeRights, authorizeAnyRight } = require("../middlewares/rights.middleware");
 
 const router = express.Router();
 
@@ -16,125 +17,147 @@ router.use(["/departments", "/sessions"], authMiddleware);
 
 router.get(
   "/departments/:deptId/sessions",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
   sessionController.listByDepartment
 );
 router.post(
   "/departments/:deptId/sessions",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("sessions"),
   sessionController.createForDepartment
 );
 
 router.get(
   "/sessions/:sessionId/report/qa",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("reports"),
   sessionController.sessionQaReport
 );
 router.get(
   "/sessions/:sessionId/report/participants",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("reports"),
   sessionController.sessionParticipantsReport
 );
 router.get(
   "/sessions/:sessionId/report/questions",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("reports"),
   sessionController.sessionQuestionsReport
 );
 router.get(
   "/sessions/:sessionId/report/summary",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("reports"),
   sessionController.sessionSummaryReport
 );
 router.get(
   "/sessions/:sessionId",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
   sessionController.detail
 );
 router.get(
   "/sessions/:sessionId/participants",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeAnyRight("sessions", "present"),
   sessionController.listParticipants
 );
 router.put(
   "/sessions/:sessionId",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("sessions"),
   sessionController.update
 );
 router.post(
   "/sessions/:sessionId/duplicate",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("sessions"),
   sessionController.duplicate
 );
 router.delete(
   "/sessions/:sessionId",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("sessions"),
   sessionController.remove
 );
 router.post(
   "/sessions/:sessionId/reset-responses",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("sessions"),
   sessionController.resetResponses
 );
 router.post(
   "/sessions/:sessionId/start",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("sessions"),
   sessionController.start
 );
 router.post(
   "/sessions/:sessionId/pause",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeAnyRight("sessions", "present"),
   sessionController.pause
 );
 router.post(
   "/sessions/:sessionId/resume",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeAnyRight("sessions", "present"),
   sessionController.resume
 );
 router.post(
   "/sessions/:sessionId/end",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeAnyRight("sessions", "present"),
   sessionController.end
 );
 router.post(
   "/sessions/:sessionId/activity",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeAnyRight("sessions", "present"),
   sessionController.pingActivity
 );
 router.post(
   "/sessions/:sessionId/close-all-questions",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("present"),
   sessionController.closeAllQuestions
 );
 router.post(
   "/sessions/:sessionId/activate-all-questions",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("present"),
   sessionController.activateAllQuestions
 );
 router.get(
   "/sessions/:sessionId/qr",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeAnyRight("sessions", "present"),
   sessionController.qr
 );
 router.post(
   "/sessions/:sessionId/present-view-link",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("present"),
   sessionController.presentViewLink
 );
 if (require("../config/integrations").isIntegrationsEnabled()) {
   router.post(
     "/sessions/:sessionId/embed-link",
-    authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+    authorizeStaff,
+    authorizeRights("present"),
     sessionController.embedLink
   );
 }
 router.get(
   "/sessions/:sessionId/present-slide",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("present"),
   sessionController.getPresentSlide
 );
 router.put(
   "/sessions/:sessionId/present-slide",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("present"),
   sessionController.presentSlide
 );
 

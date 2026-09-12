@@ -1,5 +1,5 @@
 const bcrypt = require("bcryptjs");
-const { User, Plan } = require("../models");
+const { User, Plan, Role } = require("../models");
 const { sequelize } = require("../config/database");
 const { getWebsiteSignupOrganization } = require("./websiteSignupOrg.service");
 const {
@@ -25,6 +25,7 @@ const {
   signPlanRenewToken
 } = require("./otp.service");
 const { normalizeMobile, isValidMobile } = require("../utils/phone");
+const { getEffectiveRights, getDataScope } = require("../config/user-rights");
 
 const FORGOT_PASSWORD_SUCCESS_MESSAGE =
   "Reset credentials have been sent to your email. Please check your inbox.";
@@ -47,11 +48,29 @@ function buildUserPayload(user) {
     mobile_number: user.mobile_number || null,
     full_name: user.full_name,
     role: user.role,
+    role_name: user.assignedRole?.name || user.role,
+    data_scope: getDataScope(user),
     client_id: user.client_id,
     dept_id: user.dept_id,
+    rights: getEffectiveRights(user),
     must_change_password: isMustChangePassword(user.must_change_password),
     hints_completed: isHintsCompleted(user.hints_completed)
   };
+}
+
+async function findUserWithRole(where) {
+  return User.findOne({
+    where,
+    include: [{ model: Role, as: "assignedRole", required: false }]
+  });
+}
+
+function assertRoleActive(user) {
+  if (user?.assignedRole && !user.assignedRole.is_active) {
+    const error = new Error("This role is disabled. Contact an administrator.");
+    error.statusCode = 403;
+    throw error;
+  }
 }
 
 function buildAuthTokens(payload) {
@@ -209,9 +228,7 @@ async function signupUser(input) {
 }
 
 async function loginUser(input) {
-  const user = await User.findOne({
-    where: { email: input.email.toLowerCase() }
-  });
+  const user = await findUserWithRole({ email: input.email.toLowerCase() });
 
   if (!user) {
     const error = new Error("Invalid email or password");
@@ -231,6 +248,7 @@ async function loginUser(input) {
     error.statusCode = 403;
     throw error;
   }
+  assertRoleActive(user);
 
   if (isLoginOtpEnabled()) {
     await sendOtp({
@@ -277,12 +295,15 @@ async function verifyLoginOtp(input) {
     code: input.code
   });
 
-  const user = await User.findByPk(challenge.user_id);
+  const user = await User.findByPk(challenge.user_id, {
+    include: [{ model: Role, as: "assignedRole", required: false }]
+  });
   if (!user || !user.is_active) {
     const error = new Error("User not found or inactive");
     error.statusCode = 401;
     throw error;
   }
+  assertRoleActive(user);
 
   if (String(user.email || "").toLowerCase() !== email) {
     const error = new Error("Login verification mismatch");
@@ -309,12 +330,15 @@ async function refreshAccessToken(refreshToken) {
     throw error;
   }
 
-  const user = await User.findByPk(decoded.user_id);
+  const user = await User.findByPk(decoded.user_id, {
+    include: [{ model: Role, as: "assignedRole", required: false }]
+  });
   if (!user || !user.is_active) {
     const error = new Error("User not found or inactive");
     error.statusCode = 401;
     throw error;
   }
+  assertRoleActive(user);
 
   const payload = buildUserPayload(user);
   return {

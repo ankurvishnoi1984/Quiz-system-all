@@ -3,7 +3,8 @@ const qaController = require("../controllers/qa.controller");
 const authMiddleware = require("../middlewares/auth.middleware");
 const participantAuthMiddleware = require("../middlewares/participant-auth.middleware");
 const qaAccessMiddleware = require("../middlewares/qa-access.middleware");
-const authorizeRoles = require("../middlewares/role.middleware");
+const authorizeStaff = require("../middlewares/staff.middleware");
+const { authorizeAnyRight } = require("../middlewares/rights.middleware");
 
 const router = express.Router();
 
@@ -14,25 +15,29 @@ router.delete("/qa/:qaId/upvote", participantAuthMiddleware, qaController.unvote
 router.put(
   "/qa/:qaId/approve",
   authMiddleware,
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeAnyRight("present", "sessions"),
   qaController.approve
 );
 router.put(
   "/qa/:qaId/reject",
   authMiddleware,
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeAnyRight("present", "sessions"),
   qaController.reject
 );
 router.put(
   "/qa/:qaId/answer",
   authMiddleware,
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeAnyRight("present", "sessions"),
   qaController.answer
 );
 router.put(
   "/qa/:qaId/pin",
   authMiddleware,
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeAnyRight("present", "sessions"),
   qaController.pin
 );
 

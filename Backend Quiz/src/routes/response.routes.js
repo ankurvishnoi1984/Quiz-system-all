@@ -2,8 +2,9 @@ const express = require("express");
 const responseController = require("../controllers/response.controller");
 const authMiddleware = require("../middlewares/auth.middleware");
 const participantAuthMiddleware = require("../middlewares/participant-auth.middleware");
-const authorizeRoles = require("../middlewares/role.middleware");
+const authorizeStaff = require("../middlewares/staff.middleware");
 const qaAccessMiddleware = require("../middlewares/qa-access.middleware");
+const { authorizeAnyRight, authorizeRights } = require("../middlewares/rights.middleware");
 
 const router = express.Router();
 
@@ -26,32 +27,38 @@ router.use("/responses", authMiddleware);
 
 router.get(
   "/responses/question/:questionId",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeAnyRight("present", "reports"),
   responseController.questionResults
 );
 router.get(
   "/responses/session/:sessionId",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeAnyRight("present", "reports"),
   responseController.sessionResponses
 );
 router.get(
   "/responses/session/:sessionId/leaderboard",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeAnyRight("present", "reports"),
   responseController.sessionLeaderboard
 );
 router.get(
   "/responses/session/:sessionId/survey-summary",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeAnyRight("present", "reports"),
   responseController.sessionSurveySummary
 );
 router.get(
   "/responses/session/:sessionId/summary",
-  authorizeRoles("super_admin", "client_admin", "dept_admin"),
+  authorizeStaff,
+  authorizeRights("reports"),
   responseController.sessionSummary
 );
 router.get(
   "/responses/session/:sessionId/export",
-  authorizeRoles("super_admin", "client_admin", "dept_admin"),
+  authorizeStaff,
+  authorizeRights("reports"),
   responseController.sessionExport
 );
 

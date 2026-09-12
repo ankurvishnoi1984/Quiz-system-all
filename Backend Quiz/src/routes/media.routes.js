@@ -1,7 +1,8 @@
 const express = require("express");
 const mediaController = require("../controllers/media.controller");
 const authMiddleware = require("../middlewares/auth.middleware");
-const authorizeRoles = require("../middlewares/role.middleware");
+const authorizeStaff = require("../middlewares/staff.middleware");
+const { authorizeRights } = require("../middlewares/rights.middleware");
 const { uploadMedia } = require("../config/multer");
 const multer = require("multer");
 const { errorResponse } = require("../utils/response");
@@ -23,18 +24,21 @@ function handleMediaUpload(req, res, next) {
 
 router.post(
   "/media/upload",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("builder"),
   handleMediaUpload,
   mediaController.upload
 );
 router.get(
   "/media/:deptId",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("builder"),
   mediaController.listByDepartment
 );
 router.delete(
   "/media/:assetId",
-  authorizeRoles("super_admin", "client_admin", "dept_admin", "host"),
+  authorizeStaff,
+  authorizeRights("builder"),
   mediaController.remove
 );
 

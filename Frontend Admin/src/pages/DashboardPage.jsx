@@ -38,6 +38,8 @@ import {
 import { toDateInputValue, toTimeInputValue } from '../utils/sessionSchedule'
 import { buildDashboardStats, formatTrendLabel } from '../utils/dashboardMetrics'
 import { isWebsiteSignupHost } from '../utils/websiteSignupHost'
+import { hasRight } from '../utils/userRights'
+import { canSelectDepartmentOnCreate as canSelectDepartmentForUser } from '../utils/adminRoles'
 
 const tabItems = ['All', 'Draft', 'Live', 'Completed']
 
@@ -61,10 +63,12 @@ function DashboardPage() {
   const [liveSessionMetrics, setLiveSessionMetrics] = useState({})
 
   const { departmentId, departments, clientId, client, isSuperAdmin } = useShell()
-  const canSelectDepartmentOnCreate = ['super_admin', 'client_admin', 'dept_admin'].includes(
-    user?.role,
-  )
+  const canSelectDepartmentOnCreate = canSelectDepartmentForUser(user)
   const hideDepartmentForHost = isWebsiteSignupHost({ user, departments, departmentId })
+  const canManageSessions = hasRight(user, 'sessions')
+  const canBuilder = hasRight(user, 'builder')
+  const canPresent = hasRight(user, 'present')
+  const canAnalytics = hasRight(user, 'reports')
   const debouncedSearch = useDebouncedValue(search, 250).trim().toLowerCase()
 
   const sessionsQuery = useQuery({
@@ -392,6 +396,7 @@ function DashboardPage() {
 
   const handleAction = (action, session) => {
     if (action === 'delete') {
+      if (!canManageSessions) return
       if (session.status === 'Live') return
       setDeleteConfirmSession(session)
       return
@@ -404,14 +409,17 @@ function DashboardPage() {
       return
     }
     if (action === 'reset-responses') {
+      if (!canManageSessions) return
       setResetConfirmSession(session)
       return
     }
     if (action === 'duplicate') {
+      if (!canManageSessions) return
       duplicateMutation.mutate({ session })
       return
     }
     if (action === 'edit-session') {
+      if (!canManageSessions) return
       const raw = (sessionsQuery.data || []).find(
         (s) => String(s.session_id) === String(session.id),
       )
@@ -420,17 +428,21 @@ function DashboardPage() {
       return
     }
     if (action === 'builder') {
+      if (!canBuilder) return
       navigate(`/builder?session=${encodeURIComponent(session.id)}`)
       return
     }
     if (action === 'analytics') {
+      if (!canAnalytics) return
       navigate(`/analytics?session=${encodeURIComponent(session.id)}`)
       return
     }
     if (action === 'launch') {
+      if (!canPresent) return
       if (session.status === 'Completed') return
       const goLive = () => navigate(`/live?session=${encodeURIComponent(session.id)}`)
       if (session.status === 'Draft') {
+        if (!canManageSessions) return
         transitionMutation.mutate(
           { sessionId: session.id, action: 'start' },
           {
@@ -458,6 +470,7 @@ function DashboardPage() {
       return
     }
     if (action === 'share') {
+      if (!canPresent) return
       setShareSession(session)
       return
     }
@@ -610,23 +623,25 @@ function DashboardPage() {
           <h2 className="mt-1 text-2xl font-bold text-navy-900">Sessions overview</h2>
         </div>
 
-        <button
-          type="button"
-          data-tour="create-session"
-          disabled={planLocked}
-          title={planLocked ? 'No active plan — renew to create sessions' : undefined}
-          onClick={() => {
-            if (planLocked) {
-              showPlanLockedAlert()
-              return
-            }
-            setCreateOpen(true)
-          }}
-          className="inline-flex items-center gap-2 rounded-2xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-900/25 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <Plus className="size-4" />
-          New Session
-        </button>
+        {canManageSessions ? (
+          <button
+            type="button"
+            data-tour="create-session"
+            disabled={planLocked}
+            title={planLocked ? 'No active plan — renew to create sessions' : undefined}
+            onClick={() => {
+              if (planLocked) {
+                showPlanLockedAlert()
+                return
+              }
+              setCreateOpen(true)
+            }}
+            className="inline-flex items-center gap-2 rounded-2xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-900/25 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Plus className="size-4" />
+            New Session
+          </button>
+        ) : null}
       </div>
 
       {user?.role !== 'super_admin' && planLocked ? (
@@ -734,6 +749,10 @@ function DashboardPage() {
             session={session}
             onAction={handleAction}
             planLocked={planLocked}
+            canSessions={canManageSessions}
+            canBuilder={canBuilder}
+            canPresent={canPresent}
+            canAnalytics={canAnalytics}
           />
         ))}
         {!filtered.length && !sessionsQuery.isLoading && !sessionsQuery.error ? (

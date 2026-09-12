@@ -1,11 +1,11 @@
 import { Navigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
-import { isAdminRole } from '../../utils/adminRoles'
+import { canManageDepartments } from '../../utils/adminRoles'
 
 export function AdminOnlyRoute({ children }) {
   const user = useAuthStore((state) => state.user)
 
-  if (!isAdminRole(user?.role)) {
+  if (!canManageDepartments(user)) {
     return <Navigate to="/dashboard" replace />
   }
 

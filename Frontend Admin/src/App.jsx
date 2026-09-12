@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AdminOnlyRoute } from './components/auth/AdminOnlyRoute'
 import { SuperAdminOnlyRoute } from './components/auth/SuperAdminOnlyRoute'
 import { RequireActivePlan } from './components/auth/RequireActivePlan'
+import { RequireRight } from './components/auth/RequireRight'
 import DepartmentAnalyticsPage from './pages/DepartmentAnalyticsPage'
 import ClientAnalyticsPage from './pages/ClientAnalyticsPage'
 import LoginPage from './pages/LoginPage'
@@ -17,6 +18,7 @@ import ReportsPage from './pages/ReportsPage'
 import ManageClientsPage from './pages/ManageClientsPage'
 import ManageDepartmentsPage from './pages/ManageDepartmentsPage'
 import ManageUsersPage from './pages/ManageUsersPage'
+import ManageRolesPage from './pages/ManageRolesPage'
 import ManagePlansPage from './pages/ManagePlansPage'
 import MyPlanPage from './pages/MyPlanPage'
 import WebSocketMonitorPage from './pages/WebSocketMonitorPage'
@@ -100,9 +102,11 @@ function App() {
             path="/present"
             element={
               user && !mustChangePassword ? (
-                <RequireActivePlan>
-                  <PresentModePage />
-                </RequireActivePlan>
+                <RequireRight right="present">
+                  <RequireActivePlan>
+                    <PresentModePage />
+                  </RequireActivePlan>
+                </RequireRight>
               ) : (
                 <Navigate to={user ? '/change-password' : '/login'} replace />
               )
@@ -166,27 +170,38 @@ function App() {
             <Route
               path="/builder"
               element={
-                <RequireActivePlan>
-                  <BuilderPage />
-                </RequireActivePlan>
+                <RequireRight right="builder">
+                  <RequireActivePlan>
+                    <BuilderPage />
+                  </RequireActivePlan>
+                </RequireRight>
               }
             />
             <Route
               path="/live"
               element={
-                <RequireActivePlan>
-                  <LivePage />
-                </RequireActivePlan>
+                <RequireRight right="present">
+                  <RequireActivePlan>
+                    <LivePage />
+                  </RequireActivePlan>
+                </RequireRight>
               }
             />
-            <Route path="/analytics" element={<AnalyticsPage />} />
+            <Route
+              path="/analytics"
+              element={
+                <RequireRight right="reports">
+                  <AnalyticsPage />
+                </RequireRight>
+              }
+            />
             <Route path="/training" element={<TrainingLibraryPage />} />
             <Route
               path="/department-analytics"
               element={
-                <AdminOnlyRoute>
+                <SuperAdminOnlyRoute>
                   <DepartmentAnalyticsPage />
-                </AdminOnlyRoute>
+                </SuperAdminOnlyRoute>
               }
             />
             <Route
@@ -197,7 +212,14 @@ function App() {
                 </SuperAdminOnlyRoute>
               }
             />
-            <Route path="/reports" element={<ReportsPage />} />
+            <Route
+              path="/reports"
+              element={
+                <RequireRight right="reports">
+                  <ReportsPage />
+                </RequireRight>
+              }
+            />
             <Route
               path="/manage/clients"
               element={
@@ -219,6 +241,14 @@ function App() {
               element={
                 <SuperAdminOnlyRoute>
                   <ManageUsersPage />
+                </SuperAdminOnlyRoute>
+              }
+            />
+            <Route
+              path="/manage/roles"
+              element={
+                <SuperAdminOnlyRoute>
+                  <ManageRolesPage />
                 </SuperAdminOnlyRoute>
               }
             />

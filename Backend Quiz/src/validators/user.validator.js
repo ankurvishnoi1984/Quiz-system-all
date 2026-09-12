@@ -1,5 +1,3 @@
-const VALID_ADMIN_CREATED_ROLES = ["client_admin", "dept_admin", "host"];
-
 function validateCreateUserPayload(payload) {
   const errors = [];
 
@@ -17,16 +15,10 @@ function validateCreateUserPayload(payload) {
     errors.push("password must be at least 8 characters");
   }
 
-  if (!payload?.role || !VALID_ADMIN_CREATED_ROLES.includes(payload.role)) {
-    errors.push(`role must be one of: ${VALID_ADMIN_CREATED_ROLES.join(", ")}`);
-  }
-
-  if (["client_admin", "dept_admin", "host"].includes(payload?.role) && !payload?.client_id) {
-    errors.push("client_id is required for the selected role");
-  }
-
-  if (["dept_admin", "host"].includes(payload?.role) && !payload?.dept_id) {
-    errors.push("dept_id is required for the selected role");
+  if (!payload?.role || typeof payload.role !== "string" || !payload.role.trim()) {
+    errors.push("role is required");
+  } else if (payload.role === "super_admin") {
+    errors.push("super_admin cannot be created from this form");
   }
 
   if (payload?.plan_id != null && payload.plan_id !== "") {
@@ -114,6 +106,5 @@ function validateUserStatusPayload(payload) {
 module.exports = {
   validateCreateUserPayload,
   validateExtraParticipantsPayload,
-  validateUserStatusPayload,
-  VALID_ADMIN_CREATED_ROLES
+  validateUserStatusPayload
 };

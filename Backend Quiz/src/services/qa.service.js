@@ -1,15 +1,13 @@
 const { QaQuestion, QaUpvote, Session, Department, Client, Participant } = require("../models");
+const { assertSessionWriteAccess } = require("../config/data-scope");
 
 function assertStaffAccess(user, session) {
-  if (user.role === "super_admin") return;
-  if (user.role === "client_admin" && Number(user.client_id) === Number(session.department.client_id)) {
-    return;
+  try {
+    assertSessionWriteAccess(user, session);
+  } catch (err) {
+    err.message = "Forbidden: Q&A access denied";
+    throw err;
   }
-  if (user.role === "dept_admin" && Number(user.dept_id) === Number(session.dept_id)) return;
-  if (user.role === "host" && Number(user.user_id) === Number(session.host_id)) return;
-  const error = new Error("Forbidden: Q&A access denied");
-  error.statusCode = 403;
-  throw error;
 }
 
 async function getSessionOrThrow(sessionId) {

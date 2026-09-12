@@ -6,6 +6,7 @@ import { HostAlertModal } from '../components/live/HostAlertModal'
 import { useAuthStore } from '../store/authStore'
 import { listClientsApi, listDepartmentsApi } from '../services/dashboardApi'
 import { createDepartmentApi } from '../services/managementApi'
+import { canManageDepartments, isPlatformScope } from '../utils/adminRoles'
 
 function slugify(value) {
   return String(value || '')
@@ -19,8 +20,8 @@ function ManageDepartmentsPage() {
   const accessToken = useAuthStore((state) => state.accessToken)
   const user = useAuthStore((state) => state.user)
   const queryClient = useQueryClient()
-  const isSuperAdmin = user?.role === 'super_admin'
-  const canCreate = ['super_admin', 'client_admin'].includes(user?.role)
+  const isSuperAdmin = isPlatformScope(user)
+  const canCreate = canManageDepartments(user)
 
   const [createOpen, setCreateOpen] = useState(false)
   const [alert, setAlert] = useState(null)

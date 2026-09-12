@@ -1,4 +1,5 @@
 const User = require("./user.model");
+const Role = require("./role.model");
 const Plan = require("./plan.model");
 const UserParticipantAddon = require("./user-participant-addon.model");
 const UserQuestionAddon = require("./user-question-addon.model");
@@ -25,6 +26,8 @@ const BlockedIp = require("./blocked-ip.model");
 const AuditLog = require("./audit-log.model");
 const registerAuditHooks = require("./register-audit-hooks");
 
+User.belongsTo(Role, { foreignKey: "role", targetKey: "slug", as: "assignedRole" });
+Role.hasMany(User, { foreignKey: "role", sourceKey: "slug", as: "users" });
 Plan.hasMany(User, { foreignKey: "plan_id", as: "users" });
 User.belongsTo(Plan, { foreignKey: "plan_id", as: "plan" });
 Plan.hasMany(Payment, { foreignKey: "plan_id", as: "payments" });
@@ -97,6 +100,7 @@ MediaAsset.belongsTo(User, { foreignKey: "uploaded_by" });
 
 const models = {
   User,
+  Role,
   Plan,
   Payment,
   UserParticipantAddon,

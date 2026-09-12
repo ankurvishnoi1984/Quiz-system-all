@@ -94,10 +94,9 @@ function setupWebSocketServer(server) {
               exp: decoded.exp
             });
           } else if (
-            decoded.role === "host" ||
-            decoded.role === "super_admin" ||
-            decoded.role === "client_admin" ||
-            decoded.role === "dept_admin"
+            decoded.user_id &&
+            decoded.role !== "participant" &&
+            decoded.role !== "presenter_viewer"
           ) {
             authStatus = "staff_ok";
             wsLog("info", "auth_ok", {

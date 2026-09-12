@@ -8,6 +8,7 @@ const {
   Question,
   QuestionOption
 } = require("../models");
+const { isPlatformScope } = require("../config/data-scope");
 
 function createError(message, statusCode) {
   const error = new Error(message);
@@ -15,10 +16,8 @@ function createError(message, statusCode) {
   return error;
 }
 
-function assertDeptReportAdminAccess(user, dept) {
-  if (user.role === "super_admin") return;
-  if (user.role === "client_admin" && Number(user.client_id) === Number(dept.client_id)) return;
-  if (user.role === "dept_admin" && Number(user.dept_id) === Number(dept.dept_id)) return;
+function assertDeptReportAdminAccess(user) {
+  if (isPlatformScope(user)) return;
   throw createError("Forbidden: department report access denied", 403);
 }
 

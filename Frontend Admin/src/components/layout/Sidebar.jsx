@@ -19,7 +19,8 @@ import { SidebarNavGroup } from './SidebarNavGroup'
 import { useHostNavSessions, getBuilderNavTo, getLiveNavTo } from '../../hooks/useHostNavSessions'
 import { usePlanLock } from '../../hooks/usePlanLock'
 import { useAuthStore } from '../../store/authStore'
-import { isAdminRole } from '../../utils/adminRoles'
+import { isAdminRole, canManageDepartments } from '../../utils/adminRoles'
+import { hasRight } from '../../utils/userRights'
 import { useHostOnboarding } from '../../context/HostOnboardingContext'
 
 const staticNavigationItems = [
@@ -27,7 +28,7 @@ const staticNavigationItems = [
   { kind: 'builder', label: 'Question Builder', icon: FileQuestion, isNew: true },
   { kind: 'live', label: 'Live Present Mode', icon: CirclePlay, live: true },
   { to: '/analytics', label: 'Session Analytics', icon: ChartColumnBig, kind: 'static' },
-  { to: '/department-analytics', label: 'Department Analytics', icon: Building2, kind: 'static', adminOnly: true },
+  { to: '/department-analytics', label: 'Department Analytics', icon: Building2, kind: 'static', superAdminOnly: true },
   { to: '/client-analytics', label: 'Client Analytics', icon: Layers, kind: 'static', superAdminOnly: true },
   { to: '/monitor/websockets', label: 'Connection Monitor', icon: Activity, kind: 'static', superAdminOnly: true },
   { to: '/reports', label: 'Reports', icon: FileBarChart2, kind: 'static' },
@@ -51,7 +52,11 @@ function Sidebar({ collapsed, onToggle }) {
         .filter((item) => {
           if (item.superAdminOnly && user?.role !== 'super_admin') return false
           if (item.hideForSuperAdmin && user?.role === 'super_admin') return false
-          if (item.adminOnly && !isAdminRole(user?.role)) return false
+          if (item.adminOnly && !isAdminRole(user)) return false
+          if (item.kind === 'builder' && !hasRight(user, 'builder')) return false
+          if (item.kind === 'live' && !hasRight(user, 'present')) return false
+          if (item.to === '/analytics' && !hasRight(user, 'reports')) return false
+          if (item.to === '/reports' && !hasRight(user, 'reports')) return false
           return true
         })
         .map((item) => {
@@ -79,7 +84,7 @@ function Sidebar({ collapsed, onToggle }) {
           }
           return item
         }),
-    [builderTo, liveTo, planLocked, canManagePlan, user?.role],
+    [builderTo, liveTo, planLocked, canManagePlan, user],
   )
 
   const manageClientsItems = useMemo(() => {
@@ -87,13 +92,14 @@ function Sidebar({ collapsed, onToggle }) {
     if (user?.role === 'super_admin') {
       items.push({ to: '/manage/clients', label: 'Clients' })
       items.push({ to: '/manage/users', label: 'Users' })
+      items.push({ to: '/manage/roles', label: 'Roles' })
       items.push({ to: '/manage/plans', label: 'Plans' })
     }
-    if (['super_admin', 'client_admin'].includes(user?.role)) {
+    if (canManageDepartments(user)) {
       items.push({ to: '/manage/departments', label: 'Department' })
     }
     return items
-  }, [user?.role])
+  }, [user])
 
   const dashboardItem = navigationItems.find((item) => item.to === '/dashboard')
   const myPlanItem = navigationItems.find((item) => item.to === '/my-plan')

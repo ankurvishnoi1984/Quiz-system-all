@@ -32,7 +32,7 @@ const User = sequelize.define(
       allowNull: true
     },
     role: {
-      type: DataTypes.ENUM("super_admin", "client_admin", "dept_admin", "host"),
+      type: DataTypes.STRING(64),
       allowNull: false
     },
     client_id: {
@@ -86,6 +86,10 @@ const User = sequelize.define(
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false
+    },
+    rights_overrides: {
+      type: DataTypes.JSON,
+      allowNull: true
     },
     created_at: {
       type: DataTypes.DATE,

@@ -3,6 +3,7 @@ const path = require("path");
 const sharp = require("sharp");
 const { MediaAsset, Department, Client } = require("../models");
 const { getMediaTypeFromMime, normalizeFilePath } = require("../utils/media");
+const { canAccessDepartment } = require("../config/data-scope");
 
 function createError(message, statusCode) {
   const error = new Error(message);
@@ -21,11 +22,7 @@ async function getDepartmentOrThrow(deptId) {
 }
 
 function assertDepartmentAccess(user, department) {
-  if (user.role === "super_admin") return;
-  if (user.role === "client_admin" && Number(user.client_id) === Number(department.client_id)) return;
-  if ((user.role === "dept_admin" || user.role === "host") && Number(user.dept_id) === Number(department.dept_id)) {
-    return;
-  }
+  if (canAccessDepartment(user, department)) return;
   throw createError("Forbidden: media access denied", 403);
 }
 

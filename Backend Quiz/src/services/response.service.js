@@ -10,6 +10,7 @@ const {
 } = require("../models");
 const { formatQuestionForParticipant } = require("./question.service");
 const { notifyLeaderboard, notifyRankingResponseSubmitted } = require("./websocket.service");
+const { assertSessionWriteAccess } = require("../config/data-scope");
 const {
   assignRandomQuestionOrderToParticipant,
   sortQuestionsByOrder
@@ -269,15 +270,12 @@ function assertStaffAccess(user, session) {
     error.statusCode = 403;
     throw error;
   }
-  if (user.role === "super_admin") return;
-  if (user.role === "client_admin" && Number(user.client_id) === Number(session.department.client_id)) {
-    return;
+  try {
+    assertSessionWriteAccess(user, session);
+  } catch (err) {
+    err.message = "Forbidden: response access denied";
+    throw err;
   }
-  if (user.role === "dept_admin" && Number(user.dept_id) === Number(session.dept_id)) return;
-  if (user.role === "host" && Number(user.user_id) === Number(session.host_id)) return;
-  const error = new Error("Forbidden: response access denied");
-  error.statusCode = 403;
-  throw error;
 }
 
 async function getSessionForAccess(sessionId) {
