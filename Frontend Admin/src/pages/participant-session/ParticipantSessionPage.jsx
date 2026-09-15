@@ -318,11 +318,17 @@ function ParticipantSessionPage() {
     showOverallLeaderboard &&
     (sessionSupportsOverallLeaderboard(mappedQuestions) || mappedQuestions.length === 0)
   const showSurveyResultsEnabled = Boolean(session?.survey_results_enabled)
-  // Trust the host toggle: ending screen should show whenever results are enabled,
-  // even if question mapping briefly lags behind WS updates.
-  const showSurveyEndingScreen =
-    (isSessionEnded || showSurveyResultsEnabled) &&
+  // Host toggle: live survey result charts (not tied to session end).
+  // Trust the toggle even if question mapping briefly lags behind WS updates.
+  const showSurveyResults =
+    showSurveyResultsEnabled &&
     (sessionSupportsSurveyEndingScreen(mappedQuestions) || showSurveyResultsEnabled)
+  // After the host ends a survey-style session, show thanks only (results are cleared).
+  const showSurveyThanks =
+    isSessionEnded &&
+    !showSurveyResults &&
+    sessionSupportsSurveyEndingScreen(mappedQuestions)
+  const showSurveyEndingScreen = showSurveyResults || showSurveyThanks
   const endingScreenOnlyMode = showOverallLeaderboardTab || showSurveyEndingScreen
   const navigationEnabled = session?.participant_navigation_enabled !== false
   const randomQuestionOrderEnabled = isSessionRandomQuestionOrderEnabled(session)
@@ -787,8 +793,18 @@ function ParticipantSessionPage() {
 
     const offSession = client.on(RealtimeEvent.SESSION_UPDATED, (data) => {
       if (data?.status) {
+        const ended = data.status === 'completed' || data.status === 'archived'
         queryClient.setQueryData(['participant-session', effectiveSessionCode], (old) =>
-          old ? { ...old, status: data.status } : old,
+          old
+            ? {
+                ...old,
+                status: data.status,
+                // Match backend clearParticipantFacingDisplaysOnEnd before settings WS lands.
+                ...(ended
+                  ? { leaderboard_enabled: false, survey_results_enabled: false }
+                  : {}),
+              }
+            : old,
         )
       }
       queryClient.invalidateQueries({ queryKey: ['participant-session', effectiveSessionCode] })
@@ -1076,7 +1092,16 @@ function ParticipantSessionPage() {
       }
 
       if (wasSurveyResultsEnabled && !isSurveyResultsEnabled) {
-        setStep((current) => (current === 'surveyEnding' ? 'active' : current))
+        setStep((current) => {
+          if (current !== 'surveyEnding') return current
+          const status = queryClient.getQueryData([
+            'participant-session',
+            effectiveSessionCode,
+          ])?.status
+          // Session end clears the toggle — stay on ending for thanks-only UI.
+          if (status === 'completed' || status === 'archived') return current
+          return 'active'
+        })
       }
     })
 
@@ -1158,10 +1183,10 @@ function ParticipantSessionPage() {
   }, [showOverallLeaderboardTab, dbSessionId, queryClient])
 
   useEffect(() => {
-    if (showSurveyEndingScreen && dbSessionId) {
+    if (showSurveyResults && dbSessionId) {
       queryClient.invalidateQueries({ queryKey: ['participant-survey-summary', dbSessionId] })
     }
-  }, [showSurveyEndingScreen, dbSessionId, queryClient])
+  }, [showSurveyResults, dbSessionId, queryClient])
 
   useEffect(() => {
     if (step === 'join' || step === 'waiting') return
@@ -1508,9 +1533,8 @@ function ParticipantSessionPage() {
     enabled: Boolean(
       participantToken &&
         dbSessionId &&
-        showSurveyEndingScreen &&
+        showSurveyResults &&
         (hasAnyQuestionSaved ||
-          session?.status === 'completed' ||
           session?.survey_results_enabled ||
           step === 'surveyEnding'),
     ),
@@ -1521,7 +1545,7 @@ function ParticipantSessionPage() {
       return failureCount < 1
     },
     retryDelay: (attempt) => Math.min(400 * 2 ** attempt, 2500),
-    refetchInterval: showSurveyEndingScreen ? 8000 : false,
+    refetchInterval: showSurveyResults ? 8000 : false,
   })
 
   useEffect(() => {
@@ -2396,10 +2420,11 @@ function ParticipantSessionPage() {
         ) : showSurveyEndingScreen ? (
           <SurveySessionEndingPanel
             sessionTitle={session.title}
-            summary={surveySummaryQuery.data}
-            isLoading={surveySummaryQuery.isLoading}
+            summary={showSurveyResults ? surveySummaryQuery.data : null}
+            isLoading={showSurveyResults ? surveySummaryQuery.isLoading : false}
+            thanksOnly={showSurveyThanks}
             error={
-              surveySummaryQuery.isError
+              showSurveyResults && surveySummaryQuery.isError
                 ? surveySummaryQuery.error?.message || 'Unable to load survey results.'
                 : ''
             }

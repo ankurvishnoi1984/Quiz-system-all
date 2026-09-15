@@ -412,9 +412,10 @@ export function buildRatingChartData(currentResponses, question) {
 export function buildWordCloudData(question, questionResults, currentResponses) {
   const chartType = question?.chartRawType ?? getQuestionChartRawType(question)
   if (chartType !== 'word_cloud') return []
-  const fromApi = wordCountsFromApiResults(questionResults)
-  if (fromApi.length) return fromApi
-  return wordCountsFromResponses(currentResponses)
+  // Prefer live response rows so Present/Live update as soon as responses arrive.
+  const fromLive = wordCountsFromResponses(currentResponses)
+  if (fromLive.length) return fromLive
+  return wordCountsFromApiResults(questionResults)
 }
 
 export function buildRankingResponseLabel(row, optionsById) {

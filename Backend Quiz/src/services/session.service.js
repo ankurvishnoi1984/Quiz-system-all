@@ -601,9 +601,10 @@ async function hideQuestionResultsForSession(sessionId) {
   return hiddenQuestionIds;
 }
 
-/** Close overall rankings and per-question Show results when a session ends. */
+/** Close overall rankings, survey results, and per-question Show results when a session ends. */
 async function clearParticipantFacingDisplaysOnEnd(session) {
   session.leaderboard_enabled = false;
+  session.survey_results_enabled = false;
   const hiddenQuestionIds = await hideQuestionResultsForSession(session.session_id);
   session.hiddenQuestionResultIds = hiddenQuestionIds;
   return hiddenQuestionIds;

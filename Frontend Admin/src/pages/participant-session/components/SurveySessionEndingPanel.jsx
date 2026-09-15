@@ -22,6 +22,7 @@ export function SurveySessionEndingPanel({
   error = '',
   variant = 'participant',
   showThankYou = true,
+  thanksOnly = false,
 }) {
   const isPresent = variant === 'present'
   const questions = summary?.questions || []
@@ -30,11 +31,37 @@ export function SurveySessionEndingPanel({
 
   const containerClass = isPresent
     ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
-    : 'space-y-4'
+    : thanksOnly
+      ? 'flex min-h-[min(60vh,28rem)] flex-col items-center justify-center'
+      : 'space-y-4'
 
   const scrollClass = isPresent
     ? 'present-lb-list min-h-0 flex-1 space-y-[clamp(1rem,2.5vh,1.5rem)] overflow-y-auto pr-1'
     : 'space-y-4'
+
+  if (thanksOnly) {
+    return (
+      <section className={containerClass}>
+        <div className="quiz-pop w-full max-w-lg rounded-2xl border border-emerald-200/80 bg-linear-to-r from-emerald-50/90 to-white p-8 text-center shadow-sm sm:p-10">
+          <div className="mx-auto mb-5 inline-flex size-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+            <CheckCircle2 className="size-8" aria-hidden />
+          </div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">
+            Session complete
+          </p>
+          <h2 className="mt-2 text-2xl font-bold tracking-tight text-navy-900 sm:text-3xl">
+            Thanks for participating in the survey
+          </h2>
+          {sessionTitle ? (
+            <p className="mt-3 text-base text-slate-600 sm:text-lg">{sessionTitle}</p>
+          ) : null}
+          <p className="mt-4 text-sm leading-relaxed text-slate-600 sm:text-base">
+            The host has ended this session. Your responses have been recorded.
+          </p>
+        </div>
+      </section>
+    )
+  }
 
   return (
     <section className={containerClass}>

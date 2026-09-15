@@ -429,15 +429,21 @@ function LivePage() {
     onSuccess: (updated, variables) => {
       if (updated) {
         const ended = variables?.action === 'end'
-        queryClient.setQueryData(['live-session', sessionId], (old) =>
+        const endPatch = ended
+          ? { leaderboard_enabled: false, survey_results_enabled: false }
+          : {}
+        const mergeSession = (old) =>
           old
             ? {
                 ...old,
                 ...updated,
                 status: updated.status,
-                ...(ended ? { leaderboard_enabled: false } : {}),
+                ...endPatch,
               }
-            : updated,
+            : { ...updated, ...endPatch }
+        queryClient.setQueryData(['live-session', sessionId], mergeSession)
+        queryClient.setQueryData(['live-session', sessionId, 'host'], (old) =>
+          old ? mergeSession(old) : old,
         )
         if (ended) {
           const hideResults = (old) =>

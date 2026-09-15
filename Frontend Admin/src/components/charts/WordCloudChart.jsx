@@ -26,7 +26,7 @@ export default function WordCloudChart({
   size = 'md',
 }) {
   const minHeight = size === 'lg' ? 280 : size === 'sm' ? 160 : 220
-  // Use the true box size so packing matches what the user sees (no inflated height → clipped/stacked words).
+  // Always attach the measure ref (even when empty) so empty → first word lays out live.
   const { ref, width, height, ready } = useElementSize(minHeight, { useExactHeight: true })
   const seenKeysRef = useRef(new Set())
   const bootstrappedRef = useRef(false)
@@ -35,7 +35,7 @@ export default function WordCloudChart({
   const signature = useMemo(() => wordCloudSignature(words), [words])
 
   const placed = useMemo(() => {
-    if (!ready) return []
+    if (!ready || !words.length) return []
     return layoutWordCloud(words, width, height)
   }, [words, signature, width, height, ready])
 
@@ -67,20 +67,6 @@ export default function WordCloudChart({
     return () => window.clearTimeout(timer)
   }, [signature, words])
 
-  if (!words.length) {
-    return (
-      <div className={`flex h-full items-center justify-center ${className}`.trim()}>
-        <p
-          className={`text-center font-semibold text-slate-500 ${
-            size === 'lg' ? 'text-[clamp(1.15rem,2.5vw,1.75rem)]' : 'text-sm'
-          }`}
-        >
-          {emptyLabel}
-        </p>
-      </div>
-    )
-  }
-
   return (
     <div
       ref={ref}
@@ -88,38 +74,50 @@ export default function WordCloudChart({
       role="img"
       aria-label="Live word cloud of participant responses"
     >
-      {placed.map((item) => {
-        const isNew = flashKeys.has(item.key)
-        return (
-          <div
-            key={item.key}
-            className={`word-cloud__slot absolute flex items-center justify-center ${
-              isNew ? 'word-cloud__slot--new' : ''
+      {!words.length ? (
+        <div className="flex h-full min-h-[inherit] items-center justify-center">
+          <p
+            className={`text-center font-semibold text-slate-500 ${
+              size === 'lg' ? 'text-[clamp(1.15rem,2.5vw,1.75rem)]' : 'text-sm'
             }`}
-            style={{
-              left: item.x,
-              top: item.y,
-              width: item.w,
-              height: item.h,
-            }}
           >
-            <span
-              className="word-cloud__word select-none leading-none"
+            {emptyLabel}
+          </p>
+        </div>
+      ) : (
+        placed.map((item) => {
+          const isNew = flashKeys.has(item.key)
+          return (
+            <div
+              key={item.key}
+              className={`word-cloud__slot absolute flex items-center justify-center ${
+                isNew ? 'word-cloud__slot--new' : ''
+              }`}
               style={{
-                fontSize: item.fontSize,
-                fontWeight: item.fontWeight ?? 400,
-                color: item.color,
-                fontFamily: item.fontFamily,
-                '--word-cloud-rotate': `${item.rotation}deg`,
-                transform: `rotate(${item.rotation}deg)`,
+                left: item.x,
+                top: item.y,
+                width: item.w,
+                height: item.h,
               }}
-              title={`${item.text}: ${item.count}`}
             >
-              {item.text}
-            </span>
-          </div>
-        )
-      })}
+              <span
+                className="word-cloud__word select-none leading-none"
+                style={{
+                  fontSize: item.fontSize,
+                  fontWeight: item.fontWeight ?? 400,
+                  color: item.color,
+                  fontFamily: item.fontFamily,
+                  '--word-cloud-rotate': `${item.rotation}deg`,
+                  transform: `rotate(${item.rotation}deg)`,
+                }}
+                title={`${item.text}: ${item.count}`}
+              >
+                {item.text}
+              </span>
+            </div>
+          )
+        })
+      )}
     </div>
   )
 }

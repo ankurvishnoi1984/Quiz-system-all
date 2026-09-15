@@ -751,8 +751,12 @@ async function getParticipantSessionSurveySummary({ sessionId, participant }) {
   const sessionEnded = session.status === "completed" || session.status === "archived";
   const surveyResultsEnabled = coerceSessionFlag(session.survey_results_enabled);
 
-  if (!sessionEnded && !surveyResultsEnabled) {
-    const error = new Error("Survey results are not available yet");
+  // Chart aggregates are only available while the host has survey results turned on.
+  // After the session ends, results are cleared — participants get a thanks screen instead.
+  if (!surveyResultsEnabled) {
+    const error = new Error(
+      sessionEnded ? "Survey results are no longer available" : "Survey results are not available yet"
+    );
     error.statusCode = 403;
     throw error;
   }
