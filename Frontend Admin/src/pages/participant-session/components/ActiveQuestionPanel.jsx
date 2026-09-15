@@ -65,7 +65,7 @@ export function ActiveQuestionPanel({
   return (
     <section
       key={question.id}
-      className="quiz-enter space-y-4 rounded-2xl border border-blue-200/70 bg-white p-5 shadow-sm"
+      className="quiz-fade-in space-y-4 rounded-2xl border border-blue-200/70 bg-white p-5 shadow-sm"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         {navigationEnabled ? (

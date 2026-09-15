@@ -1,6 +1,5 @@
 import {
   DndContext,
-  DragOverlay,
   KeyboardSensor,
   PointerSensor,
   closestCenter,
@@ -16,7 +15,6 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { ArrowUpDown, ListOrdered } from 'lucide-react'
-import { useState } from 'react'
 
 function rankStyles(index) {
   if (index === 0) {
@@ -43,19 +41,39 @@ function rankStyles(index) {
   }
 }
 
-function RankingOptionCard({ text, index, disabled = false, isOverlay = false, dragHandleProps = {} }) {
+function SortableRankingRow({ id, text, index, disabled = false }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+    disabled,
+  })
   const styles = rankStyles(index)
+
+  // Drag the row itself (no DragOverlay portal) so the card stays under the cursor.
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition: isDragging ? undefined : transition,
+    zIndex: isDragging ? 30 : undefined,
+    position: 'relative',
+  }
 
   return (
     <div
-      className={`rounded-2xl border-2 px-4 py-3.5 shadow-sm transition ${
+      ref={setNodeRef}
+      style={style}
+      className={`rounded-2xl border-2 px-4 py-3.5 shadow-sm transition-[border-color,box-shadow,opacity] ${
         disabled
           ? 'cursor-not-allowed border-slate-200 bg-slate-50 opacity-70'
-          : `cursor-grab touch-none border-dashed active:cursor-grabbing hover:-translate-y-0.5 hover:border-blue-400/80 hover:shadow-md ${styles.card} ${
-              isOverlay ? 'scale-[1.02] border-blue-400 bg-white shadow-lg ring-2 ring-blue-300/40' : ''
+          : `cursor-grab touch-none border-dashed active:cursor-grabbing hover:border-blue-400/80 hover:shadow-md ${styles.card} ${
+              isDragging
+                ? 'cursor-grabbing border-blue-400 bg-white shadow-lg ring-2 ring-blue-300/40'
+                : ''
             }`
       }`}
-      {...dragHandleProps}
+      {...attributes}
+      {...listeners}
+      aria-label={`Rank ${index + 1}: ${text}. Drag to reorder.`}
+      role="button"
+      tabIndex={disabled ? -1 : 0}
     >
       <div className="flex items-center gap-3">
         <span
@@ -81,38 +99,7 @@ function RankingOptionCard({ text, index, disabled = false, isOverlay = false, d
   )
 }
 
-function SortableRankingRow({ id, text, index, disabled = false }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id,
-    disabled,
-  })
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.35 : 1,
-  }
-
-  return (
-    <div ref={setNodeRef} style={style}>
-      <RankingOptionCard
-        text={text}
-        index={index}
-        disabled={disabled}
-        dragHandleProps={{
-          ...attributes,
-          ...listeners,
-          'aria-label': `Rank ${index + 1}: ${text}. Drag to reorder.`,
-          role: 'button',
-          tabIndex: disabled ? -1 : 0,
-        }}
-      />
-    </div>
-  )
-}
-
 export function RankingOptions({ question, currentResponse, inputsLocked, onRankingChange }) {
-  const [activeId, setActiveId] = useState(null)
   const options = question?.options || []
   const optionIds = options.map((opt) => Number(opt.option_id)).filter(Boolean)
   const responseOrder = Array.isArray(currentResponse?.rankingOrder)
@@ -129,17 +116,11 @@ export function RankingOptions({ question, currentResponse, inputsLocked, onRank
   const orderedOptions = orderedIds.map((id) => optionById.get(Number(id))).filter(Boolean)
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
-  const handleDragStart = (event) => {
-    if (inputsLocked) return
-    setActiveId(Number(event.active.id))
-  }
-
   const handleDragEnd = (event) => {
-    setActiveId(null)
     if (inputsLocked) return
     const { active, over } = event
     if (!over || active.id === over.id) return
@@ -149,14 +130,7 @@ export function RankingOptions({ question, currentResponse, inputsLocked, onRank
     onRankingChange(arrayMove(orderedIds, oldIndex, newIndex))
   }
 
-  const handleDragCancel = () => {
-    setActiveId(null)
-  }
-
   if (!orderedOptions.length) return null
-
-  const activeIndex = activeId != null ? orderedIds.findIndex((id) => id === activeId) : -1
-  const activeOption = activeIndex >= 0 ? orderedOptions[activeIndex] : null
 
   return (
     <div className="space-y-3">
@@ -178,9 +152,7 @@ export function RankingOptions({ question, currentResponse, inputsLocked, onRank
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
-        onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
-        onDragCancel={handleDragCancel}
       >
         <SortableContext items={orderedIds} strategy={verticalListSortingStrategy}>
           <div className="space-y-2.5">
@@ -195,16 +167,6 @@ export function RankingOptions({ question, currentResponse, inputsLocked, onRank
             ))}
           </div>
         </SortableContext>
-
-        <DragOverlay dropAnimation={{ duration: 180, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1)' }}>
-          {activeOption ? (
-            <RankingOptionCard
-              text={activeOption.option_text}
-              index={activeIndex}
-              isOverlay
-            />
-          ) : null}
-        </DragOverlay>
       </DndContext>
     </div>
   )

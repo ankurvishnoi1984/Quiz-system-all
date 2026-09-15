@@ -81,6 +81,11 @@
     animation: quiz-enter 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 
+  /* Opacity-only enter — safe for drag-and-drop (no ancestor transform). */
+  .quiz-fade-in {
+    animation: quiz-fade-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
   .quiz-pop {
     animation: quiz-pop 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
@@ -238,6 +243,15 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes quiz-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 
