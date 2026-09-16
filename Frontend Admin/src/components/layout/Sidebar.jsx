@@ -10,6 +10,7 @@ import {
   FileQuestion,
   GraduationCap,
   LayoutDashboard,
+  Library,
   Layers,
   PanelLeftClose,
   PanelLeftOpen,
@@ -25,6 +26,13 @@ import { useHostOnboarding } from '../../context/HostOnboardingContext'
 
 const staticNavigationItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, kind: 'static' },
+  {
+    to: '/question-bank',
+    label: 'Question Bank',
+    icon: Library,
+    kind: 'static',
+    questionBankRoles: ['author', 'auditor', 'client_admin', 'dept_admin', 'super_admin'],
+  },
   { kind: 'builder', label: 'Question Builder', icon: FileQuestion, isNew: true },
   { kind: 'live', label: 'Live Present Mode', icon: CirclePlay, live: true },
   { to: '/analytics', label: 'Session Analytics', icon: ChartColumnBig, kind: 'static' },
@@ -50,6 +58,9 @@ function Sidebar({ collapsed, onToggle }) {
     () =>
       staticNavigationItems
         .filter((item) => {
+          const questionBankOnly = user?.role === 'author' || user?.role === 'auditor'
+          if (questionBankOnly && item.to !== '/question-bank') return false
+          if (item.questionBankRoles && !item.questionBankRoles.includes(user?.role)) return false
           if (item.superAdminOnly && user?.role !== 'super_admin') return false
           if (item.hideForSuperAdmin && user?.role === 'super_admin') return false
           if (item.adminOnly && !isAdminRole(user)) return false

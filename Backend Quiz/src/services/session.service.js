@@ -357,6 +357,7 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
           show_leaderboard: false,
           display_order: q.display_order,
           template_id: q.template_id || null,
+          source_bank_question_id: q.source_bank_question_id || null,
           set_id: q.set_id ? setIdMap.get(Number(q.set_id)) || null : null
         },
         { transaction }

@@ -18,6 +18,7 @@ const presentViewRoutes = require("./present-view.routes");
 const websocketMonitorRoutes = require("./websocket-monitor.routes");
 const auditLogRoutes = require("./audit-log.routes");
 const aiRoutes = require("./ai.routes");
+const questionBankRoutes = require("./question-bank.routes");
 
 const router = express.Router();
 
@@ -29,6 +30,7 @@ router.use("/audit-logs", auditLogRoutes);
 router.use("/users", userRoutes);
 router.use("/roles", roleRoutes);
 router.use("/plans", planRoutes);
+router.use("/question-bank", questionBankRoutes);
 router.use("/clients", clientRoutes);
 router.use("/departments", departmentRoutes);
 router.use("/", responseRoutes);

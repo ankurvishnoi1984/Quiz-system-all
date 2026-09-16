@@ -1,4 +1,11 @@
-const VALID_ROLES = ["super_admin", "client_admin", "dept_admin", "host"];
+const VALID_ROLES = [
+  "super_admin",
+  "client_admin",
+  "dept_admin",
+  "host",
+  "author",
+  "auditor"
+];
 
 function validateRegisterPayload(payload) {
   const errors = [];

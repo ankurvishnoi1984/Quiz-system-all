@@ -42,6 +42,22 @@ const SYSTEM_ROLE_DEFAULTS = {
     permissions: [...OPERATIONAL_RIGHTS],
     is_system: true,
     is_active: true
+  },
+  author: {
+    slug: "author",
+    name: "Question Author",
+    data_scope: "own_sessions",
+    permissions: [],
+    is_system: true,
+    is_active: true
+  },
+  auditor: {
+    slug: "auditor",
+    name: "Question Auditor",
+    data_scope: "own_sessions",
+    permissions: [],
+    is_system: true,
+    is_active: true
   }
 };
 

@@ -3,6 +3,8 @@ const SYSTEM_SCOPE_BY_ROLE = {
   client_admin: 'client',
   dept_admin: 'department',
   host: 'own_sessions',
+  author: 'own_sessions',
+  auditor: 'own_sessions',
 }
 
 export function isPlatformScope(user) {

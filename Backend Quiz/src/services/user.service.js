@@ -21,7 +21,9 @@ const { getRoleBySlug } = require("./role.service");
 const ROLE_LABELS = {
   client_admin: "Client admin",
   dept_admin: "Department admin",
-  host: "Host"
+  host: "Host",
+  author: "Question Author",
+  auditor: "Question Auditor"
 };
 
 function buildUserPayload(user, extras = {}) {
@@ -130,11 +132,14 @@ async function createUserByAdmin(input, adminUser) {
     throw error;
   }
 
-  const planId = await resolveActivePlanId(input.plan_id);
-  const planExpiresAt = await resolvePlanExpiresAt({
-    planId,
-    planExpiresAt: input.plan_expires_at
-  });
+  const questionBankOnlyRole = ["author", "auditor"].includes(assignedRole.slug);
+  const planId = questionBankOnlyRole ? null : await resolveActivePlanId(input.plan_id);
+  const planExpiresAt = questionBankOnlyRole
+    ? null
+    : await resolvePlanExpiresAt({
+        planId,
+        planExpiresAt: input.plan_expires_at
+      });
   const password_hash = await bcrypt.hash(input.password, 10);
   const user = await User.create({
     full_name: String(input.full_name).trim(),

@@ -104,7 +104,11 @@ export function SessionsProvider({ children }) {
 
       return []
     },
-    enabled: !!accessToken && !!userRole,
+    enabled:
+      !!accessToken &&
+      !!userRole &&
+      userRole !== 'author' &&
+      userRole !== 'auditor',
   })
 
   const [localSessions, setLocalSessions] = useState([])

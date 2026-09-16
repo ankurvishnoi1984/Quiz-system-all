@@ -138,6 +138,7 @@ function ManageRolesPage() {
   const isBusy = createMutation.isPending || updateMutation.isPending || deleteMutation.isPending
   const modalOpen = createOpen || Boolean(editRole)
   const lockedRole = editRole?.slug === 'super_admin'
+  const bankWorkflowRole = ['author', 'auditor'].includes(editRole?.slug)
 
   const handleSubmit = (event) => {
     event.preventDefault()
@@ -350,7 +351,7 @@ function ManageRolesPage() {
                   <input
                     type="checkbox"
                     checked={checked}
-                    disabled={lockedRole}
+                    disabled={lockedRole || bankWorkflowRole}
                     onChange={() => {
                       setForm((prev) => ({
                         ...prev,

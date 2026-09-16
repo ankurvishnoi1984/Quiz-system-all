@@ -12,6 +12,10 @@ const Participant = require("./participant.model");
 const Question = require("./question.model");
 const QuestionSet = require("./question-set.model");
 const QuestionOption = require("./question-option.model");
+const QuestionBankTopic = require("./question-bank-topic.model");
+const QuestionBankQuestion = require("./question-bank-question.model");
+const QuestionBankOption = require("./question-bank-option.model");
+const QuestionBankReview = require("./question-bank-review.model");
 const Response = require("./response.model");
 const QaQuestion = require("./qa-question.model");
 const QaUpvote = require("./qa-upvote.model");
@@ -71,6 +75,37 @@ Department.hasMany(Question, { foreignKey: "dept_id" });
 Question.belongsTo(Department, { foreignKey: "dept_id" });
 Question.hasMany(QuestionOption, { foreignKey: "question_id" });
 QuestionOption.belongsTo(Question, { foreignKey: "question_id" });
+QuestionBankTopic.hasMany(QuestionBankQuestion, {
+  foreignKey: "topic_id",
+  as: "questions"
+});
+QuestionBankQuestion.belongsTo(QuestionBankTopic, {
+  foreignKey: "topic_id",
+  as: "topic"
+});
+QuestionBankQuestion.hasMany(QuestionBankOption, {
+  foreignKey: "bank_question_id",
+  as: "options"
+});
+QuestionBankOption.belongsTo(QuestionBankQuestion, {
+  foreignKey: "bank_question_id",
+  as: "question"
+});
+QuestionBankQuestion.hasMany(QuestionBankReview, {
+  foreignKey: "bank_question_id",
+  as: "reviews"
+});
+QuestionBankReview.belongsTo(QuestionBankQuestion, {
+  foreignKey: "bank_question_id",
+  as: "question"
+});
+QuestionBankQuestion.belongsTo(User, { foreignKey: "author_id", as: "author" });
+QuestionBankQuestion.belongsTo(User, { foreignKey: "approved_by", as: "approver" });
+QuestionBankReview.belongsTo(User, { foreignKey: "auditor_id", as: "auditor" });
+Question.belongsTo(QuestionBankQuestion, {
+  foreignKey: "source_bank_question_id",
+  as: "sourceBankQuestion"
+});
 Session.hasMany(Response, { foreignKey: "session_id" });
 Response.belongsTo(Session, { foreignKey: "session_id" });
 Department.hasMany(Response, { foreignKey: "dept_id" });
@@ -113,6 +148,10 @@ const models = {
   Question,
   QuestionSet,
   QuestionOption,
+  QuestionBankTopic,
+  QuestionBankQuestion,
+  QuestionBankOption,
+  QuestionBankReview,
   Response,
   QaQuestion,
   QaUpvote,

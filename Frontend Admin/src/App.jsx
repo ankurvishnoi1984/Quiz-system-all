@@ -22,6 +22,7 @@ import ManageRolesPage from './pages/ManageRolesPage'
 import ManagePlansPage from './pages/ManagePlansPage'
 import MyPlanPage from './pages/MyPlanPage'
 import WebSocketMonitorPage from './pages/WebSocketMonitorPage'
+import QuestionBankPage from './pages/QuestionBankPage'
 import ParticipantSessionPage from './pages/participant-session'
 import PresentModePage from './pages/present-mode'
 import PresentViewPage from './pages/present-mode/PresentViewPage'
@@ -38,6 +39,9 @@ const INTEGRATIONS_ENABLED = isIntegrationsEnabled()
 function getPostLoginPath(user) {
   if (user?.must_change_password) {
     return '/change-password'
+  }
+  if (user?.role === 'author' || user?.role === 'auditor') {
+    return '/question-bank'
   }
   return '/dashboard'
 }
@@ -156,7 +160,17 @@ function App() {
               )
             }
           >
-            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route
+              path="/dashboard"
+              element={
+                user?.role === 'author' || user?.role === 'auditor' ? (
+                  <Navigate to="/question-bank" replace />
+                ) : (
+                  <DashboardPage />
+                )
+              }
+            />
+            <Route path="/question-bank" element={<QuestionBankPage />} />
             <Route
               path="/my-plan"
               element={

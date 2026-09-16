@@ -157,7 +157,7 @@ function Navbar() {
 
         {menuOpen && (
           <div className="absolute right-0 mt-2 w-48 rounded-xl border border-blue-200/70 bg-white p-1 shadow-xl shadow-blue-900/15">
-            {user?.role !== 'super_admin' ? (
+            {!['super_admin', 'author', 'auditor'].includes(user?.role) ? (
               <Link
                 to="/my-plan"
                 onClick={() => setMenuOpen(false)}
@@ -167,17 +167,19 @@ function Navbar() {
                 My Plan
               </Link>
             ) : null}
-            <button
-              type="button"
-              onClick={() => {
-                setMenuOpen(false)
-                restart()
-              }}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 transition hover:bg-blue-50"
-            >
-              <CircleHelp className="size-4" />
-              Getting started hints
-            </button>
+            {!['author', 'auditor'].includes(user?.role) ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false)
+                  restart()
+                }}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-700 transition hover:bg-blue-50"
+              >
+                <CircleHelp className="size-4" />
+                Getting started hints
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={logout}

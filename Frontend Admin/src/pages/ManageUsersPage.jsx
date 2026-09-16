@@ -34,6 +34,8 @@ const ROLE_LABELS = {
   client_admin: 'Client admin',
   dept_admin: 'Department admin',
   host: 'Host',
+  author: 'Question Author',
+  auditor: 'Question Auditor',
 }
 
 function StatusToggle({ checked, disabled, pending, onChange, activeLabel = 'Active', inactiveLabel = 'Inactive' }) {
@@ -701,14 +703,18 @@ function ManageUsersPage() {
             <label className="text-sm font-semibold text-slate-700">Role</label>
             <select
               value={form.role}
-              onChange={(e) =>
+              onChange={(e) => {
+                const role = e.target.value
+                const questionBankRole = role === 'author' || role === 'auditor'
                 setForm((prev) => ({
                   ...prev,
-                  role: e.target.value,
+                  role,
                   client_id: '',
                   dept_id: '',
+                  plan_id: questionBankRole ? '' : prev.plan_id,
+                  plan_expires_at: questionBankRole ? '' : prev.plan_expires_at,
                 }))
-              }
+              }}
               className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
             >
               {assignableRoles.map((role) => (
@@ -742,7 +748,7 @@ function ManageUsersPage() {
               </select>
             </div>
           ) : null}
-          <div>
+          {!['author', 'auditor'].includes(form.role) ? <div>
             <label className="text-sm font-semibold text-slate-700">Paid plan</label>
             <select
               value={form.plan_id}
@@ -773,7 +779,7 @@ function ManageUsersPage() {
             <p className="mt-1 text-xs text-slate-500">
               Limits how many participants can be connected at once across all of this user&apos;s sessions.
             </p>
-          </div>
+          </div> : null}
           {form.plan_id && !activePlans.find((p) => String(p.plan_id) === form.plan_id)?.is_free ? (
             <div>
               <label className="text-sm font-semibold text-slate-700">Plan expiry date</label>

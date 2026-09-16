@@ -140,6 +140,10 @@ const Question = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: true
     },
+    source_bank_question_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
     created_at: {
       type: DataTypes.DATE,
       allowNull: true

@@ -90,6 +90,15 @@ async function updateRole({ roleId, name, data_scope, permissions, is_active }) 
   }
 
   if (permissions !== undefined) {
+    if (["author", "auditor"].includes(role.slug)) {
+      const requested = normalizeRightList(permissions);
+      if (requested.length) {
+        throw createError(
+          "Question Author and Question Auditor cannot receive session permissions",
+          400
+        );
+      }
+    }
     role.permissions = normalizeRightList(permissions);
   }
 

@@ -11,6 +11,7 @@ import {
   EyeOff,
   FileUp,
   GripVertical,
+  Library,
   ListChecks,
   MessageSquareText,
   Pencil,
@@ -31,6 +32,7 @@ import { HostQuestionActionButton } from '../components/live/HostQuestionActionB
 import { QuestionMediaUpload } from '../components/builder/QuestionMediaUpload'
 import { QuestionImportModal } from '../components/builder/QuestionImportModal'
 import { AiGenerateQuestionsModal } from '../components/builder/AiGenerateQuestionsModal'
+import { QuestionBankModal } from '../components/builder/QuestionBankModal'
 import { QuestionMedia } from '../components/participant-session/QuestionMedia'
 import Modal from '../components/ui/Modal'
 import { useAuthStore } from '../store/authStore'
@@ -1166,6 +1168,7 @@ function BuilderPage() {
   const [previewOpen, setPreviewOpen] = useState(false)
   const [questionImportOpen, setQuestionImportOpen] = useState(false)
   const [aiGenerateOpen, setAiGenerateOpen] = useState(false)
+  const [questionBankOpen, setQuestionBankOpen] = useState(false)
   const [dirty, setDirty] = useState(false)
   // Future: date filter on session picker
   // const [fromDate, setFromDate] = useState('')
@@ -2367,6 +2370,25 @@ function BuilderPage() {
 
           <button
             type="button"
+            onClick={() => setQuestionBankOpen(true)}
+            disabled={!isDraftSession || dirty || questionLimitReached}
+            title={
+              !isDraftSession
+                ? 'Question Bank is available only for draft sessions.'
+                : dirty
+                  ? 'Save or discard your unsaved changes before adding bank questions.'
+                  : questionLimitReached
+                    ? questionLimitMessage
+                    : 'Select approved questions from the Question Bank'
+            }
+            className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200/80 bg-emerald-50/90 px-4 py-3 text-sm font-semibold text-emerald-900 shadow-sm shadow-emerald-900/5 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Library className="size-4" />
+            Question Bank
+          </button>
+
+          <button
+            type="button"
             data-tour="save-question"
             disabled={saveMutation.isPending || planLocked}
             title={planLocked ? 'No active plan — renew to edit questions' : undefined}
@@ -3147,6 +3169,34 @@ function BuilderPage() {
             : Math.max(0, maxQuestionsPerSession - questions.length)
         }
         onAddSelected={addAiGeneratedQuestions}
+      />
+
+      <QuestionBankModal
+        open={questionBankOpen}
+        onClose={() => setQuestionBankOpen(false)}
+        accessToken={accessToken}
+        sessionId={sessionId}
+        lockedType={sessionQuestionType}
+        remainingSlots={
+          maxQuestionsPerSession == null
+            ? null
+            : Math.max(0, maxQuestionsPerSession - questions.length)
+        }
+        onAdded={async (result) => {
+          if (Array.isArray(result?.questions)) {
+            queryClient.setQueryData(['builder-questions', sessionId], result.questions)
+          }
+          await queryClient.invalidateQueries({ queryKey: ['builder-questions', sessionId] })
+          setSaveError('')
+          setSaveSuccess(
+            `${result?.created_count || 0} question${
+              result?.created_count === 1 ? '' : 's'
+            } added from Question Bank`,
+          )
+          setLastSavedLabel(
+            new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          )
+        }}
       />
 
       <PlanExpiredModal

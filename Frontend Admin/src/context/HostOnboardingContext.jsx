@@ -51,6 +51,7 @@ export function HostOnboardingProvider({ children }) {
   const isBootstrapping = useAuthStore((state) => state.isBootstrapping)
   const setHintsCompleted = useAuthStore((state) => state.setHintsCompleted)
   const userId = user?.user_id || user?.email
+  const questionBankOnly = user?.role === 'author' || user?.role === 'auditor'
   const hintsCompleted = isUserHintsCompleted(user)
   const navigate = useNavigate()
   const location = useLocation()
@@ -87,6 +88,11 @@ export function HostOnboardingProvider({ children }) {
       return undefined
     }
 
+    if (questionBankOnly) {
+      setActive(false)
+      return undefined
+    }
+
     if (hintsCompleted) {
       setActive(false)
       persist({ completed: true, stepId: null, sessionId: null })
@@ -110,7 +116,7 @@ export function HostOnboardingProvider({ children }) {
 
     const timer = window.setTimeout(() => setActive(true), 350)
     return () => window.clearTimeout(timer)
-  }, [hintsCompleted, isBootstrapping, navigate, persist, userId])
+  }, [hintsCompleted, isBootstrapping, navigate, persist, questionBankOnly, userId])
 
   const step = HOST_ONBOARDING_STEPS[stepIndex] || HOST_ONBOARDING_STEPS[0]
   const isLast = stepIndex >= HOST_ONBOARDING_STEPS.length - 1
