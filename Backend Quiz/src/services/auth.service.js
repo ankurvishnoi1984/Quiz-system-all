@@ -13,7 +13,8 @@ const { recordPlanAssignment, PLAN_HISTORY_SOURCES } = require("./plan-history.s
 const {
   signAccessToken,
   signRefreshToken,
-  verifyRefreshToken
+  verifyRefreshToken,
+  verifyEmailVerificationToken
 } = require("../utils/jwt");
 const { isPaymentOtpEnabled, isLoginOtpEnabled } = require("../config/auth-features");
 const {
@@ -52,6 +53,9 @@ function buildUserPayload(user) {
     data_scope: getDataScope(user),
     client_id: user.client_id,
     dept_id: user.dept_id,
+    parent_id: user.parent_id || null,
+    email_verified: Boolean(user.email_verified_at),
+    email_verified_at: user.email_verified_at || null,
     rights: getEffectiveRights(user),
     must_change_password: isMustChangePassword(user.must_change_password),
     hints_completed: isHintsCompleted(user.hints_completed)
@@ -100,6 +104,7 @@ async function registerUser(input) {
     role: input.role,
     client_id: input.client_id || null,
     dept_id: input.dept_id || null,
+    email_verified_at: new Date(),
     must_change_password: false
   });
 
@@ -184,6 +189,7 @@ async function signupUser(input) {
         dept_id: department.dept_id,
         plan_id: plan.plan_id,
         plan_expires_at: planExpiresAt,
+        email_verified_at: new Date(),
         must_change_password: false,
         is_active: true
       },
@@ -441,6 +447,35 @@ async function setHintsCompleted(userId, completed) {
   return { user: buildUserPayload(user) };
 }
 
+async function verifyTeamMemberEmail(token) {
+  let decoded;
+  try {
+    decoded = verifyEmailVerificationToken(String(token || ""));
+  } catch {
+    const error = new Error("Verification link is invalid or has expired");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const user = await User.findByPk(decoded.user_id);
+  if (
+    !user ||
+    !user.is_active ||
+    !user.parent_id ||
+    String(user.email).toLowerCase() !== String(decoded.email).toLowerCase()
+  ) {
+    const error = new Error("Verification link is invalid");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!user.email_verified_at) {
+    user.email_verified_at = new Date();
+    await user.save();
+  }
+  return { user: buildUserPayload(user) };
+}
+
 function buildPlanRenewSessionResult(user, usage = null) {
   const assigned = usage?.assigned_plan;
   const planName = assigned?.name || usage?.plan?.name || null;
@@ -536,6 +571,7 @@ module.exports = {
   requestPasswordReset,
   changePassword,
   setHintsCompleted,
+  verifyTeamMemberEmail,
   isMustChangePassword,
   isHintsCompleted
 };

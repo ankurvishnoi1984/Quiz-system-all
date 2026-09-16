@@ -28,6 +28,7 @@ async function request(path, options = {}) {
     const error = new Error(message)
     error.status = response.status
     error.details = details
+    error.code = payload?.code || null
     throw error
   }
 
@@ -119,5 +120,22 @@ export async function setHintsCompletedApi(accessToken, completed) {
       Authorization: `Bearer ${accessToken}`,
     },
     body: JSON.stringify({ completed: Boolean(completed) }),
+  })
+}
+
+export async function verifyEmailApi(token) {
+  return request('/auth/verify-email', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  })
+}
+
+export async function resendEmailVerificationApi(accessToken) {
+  return request('/auth/resend-email-verification', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({}),
   })
 }

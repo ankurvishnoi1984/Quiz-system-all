@@ -91,6 +91,10 @@ function toPlanPayload(plan) {
     plan.price_monthly == null || plan.price_monthly === ""
       ? null
       : Number(plan.price_monthly);
+  const extraMemberPrice =
+    plan.price_per_extra_member == null || plan.price_per_extra_member === ""
+      ? null
+      : Number(plan.price_per_extra_member);
   const currency = String(plan.currency || "INR").toUpperCase();
   return {
     plan_id: plan.plan_id,
@@ -98,6 +102,8 @@ function toPlanPayload(plan) {
     description: plan.description || null,
     max_participants: Number(plan.max_participants),
     max_questions_per_session: Number(plan.max_questions_per_session || 15),
+    included_team_members: Math.max(0, Number(plan.included_team_members || 0)),
+    price_per_extra_member: Number.isFinite(extraMemberPrice) ? extraMemberPrice : null,
     is_active: Boolean(plan.is_active),
     is_free: Boolean(plan.is_free),
     default_duration_days:
@@ -197,6 +203,12 @@ async function createPlan(input) {
     priceMonthly = Number(input.price_monthly);
   }
 
+  const includedTeamMembers = Math.max(0, Number(input.included_team_members || 0));
+  const pricePerExtraMember =
+    input.price_per_extra_member == null || input.price_per_extra_member === ""
+      ? null
+      : Number(input.price_per_extra_member);
+
   const plan = await Plan.create({
     name,
     description: input.description ? String(input.description).trim() : null,
@@ -206,6 +218,8 @@ async function createPlan(input) {
     is_free: isFree,
     default_duration_days: isFree ? null : defaultDurationDays,
     price_monthly: isFree ? null : priceMonthly,
+    included_team_members: isFree ? 0 : includedTeamMembers,
+    price_per_extra_member: isFree ? null : pricePerExtraMember,
     currency: String(input.currency || "INR").trim().toUpperCase() || "INR"
   });
 
@@ -281,6 +295,17 @@ async function updatePlan({ planId, input }) {
     }
   }
 
+  if (input.included_team_members !== undefined) {
+    plan.included_team_members = Math.max(0, Number(input.included_team_members || 0));
+  }
+
+  if (input.price_per_extra_member !== undefined) {
+    plan.price_per_extra_member =
+      input.price_per_extra_member == null || input.price_per_extra_member === ""
+        ? null
+        : Number(input.price_per_extra_member);
+  }
+
   if (input.currency !== undefined) {
     plan.currency = String(input.currency || "INR").trim().toUpperCase() || "INR";
   }
@@ -288,6 +313,8 @@ async function updatePlan({ planId, input }) {
   if (plan.is_free) {
     plan.default_duration_days = null;
     plan.price_monthly = null;
+    plan.included_team_members = 0;
+    plan.price_per_extra_member = null;
   }
 
   await plan.save();
@@ -306,6 +333,20 @@ async function countParticipantsForHost(hostId) {
   return countLiveParticipantConnectionsForSessionCodes(
     sessions.map((session) => session.session_code)
   );
+}
+
+async function getTeamHostIds(ownerId) {
+  const members = await User.findAll({
+    where: { parent_id: ownerId, is_active: true },
+    attributes: ["user_id"],
+    raw: true
+  });
+  return [Number(ownerId), ...members.map((member) => Number(member.user_id))];
+}
+
+async function countParticipantsForTeam(hostIds) {
+  const usageByHost = await countParticipantsByHostIds(hostIds);
+  return hostIds.reduce((total, hostId) => total + Number(usageByHost.get(hostId) || 0), 0);
 }
 
 async function countParticipantsByHostIds(hostIds) {
@@ -332,21 +373,29 @@ async function countParticipantsByHostIds(hostIds) {
 }
 
 async function getHostPlanUsage(hostId) {
-  const user = await User.findByPk(hostId, {
+  const requestedUser = await User.findByPk(hostId, {
+    attributes: ["user_id", "parent_id", "is_active"]
+  });
+  const billingUserId = requestedUser?.parent_id || requestedUser?.user_id;
+  const user = billingUserId
+    ? await User.findByPk(billingUserId, {
     attributes: [
       "user_id",
       "email",
       "full_name",
+      "parent_id",
       "plan_id",
       "extra_participants",
       "extra_questions",
+      "extra_team_members",
       "plan_limit_email_sent_at",
       "plan_expires_at",
       "plan_expiry_email_sent_at",
       "is_active"
     ],
     include: [{ model: Plan, as: "plan", required: false }]
-  });
+      })
+    : null;
 
   if (!user) {
     return {
@@ -374,6 +423,8 @@ async function getHostPlanUsage(hostId) {
     };
   }
 
+  const teamHostIds = await getTeamHostIds(user.user_id);
+
   const assignedPlan = user.plan ? toPlanPayload(user.plan) : null;
   const planExpiresAt = toDateOnlyString(user.plan_expires_at);
   const expired = isPlanExpired(planExpiresAt, { isFree: Boolean(assignedPlan?.is_free) });
@@ -392,8 +443,10 @@ async function getHostPlanUsage(hostId) {
     ? Math.max(0, Number(user.extra_questions || 0))
     : 0;
 
-  const used = await countParticipantsForHost(hostId);
-  const sessionsCount = await Session.count({ where: { host_id: hostId } });
+  const used = await countParticipantsForTeam(teamHostIds);
+  const sessionsCount = await Session.count({
+    where: { host_id: { [Op.in]: teamHostIds } }
+  });
   const planLimit = unrestricted || !effectivePlan ? null : Number(effectivePlan.max_participants);
   const limit = unrestricted ? null : expired || !hasActivePlan ? 0 : planLimit + extraParticipants;
   const remaining = limit == null ? null : Math.max(0, limit - used);
@@ -410,6 +463,9 @@ async function getHostPlanUsage(hostId) {
 
   return {
     host: user,
+    requested_host_id: Number(hostId),
+    billing_user_id: Number(user.user_id),
+    team_host_ids: teamHostIds,
     plan: effectivePlan,
     assigned_plan: assignedPlan,
     effective_plan: effectivePlan,
@@ -451,7 +507,7 @@ async function getPlanJoinBlock(session) {
     };
   }
 
-  const pending = getPendingJoinSlots(session.host_id);
+  const pending = getPendingJoinSlots(usage.billing_user_id);
   const effectivelyFull =
     usage.limit != null && usage.used + pending >= usage.limit;
 
@@ -488,7 +544,7 @@ async function reservePlanJoinSlot(session) {
     return () => {};
   }
 
-  const slot = tryAcquireJoinSlot(session.host_id, {
+  const slot = tryAcquireJoinSlot(usage.billing_user_id, {
     liveUsed: usage.used,
     limit: usage.limit
   });
@@ -513,9 +569,8 @@ async function assertParticipantWsWithinPlanLimit(session) {
     return { allowed: true };
   }
 
-  consumeJoinReservation(session.host_id);
-
   const usage = await getHostPlanUsage(session.host_id);
+  consumeJoinReservation(usage.billing_user_id);
   if (usage.plan_expired || (usage.assigned_plan && !usage.has_active_plan)) {
     return { allowed: false, message: PLAN_EXPIRED_JOIN_MESSAGE };
   }

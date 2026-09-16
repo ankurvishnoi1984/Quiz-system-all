@@ -6,6 +6,7 @@ const {
   renderPasswordResetEmail,
   renderEmailOtpEmail,
   renderNewUserWelcomeEmail,
+  renderTeamMemberVerificationEmail,
   renderWebsiteSignupWelcomeEmail,
   renderWeeklySummaryEmail,
   renderParticipantLimitExceededEmail,
@@ -163,6 +164,36 @@ async function sendNewUserWelcomeEmail({
   await sendMailWithConfig(config, {
     to,
     cc,
+    subject,
+    text,
+    html,
+    attachments: logoAttachment ? [logoAttachment] : []
+  });
+}
+
+async function sendTeamMemberVerificationEmail({
+  to,
+  fullName,
+  email,
+  password,
+  teamLeadName,
+  verificationUrl
+}) {
+  const config = await getActiveMailConfig();
+  const brandName = config?.sender_name || "Quiz Platform";
+  const logoAttachment = getEmailLogoAttachment();
+  const { subject, text, html } = renderTeamMemberVerificationEmail({
+    fullName,
+    email,
+    password,
+    teamLeadName,
+    verificationUrl,
+    brandName,
+    logoCid: logoAttachment ? EMAIL_LOGO_CID : null
+  });
+
+  await sendMailWithConfig(config, {
+    to,
     subject,
     text,
     html,
@@ -384,6 +415,7 @@ module.exports = {
   sendPasswordResetEmail,
   sendEmailOtpMail,
   sendNewUserWelcomeEmail,
+  sendTeamMemberVerificationEmail,
   sendWebsiteSignupWelcomeEmail,
   sendWeeklySummaryEmail,
   sendParticipantLimitExceededEmail,

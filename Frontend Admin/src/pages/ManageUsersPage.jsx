@@ -11,6 +11,7 @@ import { fetchAuthFeaturesApi } from '../services/authApi'
 import {
   adjustUserExtraParticipantsApi,
   adjustUserExtraQuestionsApi,
+  adjustUserTeamSeatsApi,
   assignUserPlanApi,
   createUserApi,
   setUserStatusApi,
@@ -18,6 +19,7 @@ import {
   listRolesApi,
   listUserExtraParticipantsApi,
   listUserExtraQuestionsApi,
+  listUserTeamSeatAddonsApi,
   listUsersApi,
   sendAdminActionOtpApi,
   verifyAdminActionOtpApi,
@@ -114,6 +116,9 @@ function ManageUsersPage() {
   const [extraQuestionsNote, setExtraQuestionsNote] = useState('')
   const [extraQuestionsFile, setExtraQuestionsFile] = useState(null)
   const [extraQuestionsFileError, setExtraQuestionsFileError] = useState('')
+  const [teamSeatsUser, setTeamSeatsUser] = useState(null)
+  const [teamSeats, setTeamSeats] = useState('1')
+  const [teamSeatPrice, setTeamSeatPrice] = useState('')
   const [planEditUser, setPlanEditUser] = useState(null)
   const [planEditForm, setPlanEditForm] = useState({ plan_id: '', plan_expires_at: '' })
   const [adminOtpOpen, setAdminOtpOpen] = useState(false)
@@ -251,7 +256,10 @@ function ManageUsersPage() {
       payload.plan_expires_at = form.plan_expires_at || null
     }
 
-    createMutation.mutate(payload)
+    requestAdminActionOtp({
+      type: 'create-user',
+      payload,
+    })
   }
 
   const extraHistoryQuery = useQuery({
@@ -266,12 +274,18 @@ function ManageUsersPage() {
     enabled: Boolean(accessToken && extraQuestionsUser?.user_id),
   })
 
+  const teamSeatHistoryQuery = useQuery({
+    queryKey: ['user-team-seats', teamSeatsUser?.user_id],
+    queryFn: () => listUserTeamSeatAddonsApi(accessToken, teamSeatsUser.user_id),
+    enabled: Boolean(accessToken && teamSeatsUser?.user_id),
+  })
+
   const extraMutation = useMutation({
     mutationFn: async ({ userId, payload, file, otpToken }) => {
       const nextPayload = { ...payload }
       if (otpToken) nextPayload.otp_token = otpToken
       if (file) {
-        const uploaded = await uploadExtraSeatAttachmentApi(userId, file)
+        const uploaded = await uploadExtraSeatAttachmentApi(userId, file, otpToken)
         nextPayload.attachment_url = uploaded?.file_path || null
         nextPayload.attachment_filename = uploaded?.original_filename || file.name
       }
@@ -308,7 +322,7 @@ function ManageUsersPage() {
       const nextPayload = { ...payload }
       if (otpToken) nextPayload.otp_token = otpToken
       if (file) {
-        const uploaded = await uploadExtraQuestionAttachmentApi(userId, file)
+        const uploaded = await uploadExtraQuestionAttachmentApi(userId, file, otpToken)
         nextPayload.attachment_url = uploaded?.file_path || null
         nextPayload.attachment_filename = uploaded?.original_filename || file.name
       }
@@ -340,8 +354,38 @@ function ManageUsersPage() {
     },
   })
 
+  const teamSeatsMutation = useMutation({
+    mutationFn: ({ userId, payload, otpToken }) =>
+      adjustUserTeamSeatsApi(accessToken, userId, {
+        ...payload,
+        ...(otpToken ? { otp_token: otpToken } : {}),
+      }),
+    onSuccess: (user) => {
+      queryClient.invalidateQueries({ queryKey: ['manage-users'] })
+      queryClient.invalidateQueries({ queryKey: ['user-team-seats', user?.user_id] })
+      setTeamSeatsUser((prev) => (prev && user ? { ...prev, ...user } : prev))
+      setTeamSeats('1')
+      setTeamSeatPrice('')
+      setAlert({
+        variant: 'success',
+        title: 'Team seats updated',
+        message: `"${user?.full_name || 'User'}" now has ${Number(user?.extra_team_members || 0).toLocaleString()} extra team seats.`,
+        confirmLabel: 'OK',
+      })
+    },
+    onError: (error) => {
+      setAlert({
+        variant: 'error',
+        title: 'Could not update team seats',
+        message: error.message || 'Please try again.',
+        confirmLabel: 'Close',
+      })
+    },
+  })
+
   const statusMutation = useMutation({
-    mutationFn: ({ userId, isActive }) => setUserStatusApi(accessToken, userId, isActive),
+    mutationFn: ({ userId, isActive, otpToken }) =>
+      setUserStatusApi(accessToken, userId, isActive, otpToken),
     onSuccess: (user) => {
       queryClient.invalidateQueries({ queryKey: ['manage-users'] })
       setAlert({
@@ -412,12 +456,27 @@ function ManageUsersPage() {
       assignPlanMutation.mutate({ ...pendingAction.payload, otpToken })
       return
     }
+    if (pendingAction.type === 'create-user') {
+      createMutation.mutate({
+        ...pendingAction.payload,
+        ...(otpToken ? { otp_token: otpToken } : {}),
+      })
+      return
+    }
+    if (pendingAction.type === 'user-status') {
+      statusMutation.mutate({ ...pendingAction.payload, otpToken })
+      return
+    }
     if (pendingAction.type === 'seats') {
       extraMutation.mutate({ ...pendingAction.payload, otpToken })
       return
     }
     if (pendingAction.type === 'questions') {
       extraQuestionsMutation.mutate({ ...pendingAction.payload, otpToken })
+      return
+    }
+    if (pendingAction.type === 'team-seats') {
+      teamSeatsMutation.mutate({ ...pendingAction.payload, otpToken })
     }
   }
 
@@ -507,6 +566,7 @@ function ManageUsersPage() {
               <th className="px-4 py-3 font-semibold text-slate-700">Email</th>
               {/* Password column hidden — credentials are emailed on create; vault UI may return later. */}
               <th className="px-4 py-3 font-semibold text-slate-700">Role</th>
+              <th className="px-4 py-3 font-semibold text-slate-700">Team</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Client</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Department</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Plan</th>
@@ -514,6 +574,7 @@ function ManageUsersPage() {
               <th className="px-4 py-3 font-semibold text-slate-700">Participants</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Questions / session</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Extra seats</th>
+              <th className="px-4 py-3 font-semibold text-slate-700">Team seats</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Extra questions</th>
               <th className="px-4 py-3 font-semibold text-slate-700">Status</th>
             </tr>
@@ -527,6 +588,26 @@ function ManageUsersPage() {
                   <PasswordRevealCell password={passwordVault[String(user.user_id)]} />
                 </td> */}
                 <td className="px-4 py-3 text-slate-700">{user.role_name || ROLE_LABELS[user.role] || user.role}</td>
+                <td className="px-4 py-3 text-slate-700">
+                  {user.parent_id ? (
+                    <div>
+                      <span className="rounded-full bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700">
+                        Member
+                      </span>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {user.team_owner?.full_name || user.team_owner?.email || `Lead #${user.parent_id}`}
+                      </p>
+                    </div>
+                  ) : user.role === 'host' &&
+                    (Number(user.extra_team_members || 0) > 0 ||
+                      Number(user.plan?.included_team_members || 0) > 0) ? (
+                    <span className="rounded-full bg-violet-50 px-2 py-1 text-[11px] font-semibold text-violet-700">
+                      Team lead
+                    </span>
+                  ) : (
+                    <span className="text-xs text-slate-500">Independent</span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-slate-700">
                   {user.client_id
                     ? clientsById.get(String(user.client_id)) || `Client ${user.client_id}`
@@ -596,6 +677,28 @@ function ManageUsersPage() {
                   </div>
                 </td>
                 <td className="px-4 py-3">
+                  {user.parent_id ? (
+                    <span className="text-xs text-slate-500">Managed by lead</span>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-slate-700">
+                        {Number(user.extra_team_members || 0).toLocaleString()}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTeamSeatsUser(user)
+                          setTeamSeats('1')
+                          setTeamSeatPrice('')
+                        }}
+                        className="rounded-lg border border-blue-200/70 bg-white px-2 py-1 text-[11px] font-semibold text-navy-800 transition hover:bg-blue-50"
+                      >
+                        Add seats
+                      </button>
+                    </div>
+                  )}
+                </td>
+                <td className="px-4 py-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-slate-700">
                       {Number(user.extra_questions || 0).toLocaleString()}
@@ -624,9 +727,12 @@ function ManageUsersPage() {
                     }
                     pending={statusMutation.isPending}
                     onChange={(isActive) =>
-                      statusMutation.mutate({
-                        userId: user.user_id,
-                        isActive,
+                      requestAdminActionOtp({
+                        type: 'user-status',
+                        payload: {
+                          userId: user.user_id,
+                          isActive,
+                        },
                       })
                     }
                   />
@@ -1023,6 +1129,121 @@ function ManageUsersPage() {
               className="h-11 rounded-xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 text-sm font-semibold text-white shadow-lg shadow-blue-900/25 transition hover:brightness-110 disabled:opacity-60"
             >
               {extraMutation.isPending ? 'Saving…' : 'Add extra seats'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={Boolean(teamSeatsUser)}
+        title={teamSeatsUser ? `Team seats — ${teamSeatsUser.full_name}` : 'Team seats'}
+        onClose={() => {
+          if (teamSeatsMutation.isPending) return
+          setTeamSeatsUser(null)
+        }}
+      >
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault()
+            const add = Number(teamSeats)
+            if (!teamSeatsUser || !Number.isInteger(add) || add <= 0) return
+            requestAdminActionOtp({
+              type: 'team-seats',
+              payload: {
+                userId: teamSeatsUser.user_id,
+                payload: {
+                  add,
+                  price_at_purchase: teamSeatPrice === '' ? null : Number(teamSeatPrice),
+                },
+              },
+            })
+          }}
+        >
+          <p className="text-sm text-slate-600">
+            Current extra team seats:{' '}
+            <strong className="text-navy-900">
+              {Number(teamSeatsUser?.extra_team_members || 0).toLocaleString()}
+            </strong>
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="text-sm font-semibold text-slate-700">Add team seats</label>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={teamSeats}
+                onChange={(event) => setTeamSeats(event.target.value)}
+                className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+                required
+              />
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-slate-700">Price recorded per addon</label>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={teamSeatPrice}
+                onChange={(event) => setTeamSeatPrice(event.target.value)}
+                className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+                placeholder="Optional"
+              />
+            </div>
+          </div>
+          {teamSeatHistoryQuery.data?.length ? (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">History</p>
+              <ul className="mt-2 max-h-40 space-y-2 overflow-y-auto text-xs text-slate-600">
+                {teamSeatHistoryQuery.data.map((row) => (
+                  <li key={row.addon_id} className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-2">
+                    <span className="font-semibold text-navy-900">
+                      {row.seats_added > 0 ? '+' : ''}
+                      {Number(row.seats_added).toLocaleString()} seats
+                    </span>
+                    {row.price_at_purchase != null
+                      ? ` · ${teamSeatsUser?.plan?.currency || 'INR'} ${Number(row.price_at_purchase).toLocaleString()}`
+                      : ''}
+                    {row.created_at ? ` · ${new Date(row.created_at).toLocaleString()}` : ''}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          <div className="flex flex-wrap justify-end gap-2 pt-2">
+            {Number(teamSeatsUser?.extra_team_members || 0) > 0 ? (
+              <button
+                type="button"
+                disabled={teamSeatsMutation.isPending}
+                onClick={() =>
+                  requestAdminActionOtp({
+                    type: 'team-seats',
+                    payload: {
+                      userId: teamSeatsUser.user_id,
+                      payload: { set: 0, price_at_purchase: null },
+                    },
+                  })
+                }
+                className="h-11 rounded-xl border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
+              >
+                Clear extra
+              </button>
+            ) : null}
+            <button
+              type="button"
+              disabled={teamSeatsMutation.isPending}
+              onClick={() => setTeamSeatsUser(null)}
+              className="h-11 rounded-xl border border-blue-200/70 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-blue-50 disabled:opacity-60"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={teamSeatsMutation.isPending}
+              className="h-11 rounded-xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {teamSeatsMutation.isPending ? 'Saving…' : 'Add team seats'}
             </button>
           </div>
         </form>

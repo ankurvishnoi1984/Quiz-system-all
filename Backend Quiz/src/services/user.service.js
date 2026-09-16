@@ -1,6 +1,15 @@
 const bcrypt = require("bcryptjs");
 const path = require("path");
-const { User, Client, Department, Plan, UserParticipantAddon, UserQuestionAddon, Role } = require("../models");
+const {
+  User,
+  Client,
+  Department,
+  Plan,
+  UserParticipantAddon,
+  UserQuestionAddon,
+  UserTeamAddon,
+  Role
+} = require("../models");
 const { sendNewUserWelcomeEmail } = require("./email.service");
 const {
   getPlanOrThrow,
@@ -40,12 +49,23 @@ function buildUserPayload(user, extras = {}) {
     data_scope: getDataScope(userWithRole),
     client_id: user.client_id,
     dept_id: user.dept_id,
+    parent_id: user.parent_id || null,
+    team_owner: extras.teamOwner
+      ? {
+          user_id: extras.teamOwner.user_id,
+          full_name: extras.teamOwner.full_name,
+          email: extras.teamOwner.email
+        }
+      : null,
+    email_verified_at: user.email_verified_at || null,
+    verification_status: user.email_verified_at ? "verified" : "pending",
     plan_id: user.plan_id || null,
     plan,
     plan_expires_at: planExpiresAt,
     plan_expired: isPlanExpired(planExpiresAt, { isFree: Boolean(plan?.is_free) }),
     extra_participants: Math.max(0, Number(user.extra_participants || 0)),
     extra_questions: Math.max(0, Number(user.extra_questions || 0)),
+    extra_team_members: Math.max(0, Number(user.extra_team_members || 0)),
     participants_used: extras.participants_used ?? 0,
     is_active: Boolean(user.is_active),
     rights: getEffectiveRights(userWithRole)
@@ -72,16 +92,25 @@ async function listUsers() {
       "role",
       "client_id",
       "dept_id",
+      "parent_id",
+      "email_verified_at",
       "plan_id",
       "plan_expires_at",
       "extra_participants",
       "extra_questions",
+      "extra_team_members",
       "is_active",
       "last_login_at",
       "created_at"
     ],
     include: [
       { model: Plan, as: "plan", required: false },
+      {
+        model: User,
+        as: "teamOwner",
+        required: false,
+        attributes: ["user_id", "full_name", "email"]
+      },
       { model: Role, as: "assignedRole", required: false }
     ],
     order: [["user_id", "DESC"]]
@@ -94,6 +123,8 @@ async function listUsers() {
       plan: user.plan ? toPlanPayload(user.plan) : null,
       participants_used: usageByHost.get(Number(user.user_id)) || 0,
       assignedRole: user.assignedRole
+      ,
+      teamOwner: user.teamOwner
     })
   );
 }
@@ -150,6 +181,7 @@ async function createUserByAdmin(input, adminUser) {
     dept_id: needsDepartmentOnUser(scope) && input.dept_id ? Number(input.dept_id) : null,
     plan_id: planId,
     plan_expires_at: planExpiresAt,
+    email_verified_at: new Date(),
     must_change_password: false
   });
 
@@ -329,6 +361,73 @@ async function listUserQuestionAddons(userId) {
   return rows.map(toQuestionAddonPayload);
 }
 
+async function listUserTeamAddons(userId) {
+  const user = await User.findByPk(userId, { attributes: ["user_id"] });
+  if (!user) {
+    const error = new Error("User not found");
+    error.statusCode = 404;
+    throw error;
+  }
+  const rows = await UserTeamAddon.findAll({
+    where: { user_id: userId },
+    order: [["created_at", "DESC"], ["addon_id", "DESC"]],
+    limit: 50
+  });
+  return rows.map((row) => ({
+    addon_id: row.addon_id,
+    seats_added: Number(row.seats_added),
+    price_at_purchase:
+      row.price_at_purchase == null ? null : Number(row.price_at_purchase),
+    source: row.source,
+    created_by: row.created_by || null,
+    created_at: row.created_at
+  }));
+}
+
+async function adjustUserExtraTeamMembers({
+  userId,
+  add,
+  set,
+  priceAtPurchase,
+  adminUser
+}) {
+  const user = await User.findByPk(userId);
+  if (!user) {
+    const error = new Error("User not found");
+    error.statusCode = 404;
+    throw error;
+  }
+  if (user.parent_id) {
+    const error = new Error("Team seats can only be assigned to a team lead");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const current = Math.max(0, Number(user.extra_team_members || 0));
+  const next = set !== undefined ? Number(set) : current + Number(add);
+  if (!Number.isInteger(next) || next < 0) {
+    const error = new Error("extra team members cannot be negative");
+    error.statusCode = 400;
+    throw error;
+  }
+  const delta = next - current;
+  if (delta === 0) return reloadUserAccountPayload(user);
+
+  user.extra_team_members = next;
+  await user.save();
+  await UserTeamAddon.create({
+    user_id: user.user_id,
+    seats_added: delta,
+    price_at_purchase:
+      priceAtPurchase == null || priceAtPurchase === ""
+        ? null
+        : Number(priceAtPurchase),
+    source: "admin_assign",
+    created_by: adminUser?.user_id || null
+  });
+  return reloadUserAccountPayload(user);
+}
+
 async function adjustUserExtraParticipants({
   userId,
   add,
@@ -503,8 +602,10 @@ module.exports = {
   assignUserPlan,
   listUserParticipantAddons,
   listUserQuestionAddons,
+  listUserTeamAddons,
   adjustUserExtraParticipants,
   adjustUserExtraQuestions,
+  adjustUserExtraTeamMembers,
   saveExtraParticipantAttachment,
   saveExtraQuestionAttachment,
   setUserActiveStatus

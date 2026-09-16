@@ -42,6 +42,7 @@ const staticNavigationItems = [
   { to: '/reports', label: 'Reports', icon: FileBarChart2, kind: 'static' },
   { to: '/training', label: 'Training Library', icon: GraduationCap, kind: 'static' },
   { to: '/my-plan', label: 'My Plan', icon: CreditCard, kind: 'static', hideForSuperAdmin: true },
+  { to: '/team', label: 'Team Management', icon: Users, kind: 'static', teamLeadOnly: true },
 ]
 
 function Sidebar({ collapsed, onToggle }) {
@@ -63,6 +64,7 @@ function Sidebar({ collapsed, onToggle }) {
           if (item.questionBankRoles && !item.questionBankRoles.includes(user?.role)) return false
           if (item.superAdminOnly && user?.role !== 'super_admin') return false
           if (item.hideForSuperAdmin && user?.role === 'super_admin') return false
+          if (item.teamLeadOnly && (user?.role !== 'host' || user?.parent_id)) return false
           if (item.adminOnly && !isAdminRole(user)) return false
           if (item.kind === 'builder' && !hasRight(user, 'builder')) return false
           if (item.kind === 'live' && !hasRight(user, 'present')) return false
@@ -103,6 +105,7 @@ function Sidebar({ collapsed, onToggle }) {
     if (user?.role === 'super_admin') {
       items.push({ to: '/manage/clients', label: 'Clients' })
       items.push({ to: '/manage/users', label: 'Users' })
+      items.push({ to: '/manage/teams', label: 'Teams' })
       items.push({ to: '/manage/roles', label: 'Roles' })
       items.push({ to: '/manage/plans', label: 'Plans' })
     }

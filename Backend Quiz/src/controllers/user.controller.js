@@ -5,8 +5,10 @@ const {
   assignUserPlan,
   listUserParticipantAddons,
   listUserQuestionAddons,
+  listUserTeamAddons,
   adjustUserExtraParticipants,
   adjustUserExtraQuestions,
+  adjustUserExtraTeamMembers,
   saveExtraParticipantAttachment,
   saveExtraQuestionAttachment,
   setUserActiveStatus
@@ -232,6 +234,51 @@ async function uploadExtraQuestionAttachment(req, res) {
   }
 }
 
+async function listTeamAddons(req, res) {
+  try {
+    const userId = Number(req.params.userId);
+    if (!Number.isInteger(userId)) {
+      return errorResponse(res, "userId must be a number", 400);
+    }
+    const addons = await listUserTeamAddons(userId);
+    return successResponse(res, { addons }, "Team seat history fetched", 200);
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
+async function adjustExtraTeamMembers(req, res) {
+  try {
+    const userId = Number(req.params.userId);
+    if (!Number.isInteger(userId)) {
+      return errorResponse(res, "userId must be a number", 400);
+    }
+    const errors = validateExtraParticipantsPayload(req.body);
+    if (
+      req.body?.price_at_purchase != null &&
+      req.body.price_at_purchase !== "" &&
+      (!Number.isFinite(Number(req.body.price_at_purchase)) ||
+        Number(req.body.price_at_purchase) < 0)
+    ) {
+      errors.push("price_at_purchase must be a non-negative number or null");
+    }
+    if (errors.length > 0) {
+      return errorResponse(res, "Validation failed", 400, errors);
+    }
+    requireAdminActionOtp(req);
+    const user = await adjustUserExtraTeamMembers({
+      userId,
+      add: req.body.add,
+      set: req.body.set,
+      priceAtPurchase: req.body.price_at_purchase,
+      adminUser: req.user
+    });
+    return successResponse(res, { user }, "Extra team seats updated", 200);
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
 module.exports = {
   list,
   create,
@@ -242,5 +289,7 @@ module.exports = {
   adjustExtraQuestions,
   uploadExtraAttachment,
   uploadExtraQuestionAttachment,
+  listTeamAddons,
+  adjustExtraTeamMembers,
   setStatus
 };

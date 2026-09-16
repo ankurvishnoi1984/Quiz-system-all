@@ -6,6 +6,8 @@ import { HostAlertModal } from '../components/live/HostAlertModal'
 import { useAuthStore } from '../store/authStore'
 import { listClientsApi } from '../services/dashboardApi'
 import { createClientApi } from '../services/managementApi'
+import { useAdminActionOtp } from '../hooks/useAdminActionOtp'
+import { AdminActionOtpModal } from '../components/management/AdminActionOtpModal'
 
 function slugify(value) {
   return String(value || '')
@@ -20,6 +22,7 @@ function ManageClientsPage() {
   const queryClient = useQueryClient()
   const [createOpen, setCreateOpen] = useState(false)
   const [alert, setAlert] = useState(null)
+  const { requestAdminAction, modalProps: adminOtpModalProps } = useAdminActionOtp()
   const [form, setForm] = useState({
     name: '',
     slug: '',
@@ -61,12 +64,18 @@ function ManageClientsPage() {
     event.preventDefault()
     if (!form.name.trim() || !form.slug.trim() || !form.contact_email.trim()) return
 
-    createMutation.mutate({
+    const payload = {
       name: form.name.trim(),
       slug: form.slug.trim(),
       contact_email: form.contact_email.trim(),
       contact_phone: form.contact_phone.trim() || null,
-    })
+    }
+    requestAdminAction((otpToken) =>
+      createMutation.mutate({
+        ...payload,
+        ...(otpToken ? { otp_token: otpToken } : {}),
+      }),
+    )
   }
 
   return (
@@ -217,6 +226,7 @@ function ManageClientsPage() {
         confirmLabel={alert?.confirmLabel ?? 'OK'}
         onClose={() => setAlert(null)}
       />
+      <AdminActionOtpModal {...adminOtpModalProps} />
     </section>
   )
 }

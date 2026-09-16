@@ -47,12 +47,25 @@ const User = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: true
     },
+    parent_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    email_verified_at: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
     extra_participants: {
       type: DataTypes.INTEGER,
       allowNull: false,
       defaultValue: 0
     },
     extra_questions: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0
+    },
+    extra_team_members: {
       type: DataTypes.INTEGER,
       allowNull: false,
       defaultValue: 0

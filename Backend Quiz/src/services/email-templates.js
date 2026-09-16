@@ -485,6 +485,70 @@ GETTING STARTED
   };
 }
 
+function renderTeamMemberVerificationEmail({
+  fullName,
+  email,
+  password,
+  teamLeadName,
+  verificationUrl,
+  brandName,
+  logoCid,
+  logoUrl
+}) {
+  const greeting = fullName ? `Hello ${fullName},` : "Hello,";
+  const bodyHtml = `
+    <p style="margin:0 0 16px;font-size:16px;line-height:1.65;color:${BRAND.slate};">${escapeHtml(greeting)}</p>
+    <p style="margin:0 0 24px;font-size:16px;line-height:1.65;color:${BRAND.slate};">
+      ${escapeHtml(teamLeadName || "Your team lead")} added you to their team. Verify your email before using the dashboard.
+    </p>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px;">
+      <tr>
+        <td style="background-color:${BRAND.surface};border:1px solid ${BRAND.border};border-radius:12px;padding:20px 22px;">
+          <p style="margin:0 0 8px;font-size:14px;color:${BRAND.slateLight};">Email</p>
+          <p style="margin:0 0 16px;font-size:15px;font-weight:700;color:${BRAND.navy};">${escapeHtml(email)}</p>
+          <p style="margin:0 0 8px;font-size:14px;color:${BRAND.slateLight};">Temporary password</p>
+          <p style="margin:0;font-family:monospace;font-size:22px;font-weight:700;color:${BRAND.navy};word-break:break-all;">${escapeHtml(password)}</p>
+        </td>
+      </tr>
+    </table>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:0 auto 24px;">
+      <tr>
+        <td align="center" style="border-radius:12px;background:${BRAND.blue};">
+          <a href="${escapeHtml(verificationUrl)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:700;color:${BRAND.white};text-decoration:none;border-radius:12px;">
+            Verify email
+          </a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0;font-size:13px;line-height:1.6;color:${BRAND.slateLight};text-align:center;">
+      This verification link expires in 48 hours.
+    </p>`;
+
+  return {
+    subject: `Verify your email — ${brandName || "Quiz Platform"}`,
+    text: `${greeting}
+
+${teamLeadName || "Your team lead"} added you to their team.
+
+Email: ${email}
+Temporary password: ${password}
+
+Verify your email within 48 hours:
+${verificationUrl}
+
+— ${brandName || "Quiz Platform"}`,
+    html: renderEmailLayout({
+      preheader: "Verify your email to access your team dashboard.",
+      brandName,
+      title: "You have been added to a team",
+      bodyHtml,
+      footerNote: "You received this email because a team lead added your email address.",
+      logoCid,
+      logoUrl
+    })
+  };
+}
+
 function renderParticipantLimitExceededEmail({
   fullName,
   planName,
@@ -1173,6 +1237,7 @@ module.exports = {
   renderPasswordResetEmail,
   renderEmailOtpEmail,
   renderNewUserWelcomeEmail,
+  renderTeamMemberVerificationEmail,
   renderWebsiteSignupWelcomeEmail,
   renderWeeklySummaryEmail,
   renderParticipantLimitExceededEmail,

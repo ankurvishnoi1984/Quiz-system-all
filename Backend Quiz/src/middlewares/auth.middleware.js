@@ -42,11 +42,26 @@ async function authMiddleware(req, res, next) {
       data_scope: getDataScope(userWithRole),
       client_id: user.client_id,
       dept_id: user.dept_id,
+      parent_id: user.parent_id || null,
+      email_verified: Boolean(user.email_verified_at),
+      email_verified_at: user.email_verified_at || null,
       rights: getEffectiveRights(userWithRole),
       assignedRole: user.assignedRole || null,
       must_change_password: isMustChangePassword(user.must_change_password),
       hints_completed: isHintsCompleted(user.hints_completed)
     };
+
+    const mayAccessVerification =
+      req.originalUrl.endsWith("/auth/me") ||
+      req.originalUrl.endsWith("/auth/resend-email-verification");
+    if (user.parent_id && !user.email_verified_at && !mayAccessVerification) {
+      return res.status(403).json({
+        success: false,
+        message: "Verify your email before accessing the dashboard",
+        code: "EMAIL_NOT_VERIFIED",
+        errors: null
+      });
+    }
     return next();
   } catch (err) {
     return errorResponse(res, "Invalid or expired token", 401);

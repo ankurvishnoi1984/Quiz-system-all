@@ -8,8 +8,10 @@ const {
   refreshAccessToken,
   requestPasswordReset,
   changePassword,
-  setHintsCompleted
+  setHintsCompleted,
+  verifyTeamMemberEmail
 } = require("../services/auth.service");
+const { resendOwnTeamVerification } = require("../services/team.service");
 const { applyPlanRenewal } = require("../services/payment.service");
 const { sendOtp, verifyOtp, PURPOSES, verifyLoginChallengeToken, sendAdminActionOtp, verifyAdminActionOtp } = require("../services/otp.service");
 const { getAuthFeatureFlags } = require("../config/auth-features");
@@ -216,6 +218,32 @@ async function hintsCompleted(req, res) {
   }
 }
 
+async function verifyEmail(req, res) {
+  try {
+    if (!req.body?.token) {
+      return errorResponse(res, "token is required", 400);
+    }
+    const result = await verifyTeamMemberEmail(req.body.token);
+    return successResponse(res, result, "Email verified successfully", 200);
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
+async function resendEmailVerification(req, res) {
+  try {
+    const result = await resendOwnTeamVerification(req.user.user_id);
+    return successResponse(
+      res,
+      result,
+      result.already_verified ? "Email is already verified" : "Verification email sent",
+      200
+    );
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
 async function renewStart(req, res) {
   try {
     const errors = validateRenewStartPayload(req.body);
@@ -302,5 +330,7 @@ module.exports = {
   refresh,
   forgotPassword,
   changePassword: changePasswordHandler,
-  hintsCompleted
+  hintsCompleted,
+  verifyEmail,
+  resendEmailVerification
 };

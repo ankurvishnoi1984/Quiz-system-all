@@ -27,6 +27,16 @@ const Plan = sequelize.define(
       allowNull: false,
       defaultValue: 15
     },
+    included_team_members: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0
+    },
+    price_per_extra_member: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: null
+    },
     is_free: {
       type: DataTypes.BOOLEAN,
       allowNull: false,

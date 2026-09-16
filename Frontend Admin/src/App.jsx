@@ -20,7 +20,10 @@ import ManageDepartmentsPage from './pages/ManageDepartmentsPage'
 import ManageUsersPage from './pages/ManageUsersPage'
 import ManageRolesPage from './pages/ManageRolesPage'
 import ManagePlansPage from './pages/ManagePlansPage'
+import ManageTeamsPage from './pages/ManageTeamsPage'
 import MyPlanPage from './pages/MyPlanPage'
+import TeamManagementPage from './pages/TeamManagementPage'
+import VerifyEmailPage from './pages/VerifyEmailPage'
 import WebSocketMonitorPage from './pages/WebSocketMonitorPage'
 import QuestionBankPage from './pages/QuestionBankPage'
 import ParticipantSessionPage from './pages/participant-session'
@@ -37,6 +40,9 @@ import { isIntegrationsEnabled } from './utils/integrations'
 const INTEGRATIONS_ENABLED = isIntegrationsEnabled()
 
 function getPostLoginPath(user) {
+  if (user?.parent_id && !user?.email_verified) {
+    return '/verify-email'
+  }
   if (user?.must_change_password) {
     return '/change-password'
   }
@@ -52,7 +58,8 @@ function isPublicAppPath(pathname) {
     pathname.startsWith('/present/view') ||
     (INTEGRATIONS_ENABLED && pathname.startsWith('/embed/display')) ||
     pathname === '/login' ||
-    pathname === '/forgot-password'
+    pathname === '/forgot-password' ||
+    pathname === '/verify-email'
   )
 }
 
@@ -87,6 +94,7 @@ function App() {
   }
 
   const mustChangePassword = Boolean(user?.must_change_password)
+  const mustVerifyEmail = Boolean(user?.parent_id && !user?.email_verified)
   const postLoginPath = getPostLoginPath(user)
 
   return (
@@ -96,6 +104,7 @@ function App() {
           <Route path="/join/:sessionId" element={<ParticipantSessionPage />} />
           <Route path="/join" element={<ParticipantSessionPage />} />
           <Route path="/present/view" element={<PresentViewPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
           {INTEGRATIONS_ENABLED ? (
             <>
               <Route path="/embed/display" element={<EmbedDisplayPage />} />
@@ -105,24 +114,24 @@ function App() {
           <Route
             path="/present"
             element={
-              user && !mustChangePassword ? (
+              user && !mustChangePassword && !mustVerifyEmail ? (
                 <RequireRight right="present">
                   <RequireActivePlan>
                     <PresentModePage />
                   </RequireActivePlan>
                 </RequireRight>
               ) : (
-                <Navigate to={user ? '/change-password' : '/login'} replace />
+                <Navigate to={user ? postLoginPath : '/login'} replace />
               )
             }
           />
           <Route
             path="/preview"
             element={
-              user && !mustChangePassword ? (
+              user && !mustChangePassword && !mustVerifyEmail ? (
                 <PreviewModePage />
               ) : (
-                <Navigate to={user ? '/change-password' : '/login'} replace />
+                <Navigate to={user ? postLoginPath : '/login'} replace />
               )
             }
           />
@@ -139,6 +148,8 @@ function App() {
             element={
               !user ? (
                 <Navigate to="/login" replace />
+              ) : mustVerifyEmail ? (
+                <Navigate to="/verify-email" replace />
               ) : mustChangePassword ? (
                 <ForceChangePasswordPage />
               ) : (
@@ -150,7 +161,9 @@ function App() {
           <Route
             element={
               user ? (
-                mustChangePassword ? (
+                mustVerifyEmail ? (
+                  <Navigate to="/verify-email" replace />
+                ) : mustChangePassword ? (
                   <Navigate to="/change-password" replace />
                 ) : (
                   <HostLayout />
@@ -171,6 +184,16 @@ function App() {
               }
             />
             <Route path="/question-bank" element={<QuestionBankPage />} />
+            <Route
+              path="/team"
+              element={
+                user?.role === 'host' && !user?.parent_id ? (
+                  <TeamManagementPage />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              }
+            />
             <Route
               path="/my-plan"
               element={
@@ -271,6 +294,14 @@ function App() {
               element={
                 <SuperAdminOnlyRoute>
                   <ManagePlansPage />
+                </SuperAdminOnlyRoute>
+              }
+            />
+            <Route
+              path="/manage/teams"
+              element={
+                <SuperAdminOnlyRoute>
+                  <ManageTeamsPage />
                 </SuperAdminOnlyRoute>
               }
             />

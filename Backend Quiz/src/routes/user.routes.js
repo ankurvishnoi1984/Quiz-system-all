@@ -5,6 +5,7 @@ const authorizeRoles = require("../middlewares/role.middleware");
 const { uploadExtraSeatAttachment, uploadExtraQuestionAttachment } = require("../config/multer");
 const multer = require("multer");
 const { errorResponse } = require("../utils/response");
+const requireAdminActionOtp = require("../middlewares/admin-action-otp.middleware");
 
 const router = express.Router();
 
@@ -31,9 +32,24 @@ function uploadExtraQuestionFile(req, res, next) {
 router.use(authMiddleware);
 
 router.get("/", authorizeRoles("super_admin"), userController.list);
-router.post("/", authorizeRoles("super_admin"), userController.create);
-router.patch("/:userId/plan", authorizeRoles("super_admin"), userController.assignPlan);
-router.patch("/:userId/status", authorizeRoles("super_admin"), userController.setStatus);
+router.post(
+  "/",
+  authorizeRoles("super_admin"),
+  requireAdminActionOtp,
+  userController.create
+);
+router.patch(
+  "/:userId/plan",
+  authorizeRoles("super_admin"),
+  requireAdminActionOtp,
+  userController.assignPlan
+);
+router.patch(
+  "/:userId/status",
+  authorizeRoles("super_admin"),
+  requireAdminActionOtp,
+  userController.setStatus
+);
 router.get(
   "/:userId/extra-participants",
   authorizeRoles("super_admin"),
@@ -42,12 +58,14 @@ router.get(
 router.post(
   "/:userId/extra-participants/attachment",
   authorizeRoles("super_admin"),
+  requireAdminActionOtp,
   uploadExtraSeatFile,
   userController.uploadExtraAttachment
 );
 router.patch(
   "/:userId/extra-participants",
   authorizeRoles("super_admin"),
+  requireAdminActionOtp,
   userController.adjustExtraParticipants
 );
 router.get(
@@ -58,13 +76,26 @@ router.get(
 router.post(
   "/:userId/extra-questions/attachment",
   authorizeRoles("super_admin"),
+  requireAdminActionOtp,
   uploadExtraQuestionFile,
   userController.uploadExtraQuestionAttachment
 );
 router.patch(
   "/:userId/extra-questions",
   authorizeRoles("super_admin"),
+  requireAdminActionOtp,
   userController.adjustExtraQuestions
+);
+router.get(
+  "/:userId/team-seats",
+  authorizeRoles("super_admin"),
+  userController.listTeamAddons
+);
+router.patch(
+  "/:userId/team-seats",
+  authorizeRoles("super_admin"),
+  requireAdminActionOtp,
+  userController.adjustExtraTeamMembers
 );
 
 module.exports = router;

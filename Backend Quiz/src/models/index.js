@@ -3,6 +3,7 @@ const Role = require("./role.model");
 const Plan = require("./plan.model");
 const UserParticipantAddon = require("./user-participant-addon.model");
 const UserQuestionAddon = require("./user-question-addon.model");
+const UserTeamAddon = require("./user-team-addon.model");
 const Payment = require("./payment.model");
 const Client = require("./client.model");
 const Department = require("./department.model");
@@ -32,6 +33,8 @@ const registerAuditHooks = require("./register-audit-hooks");
 
 User.belongsTo(Role, { foreignKey: "role", targetKey: "slug", as: "assignedRole" });
 Role.hasMany(User, { foreignKey: "role", sourceKey: "slug", as: "users" });
+User.belongsTo(User, { foreignKey: "parent_id", as: "teamOwner" });
+User.hasMany(User, { foreignKey: "parent_id", as: "teamMembers" });
 Plan.hasMany(User, { foreignKey: "plan_id", as: "users" });
 User.belongsTo(Plan, { foreignKey: "plan_id", as: "plan" });
 Plan.hasMany(Payment, { foreignKey: "plan_id", as: "payments" });
@@ -42,6 +45,10 @@ User.hasMany(UserParticipantAddon, { foreignKey: "user_id", as: "participant_add
 UserParticipantAddon.belongsTo(User, { foreignKey: "user_id", as: "user" });
 User.hasMany(UserQuestionAddon, { foreignKey: "user_id", as: "question_addons" });
 UserQuestionAddon.belongsTo(User, { foreignKey: "user_id", as: "user" });
+User.hasMany(UserTeamAddon, { foreignKey: "user_id", as: "team_addons" });
+UserTeamAddon.belongsTo(User, { foreignKey: "user_id", as: "user" });
+User.hasMany(UserTeamAddon, { foreignKey: "created_by", as: "created_team_addons" });
+UserTeamAddon.belongsTo(User, { foreignKey: "created_by", as: "creator" });
 User.hasMany(UserPlanHistory, { foreignKey: "user_id", as: "plan_history" });
 UserPlanHistory.belongsTo(User, { foreignKey: "user_id", as: "user" });
 Plan.hasMany(UserPlanHistory, { foreignKey: "plan_id", as: "plan_history" });
@@ -140,6 +147,7 @@ const models = {
   Payment,
   UserParticipantAddon,
   UserQuestionAddon,
+  UserTeamAddon,
   Client,
   Department,
   Session,

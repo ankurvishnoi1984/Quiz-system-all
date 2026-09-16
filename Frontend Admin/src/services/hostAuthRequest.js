@@ -109,6 +109,7 @@ export async function hostAuthRequest(path, _ignoredAccessToken, options = {}) {
       const err = new Error(payload?.message || 'Request failed')
       err.status = response.status
       err.details = payload?.errors || null
+      err.code = payload?.code || null
       throw err
     }
 

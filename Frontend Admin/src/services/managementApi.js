@@ -26,6 +26,11 @@ export async function listUsersApi(accessToken) {
   return data?.users || []
 }
 
+export async function listTeamsForAdminApi(accessToken) {
+  const data = await authRequest('/admin/teams', accessToken)
+  return data?.teams || []
+}
+
 export async function createUserApi(accessToken, payload) {
   const data = await authRequest('/users', accessToken, {
     method: 'POST',
@@ -55,10 +60,13 @@ export async function updatePlanApi(accessToken, planId, payload) {
   return data?.plan
 }
 
-export async function setUserStatusApi(accessToken, userId, isActive) {
+export async function setUserStatusApi(accessToken, userId, isActive, otpToken) {
   const data = await authRequest(`/users/${userId}/status`, accessToken, {
     method: 'PATCH',
-    body: JSON.stringify({ is_active: Boolean(isActive) }),
+    body: JSON.stringify({
+      is_active: Boolean(isActive),
+      ...(otpToken ? { otp_token: otpToken } : {}),
+    }),
   })
   return data?.user
 }
@@ -84,9 +92,10 @@ export async function updateRoleApi(accessToken, roleId, payload) {
   return data?.role
 }
 
-export async function deleteRoleApi(accessToken, roleId) {
+export async function deleteRoleApi(accessToken, roleId, otpToken) {
   return authRequest(`/roles/${roleId}`, accessToken, {
     method: 'DELETE',
+    body: JSON.stringify(otpToken ? { otp_token: otpToken } : {}),
   })
 }
 
@@ -118,7 +127,7 @@ export async function listUserExtraParticipantsApi(accessToken, userId) {
   return data?.addons || []
 }
 
-export async function uploadExtraSeatAttachmentApi(userId, file) {
+export async function uploadExtraSeatAttachmentApi(userId, file, otpToken) {
   const execute = async (afterRefresh = false) => {
     const { accessToken, refreshToken, clearAuth } = useAuthStore.getState()
     if (!accessToken) {
@@ -135,6 +144,7 @@ export async function uploadExtraSeatAttachmentApi(userId, file) {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
+        ...(otpToken ? { 'x-admin-action-otp-token': otpToken } : {}),
       },
       body: formData,
     })
@@ -186,6 +196,19 @@ export async function adjustUserExtraQuestionsApi(accessToken, userId, payload) 
   return data?.user
 }
 
+export async function listUserTeamSeatAddonsApi(accessToken, userId) {
+  const data = await authRequest(`/users/${userId}/team-seats`, accessToken)
+  return data?.addons || []
+}
+
+export async function adjustUserTeamSeatsApi(accessToken, userId, payload) {
+  const data = await authRequest(`/users/${userId}/team-seats`, accessToken, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+  return data?.user
+}
+
 export async function sendAdminActionOtpApi(accessToken) {
   const data = await authRequest('/auth/admin-action/otp/send', accessToken, {
     method: 'POST',
@@ -207,7 +230,7 @@ export async function listUserExtraQuestionsApi(accessToken, userId) {
   return data?.addons || []
 }
 
-export async function uploadExtraQuestionAttachmentApi(userId, file) {
+export async function uploadExtraQuestionAttachmentApi(userId, file, otpToken) {
   const execute = async (afterRefresh = false) => {
     const { accessToken, refreshToken, clearAuth } = useAuthStore.getState()
     if (!accessToken) {
@@ -224,6 +247,7 @@ export async function uploadExtraQuestionAttachmentApi(userId, file) {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
+        ...(otpToken ? { 'x-admin-action-otp-token': otpToken } : {}),
       },
       body: formData,
     })

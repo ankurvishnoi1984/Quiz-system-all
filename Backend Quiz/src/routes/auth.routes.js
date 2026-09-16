@@ -33,7 +33,13 @@ router.post("/otp/send", otpSendIpRateLimit, authController.sendOtp);
 router.post("/otp/verify", otpVerifyIpRateLimit, authController.verifyOtp);
 router.post("/refresh", authController.refresh);
 router.post("/forgot-password", authController.forgotPassword);
+router.post("/verify-email", authController.verifyEmail);
 router.get("/me", authMiddleware, authController.me);
+router.post(
+  "/resend-email-verification",
+  authMiddleware,
+  authController.resendEmailVerification
+);
 router.post("/change-password", authMiddleware, authController.changePassword);
 router.patch("/hints-completed", authMiddleware, authController.hintsCompleted);
 

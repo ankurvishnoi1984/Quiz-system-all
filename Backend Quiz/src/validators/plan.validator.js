@@ -52,6 +52,18 @@ function validateCreatePlanPayload(payload) {
     }
   }
 
+  const teamMembers = Number(payload?.included_team_members ?? 0);
+  if (!Number.isInteger(teamMembers) || teamMembers < 0) {
+    errors.push("included_team_members must be a whole number of 0 or more");
+  }
+
+  if (payload?.price_per_extra_member != null && payload.price_per_extra_member !== "") {
+    const price = Number(payload.price_per_extra_member);
+    if (!Number.isFinite(price) || price < 0) {
+      errors.push("price_per_extra_member must be a non-negative number or null");
+    }
+  }
+
   if (payload?.currency !== undefined && payload.currency != null && payload.currency !== "") {
     if (typeof payload.currency !== "string" || !/^[A-Za-z]{3}$/.test(payload.currency.trim())) {
       errors.push("currency must be a 3-letter code (e.g. INR)");
@@ -82,7 +94,10 @@ function validateUpdatePlanPayload(payload) {
     "is_free",
     "default_duration_days",
     "price_monthly",
-    "currency"
+    "included_team_members",
+    "price_per_extra_member",
+    "currency",
+    "otp_token"
   ];
   const invalid = keys.filter((key) => !allowed.includes(key));
   if (invalid.length) {
@@ -140,6 +155,22 @@ function validateUpdatePlanPayload(payload) {
       const price = Number(payload.price_monthly);
       if (!Number.isInteger(price) || price < 0) {
         errors.push("price_monthly must be a non-negative whole number or null");
+      }
+    }
+  }
+
+  if (payload.included_team_members !== undefined) {
+    const teamMembers = Number(payload.included_team_members);
+    if (!Number.isInteger(teamMembers) || teamMembers < 0) {
+      errors.push("included_team_members must be a whole number of 0 or more");
+    }
+  }
+
+  if (payload.price_per_extra_member !== undefined) {
+    if (payload.price_per_extra_member != null && payload.price_per_extra_member !== "") {
+      const price = Number(payload.price_per_extra_member);
+      if (!Number.isFinite(price) || price < 0) {
+        errors.push("price_per_extra_member must be a non-negative number or null");
       }
     }
   }

@@ -23,6 +23,8 @@ const pageTitles = {
   '/manage/roles': 'Role Management',
   '/manage/plans': 'Paid Plans',
   '/my-plan': 'My Plan',
+  '/team': 'Team Management',
+  '/manage/teams': 'Team Management',
   '/monitor/websockets': 'Connection Monitor',
 }
 
@@ -30,7 +32,7 @@ function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef(null)
   const { pathname } = useLocation()
-  const { client, setClient, clientId, setClientId, department, setDepartment, departmentId, setDepartmentId, clients, departments, isSuperAdmin, clientsLoading, departmentsLoading } = useShell()
+  const { setClient, clientId, setClientId, department, setDepartment, departmentId, setDepartmentId, clients, departments, isSuperAdmin, clientsLoading, departmentsLoading } = useShell()
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
   const { restart } = useHostOnboarding()

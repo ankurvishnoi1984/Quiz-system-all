@@ -7,6 +7,8 @@ import { useAuthStore } from '../store/authStore'
 import { listClientsApi, listDepartmentsApi } from '../services/dashboardApi'
 import { createDepartmentApi } from '../services/managementApi'
 import { canManageDepartments, isPlatformScope } from '../utils/adminRoles'
+import { useAdminActionOtp } from '../hooks/useAdminActionOtp'
+import { AdminActionOtpModal } from '../components/management/AdminActionOtpModal'
 
 function slugify(value) {
   return String(value || '')
@@ -25,6 +27,7 @@ function ManageDepartmentsPage() {
 
   const [createOpen, setCreateOpen] = useState(false)
   const [alert, setAlert] = useState(null)
+  const { requestAdminAction, modalProps: adminOtpModalProps } = useAdminActionOtp()
   const [form, setForm] = useState({
     client_id: '',
     name: '',
@@ -97,12 +100,18 @@ function ManageDepartmentsPage() {
     const clientId = isSuperAdmin ? form.client_id : String(user?.client_id || '')
     if (!clientId || !form.name.trim() || !form.slug.trim()) return
 
-    createMutation.mutate({
+    const payload = {
       client_id: Number(clientId),
       name: form.name.trim(),
       slug: form.slug.trim(),
       description: form.description.trim() || null,
-    })
+    }
+    requestAdminAction((otpToken) =>
+      createMutation.mutate({
+        ...payload,
+        ...(otpToken ? { otp_token: otpToken } : {}),
+      }),
+    )
   }
 
   return (
@@ -275,6 +284,7 @@ function ManageDepartmentsPage() {
         confirmLabel={alert?.confirmLabel ?? 'OK'}
         onClose={() => setAlert(null)}
       />
+      <AdminActionOtpModal {...adminOtpModalProps} />
     </section>
   )
 }

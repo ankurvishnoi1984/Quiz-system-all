@@ -19,13 +19,34 @@ const SHARED_FEATURES = [
   'Host admin portal access',
 ]
 
+function formatTeamSeats(plan) {
+  const included = Math.max(0, Number(plan.included_team_members || 0))
+  return included > 0
+    ? `${included.toLocaleString()} team member seat${included === 1 ? '' : 's'} included*`
+    : 'Single host'
+}
+
+function formatExtraMemberPrice(plan) {
+  const price = Number(plan.price_per_extra_member)
+  if (!Number.isFinite(price) || price < 0) return null
+  try {
+    return `${new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: plan.currency || 'INR',
+      maximumFractionDigits: 0,
+    }).format(price)} per extra member/month**`
+  } catch {
+    return `${plan.currency || 'INR'} ${price.toLocaleString()} per extra member/month**`
+  }
+}
+
 function PricingPage() {
   const plansQuery = useQuery({
     queryKey: ['public-plans'],
     queryFn: fetchPublicPlansApi,
   })
 
-  const plans = plansQuery.data || []
+  const plans = useMemo(() => plansQuery.data || [], [plansQuery.data])
   const featuredIndex = Math.min(1, Math.max(0, plans.length - 1))
 
   const comparisonRows = useMemo(() => {
@@ -47,6 +68,10 @@ function PricingPage() {
         values: plans.map((plan) =>
           formatPlanQuestionLimitShort(plan.max_questions_per_session),
         ),
+      },
+      {
+        feature: 'Team members',
+        values: plans.map((plan) => formatTeamSeats(plan)),
       },
       ...SHARED_FEATURES.map((feature) => ({
         feature,
@@ -135,6 +160,16 @@ function PricingPage() {
                       <Check className="mt-0.5 size-4 shrink-0 text-navy-700" />
                       {formatPlanQuestionLimit(plan.max_questions_per_session)}
                     </li>
+                    <li className="flex items-start gap-2">
+                      <Check className="mt-0.5 size-4 shrink-0 text-navy-700" />
+                      {formatTeamSeats(plan)}
+                    </li>
+                    {formatExtraMemberPrice(plan) ? (
+                      <li className="flex items-start gap-2">
+                        <Check className="mt-0.5 size-4 shrink-0 text-navy-700" />
+                        {formatExtraMemberPrice(plan)}
+                      </li>
+                    ) : null}
                     {SHARED_FEATURES.map((feature) => (
                       <li key={feature} className="flex items-start gap-2">
                         <Check className="mt-0.5 size-4 shrink-0 text-navy-700" />
@@ -165,6 +200,19 @@ function PricingPage() {
             Sign in to the host portal
           </a>
         </p>
+        {plans.length ? (
+          <div className="mx-auto mt-8 max-w-4xl rounded-2xl border border-slate-200 bg-slate-50 p-5 text-xs leading-relaxed text-slate-600">
+            <p>
+              <strong>*</strong> Team seats let colleagues run their own sessions under one
+              subscription. All team sessions share the plan&apos;s concurrent participant pool.
+            </p>
+            <p className="mt-2">
+              <strong>**</strong> Extra seats are addons to the team lead&apos;s subscription and
+              expire with that plan. New members must verify their email before accessing the
+              dashboard.
+            </p>
+          </div>
+        ) : null}
       </section>
 
       {plans.length ? (

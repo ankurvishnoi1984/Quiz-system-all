@@ -3,6 +3,8 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Modal from '../components/ui/Modal'
 import { HostAlertModal } from '../components/live/HostAlertModal'
+import { AdminActionOtpModal } from '../components/management/AdminActionOtpModal'
+import { useAdminActionOtp } from '../hooks/useAdminActionOtp'
 import { useAuthStore } from '../store/authStore'
 import {
   createRoleApi,
@@ -60,6 +62,7 @@ function ManageRolesPage() {
   const [editRole, setEditRole] = useState(null)
   const [alert, setAlert] = useState(null)
   const [form, setForm] = useState(emptyForm)
+  const { requestAdminAction, modalProps: adminOtpModalProps } = useAdminActionOtp()
 
   const rolesQuery = useQuery({
     queryKey: ['manage-roles'],
@@ -115,7 +118,7 @@ function ManageRolesPage() {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (roleId) => deleteRoleApi(accessToken, roleId),
+    mutationFn: ({ roleId, otpToken }) => deleteRoleApi(accessToken, roleId, otpToken),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['manage-roles'] })
       setAlert({
@@ -154,11 +157,21 @@ function ManageRolesPage() {
     }
 
     if (editRole) {
-      updateMutation.mutate({ roleId: editRole.role_id, input: payload })
+      requestAdminAction((otpToken) =>
+        updateMutation.mutate({
+          roleId: editRole.role_id,
+          input: { ...payload, ...(otpToken ? { otp_token: otpToken } : {}) },
+        }),
+      )
       return
     }
 
-    createMutation.mutate(payload)
+    requestAdminAction((otpToken) =>
+      createMutation.mutate({
+        ...payload,
+        ...(otpToken ? { otp_token: otpToken } : {}),
+      }),
+    )
   }
 
   const openEdit = (role) => {
@@ -261,10 +274,15 @@ function ManageRolesPage() {
                       pending={updateMutation.isPending}
                       onChange={(isActive) => {
                         if (isSuperAdmin) return
-                        updateMutation.mutate({
-                          roleId: role.role_id,
-                          input: { is_active: isActive },
-                        })
+                        requestAdminAction((otpToken) =>
+                          updateMutation.mutate({
+                            roleId: role.role_id,
+                            input: {
+                              is_active: isActive,
+                              ...(otpToken ? { otp_token: otpToken } : {}),
+                            },
+                          }),
+                        )
                       }}
                     />
                   </td>
@@ -282,7 +300,11 @@ function ManageRolesPage() {
                         <button
                           type="button"
                           disabled={isBusy}
-                          onClick={() => deleteMutation.mutate(role.role_id)}
+                          onClick={() =>
+                            requestAdminAction((otpToken) =>
+                              deleteMutation.mutate({ roleId: role.role_id, otpToken }),
+                            )
+                          }
                           className="rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-50"
                         >
                           Delete
@@ -398,6 +420,7 @@ function ManageRolesPage() {
         confirmLabel={alert?.confirmLabel ?? 'OK'}
         onClose={() => setAlert(null)}
       />
+      <AdminActionOtpModal {...adminOtpModalProps} />
     </section>
   )
 }
