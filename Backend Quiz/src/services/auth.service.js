@@ -6,7 +6,11 @@ const {
   assertPaymentEligibleForSignup,
   linkPaymentToUser
 } = require("./payment.service");
-const { sendPasswordResetEmail, sendWebsiteSignupWelcomeEmail } = require("./email.service");
+const {
+  sendPasswordResetEmail,
+  sendPasswordChangedEmail,
+  sendWebsiteSignupWelcomeEmail
+} = require("./email.service");
 const { generateTemporaryPassword } = require("../utils/password");
 const { addDaysToDateOnly, toDateOnlyString, getHostPlanUsage, canSelfServePlanChange } = require("./plan.service");
 const { recordPlanAssignment, PLAN_HISTORY_SOURCES } = require("./plan-history.service");
@@ -426,10 +430,22 @@ async function changePassword(userId, body = {}) {
   user.must_change_password = false;
   await user.save();
 
+  let confirmation_email_sent = true;
+  try {
+    await sendPasswordChangedEmail({
+      to: user.email,
+      fullName: user.full_name
+    });
+  } catch (error) {
+    confirmation_email_sent = false;
+    console.error("Password change confirmation email failed:", error);
+  }
+
   const payload = buildUserPayload(user);
   return {
     user: payload,
-    tokens: buildAuthTokens(payload)
+    tokens: buildAuthTokens(payload),
+    confirmation_email_sent
   };
 }
 

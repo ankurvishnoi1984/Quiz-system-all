@@ -27,6 +27,21 @@ export function PresentQuestionMedia({ media, className = '' }) {
 
   if (!src) return null
 
+  if (media.mediaType === 'video_embed') {
+    return (
+      <div className={`relative z-20 overflow-hidden rounded-2xl border border-blue-200/80 bg-black shadow-md ${className}`.trim()}>
+        <iframe
+          src={src}
+          title="Question embedded media"
+          className="aspect-video max-h-[min(36vh,360px)] w-full"
+          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+          sandbox="allow-scripts allow-same-origin allow-presentation"
+          allowFullScreen
+        />
+      </div>
+    )
+  }
+
   const compactVisualClassName =
     'max-h-[min(18vh,160px)] w-full object-contain lg:max-h-[min(22vh,200px)]'
 

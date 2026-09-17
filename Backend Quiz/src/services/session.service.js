@@ -247,6 +247,13 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
       throw error;
     }
   }
+  const [sourceHost, targetHost] = await Promise.all([
+    User.findByPk(source.host_id, { attributes: ["user_id", "parent_id"] }),
+    User.findByPk(hostId, { attributes: ["user_id", "parent_id"] })
+  ]);
+  const preserveBankSource =
+    Number(sourceHost?.parent_id || sourceHost?.user_id) ===
+    Number(targetHost?.parent_id || targetHost?.user_id);
 
   await assertHostCanRunSessions(hostId);
 
@@ -357,7 +364,9 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
           show_leaderboard: false,
           display_order: q.display_order,
           template_id: q.template_id || null,
-          source_bank_question_id: q.source_bank_question_id || null,
+          source_bank_question_id: preserveBankSource
+            ? q.source_bank_question_id || null
+            : null,
           set_id: q.set_id ? setIdMap.get(Number(q.set_id)) || null : null
         },
         { transaction }

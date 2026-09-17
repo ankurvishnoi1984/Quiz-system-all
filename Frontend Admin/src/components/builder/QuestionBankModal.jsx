@@ -1,7 +1,9 @@
-import { Check, Library, LoaderCircle, Search, Shuffle } from 'lucide-react'
+import { Check, Eye, Library, LoaderCircle, Search, Shuffle } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import Modal from '../ui/Modal'
+import { QuestionMedia } from '../participant-session/QuestionMedia'
+import { mapApiMediaToQuestionMedia } from '../../utils/questionMedia'
 import {
   addQuestionBankQuestionsToSessionApi,
   addRandomQuestionBankQuestionsApi,
@@ -25,6 +27,17 @@ function apiTypeFromUi(value) {
   return TYPES.find((type) => type.ui === value)?.api || ''
 }
 
+function distributeDifficultyCounts(total) {
+  const safeTotal = Math.max(1, Number(total) || 10)
+  const base = Math.floor(safeTotal / 3)
+  const remainder = safeTotal % 3
+  return {
+    easy: base + (remainder > 0 ? 1 : 0),
+    medium: base + (remainder > 1 ? 1 : 0),
+    hard: base,
+  }
+}
+
 export function QuestionBankModal({
   open,
   onClose,
@@ -40,7 +53,11 @@ export function QuestionBankModal({
   const [questionType, setQuestionType] = useState(lockedApiType || 'mcq')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState(() => new Set())
+  const [mediaPreviewId, setMediaPreviewId] = useState(null)
   const [randomCount, setRandomCount] = useState(10)
+  const [difficultyCounts, setDifficultyCounts] = useState(() =>
+    distributeDifficultyCounts(10),
+  )
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -50,7 +67,10 @@ export function QuestionBankModal({
     setQuestionType(lockedApiType || 'mcq')
     setSearch('')
     setSelected(new Set())
-    setRandomCount(Math.max(1, Math.min(10, remainingSlots ?? 10)))
+    setMediaPreviewId(null)
+    const initialRandomCount = Math.max(1, Math.min(10, remainingSlots ?? 10))
+    setRandomCount(initialRandomCount)
+    setDifficultyCounts(distributeDifficultyCounts(initialRandomCount))
     setError('')
   }, [open, lockedApiType, remainingSlots])
 
@@ -97,8 +117,12 @@ export function QuestionBankModal({
       addRandomQuestionBankQuestionsApi(accessToken, sessionId, {
         topic_id: Number(topicId),
         difficulty,
+        difficulty_counts: difficulty === 'mixed' ? difficultyCounts : undefined,
         question_type: questionType,
-        count: Math.max(1, Math.min(Number(randomCount) || 10, maxSelectable)),
+        count:
+          difficulty === 'mixed'
+            ? undefined
+            : Math.max(1, Math.min(Number(randomCount) || 10, maxSelectable)),
       }),
     onSuccess: (result) => {
       onAdded?.(result)
@@ -122,6 +146,11 @@ export function QuestionBankModal({
   }
 
   const busy = addMutation.isPending || randomMutation.isPending
+  const mixedTotal = Object.values(difficultyCounts).reduce(
+    (sum, value) => sum + (Number(value) || 0),
+    0,
+  )
+  const randomRequested = difficulty === 'mixed' ? mixedTotal : Number(randomCount) || 0
 
   return (
     <Modal open={open} title="Select from Question Bank" onClose={onClose} size="xl">
@@ -176,19 +205,56 @@ export function QuestionBankModal({
             <p className="font-semibold text-violet-950">Add random questions</p>
             <p className="text-sm text-violet-700">Uses the selected topic, difficulty and type; existing bank questions are excluded.</p>
           </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              min="1"
-              max={Math.min(50, maxSelectable || 1)}
-              value={randomCount}
-              onChange={(e) => setRandomCount(e.target.value)}
-              className="input-modern w-24"
-              aria-label="Random question count"
-            />
+          <div className="flex flex-wrap items-end gap-2">
+            {difficulty === 'mixed' ? (
+              <>
+                {['easy', 'medium', 'hard'].map((level) => (
+                  <label key={level} className="space-y-1 text-xs font-bold capitalize text-slate-700">
+                    {level}
+                    <input
+                      type="number"
+                      min="0"
+                      max="50"
+                      value={difficultyCounts[level]}
+                      onChange={(event) =>
+                        setDifficultyCounts((current) => ({
+                          ...current,
+                          [level]: Math.max(0, Number(event.target.value) || 0),
+                        }))
+                      }
+                      className="input-modern block w-20"
+                      aria-label={`${level} random question count`}
+                    />
+                  </label>
+                ))}
+                <div className="px-2 pb-2 text-sm font-bold text-violet-900">
+                  Total: {mixedTotal}
+                </div>
+              </>
+            ) : (
+              <label className="space-y-1 text-xs font-bold text-slate-700">
+                Quantity
+                <input
+                  type="number"
+                  min="1"
+                  max={Math.min(50, maxSelectable || 1)}
+                  value={randomCount}
+                  onChange={(e) => setRandomCount(e.target.value)}
+                  className="input-modern block w-24"
+                  aria-label="Random question count"
+                />
+              </label>
+            )}
             <button
               type="button"
-              disabled={!topicId || !questionType || busy || maxSelectable <= 0}
+              disabled={
+                !topicId ||
+                !questionType ||
+                busy ||
+                maxSelectable <= 0 ||
+                randomRequested < 1 ||
+                randomRequested > Math.min(50, maxSelectable)
+              }
               onClick={() => randomMutation.mutate()}
               className="inline-flex min-w-32 items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-violet-700/20 transition hover:bg-violet-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -215,10 +281,17 @@ export function QuestionBankModal({
             {questions.map((question) => {
               const active = selected.has(question.bank_question_id)
               return (
-                <button
-                  type="button"
+                <div
+                  role="button"
+                  tabIndex={0}
                   key={question.bank_question_id}
                   onClick={() => toggle(question.bank_question_id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      toggle(question.bank_question_id)
+                    }
+                  }}
                   className={`w-full rounded-2xl border p-4 text-left transition ${
                     active
                       ? 'border-blue-400 bg-blue-50'
@@ -233,6 +306,9 @@ export function QuestionBankModal({
                       <div className="flex flex-wrap gap-2 text-xs font-semibold">
                         <span className="rounded-full bg-violet-50 px-2 py-0.5 text-violet-700">{question.difficulty}</span>
                         <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">{question.question_type.replaceAll('_', ' ')}</span>
+                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
+                          v{question.version || 1}
+                        </span>
                       </div>
                       <p className="mt-2 font-semibold text-navy-950">{question.question_text}</p>
                       {question.options?.length ? (
@@ -240,9 +316,42 @@ export function QuestionBankModal({
                           {question.options.map((option) => option.option_text).join(' · ')}
                         </p>
                       ) : null}
+                      {question.media_url ? (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setMediaPreviewId((current) =>
+                              current === question.bank_question_id
+                                ? null
+                                : question.bank_question_id,
+                            )
+                          }}
+                          className="mt-3 inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-white px-3 py-2 text-xs font-bold text-blue-700 transition hover:bg-blue-50"
+                        >
+                          <Eye className="size-4" />
+                          {mediaPreviewId === question.bank_question_id
+                            ? 'Hide media'
+                            : 'View media'}
+                        </button>
+                      ) : null}
                     </div>
                   </div>
-                </button>
+                  {question.media_url &&
+                  mediaPreviewId === question.bank_question_id ? (
+                    <div
+                      className="mt-4 border-t border-blue-100 pt-4"
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => event.stopPropagation()}
+                      role="presentation"
+                    >
+                      <QuestionMedia
+                        media={mapApiMediaToQuestionMedia(question)}
+                        maxHeightClass="max-h-80"
+                      />
+                    </div>
+                  ) : null}
+                </div>
               )
             })}
           </div>

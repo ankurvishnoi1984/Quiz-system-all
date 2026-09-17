@@ -1,6 +1,8 @@
 import {
   Archive,
+  Check,
   CheckCircle2,
+  ChevronDown,
   ClipboardCheck,
   Eye,
   FileQuestion,
@@ -13,13 +15,22 @@ import {
   Send,
   XCircle,
 } from 'lucide-react'
-import { useDeferredValue, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '../store/authStore'
 import Modal from '../components/ui/Modal'
+import { QuestionMediaUpload } from '../components/builder/QuestionMediaUpload'
+import { QuestionMedia } from '../components/participant-session/QuestionMedia'
+import { HostAlertModal } from '../components/live/HostAlertModal'
+import {
+  buildQuestionMediaPayload,
+  mapApiMediaToQuestionMedia,
+  normalizeEmbedUrl,
+} from '../utils/questionMedia'
 import {
   archiveQuestionBankQuestionApi,
   createQuestionBankQuestionApi,
+  listQuestionBankOwnersApi,
   listQuestionBankQuestionsApi,
   listQuestionBankTopicsApi,
   reviewQuestionBankQuestionApi,
@@ -58,8 +69,147 @@ function label(value) {
     .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
+function friendlyValidationMessage(message) {
+  const normalized = String(message || '').toLowerCase()
+  if (normalized.includes('option text values must be unique')) {
+    return 'Each answer option must be different. Please remove or rename duplicate answers.'
+  }
+  if (
+    normalized.includes('exactly one correct option') ||
+    normalized.includes('exactly one correct answer')
+  ) {
+    return 'Select exactly one correct answer.'
+  }
+  if (normalized.includes('must include option_text')) {
+    return 'Every answer option must contain text.'
+  }
+  if (normalized.includes('topic is required')) {
+    return 'Enter or select a topic.'
+  }
+  if (normalized.includes('question_text is required')) {
+    return 'Enter the question text.'
+  }
+  if (normalized.includes('select a host account')) {
+    return 'Select the Host account that will own this question.'
+  }
+  return String(message || 'Please check the question details and try again.')
+}
+
+function HostAccountSelect({
+  owners,
+  value,
+  onChange,
+  allowAll = false,
+  disabled = false,
+}) {
+  const rootRef = useRef(null)
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const selected = owners.find((owner) => Number(owner.user_id) === Number(value))
+  const filteredOwners = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    if (!term) return owners
+    return owners.filter(
+      (owner) =>
+        owner.full_name?.toLowerCase().includes(term) ||
+        owner.email?.toLowerCase().includes(term),
+    )
+  }, [owners, search])
+
+  useEffect(() => {
+    if (!open) return undefined
+    const closeOnOutsideClick = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', closeOnOutsideClick)
+    return () => document.removeEventListener('mousedown', closeOnOutsideClick)
+  }, [open])
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => {
+          setSearch('')
+          setOpen((current) => !current)
+        }}
+        className="input-modern flex w-full items-center justify-between gap-2 text-left disabled:bg-slate-100"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className={`truncate ${selected ? 'text-slate-900' : 'text-slate-500'}`}>
+          {selected
+            ? `${selected.full_name} (${selected.email})`
+            : allowAll
+              ? 'All Host accounts'
+              : 'Select Host account'}
+        </span>
+        <ChevronDown className="size-4 shrink-0 text-slate-400" />
+      </button>
+      {open ? (
+        <div className="absolute z-50 mt-2 w-full min-w-80 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+            <input
+              autoFocus
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') setOpen(false)
+              }}
+              className="h-10 w-full rounded-xl border border-slate-200 pl-9 pr-3 text-sm outline-none focus:border-blue-400"
+              placeholder="Search Host name or email"
+            />
+          </div>
+          <div className="mt-2 max-h-64 overflow-y-auto" role="listbox">
+            {allowAll && !search ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onChange('')
+                  setOpen(false)
+                }}
+                className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                All Host accounts
+                {!value ? <Check className="size-4 text-blue-600" /> : null}
+              </button>
+            ) : null}
+            {filteredOwners.map((owner) => (
+              <button
+                type="button"
+                key={owner.user_id}
+                onClick={() => {
+                  onChange(String(owner.user_id))
+                  setOpen(false)
+                }}
+                className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-blue-50"
+                role="option"
+                aria-selected={Number(owner.user_id) === Number(value)}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-slate-900">{owner.full_name}</span>
+                  <span className="block truncate text-xs text-slate-500">{owner.email}</span>
+                </span>
+                {Number(owner.user_id) === Number(value) ? (
+                  <Check className="size-4 shrink-0 text-blue-600" />
+                ) : null}
+              </button>
+            ))}
+            {!filteredOwners.length ? (
+              <p className="px-3 py-5 text-center text-sm text-slate-500">No Hosts found</p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function emptyQuestion(topicId = '') {
   return {
+    owner_id: '',
     topic_id: topicId,
     topic_name: '',
     question_type: 'mcq',
@@ -67,11 +217,12 @@ function emptyQuestion(topicId = '') {
     difficulty: 'medium',
     language: 'en',
     is_quiz_mode: true,
+    media: null,
     allow_multiple_select: false,
     rating_min: 1,
     rating_max: 10,
     options: [
-      { option_text: '', is_correct: true },
+      { option_text: '', is_correct: false },
       { option_text: '', is_correct: false },
       { option_text: '', is_correct: false },
       { option_text: '', is_correct: false },
@@ -90,9 +241,20 @@ function normalizeFormForType(form, nextType) {
       question_type: nextType,
       is_quiz_mode: true,
       options: [
-        { option_text: 'True', is_correct: true },
+        { option_text: 'True', is_correct: false },
         { option_text: 'False', is_correct: false },
       ],
+    }
+  }
+  if (nextType === 'mcq' && form.question_type !== 'mcq') {
+    return {
+      ...form,
+      question_type: nextType,
+      is_quiz_mode: true,
+      options: Array.from({ length: 4 }, () => ({
+        option_text: '',
+        is_correct: false,
+      })),
     }
   }
   if (optionsRequired(nextType)) {
@@ -100,7 +262,7 @@ function normalizeFormForType(form, nextType) {
       form.options?.length >= 2
         ? form.options
         : [
-            { option_text: '', is_correct: true },
+            { option_text: '', is_correct: false },
             { option_text: '', is_correct: false },
           ]
     return {
@@ -138,6 +300,12 @@ function QuestionPreview({ question }) {
         <span className="text-slate-500">v{question.version || 1}</span>
       </div>
       <p className="text-lg font-bold leading-relaxed text-navy-950">{question.question_text}</p>
+      {question.media_url ? (
+        <QuestionMedia
+          media={mapApiMediaToQuestionMedia(question)}
+          maxHeightClass="max-h-72"
+        />
+      ) : null}
       {question.options?.length ? (
         <div className="grid gap-2 sm:grid-cols-2">
           {question.options.map((option) => (
@@ -161,6 +329,14 @@ function QuestionPreview({ question }) {
         </span>
         <span aria-hidden="true">•</span>
         <span>{String(question.language || 'en').toUpperCase()}</span>
+        {question.owner ? (
+          <>
+            <span aria-hidden="true">•</span>
+            <span>
+              Host account: <strong className="font-semibold text-slate-700">{question.owner.full_name}</strong>
+            </span>
+          </>
+        ) : null}
       </div>
       {reviews[0]?.comments ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
@@ -212,37 +388,90 @@ function QuestionDetailsModal({ question, onClose }) {
   )
 }
 
-function AuthorEditor({ topics, editing, onCancel, onSaved }) {
+function AuthorEditor({
+  topics,
+  owners,
+  role,
+  currentUser,
+  editing,
+  onCancel,
+  onSaved,
+}) {
   const accessToken = useAuthStore((state) => state.accessToken)
   const [form, setForm] = useState(() => {
     if (!editing) return emptyQuestion(topics[0]?.topic_id || '')
     return {
       ...emptyQuestion(editing.topic_id),
       ...editing,
+      owner_id: editing.owner_id || '',
       topic_name: editing.topic?.name || '',
+      media: mapApiMediaToQuestionMedia(editing),
       options: (editing.options || []).map((option) => ({
         option_text: option.option_text,
         is_correct: Boolean(option.is_correct),
       })),
     }
   })
+  const [embedUrl, setEmbedUrl] = useState(
+    editing?.media_type === 'video_embed' ? editing.media_url || '' : '',
+  )
+  const [mediaMode, setMediaMode] = useState(
+    editing?.media_type === 'video_embed'
+      ? 'embed'
+      : editing?.media_url
+        ? 'upload'
+        : 'none',
+  )
   const [error, setError] = useState('')
 
   const saveMutation = useMutation({
     mutationFn: () => {
+      if (mediaMode === 'embed' && !embedUrl.trim()) {
+        throw new Error('Enter an embed URL or choose No media')
+      }
+      if (mediaMode === 'upload' && !form.media?.url) {
+        throw new Error('Upload a media file or choose No media')
+      }
+      const normalizedEmbedUrl = mediaMode === 'embed' && embedUrl.trim()
+        ? normalizeEmbedUrl(embedUrl)
+        : ''
+      if (mediaMode === 'embed' && embedUrl.trim() && !normalizedEmbedUrl) {
+        throw new Error('Enter a valid HTTP or HTTPS embed URL')
+      }
+      const media = normalizedEmbedUrl
+        ? {
+            url: normalizedEmbedUrl,
+            kind: 'video',
+            mediaType: 'video_embed',
+          }
+        : mediaMode === 'upload'
+          ? form.media
+          : null
       const payload = {
         ...form,
+        owner_id: Number(form.owner_id) || undefined,
         topic_id: Number(form.topic_id),
         rating_min: Number(form.rating_min),
         rating_max: Number(form.rating_max),
         options: optionsRequired(form.question_type) ? form.options : [],
+        ...buildQuestionMediaPayload(media),
       }
       return editing
         ? updateQuestionBankQuestionApi(accessToken, editing.bank_question_id, payload)
         : createQuestionBankQuestionApi(accessToken, payload)
     },
+    onMutate: () => setError(''),
     onSuccess: onSaved,
-    onError: (err) => setError(err.message || 'Unable to save question'),
+    onError: (err) => {
+      const details = Array.isArray(err.details)
+        ? err.details.filter(Boolean)
+        : []
+      setError(
+        details.length
+          ? details.map(friendlyValidationMessage)
+          : [friendlyValidationMessage(err.message || 'Unable to save question')],
+      )
+    },
   })
 
   const setCorrect = (index) => {
@@ -254,19 +483,48 @@ function AuthorEditor({ topics, editing, onCancel, onSaved }) {
       })),
     }))
   }
+  const selectedOwner = owners.find(
+    (owner) => Number(owner.user_id) === Number(form.owner_id),
+  )
+  const mediaDeptId =
+    role === 'author' ? currentUser?.dept_id : selectedOwner?.dept_id
 
   return (
     <div className="rounded-3xl border border-blue-200 bg-white p-6 shadow-sm">
       <div className="mb-5">
         <div>
           <h2 className="text-xl font-bold text-navy-950">
-            {editing ? 'Edit question' : 'Create question'}
+            {editing
+              ? `Edit question v${editing.version || 1}`
+              : 'Create question'}
           </h2>
-          <p className="text-sm text-slate-500">Save a draft before submitting it to an Auditor.</p>
+          <p className="text-sm text-slate-500">
+            {editing?.revision_of_id
+              ? 'The previous approved version remains available to Hosts until this version is approved.'
+              : 'Save a draft before submitting it to an Auditor.'}
+          </p>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
+        {role !== 'author' ? (
+          <div className="space-y-1.5 text-sm font-semibold text-slate-700">
+            <p>Host account</p>
+            <HostAccountSelect
+              owners={owners}
+              value={form.owner_id}
+              disabled={Boolean(editing)}
+              onChange={(ownerId) =>
+                setForm((current) => ({
+                  ...current,
+                  owner_id: ownerId,
+                  topic_id: '',
+                  topic_name: '',
+                }))
+              }
+            />
+          </div>
+        ) : null}
         <label className="space-y-1.5 text-sm font-semibold text-slate-700">
           Topic
           <input
@@ -287,9 +545,16 @@ function AuthorEditor({ topics, editing, onCancel, onSaved }) {
             placeholder="Enter or select a topic"
           />
           <datalist id="question-bank-topic-options">
-            {topics.map((topic) => (
+            {topics
+              .filter(
+                (topic) =>
+                  role === 'author' ||
+                  !form.owner_id ||
+                  Number(topic.owner_id) === Number(form.owner_id),
+              )
+              .map((topic) => (
               <option key={topic.topic_id} value={topic.name} />
-            ))}
+              ))}
           </datalist>
         </label>
         <label className="space-y-1.5 text-sm font-semibold text-slate-700">
@@ -332,6 +597,82 @@ function AuthorEditor({ topics, editing, onCancel, onSaved }) {
           placeholder="Write the complete question"
         />
       </label>
+
+      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-navy-950">Question media</p>
+            <p className="text-xs text-slate-600">Choose one media source.</p>
+          </div>
+          <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1">
+            {[
+              { value: 'none', label: 'No media' },
+              { value: 'upload', label: 'Upload file' },
+              { value: 'embed', label: 'Embed link' },
+            ].map((option) => (
+              <button
+                type="button"
+                key={option.value}
+                onClick={() => {
+                  setMediaMode(option.value)
+                  if (option.value !== 'embed') setEmbedUrl('')
+                  if (option.value !== 'upload') {
+                    setForm((current) => ({ ...current, media: null }))
+                  }
+                }}
+                className={`rounded-lg px-3 py-2 text-xs font-bold transition ${
+                  mediaMode === option.value
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {mediaMode === 'upload' ? (
+          <div className="mt-4">
+            <QuestionMediaUpload
+              media={form.media}
+              deptId={mediaDeptId}
+              disabled={!mediaDeptId}
+              onError={setError}
+              onChange={(media) =>
+                setForm((current) => ({ ...current, media }))
+              }
+            />
+          </div>
+        ) : null}
+        {mediaMode === 'embed' ? (
+          <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50/50 p-4">
+          <p className="text-sm font-bold text-navy-950">YouTube or embed link</p>
+          <p className="mt-1 text-xs text-slate-600">
+            Paste a YouTube, Vimeo, or HTTPS embed URL. Adding a link replaces uploaded media.
+          </p>
+          <input
+            type="url"
+            value={embedUrl}
+            onChange={(event) => setEmbedUrl(event.target.value)}
+            disabled={!mediaDeptId}
+            className="input-modern mt-3"
+            placeholder="https://www.youtube.com/watch?v=..."
+          />
+          {embedUrl && normalizeEmbedUrl(embedUrl) ? (
+            <div className="mt-3 overflow-hidden rounded-xl border border-blue-200 bg-black">
+              <iframe
+                src={normalizeEmbedUrl(embedUrl)}
+                title="Embed preview"
+                className="aspect-video w-full"
+                allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                sandbox="allow-scripts allow-same-origin allow-presentation"
+                allowFullScreen
+              />
+            </div>
+          ) : null}
+          </div>
+        ) : null}
+      </div>
 
       {optionsRequired(form.question_type) ? (
         <div className="mt-4 space-y-2">
@@ -428,7 +769,6 @@ function AuthorEditor({ topics, editing, onCancel, onSaved }) {
         ) : null}
       </div>
 
-      {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-5">
         <p className="text-xs text-slate-500">
           Your question remains private until you submit it for review.
@@ -443,7 +783,10 @@ function AuthorEditor({ topics, editing, onCancel, onSaved }) {
           </button>
           <button
             type="button"
-            disabled={saveMutation.isPending}
+            disabled={
+              saveMutation.isPending ||
+              (role !== 'author' && !form.owner_id)
+            }
             onClick={() => saveMutation.mutate()}
             className="inline-flex min-w-36 items-center justify-center gap-2 rounded-xl bg-linear-to-r from-blue-700 to-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-blue-700/20 transition hover:from-blue-800 hover:to-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
@@ -456,6 +799,16 @@ function AuthorEditor({ topics, editing, onCancel, onSaved }) {
           </button>
         </div>
       </div>
+      <HostAlertModal
+        open={Boolean(error)}
+        variant="error"
+        title="Question could not be saved"
+        message={(Array.isArray(error) ? error : [error])
+          .map((message) => `• ${friendlyValidationMessage(message)}`)
+          .join('\n')}
+        confirmLabel="Review question"
+        onClose={() => setError('')}
+      />
     </div>
   )
 }
@@ -467,6 +820,7 @@ export default function QuestionBankPage() {
   const [editorOpen, setEditorOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const [status, setStatus] = useState('')
+  const [ownerFilter, setOwnerFilter] = useState('')
   const [topicId, setTopicId] = useState('')
   const [difficulty, setDifficulty] = useState('')
   const [questionType, setQuestionType] = useState('')
@@ -475,9 +829,17 @@ export default function QuestionBankPage() {
   const [detailQuestion, setDetailQuestion] = useState(null)
   const [reviewComments, setReviewComments] = useState({})
   const role = user?.role
-  const canAuthor = role === 'author'
-  const canAudit = role === 'auditor'
+  const adminRoles = ['super_admin', 'client_admin', 'dept_admin']
+  const canAuthor = role === 'author' || adminRoles.includes(role)
+  const canAudit = role === 'auditor' || adminRoles.includes(role)
   const allowedRoles = ['author', 'auditor', 'super_admin', 'client_admin', 'dept_admin']
+
+  const ownersQuery = useQuery({
+    queryKey: ['question-bank-owners', role],
+    queryFn: () => listQuestionBankOwnersApi(accessToken),
+    enabled: Boolean(accessToken && adminRoles.includes(role)),
+  })
+  const owners = ownersQuery.data || []
 
   const topicsQuery = useQuery({
     queryKey: ['question-bank-topics', role],
@@ -490,10 +852,20 @@ export default function QuestionBankPage() {
   const topics = topicsQuery.data || []
 
   const questionsQuery = useQuery({
-    queryKey: ['question-bank-manage', role, status, topicId, difficulty, questionType, deferredSearch],
+    queryKey: [
+      'question-bank-manage',
+      role,
+      ownerFilter,
+      status,
+      topicId,
+      difficulty,
+      questionType,
+      deferredSearch,
+    ],
     queryFn: () =>
       listQuestionBankQuestionsApi(accessToken, {
         status,
+        owner_id: ownerFilter,
         topic_id: topicId,
         difficulty,
         question_type: questionType,
@@ -526,7 +898,14 @@ export default function QuestionBankPage() {
         comments: reviewComments[question.bank_question_id] || '',
       })
     },
-    onSuccess: refresh,
+    onSuccess: (result, variables) => {
+      refresh()
+      if (variables.action === 'revise' && result) {
+        setEditing(result)
+        setEditorOpen(true)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }
+    },
   })
 
   const statusOptions = useMemo(() => {
@@ -553,7 +932,11 @@ export default function QuestionBankPage() {
             </span>
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-200">
-                {role === 'author' ? 'Author workspace' : role === 'auditor' ? 'Auditor workspace' : 'Administration'}
+                {role === 'author'
+                  ? 'Private account bank · Author workspace'
+                  : role === 'auditor'
+                    ? 'Private account bank · Auditor workspace'
+                    : 'Scoped administration'}
               </p>
               <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
                 {role === 'author'
@@ -568,10 +951,10 @@ export default function QuestionBankPage() {
             {role === 'author'
                   ? 'Create reusable questions, assign a topic, and submit completed drafts for approval.'
               : role === 'auditor'
-                    ? 'Review question quality, answers and settings before content becomes available to Hosts.'
+                    ? 'Review only your account’s questions before they become available to its Hosts.'
                 : role === 'super_admin'
-                      ? 'Monitor question quality, approval progress and the complete content review history.'
-                      : 'Browse question types, approval statuses, answers, authors and review details.'}
+                      ? 'Create questions for a selected Host account and manage approvals across the platform.'
+                      : 'Create questions for an accessible Host account and manage approvals within your scope.'}
               </p>
             </div>
           </div>
@@ -594,6 +977,9 @@ export default function QuestionBankPage() {
         <AuthorEditor
           key={editing?.bank_question_id || 'new'}
           topics={topics.filter((topic) => topic.is_active)}
+          owners={owners}
+          role={role}
+          currentUser={user}
           editing={editing}
           onCancel={() => {
             setEditorOpen(false)
@@ -626,7 +1012,7 @@ export default function QuestionBankPage() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className={`grid gap-3 md:grid-cols-2 ${adminRoles.includes(role) ? 'xl:grid-cols-6' : 'xl:grid-cols-5'}`}>
           <label className="relative xl:col-span-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -644,11 +1030,36 @@ export default function QuestionBankPage() {
               </option>
             ))}
           </select>
+          {adminRoles.includes(role) ? (
+            <HostAccountSelect
+              owners={owners}
+              value={ownerFilter}
+              allowAll
+              onChange={(ownerId) => {
+                setOwnerFilter(ownerId)
+                setTopicId('')
+              }}
+            />
+          ) : null}
           <select value={topicId} onChange={(event) => setTopicId(event.target.value)} className="input-modern">
             <option value="">All topics</option>
-            {topics.map((topic) => (
-              <option key={topic.topic_id} value={topic.topic_id}>{topic.name}</option>
-            ))}
+            {topics
+              .filter(
+                (topic) =>
+                  !ownerFilter ||
+                  Number(topic.owner_id) === Number(ownerFilter),
+              )
+              .map((topic) => {
+                const topicOwner = owners.find(
+                  (owner) => Number(owner.user_id) === Number(topic.owner_id),
+                )
+                return (
+                  <option key={topic.topic_id} value={topic.topic_id}>
+                    {topic.name}
+                    {!ownerFilter && topicOwner ? ` — ${topicOwner.full_name}` : ''}
+                  </option>
+                )
+              })}
           </select>
           <select value={questionType} onChange={(event) => setQuestionType(event.target.value)} className="input-modern">
             <option value="">All question types</option>
@@ -669,6 +1080,7 @@ export default function QuestionBankPage() {
             type="button"
             onClick={() => {
               setStatus('')
+              setOwnerFilter('')
               setTopicId('')
               setQuestionType('')
               setDifficulty('')
@@ -738,7 +1150,9 @@ export default function QuestionBankPage() {
                 >
                   <Eye className="size-4" /> View details
                 </button>
-                {canAuthor && ['draft', 'changes_requested'].includes(question.status) ? (
+                {canAuthor &&
+                Number(question.author_id) === Number(user?.user_id) &&
+                ['draft', 'changes_requested'].includes(question.status) ? (
                   <>
                     <button
                       type="button"
@@ -760,13 +1174,16 @@ export default function QuestionBankPage() {
                     </button>
                   </>
                 ) : null}
-                {canAuthor && question.status === 'approved' ? (
+                {canAuthor &&
+                Number(question.author_id) === Number(user?.user_id) &&
+                question.status === 'approved' ? (
                   <button
                     type="button"
                     onClick={() => actionMutation.mutate({ action: 'revise', question })}
                     className="inline-flex items-center gap-2 rounded-xl border border-violet-300 bg-violet-50 px-4 py-2.5 text-sm font-bold text-violet-700 transition hover:bg-violet-100"
                   >
-                    <FileQuestion className="size-4" /> Create revision
+                    <FileQuestion className="size-4" />
+                    Edit as v{Number(question.version || 1) + 1}
                   </button>
                 ) : null}
                 {canAudit && question.status === 'approved' ? (

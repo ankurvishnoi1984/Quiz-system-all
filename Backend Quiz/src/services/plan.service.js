@@ -337,7 +337,7 @@ async function countParticipantsForHost(hostId) {
 
 async function getTeamHostIds(ownerId) {
   const members = await User.findAll({
-    where: { parent_id: ownerId, is_active: true },
+    where: { parent_id: ownerId, role: "host", is_active: true },
     attributes: ["user_id"],
     raw: true
   });

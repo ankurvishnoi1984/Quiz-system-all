@@ -19,6 +19,11 @@ export async function listQuestionBankTopicsApi(accessToken, params = {}) {
   return data?.topics || []
 }
 
+export async function listQuestionBankOwnersApi(accessToken) {
+  const data = await hostAuthRequest('/question-bank/owners', accessToken)
+  return data?.owners || []
+}
+
 export async function createQuestionBankTopicApi(accessToken, payload) {
   const data = await hostAuthRequest('/question-bank/topics', accessToken, {
     method: 'POST',

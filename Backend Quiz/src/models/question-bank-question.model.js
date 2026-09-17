@@ -9,6 +9,10 @@ const QuestionBankQuestion = sequelize.define(
       primaryKey: true,
       autoIncrement: true
     },
+    owner_id: {
+      type: DataTypes.INTEGER,
+      allowNull: false
+    },
     topic_id: {
       type: DataTypes.INTEGER,
       allowNull: false

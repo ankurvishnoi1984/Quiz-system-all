@@ -327,6 +327,31 @@ If you did not request this reset, ignore this email or contact your administrat
   };
 }
 
+function renderPasswordChangedEmail({ fullName, brandName, logoCid, logoUrl }) {
+  const greeting = fullName ? `Hello ${fullName},` : "Hello,";
+  const bodyHtml = `
+    <p style="margin:0 0 16px;font-size:16px;line-height:1.65;color:${BRAND.slate};">${escapeHtml(greeting)}</p>
+    <p style="margin:0 0 20px;font-size:16px;line-height:1.65;color:${BRAND.slate};">
+      Your account password was changed successfully. For your security, passwords are never included in email or stored in readable form.
+    </p>
+    <p style="margin:0;font-size:14px;line-height:1.6;color:${BRAND.slateLight};">
+      If you did not make this change, reset your password immediately and contact your administrator.
+    </p>`;
+  return {
+    subject: "Your password was changed",
+    text: `${greeting}\n\nYour account password was changed successfully. For security, your password is not included in this email.\n\nIf you did not make this change, reset your password immediately and contact your administrator.\n\n— ${brandName || "Quiz Platform"}`,
+    html: renderEmailLayout({
+      preheader: "Your account password was changed successfully.",
+      brandName,
+      title: "Password changed",
+      bodyHtml,
+      footerNote: "This is a security notification for your account.",
+      logoCid,
+      logoUrl
+    })
+  };
+}
+
 function renderAssignmentDetail(label, value) {
   if (!value) return "";
   return `
@@ -1235,6 +1260,7 @@ module.exports = {
   escapeHtml,
   renderEmailLayout,
   renderPasswordResetEmail,
+  renderPasswordChangedEmail,
   renderEmailOtpEmail,
   renderNewUserWelcomeEmail,
   renderTeamMemberVerificationEmail,

@@ -2,6 +2,7 @@ const { successResponse, errorResponse } = require("../utils/response");
 const {
   getTeamSummary,
   addTeamMember,
+  updatePendingTeamMember,
   resendTeamMemberVerification,
   removeTeamMember,
   listTeamsForAdmin
@@ -16,12 +17,33 @@ async function getTeam(req, res) {
   }
 }
 
+async function updateMember(req, res) {
+  try {
+    const result = await updatePendingTeamMember({
+      ownerId: req.user.user_id,
+      memberId: Number(req.params.memberId),
+      fullName: req.body?.full_name,
+      email: req.body?.email,
+      role: req.body?.role
+    });
+    return successResponse(
+      res,
+      result,
+      "Team member updated and verification email sent",
+      200
+    );
+  } catch (error) {
+    return errorResponse(res, error.message, error.statusCode || 500);
+  }
+}
+
 async function addMember(req, res) {
   try {
     const result = await addTeamMember({
       ownerId: req.user.user_id,
       fullName: req.body?.full_name,
-      email: req.body?.email
+      email: req.body?.email,
+      role: req.body?.role
     });
     const message = result.email_sent
       ? "Team member added and verification email sent"
@@ -68,6 +90,7 @@ async function listAdminTeams(req, res) {
 module.exports = {
   getTeam,
   addMember,
+  updateMember,
   resendVerification,
   removeMember,
   listAdminTeams

@@ -22,6 +22,16 @@ function validateBankQuestionPayload(payload) {
   ) {
     errors.push("language must be 20 characters or less");
   }
+  if (payload?.media_type === "video_embed") {
+    try {
+      const mediaUrl = new URL(String(payload.media_url || ""));
+      if (!["http:", "https:"].includes(mediaUrl.protocol)) {
+        errors.push("embed media URL must use HTTP or HTTPS");
+      }
+    } catch {
+      errors.push("embed media URL must be valid");
+    }
+  }
   return [...new Set(errors)];
 }
 

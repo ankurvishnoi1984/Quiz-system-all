@@ -10,6 +10,15 @@ function sendError(res, err) {
   return errorResponse(res, err.message, err.statusCode || 500, err.details || null);
 }
 
+async function listOwners(req, res) {
+  try {
+    const owners = await questionBankService.listOwners({ user: req.user });
+    return successResponse(res, { owners }, "Question bank owners fetched");
+  } catch (err) {
+    return sendError(res, err);
+  }
+}
+
 async function listTopics(req, res) {
   try {
     const topics = await questionBankService.listTopics({
@@ -158,6 +167,7 @@ async function addRandomToSession(req, res) {
       sessionId: req.params.sessionId,
       topicId: req.body?.topic_id,
       difficulty: req.body?.difficulty,
+      difficultyCounts: req.body?.difficulty_counts,
       questionType: req.body?.question_type,
       count: req.body?.count,
       user: req.user
@@ -169,6 +179,7 @@ async function addRandomToSession(req, res) {
 }
 
 module.exports = {
+  listOwners,
   listTopics,
   createTopic,
   updateTopic,

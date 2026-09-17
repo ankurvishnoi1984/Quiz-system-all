@@ -150,6 +150,13 @@ async function createUserByAdmin(input, adminUser) {
     error.statusCode = 400;
     throw error;
   }
+  if (["author", "auditor"].includes(assignedRole.slug)) {
+    const error = new Error(
+      "Question Authors and Auditors must be added by a Host from Team Management"
+    );
+    error.statusCode = 400;
+    throw error;
+  }
 
   const scope = assignedRole.data_scope;
   if (needsClientOnUser(scope) && !input.client_id) {

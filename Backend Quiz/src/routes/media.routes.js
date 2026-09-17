@@ -3,12 +3,19 @@ const mediaController = require("../controllers/media.controller");
 const authMiddleware = require("../middlewares/auth.middleware");
 const authorizeStaff = require("../middlewares/staff.middleware");
 const { authorizeRights } = require("../middlewares/rights.middleware");
+const { userHasRight } = require("../config/user-rights");
 const { uploadMedia } = require("../config/multer");
 const multer = require("multer");
 const { errorResponse } = require("../utils/response");
 
 const router = express.Router();
 const uploadSingleFile = uploadMedia.single("file");
+const QUESTION_MEDIA_ROLES = [
+  "author",
+  "super_admin",
+  "client_admin",
+  "dept_admin"
+];
 
 router.use("/media", authMiddleware);
 
@@ -22,10 +29,20 @@ function handleMediaUpload(req, res, next) {
   });
 }
 
+function authorizeQuestionMediaUpload(req, res, next) {
+  if (
+    QUESTION_MEDIA_ROLES.includes(req.user?.role) ||
+    userHasRight(req.user, "builder")
+  ) {
+    return next();
+  }
+  return errorResponse(res, "Question media upload access denied", 403);
+}
+
 router.post(
   "/media/upload",
   authorizeStaff,
-  authorizeRights("builder"),
+  authorizeQuestionMediaUpload,
   handleMediaUpload,
   mediaController.upload
 );

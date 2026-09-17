@@ -24,6 +24,11 @@ const EDITABLE_STATUSES = ["draft", "changes_requested"];
 const QUESTION_INCLUDE = [
   { model: QuestionBankTopic, as: "topic" },
   {
+    model: User,
+    as: "owner",
+    attributes: ["user_id", "full_name", "email", "client_id", "dept_id"]
+  },
+  {
     model: QuestionBankOption,
     as: "options",
     separate: true,
@@ -66,15 +71,73 @@ function isSuperAdmin(user) {
   return user?.role === "super_admin";
 }
 
+function accountOwnerId(user) {
+  return Number(user?.parent_id || user?.user_id);
+}
+
+async function adminOwnerIds(user) {
+  if (isSuperAdmin(user)) return null;
+  const where = { role: "host", parent_id: null, is_active: true };
+  if (user?.role === "client_admin") where.client_id = Number(user.client_id);
+  else if (user?.role === "dept_admin") where.dept_id = Number(user.dept_id);
+  else return [accountOwnerId(user)];
+  const owners = await User.findAll({ where, attributes: ["user_id"], raw: true });
+  return owners.map((owner) => Number(owner.user_id));
+}
+
+async function resolveActionOwnerId(user, requestedOwnerId) {
+  if (user?.role === "author" || user?.role === "auditor") {
+    return accountOwnerId(user);
+  }
+  const ownerId = Number(requestedOwnerId);
+  if (!Number.isInteger(ownerId) || ownerId <= 0) {
+    throw createError("Select a Host account", 400);
+  }
+  const allowedIds = await adminOwnerIds(user);
+  if (allowedIds !== null && !allowedIds.includes(ownerId)) {
+    throw createError("Host account is outside your access scope", 403);
+  }
+  const owner = await User.findOne({
+    where: { user_id: ownerId, role: "host", parent_id: null, is_active: true }
+  });
+  if (!owner) throw createError("Host account not found or inactive", 404);
+  return ownerId;
+}
+
+async function actionOwnerWhere(user) {
+  if (isSuperAdmin(user)) return {};
+  if (["client_admin", "dept_admin"].includes(user?.role)) {
+    return { owner_id: { [Op.in]: await adminOwnerIds(user) } };
+  }
+  return { owner_id: accountOwnerId(user) };
+}
+
+async function listOwners({ user }) {
+  if (!["super_admin", "client_admin", "dept_admin"].includes(user?.role)) {
+    throw createError("Administrator access required", 403);
+  }
+  const ownerIds = await adminOwnerIds(user);
+  return User.findAll({
+    where: {
+      role: "host",
+      parent_id: null,
+      is_active: true,
+      ...(ownerIds === null ? {} : { user_id: { [Op.in]: ownerIds } })
+    },
+    attributes: ["user_id", "full_name", "email", "client_id", "dept_id"],
+    order: [["full_name", "ASC"]]
+  });
+}
+
 function assertAuthor(user) {
-  if (user?.role !== "author") {
-    throw createError("Only Question Authors can perform this action", 403);
+  if (!["author", "super_admin", "client_admin", "dept_admin"].includes(user?.role)) {
+    throw createError("Only Question Authors and Administrators can perform this action", 403);
   }
 }
 
 function assertAuditor(user) {
-  if (user?.role !== "auditor") {
-    throw createError("Only Question Auditors can perform this action", 403);
+  if (!["auditor", "super_admin", "client_admin", "dept_admin"].includes(user?.role)) {
+    throw createError("Only Question Auditors and Administrators can perform this action", 403);
   }
 }
 
@@ -130,23 +193,27 @@ function normalizeOptions(input) {
   }));
 }
 
-async function assertActiveTopic(topicId, { transaction } = {}) {
+async function assertActiveTopic(topicId, ownerId, { transaction } = {}) {
   const topic = await QuestionBankTopic.findOne({
-    where: { topic_id: Number(topicId), is_active: true },
+    where: {
+      topic_id: Number(topicId),
+      owner_id: Number(ownerId),
+      is_active: true
+    },
     transaction
   });
   if (!topic) throw createError("Question bank topic not found or inactive", 400);
   return topic;
 }
 
-async function resolveQuestionTopic(input, user, { transaction } = {}) {
+async function resolveQuestionTopic(input, ownerId, user, { transaction } = {}) {
   const topicName = String(input.topic_name || "").trim();
   if (!topicName) {
-    return assertActiveTopic(input.topic_id, { transaction });
+    return assertActiveTopic(input.topic_id, ownerId, { transaction });
   }
 
   let topic = await QuestionBankTopic.findOne({
-    where: { name: topicName },
+    where: { owner_id: ownerId, name: topicName },
     transaction
   });
   if (topic) {
@@ -160,12 +227,18 @@ async function resolveQuestionTopic(input, user, { transaction } = {}) {
   const base = slugify(topicName) || "topic";
   let slug = base;
   let suffix = 2;
-  while (await QuestionBankTopic.findOne({ where: { slug }, transaction })) {
+  while (
+    await QuestionBankTopic.findOne({
+      where: { owner_id: ownerId, slug },
+      transaction
+    })
+  ) {
     slug = `${base}-${suffix}`.slice(0, 140);
     suffix += 1;
   }
   return QuestionBankTopic.create(
     {
+      owner_id: ownerId,
       name: topicName,
       slug,
       description: null,
@@ -177,8 +250,9 @@ async function resolveQuestionTopic(input, user, { transaction } = {}) {
   );
 }
 
-async function getBankQuestionOrThrow(id, { transaction } = {}) {
-  const question = await QuestionBankQuestion.findByPk(Number(id), {
+async function getBankQuestionOrThrow(id, { transaction, where = {} } = {}) {
+  const question = await QuestionBankQuestion.findOne({
+    where: { bank_question_id: Number(id), ...where },
     include: QUESTION_INCLUDE,
     transaction
   });
@@ -187,7 +261,8 @@ async function getBankQuestionOrThrow(id, { transaction } = {}) {
 }
 
 async function listTopics({ user, includeInactive = false }) {
-  const where = {};
+  const ownerIds = await adminOwnerIds(user);
+  const where = ownerIds === null ? {} : { owner_id: { [Op.in]: ownerIds } };
   if (!isSuperAdmin(user) || !includeInactive) where.is_active = true;
   const topics = await QuestionBankTopic.findAll({
     where,
@@ -202,7 +277,10 @@ async function listTopics({ user, includeInactive = false }) {
       "topic_id",
       [sequelize.fn("COUNT", sequelize.col("bank_question_id")), "question_count"]
     ],
-    where: { status: "approved" },
+    where: {
+      status: "approved",
+      ...(ownerIds === null ? {} : { owner_id: { [Op.in]: ownerIds } })
+    },
     group: ["topic_id"],
     raw: true
   });
@@ -217,15 +295,21 @@ async function listTopics({ user, includeInactive = false }) {
 
 async function createTopic({ input, user }) {
   assertTopicAdmin(user);
+  const ownerId = Number(input.owner_id);
+  const owner = await User.findOne({
+    where: { user_id: ownerId, role: "host", parent_id: null, is_active: true }
+  });
+  if (!owner) throw createError("A valid Host account owner is required", 400);
   const name = String(input.name || "").trim();
   const base = slugify(name) || "topic";
   let slug = base;
   let suffix = 2;
-  while (await QuestionBankTopic.findOne({ where: { slug } })) {
+  while (await QuestionBankTopic.findOne({ where: { owner_id: ownerId, slug } })) {
     slug = `${base}-${suffix}`.slice(0, 140);
     suffix += 1;
   }
   return QuestionBankTopic.create({
+    owner_id: ownerId,
     name,
     slug,
     description: input.description ? String(input.description).trim() : null,
@@ -251,34 +335,52 @@ async function updateTopic({ topicId, input, user }) {
   return topic;
 }
 
-function listScopeWhere(user, requestedStatus, { auditorQueueDefault = true } = {}) {
+async function listScopeWhere(
+  user,
+  requestedStatus,
+  { auditorQueueDefault = true } = {}
+) {
   if (user?.role === "author") {
     return {
+      owner_id: accountOwnerId(user),
       author_id: user.user_id,
       ...(requestedStatus ? { status: requestedStatus } : {})
     };
   }
   if (user?.role === "auditor") {
-    return requestedStatus
+    const statusWhere = requestedStatus
       ? { status: requestedStatus }
       : auditorQueueDefault
         ? { status: "pending_review" }
         : {};
+    return { owner_id: accountOwnerId(user), ...statusWhere };
   }
-  if (["super_admin", "client_admin", "dept_admin"].includes(user?.role)) {
+  if (isSuperAdmin(user)) {
     return requestedStatus ? { status: requestedStatus } : {};
+  }
+  if (["client_admin", "dept_admin"].includes(user?.role)) {
+    const ownerIds = await adminOwnerIds(user);
+    return {
+      owner_id: { [Op.in]: ownerIds },
+      ...(requestedStatus ? { status: requestedStatus } : {})
+    };
   }
   if (!userHasRight(user, "builder")) {
     throw createError("Question bank access denied", 403);
   }
-  return { status: "approved" };
+  return { owner_id: accountOwnerId(user), status: "approved" };
 }
 
 async function listQuestions({ user, query = {} }) {
   const page = Math.max(1, Number(query.page) || 1);
   const limit = Math.min(100, Math.max(1, Number(query.limit) || 25));
   const requestedStatus = query.status ? String(query.status).toLowerCase() : null;
-  const where = listScopeWhere(user, requestedStatus);
+  const where = await listScopeWhere(user, requestedStatus);
+  let filteredOwnerId = null;
+  if (query.owner_id) {
+    filteredOwnerId = await resolveActionOwnerId(user, query.owner_id);
+    where.owner_id = filteredOwnerId;
+  }
 
   if (query.topic_id) where.topic_id = Number(query.topic_id);
   if (query.difficulty && query.difficulty !== "mixed") {
@@ -298,6 +400,36 @@ async function listQuestions({ user, query = {} }) {
     "client_admin",
     "dept_admin"
   ].includes(user?.role);
+  if (managementView && !requestedStatus && !where.status) {
+    where.status = { [Op.ne]: "archived" };
+  }
+  if (managementView && requestedStatus !== "archived") {
+    const revisionScope = await listScopeWhere(user, null, {
+      auditorQueueDefault: false
+    });
+    if (filteredOwnerId) revisionScope.owner_id = filteredOwnerId;
+    const activeRevisions = await QuestionBankQuestion.findAll({
+      attributes: ["revision_of_id"],
+      where: {
+        ...revisionScope,
+        revision_of_id: { [Op.ne]: null },
+        status: {
+          [Op.in]: ["draft", "pending_review", "changes_requested"]
+        }
+      },
+      raw: true
+    });
+    const supersededIds = [
+      ...new Set(
+        activeRevisions
+          .map((row) => Number(row.revision_of_id))
+          .filter(Number.isInteger)
+      )
+    ];
+    if (supersededIds.length) {
+      where.bank_question_id = { [Op.notIn]: supersededIds };
+    }
+  }
   const include = managementView
     ? QUESTION_INCLUDE
     : [
@@ -318,12 +450,16 @@ async function listQuestions({ user, query = {} }) {
     limit,
     offset: (page - 1) * limit
   });
+  const statusWhere = await listScopeWhere(user, null, {
+    auditorQueueDefault: false
+  });
+  if (filteredOwnerId) statusWhere.owner_id = filteredOwnerId;
   const statusRows = await QuestionBankQuestion.findAll({
     attributes: [
       "status",
       [sequelize.fn("COUNT", sequelize.col("bank_question_id")), "count"]
     ],
-    where: listScopeWhere(user, null, { auditorQueueDefault: false }),
+    where: statusWhere,
     group: ["status"],
     raw: true
   });
@@ -349,10 +485,12 @@ async function createQuestion({ input, user }) {
   if (errors.length) throw createError("Validation failed", 400, errors);
 
   return sequelize.transaction(async (transaction) => {
-    const topic = await resolveQuestionTopic(input, user, { transaction });
+    const ownerId = await resolveActionOwnerId(user, input.owner_id);
+    const topic = await resolveQuestionTopic(input, ownerId, user, { transaction });
     const question = await QuestionBankQuestion.create(
       {
         ...normalizeQuestionInput({ ...input, topic_id: topic.topic_id }),
+        owner_id: ownerId,
         author_id: user.user_id,
         status: "draft",
         version: 1
@@ -370,10 +508,10 @@ async function createQuestion({ input, user }) {
 
 async function updateQuestion({ questionId, input, user }) {
   assertAuthor(user);
-  const question = await getBankQuestionOrThrow(questionId);
-  if (!isSuperAdmin(user) && Number(question.author_id) !== Number(user.user_id)) {
-    throw createError("You can edit only your own questions", 403);
-  }
+  const ownerWhere = await actionOwnerWhere(user);
+  const question = await getBankQuestionOrThrow(questionId, {
+    where: { ...ownerWhere, author_id: user.user_id }
+  });
   if (!EDITABLE_STATUSES.includes(question.status)) {
     throw createError(
       "Only draft or changes-requested questions can be edited",
@@ -391,7 +529,12 @@ async function updateQuestion({ questionId, input, user }) {
   if (errors.length) throw createError("Validation failed", 400, errors);
 
   return sequelize.transaction(async (transaction) => {
-    const topic = await resolveQuestionTopic(merged, user, { transaction });
+    const topic = await resolveQuestionTopic(
+      merged,
+      question.owner_id,
+      user,
+      { transaction }
+    );
     await question.update(
       normalizeQuestionInput({ ...merged, topic_id: topic.topic_id }),
       { transaction }
@@ -413,10 +556,10 @@ async function updateQuestion({ questionId, input, user }) {
 
 async function submitQuestion({ questionId, user }) {
   assertAuthor(user);
-  const question = await getBankQuestionOrThrow(questionId);
-  if (!isSuperAdmin(user) && Number(question.author_id) !== Number(user.user_id)) {
-    throw createError("You can submit only your own questions", 403);
-  }
+  const ownerWhere = await actionOwnerWhere(user);
+  const question = await getBankQuestionOrThrow(questionId, {
+    where: { ...ownerWhere, author_id: user.user_id }
+  });
   if (!EDITABLE_STATUSES.includes(question.status)) {
     throw createError("Only draft or changes-requested questions can be submitted", 400);
   }
@@ -431,11 +574,17 @@ async function submitQuestion({ questionId, user }) {
 
 async function reviewQuestion({ questionId, decision, comments, user }) {
   assertAuditor(user);
-  const question = await getBankQuestionOrThrow(questionId);
+  const ownerWhere = await actionOwnerWhere(user);
+  const question = await getBankQuestionOrThrow(questionId, {
+    where: ownerWhere
+  });
   if (question.status !== "pending_review") {
     throw createError("Only pending questions can be reviewed", 400);
   }
-  if (Number(question.author_id) === Number(user.user_id)) {
+  if (
+    user.role === "auditor" &&
+    Number(question.author_id) === Number(user.user_id)
+  ) {
     throw createError("Authors cannot review or approve their own questions", 403);
   }
 
@@ -482,7 +631,10 @@ async function reviewQuestion({ questionId, decision, comments, user }) {
 
 async function archiveQuestion({ questionId, user }) {
   assertAuditor(user);
-  const question = await getBankQuestionOrThrow(questionId);
+  const ownerWhere = await actionOwnerWhere(user);
+  const question = await getBankQuestionOrThrow(questionId, {
+    where: ownerWhere
+  });
   if (question.status !== "approved") {
     throw createError("Only approved questions can be archived", 400);
   }
@@ -495,20 +647,50 @@ async function archiveQuestion({ questionId, user }) {
 
 async function createRevision({ questionId, user }) {
   assertAuthor(user);
-  const source = await getBankQuestionOrThrow(questionId);
-  if (!isSuperAdmin(user) && Number(source.author_id) !== Number(user.user_id)) {
-    throw createError("You can revise only your own questions", 403);
-  }
+  const ownerWhere = await actionOwnerWhere(user);
+  const source = await getBankQuestionOrThrow(questionId, {
+    where: { ...ownerWhere, author_id: user.user_id }
+  });
   if (source.status !== "approved") {
     throw createError("Only approved questions can create a revision", 400);
   }
+  const activeRevision = await QuestionBankQuestion.findOne({
+    where: {
+      owner_id: source.owner_id,
+      revision_of_id: source.bank_question_id,
+      status: {
+        [Op.in]: ["draft", "pending_review", "changes_requested"]
+      }
+    },
+    order: [["version", "DESC"]]
+  });
+  if (activeRevision) {
+    throw createError(
+      `Version ${activeRevision.version} is already in progress`,
+      409,
+      {
+        bank_question_id: activeRevision.bank_question_id,
+        version: activeRevision.version,
+        status: activeRevision.status
+      }
+    );
+  }
+  const highestChildVersion = await QuestionBankQuestion.max("version", {
+    where: {
+      owner_id: source.owner_id,
+      revision_of_id: source.bank_question_id
+    }
+  });
+  const nextVersion =
+    Math.max(Number(source.version || 1), Number(highestChildVersion || 0)) + 1;
   const plain = source.get({ plain: true });
   return sequelize.transaction(async (transaction) => {
     const revision = await QuestionBankQuestion.create(
       {
         ...normalizeQuestionInput(plain),
+        owner_id: source.owner_id,
         revision_of_id: source.bank_question_id,
-        version: Number(source.version || 1) + 1,
+        version: nextVersion,
         author_id: user.user_id,
         status: "draft"
       },
@@ -529,6 +711,10 @@ async function getSessionForBankCopy(sessionId) {
       {
         model: Department,
         include: [{ model: Client, attributes: ["client_id"] }]
+      },
+      {
+        model: User,
+        attributes: ["user_id", "parent_id"]
       }
     ]
   });
@@ -536,10 +722,11 @@ async function getSessionForBankCopy(sessionId) {
   return session;
 }
 
-async function approvedQuestionsByIds(ids) {
+async function approvedQuestionsByIds(ids, ownerId) {
   return QuestionBankQuestion.findAll({
     where: {
       bank_question_id: { [Op.in]: ids },
+      owner_id: Number(ownerId),
       status: "approved"
     },
     include: [
@@ -564,8 +751,9 @@ async function copyBankQuestionsToSession({ sessionId, bankQuestionIds, user }) 
   if (session.status !== "draft") {
     throw createError("Question bank items can be added only to draft sessions", 400);
   }
+  const targetOwnerId = Number(session.user?.parent_id || session.host_id);
 
-  const bankQuestions = await approvedQuestionsByIds(ids);
+  const bankQuestions = await approvedQuestionsByIds(ids, targetOwnerId);
   const byId = new Map(bankQuestions.map((row) => [Number(row.bank_question_id), row]));
   const ordered = ids.map((id) => byId.get(id)).filter(Boolean);
   if (ordered.length !== ids.length) {
@@ -674,12 +862,49 @@ async function addRandomQuestionsToSession({
   sessionId,
   topicId,
   difficulty,
+  difficultyCounts,
   questionType,
   count,
   user
 }) {
-  const requested = Math.min(50, Math.max(1, Number(count) || 10));
+  const normalizedDifficulty = String(difficulty || "mixed").toLowerCase();
+  const useDifficultyMix =
+    normalizedDifficulty === "mixed" &&
+    difficultyCounts &&
+    typeof difficultyCounts === "object";
+  const requestedByDifficulty = useDifficultyMix
+    ? {
+        easy: Math.max(0, Number(difficultyCounts.easy) || 0),
+        medium: Math.max(0, Number(difficultyCounts.medium) || 0),
+        hard: Math.max(0, Number(difficultyCounts.hard) || 0)
+      }
+    : null;
+  if (
+    requestedByDifficulty &&
+    Object.values(requestedByDifficulty).some((value) => !Number.isInteger(value))
+  ) {
+    throw createError("Difficulty quantities must be whole numbers", 400);
+  }
+  const requested = requestedByDifficulty
+    ? Object.values(requestedByDifficulty).reduce((sum, value) => sum + value, 0)
+    : Math.min(50, Math.max(1, Number(count) || 10));
+  if (requested < 1) {
+    throw createError("Select at least one random question", 400);
+  }
+  if (requested > 50) {
+    throw createError("At most 50 random questions can be added at once", 400);
+  }
+  const session = await getSessionForBankCopy(sessionId);
+  assertSessionWriteAccess(user, session);
+  if (!userHasRight(user, "builder")) {
+    throw createError("Question Builder access denied", 403);
+  }
+  if (session.status !== "draft") {
+    throw createError("Question bank items can be added only to draft sessions", 400);
+  }
+  const targetOwnerId = Number(session.user?.parent_id || session.host_id);
   const where = {
+    owner_id: targetOwnerId,
     status: "approved",
     topic_id: Number(topicId),
     question_type: String(questionType || "").toLowerCase()
@@ -688,8 +913,8 @@ async function addRandomQuestionsToSession({
     throw createError("topic_id is required", 400);
   }
   if (!where.question_type) throw createError("question_type is required", 400);
-  if (difficulty && difficulty !== "mixed") {
-    where.difficulty = String(difficulty).toLowerCase();
+  if (normalizedDifficulty !== "mixed") {
+    where.difficulty = normalizedDifficulty;
   }
 
   const used = await Question.findAll({
@@ -705,9 +930,37 @@ async function addRandomQuestionsToSession({
 
   const available = await QuestionBankQuestion.findAll({
     where,
-    attributes: ["bank_question_id"],
+    attributes: ["bank_question_id", "difficulty"],
     raw: true
   });
+  if (requestedByDifficulty) {
+    const selectedIds = [];
+    for (const level of ["easy", "medium", "hard"]) {
+      const levelAvailable = available.filter((row) => row.difficulty === level);
+      const levelRequested = requestedByDifficulty[level];
+      if (levelAvailable.length < levelRequested) {
+        throw createError(
+          `Only ${levelAvailable.length} ${level} question${levelAvailable.length === 1 ? "" : "s"} are available`,
+          400,
+          {
+            difficulty: level,
+            available_count: levelAvailable.length,
+            requested_count: levelRequested
+          }
+        );
+      }
+      selectedIds.push(
+        ...shuffleUnique(levelAvailable)
+          .slice(0, levelRequested)
+          .map((row) => Number(row.bank_question_id))
+      );
+    }
+    return copyBankQuestionsToSession({
+      sessionId,
+      bankQuestionIds: shuffleUnique(selectedIds),
+      user
+    });
+  }
   if (available.length < requested) {
     throw createError(
       `Only ${available.length} matching approved question${available.length === 1 ? "" : "s"} are available`,
@@ -726,6 +979,7 @@ async function addRandomQuestionsToSession({
 }
 
 module.exports = {
+  listOwners,
   listTopics,
   createTopic,
   updateTopic,

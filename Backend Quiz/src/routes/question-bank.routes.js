@@ -8,39 +8,42 @@ const router = express.Router();
 
 router.use(authMiddleware);
 
+router.get(
+  "/owners",
+  authorizeRoles("super_admin", "client_admin", "dept_admin"),
+  controller.listOwners
+);
 router.get("/topics", controller.listTopics);
-router.post("/topics", authorizeRoles("super_admin"), controller.createTopic);
-router.put("/topics/:topicId", authorizeRoles("super_admin"), controller.updateTopic);
 
 router.get("/questions", controller.listQuestions);
 router.post(
   "/questions",
-  authorizeRoles("author"),
+  authorizeRoles("author", "super_admin", "client_admin", "dept_admin"),
   controller.createQuestion
 );
 router.put(
   "/questions/:questionId",
-  authorizeRoles("author"),
+  authorizeRoles("author", "super_admin", "client_admin", "dept_admin"),
   controller.updateQuestion
 );
 router.post(
   "/questions/:questionId/submit",
-  authorizeRoles("author"),
+  authorizeRoles("author", "super_admin", "client_admin", "dept_admin"),
   controller.submitQuestion
 );
 router.post(
   "/questions/:questionId/revise",
-  authorizeRoles("author"),
+  authorizeRoles("author", "super_admin", "client_admin", "dept_admin"),
   controller.createRevision
 );
 router.post(
   "/questions/:questionId/review",
-  authorizeRoles("auditor"),
+  authorizeRoles("auditor", "super_admin", "client_admin", "dept_admin"),
   controller.reviewQuestion
 );
 router.post(
   "/questions/:questionId/archive",
-  authorizeRoles("auditor"),
+  authorizeRoles("auditor", "super_admin", "client_admin", "dept_admin"),
   controller.archiveQuestion
 );
 

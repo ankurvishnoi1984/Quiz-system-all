@@ -196,7 +196,12 @@ function ManageUsersPage() {
   )
 
   const assignableRoles = useMemo(
-    () => (rolesQuery.data || []).filter((role) => role.is_active && role.slug !== 'super_admin'),
+    () =>
+      (rolesQuery.data || []).filter(
+        (role) =>
+          role.is_active &&
+          !['super_admin', 'author', 'auditor'].includes(role.slug),
+      ),
     [rolesQuery.data],
   )
   const selectedRole = assignableRoles.find((role) => role.slug === form.role) || null

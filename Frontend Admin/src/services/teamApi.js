@@ -12,6 +12,13 @@ export async function addTeamMemberApi(accessToken, payload) {
   })
 }
 
+export async function updateTeamMemberApi(accessToken, memberId, payload) {
+  return hostAuthRequest(`/team/members/${memberId}`, accessToken, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
 export async function resendTeamMemberVerificationApi(accessToken, memberId) {
   return hostAuthRequest(`/team/members/${memberId}/resend-verification`, accessToken, {
     method: 'POST',

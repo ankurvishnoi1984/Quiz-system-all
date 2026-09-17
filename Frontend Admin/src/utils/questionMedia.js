@@ -90,6 +90,34 @@ export function normalizeQuestionMediaUrlForStorage(url) {
   return trimmed
 }
 
+export function normalizeEmbedUrl(url) {
+  const trimmed = String(url || '').trim()
+  if (!trimmed) return ''
+  try {
+    const parsed = new URL(trimmed)
+    if (!['http:', 'https:'].includes(parsed.protocol)) return ''
+    const host = parsed.hostname.replace(/^www\./, '').toLowerCase()
+    if (host === 'youtu.be') {
+      const videoId = parsed.pathname.split('/').filter(Boolean)[0]
+      return videoId ? `https://www.youtube.com/embed/${videoId}` : ''
+    }
+    if (host === 'youtube.com' || host === 'm.youtube.com') {
+      if (parsed.pathname === '/watch') {
+        const videoId = parsed.searchParams.get('v')
+        return videoId ? `https://www.youtube.com/embed/${videoId}` : ''
+      }
+      if (parsed.pathname.startsWith('/embed/')) return parsed.toString()
+    }
+    if (host === 'vimeo.com') {
+      const videoId = parsed.pathname.split('/').filter(Boolean)[0]
+      return /^\d+$/.test(videoId || '') ? `https://player.vimeo.com/video/${videoId}` : ''
+    }
+    return parsed.toString()
+  } catch {
+    return ''
+  }
+}
+
 export function formatBytes(bytes) {
   if (!Number.isFinite(bytes) || bytes < 0) return ''
   if (bytes < 1024) return `${bytes} B`

@@ -196,7 +196,16 @@ export function QuestionMediaUpload({
               </button>
             </div>
             <div className="mt-3 overflow-hidden rounded-xl border border-blue-100 bg-slate-50">
-              {media?.kind === 'video' ? (
+              {media?.mediaType === 'video_embed' ? (
+                <iframe
+                  src={previewUrl}
+                  title="Question embedded media"
+                  className="aspect-video w-full"
+                  allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                  sandbox="allow-scripts allow-same-origin allow-presentation"
+                  allowFullScreen
+                />
+              ) : media?.kind === 'video' ? (
                 <video src={previewUrl} controls className="max-h-72 w-full" />
               ) : media?.kind === 'audio' ? (
                 <div className="px-4 py-5">

@@ -1,4 +1,4 @@
-import { Mail, Plus, Trash2, UserCheck, Users } from 'lucide-react'
+import { BookOpen, Mail, Pencil, Plus, ShieldCheck, Trash2, UserCheck, Users } from 'lucide-react'
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Modal from '../components/ui/Modal'
@@ -9,14 +9,16 @@ import {
   getMyTeamApi,
   removeTeamMemberApi,
   resendTeamMemberVerificationApi,
+  updateTeamMemberApi,
 } from '../services/teamApi'
 
 export default function TeamManagementPage() {
   const accessToken = useAuthStore((state) => state.accessToken)
   const queryClient = useQueryClient()
   const [addOpen, setAddOpen] = useState(false)
+  const [editMember, setEditMember] = useState(null)
   const [removeMember, setRemoveMember] = useState(null)
-  const [form, setForm] = useState({ full_name: '', email: '' })
+  const [form, setForm] = useState({ full_name: '', email: '', role: 'host' })
   const [alert, setAlert] = useState(null)
 
   const teamQuery = useQuery({
@@ -31,7 +33,7 @@ export default function TeamManagementPage() {
     onSuccess: (result) => {
       refresh()
       setAddOpen(false)
-      setForm({ full_name: '', email: '' })
+      setForm({ full_name: '', email: '', role: 'host' })
       setAlert({
         variant: result?.email_sent ? 'success' : 'error',
         title: 'Team member added',
@@ -56,6 +58,22 @@ export default function TeamManagementPage() {
       setAlert({ variant: 'error', title: 'Could not resend email', message: error.message }),
   })
 
+  const editMutation = useMutation({
+    mutationFn: (payload) =>
+      updateTeamMemberApi(accessToken, editMember.user_id, payload),
+    onSuccess: () => {
+      refresh()
+      setEditMember(null)
+      setAlert({
+        variant: 'success',
+        title: 'Member updated',
+        message: 'Updated verification details and a new temporary password were emailed.',
+      })
+    },
+    onError: (error) =>
+      setAlert({ variant: 'error', title: 'Could not update member', message: error.message }),
+  })
+
   const removeMutation = useMutation({
     mutationFn: (memberId) => removeTeamMemberApi(accessToken, memberId),
     onSuccess: () => {
@@ -64,7 +82,10 @@ export default function TeamManagementPage() {
       setAlert({
         variant: 'success',
         title: 'Member removed',
-        message: 'The member can no longer sign in and the team seat is available again.',
+        message:
+          removeMember?.role === 'host'
+            ? 'The member can no longer sign in and the Host seat is available again.'
+            : `The member can no longer sign in and the Question ${removeMember?.role === 'author' ? 'Author' : 'Auditor'} slot is available again.`,
       })
     },
     onError: (error) =>
@@ -73,6 +94,14 @@ export default function TeamManagementPage() {
 
   const team = teamQuery.data
   const seats = team?.seats || { used: 0, total: 0, remaining: 0 }
+  const contentRoles = team?.content_roles || {
+    author: { used: 0, limit: 1, remaining: 1 },
+    auditor: { used: 0, limit: 1, remaining: 1 },
+  }
+  const canAddAny =
+    Boolean(team?.plan && seats.remaining > 0) ||
+    contentRoles.author.remaining > 0 ||
+    contentRoles.auditor.remaining > 0
   const usagePercent = seats.total ? Math.min(100, Math.round((seats.used / seats.total) * 100)) : 0
 
   return (
@@ -82,13 +111,22 @@ export default function TeamManagementPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-navy-700">Workspace</p>
           <h2 className="mt-1 text-2xl font-bold text-navy-900">Team Management</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Add colleagues to your plan and check whether they have verified their email.
+            Add Host teammates and manage your private Question Author and Auditor.
           </p>
         </div>
         <button
           type="button"
-          onClick={() => setAddOpen(true)}
-          disabled={!team?.plan || seats.remaining <= 0}
+          onClick={() => {
+            const hostAvailable = Boolean(team?.plan && seats.remaining > 0)
+            const nextRole = hostAvailable
+              ? 'host'
+              : contentRoles.author.remaining > 0
+                ? 'author'
+                : 'auditor'
+            setForm((current) => ({ ...current, role: nextRole }))
+            setAddOpen(true)
+          }}
+          disabled={!canAddAny}
           className="inline-flex h-11 items-center gap-2 rounded-xl bg-navy-900 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Plus className="size-4" /> Add member
@@ -123,13 +161,38 @@ export default function TeamManagementPage() {
             </div>
             {!team.plan ? (
               <p className="mt-3 text-sm font-medium text-amber-700">
-                An active paid plan is required before adding team members.
+                A paid plan is required only for additional Hosts. Author and Auditor access remains available.
               </p>
             ) : seats.remaining <= 0 ? (
               <p className="mt-3 text-sm font-medium text-amber-700">
-                All seats are used. Contact the administrator to add more team seats.
+                All Host seats are used. Author and Auditor slots are managed separately below.
               </p>
             ) : null}
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="rounded-2xl border border-violet-200 bg-violet-50 p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-violet-950">Question Author</p>
+                  <p className="mt-1 text-sm text-violet-700">
+                    {contentRoles.author.used} of {contentRoles.author.limit} assigned
+                  </p>
+                </div>
+                <BookOpen className="size-6 text-violet-600" />
+              </div>
+            </div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-emerald-950">Question Auditor</p>
+                  <p className="mt-1 text-sm text-emerald-700">
+                    {contentRoles.auditor.used} of {contentRoles.auditor.limit} assigned
+                  </p>
+                </div>
+                <ShieldCheck className="size-6 text-emerald-600" />
+              </div>
+            </div>
           </div>
 
           <div className="overflow-hidden rounded-2xl border border-blue-200/70 bg-white shadow-sm">
@@ -147,6 +210,9 @@ export default function TeamManagementPage() {
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold text-navy-900">{member.full_name}</p>
+                        <span className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-700">
+                          {member.role_name || member.role}
+                        </span>
                         <p className="truncate text-sm text-slate-600">{member.email}</p>
                         <p className="mt-1 text-xs text-slate-500">
                           Added {new Date(member.created_at).toLocaleDateString()}
@@ -165,14 +231,24 @@ export default function TeamManagementPage() {
                         {verified ? 'Verified' : 'Pending'}
                       </span>
                       {!verified ? (
-                        <button
-                          type="button"
-                          disabled={resendMutation.isPending}
-                          onClick={() => resendMutation.mutate(member.user_id)}
-                          className="rounded-xl border border-blue-200 px-3 py-2 text-xs font-semibold text-navy-800 hover:bg-blue-50"
-                        >
-                          Resend
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setEditMember({ ...member })}
+                            className="rounded-xl border border-slate-200 p-2 text-slate-700 hover:bg-slate-50"
+                            aria-label={`Edit ${member.full_name}`}
+                          >
+                            <Pencil className="size-4" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={resendMutation.isPending}
+                            onClick={() => resendMutation.mutate(member.user_id)}
+                            className="rounded-xl border border-blue-200 px-3 py-2 text-xs font-semibold text-navy-800 hover:bg-blue-50"
+                          >
+                            Resend
+                          </button>
+                        </>
                       ) : null}
                       <button
                         type="button"
@@ -204,6 +280,27 @@ export default function TeamManagementPage() {
           }}
         >
           <div>
+            <label className="text-sm font-semibold text-slate-700">Role</label>
+            <select
+              value={form.role}
+              onChange={(event) => setForm((old) => ({ ...old, role: event.target.value }))}
+              className="mt-1 h-11 w-full rounded-xl border border-blue-200 bg-white px-3 text-sm outline-none focus:border-blue-400"
+            >
+              <option value="host" disabled={!team?.plan || seats.remaining <= 0}>
+                Host team member{!team?.plan || seats.remaining <= 0 ? ' — unavailable' : ''}
+              </option>
+              <option value="author" disabled={contentRoles.author.remaining <= 0}>
+                Question Author{contentRoles.author.remaining <= 0 ? ' — assigned' : ''}
+              </option>
+              <option value="auditor" disabled={contentRoles.auditor.remaining <= 0}>
+                Question Auditor{contentRoles.auditor.remaining <= 0 ? ' — assigned' : ''}
+              </option>
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              Author and Auditor roles do not use Host team seats.
+            </p>
+          </div>
+          <div>
             <label className="text-sm font-semibold text-slate-700">Full name</label>
             <input
               value={form.full_name}
@@ -233,9 +330,110 @@ export default function TeamManagementPage() {
         </form>
       </Modal>
 
+      <Modal
+        open={Boolean(editMember)}
+        title="Edit pending team member"
+        subtitle="Saving sends a new verification email and temporary password."
+        onClose={() => setEditMember(null)}
+      >
+        {editMember ? (
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault()
+              editMutation.mutate({
+                full_name: editMember.full_name,
+                email: editMember.email,
+                role: editMember.role,
+              })
+            }}
+          >
+            <div>
+              <label className="text-sm font-semibold text-slate-700">Role</label>
+              <select
+                value={editMember.role}
+                onChange={(event) =>
+                  setEditMember((current) => ({ ...current, role: event.target.value }))
+                }
+                className="mt-1 h-11 w-full rounded-xl border border-blue-200 bg-white px-3 text-sm"
+              >
+                <option
+                  value="host"
+                  disabled={
+                    editMember.role !== 'host' &&
+                    (!team?.plan || seats.remaining <= 0)
+                  }
+                >
+                  Host team member
+                </option>
+                <option
+                  value="author"
+                  disabled={
+                    editMember.role !== 'author' &&
+                    contentRoles.author.remaining <= 0
+                  }
+                >
+                  Question Author
+                </option>
+                <option
+                  value="auditor"
+                  disabled={
+                    editMember.role !== 'auditor' &&
+                    contentRoles.auditor.remaining <= 0
+                  }
+                >
+                  Question Auditor
+                </option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-slate-700">Full name</label>
+              <input
+                value={editMember.full_name}
+                onChange={(event) =>
+                  setEditMember((current) => ({ ...current, full_name: event.target.value }))
+                }
+                className="mt-1 h-11 w-full rounded-xl border border-blue-200 px-3 text-sm"
+                required
+              />
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-slate-700">Email</label>
+              <input
+                type="email"
+                value={editMember.email}
+                onChange={(event) =>
+                  setEditMember((current) => ({ ...current, email: event.target.value }))
+                }
+                className="mt-1 h-11 w-full rounded-xl border border-blue-200 px-3 text-sm"
+                required
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditMember(null)}
+                className="h-11 rounded-xl border border-blue-200 px-4 text-sm font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={editMutation.isPending}
+                className="h-11 rounded-xl bg-navy-900 px-4 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {editMutation.isPending ? 'Saving…' : 'Save and resend verification'}
+              </button>
+            </div>
+          </form>
+        ) : null}
+      </Modal>
+
       <Modal open={Boolean(removeMember)} title="Remove team member?" onClose={() => setRemoveMember(null)}>
         <p className="text-sm text-slate-600">
-          {removeMember?.full_name} will lose access immediately and their seat will become available.
+          {removeMember?.full_name} will lose access immediately and their{' '}
+          {removeMember?.role === 'host' ? 'Host seat' : `${removeMember?.role_name || 'content role'} slot`}{' '}
+          will become available.
         </p>
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" onClick={() => setRemoveMember(null)} className="h-11 rounded-xl border border-blue-200 px-4 text-sm font-semibold">

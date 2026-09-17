@@ -9,14 +9,17 @@ const QuestionBankTopic = sequelize.define(
       primaryKey: true,
       autoIncrement: true
     },
+    owner_id: {
+      type: DataTypes.INTEGER,
+      allowNull: false
+    },
     name: {
       type: DataTypes.STRING(120),
       allowNull: false
     },
     slug: {
       type: DataTypes.STRING(140),
-      allowNull: false,
-      unique: true
+      allowNull: false
     },
     description: {
       type: DataTypes.TEXT,
@@ -41,7 +44,14 @@ const QuestionBankTopic = sequelize.define(
     tableName: "question_bank_topics",
     timestamps: true,
     createdAt: "created_at",
-    updatedAt: "updated_at"
+    updatedAt: "updated_at",
+    indexes: [
+      {
+        name: "question_bank_topic_owner_slug_uq",
+        unique: true,
+        fields: ["owner_id", "slug"]
+      }
+    ]
   }
 );
 

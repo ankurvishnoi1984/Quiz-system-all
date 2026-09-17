@@ -82,6 +82,10 @@ Department.hasMany(Question, { foreignKey: "dept_id" });
 Question.belongsTo(Department, { foreignKey: "dept_id" });
 Question.hasMany(QuestionOption, { foreignKey: "question_id" });
 QuestionOption.belongsTo(Question, { foreignKey: "question_id" });
+User.hasMany(QuestionBankTopic, { foreignKey: "owner_id", as: "ownedBankTopics" });
+QuestionBankTopic.belongsTo(User, { foreignKey: "owner_id", as: "owner" });
+User.hasMany(QuestionBankQuestion, { foreignKey: "owner_id", as: "ownedBankQuestions" });
+QuestionBankQuestion.belongsTo(User, { foreignKey: "owner_id", as: "owner" });
 QuestionBankTopic.hasMany(QuestionBankQuestion, {
   foreignKey: "topic_id",
   as: "questions"

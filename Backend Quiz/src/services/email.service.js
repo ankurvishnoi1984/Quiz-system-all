@@ -4,6 +4,7 @@ const nodemailer = require("nodemailer");
 const { MailConfig, NotificationRecipient } = require("../models");
 const {
   renderPasswordResetEmail,
+  renderPasswordChangedEmail,
   renderEmailOtpEmail,
   renderNewUserWelcomeEmail,
   renderTeamMemberVerificationEmail,
@@ -104,6 +105,24 @@ async function sendPasswordResetEmail({ to, fullName, temporaryPassword }) {
     logoCid: logoAttachment ? EMAIL_LOGO_CID : null
   });
 
+  await sendMailWithConfig(config, {
+    to,
+    subject,
+    text,
+    html,
+    attachments: logoAttachment ? [logoAttachment] : []
+  });
+}
+
+async function sendPasswordChangedEmail({ to, fullName }) {
+  const config = await getActiveMailConfig();
+  const brandName = config?.sender_name || "Quiz Platform";
+  const logoAttachment = getEmailLogoAttachment();
+  const { subject, text, html } = renderPasswordChangedEmail({
+    fullName,
+    brandName,
+    logoCid: logoAttachment ? EMAIL_LOGO_CID : null
+  });
   await sendMailWithConfig(config, {
     to,
     subject,
@@ -413,6 +432,7 @@ module.exports = {
   getActiveMailConfig,
   sendMail,
   sendPasswordResetEmail,
+  sendPasswordChangedEmail,
   sendEmailOtpMail,
   sendNewUserWelcomeEmail,
   sendTeamMemberVerificationEmail,

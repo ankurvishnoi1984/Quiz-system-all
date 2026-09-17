@@ -6,6 +6,19 @@ export function QuestionMedia({ media, className = '', maxHeightClass = 'max-h-8
 
   const baseClassName = `${maxHeightClass} w-full rounded-2xl border border-blue-100 ${className}`.trim()
 
+  if (media.mediaType === 'video_embed') {
+    return (
+      <iframe
+        src={src}
+        title="Question embedded media"
+        className={`${baseClassName} aspect-video`}
+        allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+        sandbox="allow-scripts allow-same-origin allow-presentation"
+        allowFullScreen
+      />
+    )
+  }
+
   if (media.kind === 'video') {
     return <video src={src} controls className={baseClassName} />
   }
