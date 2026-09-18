@@ -104,6 +104,19 @@ const User = sequelize.define(
       type: DataTypes.JSON,
       allowNull: true
     },
+    sub_admin_access: {
+      type: DataTypes.ENUM("all", "clients", "departments"),
+      allowNull: true,
+      defaultValue: null
+    },
+    allowed_client_ids: {
+      type: DataTypes.JSON,
+      allowNull: true
+    },
+    allowed_dept_ids: {
+      type: DataTypes.JSON,
+      allowNull: true
+    },
     created_at: {
       type: DataTypes.DATE,
       allowNull: true

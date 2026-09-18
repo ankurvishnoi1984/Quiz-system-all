@@ -23,7 +23,7 @@ async function create(req, res) {
 
 async function list(req, res) {
   try {
-    const clients = await getClients();
+    const clients = await getClients(req.user);
     return successResponse(res, { clients }, "Clients fetched", 200);
   } catch (err) {
     return errorResponse(res, err.message, err.statusCode || 500);
@@ -50,7 +50,7 @@ async function report(req, res) {
 
 async function detail(req, res) {
   try {
-    const client = await getClientById(req.params.clientId);
+    const client = await getClientById(req.params.clientId, req.user);
     return successResponse(res, { client }, "Client fetched", 200);
   } catch (err) {
     return errorResponse(res, err.message, err.statusCode || 500);

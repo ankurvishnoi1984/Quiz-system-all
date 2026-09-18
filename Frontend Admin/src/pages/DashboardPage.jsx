@@ -12,6 +12,7 @@ import { HostAlertModal } from '../components/live/HostAlertModal'
 import Modal from '../components/ui/Modal'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useAuthStore } from '../store/authStore'
+import { skipsPlanLock } from '../utils/adminRoles'
 import { useHostOnboarding } from '../context/HostOnboardingContext'
 import { useShell } from '../context/ShellContext'
 import { createRealtimeClient, RealtimeEvent } from '../services/realtimeClient'
@@ -80,12 +81,12 @@ function DashboardPage() {
   const planUsageQuery = useQuery({
     queryKey: ['plan-usage'],
     queryFn: () => getPlanUsageApi(accessToken),
-    enabled: Boolean(accessToken && user?.role !== 'super_admin'),
+    enabled: Boolean(accessToken && !skipsPlanLock(user)),
   })
   const planUsage = planUsageQuery.data
-  const planLocked = user?.role !== 'super_admin' && hasNoActivePlan(planUsage)
+  const planLocked = !skipsPlanLock(user) && hasNoActivePlan(planUsage)
   const planExpiringSoon =
-    user?.role !== 'super_admin' && !planLocked && isPlanExpiringSoon(planUsage)
+    !skipsPlanLock(user) && !planLocked && isPlanExpiringSoon(planUsage)
   const [planExpiryModalOpen, setPlanExpiryModalOpen] = useState(false)
   const [planExpiringSoonModalOpen, setPlanExpiringSoonModalOpen] = useState(false)
 
@@ -644,16 +645,16 @@ function DashboardPage() {
         ) : null}
       </div>
 
-      {user?.role !== 'super_admin' && planLocked ? (
+      {!skipsPlanLock(user) && planLocked ? (
         <PlanExpiredBanner usage={planUsage} />
       ) : null}
 
-      {user?.role !== 'super_admin' && planExpiringSoon ? (
+      {!skipsPlanLock(user) && planExpiringSoon ? (
         <PlanExpiringSoonBanner usage={planUsage} showViewPlan />
       ) : null}
 
       {/* Plan usage card on dashboard — re-enable when we want the "Your plan" summary here again.
-      {user?.role !== 'super_admin' && planUsage ? (
+      {!skipsPlanLock(user) && planUsage ? (
         <PlanUsageCard usage={planUsage} compact />
       ) : null}
       */}

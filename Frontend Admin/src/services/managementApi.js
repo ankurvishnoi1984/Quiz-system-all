@@ -283,5 +283,31 @@ export async function uploadExtraQuestionAttachmentApi(userId, file, otpToken) {
   return execute(false)
 }
 
+export async function listSubAdminsApi(accessToken) {
+  return authRequest('/admin/sub-admins', accessToken)
+}
+
+export async function createSubAdminApi(accessToken, payload) {
+  return authRequest('/admin/sub-admins', accessToken, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateSubAdminApi(accessToken, userId, payload) {
+  return authRequest(`/admin/sub-admins/${userId}`, accessToken, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function listSubAdminActionsApi(accessToken, userId, params = {}) {
+  const query = new URLSearchParams()
+  if (params.page) query.set('page', String(params.page))
+  if (params.limit) query.set('limit', String(params.limit))
+  const suffix = query.toString() ? `?${query}` : ''
+  return authRequest(`/admin/sub-admins/${userId}/actions${suffix}`, accessToken)
+}
+
 // Legacy public registration (unused by User Management UI).
 // export async function registerUserApi(payload) { ... }

@@ -80,7 +80,7 @@ async function removeMember(req, res) {
 
 async function listAdminTeams(req, res) {
   try {
-    const teams = await listTeamsForAdmin();
+    const teams = await listTeamsForAdmin(req.user);
     return successResponse(res, { teams }, "Teams fetched", 200);
   } catch (error) {
     return errorResponse(res, error.message, error.statusCode || 500);

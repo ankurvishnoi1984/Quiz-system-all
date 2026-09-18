@@ -37,7 +37,8 @@ export function useAdminActionOtp() {
 
   const requestAdminAction = async (action) => {
     const otpEnabled = featuresQuery.data?.admin_action_otp_enabled !== false
-    if (user?.role !== 'super_admin' || !otpEnabled) {
+    const needsOtp = user?.role === 'super_admin' || user?.role === 'sub_admin'
+    if (!needsOtp || !otpEnabled) {
       action(null)
       return
     }

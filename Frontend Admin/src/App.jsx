@@ -21,6 +21,7 @@ import ManageUsersPage from './pages/ManageUsersPage'
 import ManageRolesPage from './pages/ManageRolesPage'
 import ManagePlansPage from './pages/ManagePlansPage'
 import ManageTeamsPage from './pages/ManageTeamsPage'
+import ManageSubAdminsPage from './pages/ManageSubAdminsPage'
 import MyPlanPage from './pages/MyPlanPage'
 import TeamManagementPage from './pages/TeamManagementPage'
 import VerifyEmailPage from './pages/VerifyEmailPage'
@@ -236,17 +237,17 @@ function App() {
             <Route
               path="/department-analytics"
               element={
-                <SuperAdminOnlyRoute>
+                <RequireRight anyOf={['manage_departments', 'manage_clients']}>
                   <DepartmentAnalyticsPage />
-                </SuperAdminOnlyRoute>
+                </RequireRight>
               }
             />
             <Route
               path="/client-analytics"
               element={
-                <SuperAdminOnlyRoute>
+                <RequireRight right="manage_clients">
                   <ClientAnalyticsPage />
-                </SuperAdminOnlyRoute>
+                </RequireRight>
               }
             />
             <Route
@@ -260,9 +261,9 @@ function App() {
             <Route
               path="/manage/clients"
               element={
-                <SuperAdminOnlyRoute>
+                <RequireRight right="manage_clients">
                   <ManageClientsPage />
-                </SuperAdminOnlyRoute>
+                </RequireRight>
               }
             />
             <Route
@@ -276,8 +277,16 @@ function App() {
             <Route
               path="/manage/users"
               element={
-                <SuperAdminOnlyRoute>
+                <RequireRight right="manage_users">
                   <ManageUsersPage />
+                </RequireRight>
+              }
+            />
+            <Route
+              path="/manage/sub-admins"
+              element={
+                <SuperAdminOnlyRoute>
+                  <ManageSubAdminsPage />
                 </SuperAdminOnlyRoute>
               }
             />
@@ -292,25 +301,25 @@ function App() {
             <Route
               path="/manage/plans"
               element={
-                <SuperAdminOnlyRoute>
+                <RequireRight right="manage_plans">
                   <ManagePlansPage />
-                </SuperAdminOnlyRoute>
+                </RequireRight>
               }
             />
             <Route
               path="/manage/teams"
               element={
-                <SuperAdminOnlyRoute>
+                <RequireRight right="manage_teams">
                   <ManageTeamsPage />
-                </SuperAdminOnlyRoute>
+                </RequireRight>
               }
             />
             <Route
               path="/monitor/websockets"
               element={
-                <SuperAdminOnlyRoute>
+                <RequireRight right="connection_monitor">
                   <WebSocketMonitorPage />
-                </SuperAdminOnlyRoute>
+                </RequireRight>
               }
             />
           </Route>

@@ -200,7 +200,7 @@ function ManageUsersPage() {
       (rolesQuery.data || []).filter(
         (role) =>
           role.is_active &&
-          !['super_admin', 'author', 'auditor'].includes(role.slug),
+          !['super_admin', 'sub_admin', 'author', 'auditor'].includes(role.slug),
       ),
     [rolesQuery.data],
   )

@@ -61,6 +61,10 @@ function buildUserPayload(user) {
     email_verified: Boolean(user.email_verified_at),
     email_verified_at: user.email_verified_at || null,
     rights: getEffectiveRights(user),
+    rights_overrides: Array.isArray(user.rights_overrides) ? user.rights_overrides : null,
+    sub_admin_access: user.sub_admin_access || null,
+    allowed_client_ids: Array.isArray(user.allowed_client_ids) ? user.allowed_client_ids : null,
+    allowed_dept_ids: Array.isArray(user.allowed_dept_ids) ? user.allowed_dept_ids : null,
     must_change_password: isMustChangePassword(user.must_change_password),
     hints_completed: isHintsCompleted(user.hints_completed)
   };

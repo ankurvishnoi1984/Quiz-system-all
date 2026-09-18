@@ -140,7 +140,7 @@ function ManageRolesPage() {
 
   const isBusy = createMutation.isPending || updateMutation.isPending || deleteMutation.isPending
   const modalOpen = createOpen || Boolean(editRole)
-  const lockedRole = editRole?.slug === 'super_admin'
+  const lockedRole = editRole?.slug === 'super_admin' || editRole?.slug === 'sub_admin'
   const bankWorkflowRole = ['author', 'auditor'].includes(editRole?.slug)
 
   const handleSubmit = (event) => {
@@ -175,7 +175,7 @@ function ManageRolesPage() {
   }
 
   const openEdit = (role) => {
-    if (role.slug === 'super_admin') return
+    if (role.slug === 'super_admin' || role.slug === 'sub_admin') return
     setCreateOpen(false)
     setEditRole(role)
     setForm({
@@ -237,6 +237,8 @@ function ManageRolesPage() {
           <tbody>
             {(rolesQuery.data || []).map((role) => {
               const isSuperAdmin = role.slug === 'super_admin'
+              const isLockedSystemRole =
+                role.slug === 'super_admin' || role.slug === 'sub_admin'
               const canDelete = !role.is_system && Number(role.users_count || 0) === 0
               return (
                 <tr key={role.role_id} className="border-b border-blue-50 last:border-b-0">
@@ -262,7 +264,11 @@ function ManageRolesPage() {
                           </span>
                         ))
                       ) : (
-                        <span className="text-xs text-slate-500">None</span>
+                        <span className="text-xs text-slate-500">
+                          {role.slug === 'sub_admin'
+                            ? 'Assigned per user'
+                            : 'None'}
+                        </span>
                       )}
                     </div>
                   </td>
@@ -270,10 +276,10 @@ function ManageRolesPage() {
                   <td className="px-4 py-3">
                     <StatusToggle
                       checked={Boolean(role.is_active)}
-                      disabled={isSuperAdmin}
+                      disabled={isLockedSystemRole}
                       pending={updateMutation.isPending}
                       onChange={(isActive) => {
-                        if (isSuperAdmin) return
+                        if (isLockedSystemRole) return
                         requestAdminAction((otpToken) =>
                           updateMutation.mutate({
                             roleId: role.role_id,
@@ -290,7 +296,7 @@ function ManageRolesPage() {
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        disabled={isSuperAdmin}
+                        disabled={isLockedSystemRole}
                         onClick={() => openEdit(role)}
                         className="rounded-lg border border-blue-200/70 bg-white px-2.5 py-1.5 text-xs font-semibold text-navy-800 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
                       >

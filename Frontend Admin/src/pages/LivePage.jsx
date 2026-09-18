@@ -75,6 +75,7 @@ import {
   updateSessionApi,
 } from '../services/liveApi'
 import { getPlanUsageApi } from '../services/managementApi'
+import { skipsPlanLock } from '../utils/adminRoles'
 import { formatQuizSubmitTimeCompact } from '../utils/quizResponseTime'
 import {
   HOST_EXTRA_SOUNDS_ENABLED,
@@ -123,9 +124,9 @@ function LivePage() {
   const planUsageQuery = useQuery({
     queryKey: ['plan-usage'],
     queryFn: () => getPlanUsageApi(accessToken),
-    enabled: Boolean(accessToken && user?.role !== 'super_admin'),
+    enabled: Boolean(accessToken && !skipsPlanLock(user)),
   })
-  const planLocked = user?.role !== 'super_admin' && hasNoActivePlan(planUsageQuery.data)
+  const planLocked = !skipsPlanLock(user) && hasNoActivePlan(planUsageQuery.data)
 
 
   const [questionIndex, setQuestionIndex] = useState(0)

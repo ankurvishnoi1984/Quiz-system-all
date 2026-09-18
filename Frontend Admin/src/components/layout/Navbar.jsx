@@ -20,6 +20,7 @@ const pageTitles = {
   '/manage/clients': 'Manage Clients',
   '/manage/departments': 'Manage Departments',
   '/manage/users': 'User Management',
+  '/manage/sub-admins': 'Sub Admin Management',
   '/manage/roles': 'Role Management',
   '/manage/plans': 'Paid Plans',
   '/my-plan': 'My Plan',

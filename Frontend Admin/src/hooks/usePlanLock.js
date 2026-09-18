@@ -2,14 +2,15 @@ import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '../store/authStore'
 import { getPlanUsageApi } from '../services/managementApi'
 import { hasNoActivePlan, canSelfServePlanChange } from '../components/dashboard/PlanExpiredNotice'
+import { skipsPlanLock } from '../utils/adminRoles'
 
 /**
- * Shared plan-lock state for hosts/admins (not super_admin).
+ * Shared plan-lock state for hosts/admins (not super_admin / sub_admin).
  */
 export function usePlanLock() {
   const accessToken = useAuthStore((state) => state.accessToken)
   const user = useAuthStore((state) => state.user)
-  const skip = !accessToken || user?.role === 'super_admin'
+  const skip = !accessToken || skipsPlanLock(user)
 
   const planUsageQuery = useQuery({
     queryKey: ['plan-usage'],

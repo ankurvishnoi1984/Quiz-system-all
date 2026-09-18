@@ -7,6 +7,7 @@ const { getHostPlanUsage } = require("./plan.service");
 const { sendTeamMemberVerificationEmail } = require("./email.service");
 const { signEmailVerificationToken } = require("../utils/jwt");
 const { getFrontendPublicUrl } = require("../config/publicAppUrl");
+const { buildSubAdminUserWhere } = require("../config/data-scope");
 
 function createTemporaryPassword() {
   return crypto.randomBytes(9).toString("base64url");
@@ -443,9 +444,13 @@ async function removeTeamMember({ ownerId, memberId }) {
   return { user_id: Number(member.user_id), is_active: false };
 }
 
-async function listTeamsForAdmin() {
+async function listTeamsForAdmin(actor = null) {
+  const ownerWhere = { role: "host", parent_id: null, is_active: true };
+  const scopeWhere = buildSubAdminUserWhere(actor);
+  if (scopeWhere) Object.assign(ownerWhere, scopeWhere);
+
   const owners = await User.findAll({
-    where: { role: "host", parent_id: null, is_active: true },
+    where: ownerWhere,
     include: [
       {
         model: User,

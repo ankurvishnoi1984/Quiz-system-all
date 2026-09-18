@@ -9,11 +9,14 @@ const {
   validateCreateDepartmentPayload
 } = require("../validators/department.validator");
 const { canCreateDepartments } = require("../config/data-scope");
-const { getDataScope } = require("../config/user-rights");
+const { getDataScope, isSubAdmin, userHasRight } = require("../config/user-rights");
 
 async function create(req, res) {
   try {
     if (!canCreateDepartments(req.user)) {
+      return errorResponse(res, "Forbidden: insufficient permissions", 403);
+    }
+    if (isSubAdmin(req.user) && !userHasRight(req.user, "manage_departments")) {
       return errorResponse(res, "Forbidden: insufficient permissions", 403);
     }
 
@@ -49,9 +52,12 @@ async function list(req, res) {
       clientId = Number(department.client_id);
     }
 
-    const departments = await getDepartments({
-      client_id: clientId
-    });
+    const departments = await getDepartments(
+      {
+        client_id: clientId
+      },
+      user
+    );
     return successResponse(res, { departments }, "Departments fetched", 200);
   } catch (err) {
     return errorResponse(res, err.message, err.statusCode || 500);

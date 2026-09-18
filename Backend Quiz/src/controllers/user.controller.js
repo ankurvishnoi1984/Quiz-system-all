@@ -30,7 +30,7 @@ function requireAdminActionOtp(req) {
 
 async function list(req, res) {
   try {
-    const users = await listUsers();
+    const users = await listUsers(req.user);
     return successResponse(res, { users }, "Users fetched", 200);
   } catch (err) {
     return errorResponse(res, err.message, err.statusCode || 500);

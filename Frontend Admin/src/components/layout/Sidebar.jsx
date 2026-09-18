@@ -20,8 +20,8 @@ import { SidebarNavGroup } from './SidebarNavGroup'
 import { useHostNavSessions, getBuilderNavTo, getLiveNavTo } from '../../hooks/useHostNavSessions'
 import { usePlanLock } from '../../hooks/usePlanLock'
 import { useAuthStore } from '../../store/authStore'
-import { isAdminRole, canManageDepartments } from '../../utils/adminRoles'
-import { hasRight } from '../../utils/userRights'
+import { isAdminRole, canManageDepartments, isSuperAdmin } from '../../utils/adminRoles'
+import { hasRight, hasAnyRight } from '../../utils/userRights'
 import { useHostOnboarding } from '../../context/HostOnboardingContext'
 
 const staticNavigationItems = [
@@ -36,12 +36,12 @@ const staticNavigationItems = [
   { kind: 'builder', label: 'Question Builder', icon: FileQuestion, isNew: true },
   { kind: 'live', label: 'Live Present Mode', icon: CirclePlay, live: true },
   { to: '/analytics', label: 'Session Analytics', icon: ChartColumnBig, kind: 'static' },
-  { to: '/department-analytics', label: 'Department Analytics', icon: Building2, kind: 'static', superAdminOnly: true },
-  { to: '/client-analytics', label: 'Client Analytics', icon: Layers, kind: 'static', superAdminOnly: true },
-  { to: '/monitor/websockets', label: 'Connection Monitor', icon: Activity, kind: 'static', superAdminOnly: true },
+  { to: '/department-analytics', label: 'Department Analytics', icon: Building2, kind: 'static', rightAnyOf: ['manage_departments', 'manage_clients'] },
+  { to: '/client-analytics', label: 'Client Analytics', icon: Layers, kind: 'static', right: 'manage_clients' },
+  { to: '/monitor/websockets', label: 'Connection Monitor', icon: Activity, kind: 'static', right: 'connection_monitor' },
   { to: '/reports', label: 'Reports', icon: FileBarChart2, kind: 'static' },
   { to: '/training', label: 'Training Library', icon: GraduationCap, kind: 'static' },
-  { to: '/my-plan', label: 'My Plan', icon: CreditCard, kind: 'static', hideForSuperAdmin: true },
+  { to: '/my-plan', label: 'My Plan', icon: CreditCard, kind: 'static', hideForSuperAdmin: true, hideForSubAdmin: true },
   { to: '/team', label: 'Team Management', icon: Users, kind: 'static', teamLeadOnly: true },
 ]
 
@@ -64,6 +64,9 @@ function Sidebar({ collapsed, onToggle }) {
           if (item.questionBankRoles && !item.questionBankRoles.includes(user?.role)) return false
           if (item.superAdminOnly && user?.role !== 'super_admin') return false
           if (item.hideForSuperAdmin && user?.role === 'super_admin') return false
+          if (item.hideForSubAdmin && user?.role === 'sub_admin') return false
+          if (item.right && !hasRight(user, item.right)) return false
+          if (item.rightAnyOf && !hasAnyRight(user, item.rightAnyOf)) return false
           if (item.teamLeadOnly && (user?.role !== 'host' || user?.parent_id)) return false
           if (item.adminOnly && !isAdminRole(user)) return false
           if (item.kind === 'builder' && !hasRight(user, 'builder')) return false
@@ -102,11 +105,20 @@ function Sidebar({ collapsed, onToggle }) {
 
   const manageClientsItems = useMemo(() => {
     const items = []
-    if (user?.role === 'super_admin') {
+    if (hasRight(user, 'manage_clients')) {
       items.push({ to: '/manage/clients', label: 'Clients' })
+    }
+    if (hasRight(user, 'manage_users')) {
       items.push({ to: '/manage/users', label: 'Users' })
+    }
+    if (hasRight(user, 'manage_teams')) {
       items.push({ to: '/manage/teams', label: 'Teams' })
+    }
+    if (isSuperAdmin(user)) {
+      items.push({ to: '/manage/sub-admins', label: 'Sub Admins' })
       items.push({ to: '/manage/roles', label: 'Roles' })
+    }
+    if (hasRight(user, 'manage_plans')) {
       items.push({ to: '/manage/plans', label: 'Plans' })
     }
     if (canManageDepartments(user)) {

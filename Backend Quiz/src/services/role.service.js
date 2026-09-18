@@ -2,6 +2,7 @@ const { Op } = require("sequelize");
 const { Role, User } = require("../models");
 const {
   ASSIGNABLE_DATA_SCOPES,
+  OPERATIONAL_RIGHTS,
   normalizeRightList,
   slugifyRoleName,
   toRolePayload
@@ -11,6 +12,10 @@ function createError(message, statusCode) {
   const error = new Error(message);
   error.statusCode = statusCode;
   return error;
+}
+
+function normalizeOperationalPermissions(values) {
+  return normalizeRightList(values).filter((right) => OPERATIONAL_RIGHTS.includes(right));
 }
 
 async function getRoleBySlug(slug) {
@@ -59,7 +64,7 @@ async function createRole({ name, data_scope, permissions }) {
     slug,
     name: trimmedName,
     data_scope,
-    permissions: normalizeRightList(permissions),
+    permissions: normalizeOperationalPermissions(permissions),
     is_system: false,
     is_active: true
   });
@@ -71,6 +76,9 @@ async function updateRole({ roleId, name, data_scope, permissions, is_active }) 
   if (!role) throw createError("Role not found", 404);
   if (role.slug === "super_admin") {
     throw createError("Super admin role cannot be changed", 400);
+  }
+  if (role.slug === "sub_admin") {
+    throw createError("Sub admin role permissions are assigned per user, not on the role", 400);
   }
 
   if (name !== undefined) {
@@ -91,15 +99,17 @@ async function updateRole({ roleId, name, data_scope, permissions, is_active }) 
 
   if (permissions !== undefined) {
     if (["author", "auditor"].includes(role.slug)) {
-      const requested = normalizeRightList(permissions);
+      const requested = normalizeOperationalPermissions(permissions);
       if (requested.length) {
         throw createError(
           "Question Author and Question Auditor cannot receive session permissions",
           400
         );
       }
+      role.permissions = [];
+    } else {
+      role.permissions = normalizeOperationalPermissions(permissions);
     }
-    role.permissions = normalizeRightList(permissions);
   }
 
   if (is_active !== undefined) {

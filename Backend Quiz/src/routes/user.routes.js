@@ -2,12 +2,14 @@ const express = require("express");
 const userController = require("../controllers/user.controller");
 const authMiddleware = require("../middlewares/auth.middleware");
 const authorizeRoles = require("../middlewares/role.middleware");
+const { authorizeRights } = require("../middlewares/rights.middleware");
 const { uploadExtraSeatAttachment, uploadExtraQuestionAttachment } = require("../config/multer");
 const multer = require("multer");
 const { errorResponse } = require("../utils/response");
 const requireAdminActionOtp = require("../middlewares/admin-action-otp.middleware");
 
 const router = express.Router();
+const platformManagers = authorizeRoles("super_admin", "sub_admin");
 
 function uploadExtraSeatFile(req, res, next) {
   uploadExtraSeatAttachment.single("file")(req, res, (error) => {
@@ -31,69 +33,80 @@ function uploadExtraQuestionFile(req, res, next) {
 
 router.use(authMiddleware);
 
-router.get("/", authorizeRoles("super_admin"), userController.list);
+router.get("/", platformManagers, authorizeRights("manage_users"), userController.list);
 router.post(
   "/",
-  authorizeRoles("super_admin"),
+  platformManagers,
+  authorizeRights("manage_users"),
   requireAdminActionOtp,
   userController.create
 );
 router.patch(
   "/:userId/plan",
-  authorizeRoles("super_admin"),
+  platformManagers,
+  authorizeRights("manage_user_plan"),
   requireAdminActionOtp,
   userController.assignPlan
 );
 router.patch(
   "/:userId/status",
-  authorizeRoles("super_admin"),
+  platformManagers,
+  authorizeRights("manage_users"),
   requireAdminActionOtp,
   userController.setStatus
 );
 router.get(
   "/:userId/extra-participants",
-  authorizeRoles("super_admin"),
+  platformManagers,
+  authorizeRights("manage_user_extra_participants"),
   userController.listAddons
 );
 router.post(
   "/:userId/extra-participants/attachment",
-  authorizeRoles("super_admin"),
+  platformManagers,
+  authorizeRights("manage_user_extra_participants"),
   requireAdminActionOtp,
   uploadExtraSeatFile,
   userController.uploadExtraAttachment
 );
 router.patch(
   "/:userId/extra-participants",
-  authorizeRoles("super_admin"),
+  platformManagers,
+  authorizeRights("manage_user_extra_participants"),
   requireAdminActionOtp,
   userController.adjustExtraParticipants
 );
 router.get(
   "/:userId/extra-questions",
-  authorizeRoles("super_admin"),
+  platformManagers,
+  authorizeRights("manage_user_extra_questions"),
   userController.listQuestionAddons
 );
 router.post(
   "/:userId/extra-questions/attachment",
-  authorizeRoles("super_admin"),
+  platformManagers,
+  authorizeRights("manage_user_extra_questions"),
   requireAdminActionOtp,
   uploadExtraQuestionFile,
   userController.uploadExtraQuestionAttachment
 );
 router.patch(
   "/:userId/extra-questions",
-  authorizeRoles("super_admin"),
+  platformManagers,
+  authorizeRights("manage_user_extra_questions"),
   requireAdminActionOtp,
   userController.adjustExtraQuestions
 );
 router.get(
   "/:userId/team-seats",
-  authorizeRoles("super_admin"),
+  platformManagers,
+  authorizeRights("manage_user_team_seats"),
   userController.listTeamAddons
 );
 router.patch(
   "/:userId/team-seats",
-  authorizeRoles("super_admin"),
+  platformManagers,
+  authorizeRights("manage_user_team_seats"),
   requireAdminActionOtp,
   userController.adjustExtraTeamMembers
 );

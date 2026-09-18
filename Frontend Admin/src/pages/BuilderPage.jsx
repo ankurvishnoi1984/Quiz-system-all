@@ -63,6 +63,7 @@ import { useHostNavSessions, getLatestSessionId } from '../hooks/useHostNavSessi
 import { useShell } from '../context/ShellContext'
 import { useHostOnboarding } from '../context/HostOnboardingContext'
 import { getPlanUsageApi } from '../services/managementApi'
+import { skipsPlanLock } from '../utils/adminRoles'
 import {
   PlanExpiredBanner,
   PlanExpiredModal,
@@ -1155,9 +1156,9 @@ function BuilderPage() {
   const planUsageQuery = useQuery({
     queryKey: ['plan-usage'],
     queryFn: () => getPlanUsageApi(accessToken),
-    enabled: Boolean(accessToken && user?.role !== 'super_admin'),
+    enabled: Boolean(accessToken && !skipsPlanLock(user)),
   })
-  const planLocked = user?.role !== 'super_admin' && hasNoActivePlan(planUsageQuery.data)
+  const planLocked = !skipsPlanLock(user) && hasNoActivePlan(planUsageQuery.data)
   const [planLockedModalOpen, setPlanLockedModalOpen] = useState(false)
 
   useEffect(() => {
@@ -1527,7 +1528,7 @@ function BuilderPage() {
 
   const sessionQuestionType = questions[0]?.type ?? null
   const maxQuestionsPerSession =
-    user?.role === 'super_admin'
+    skipsPlanLock(user)
       ? null
       : planUsageQuery.data?.max_questions_per_session != null
         ? Number(planUsageQuery.data.max_questions_per_session)

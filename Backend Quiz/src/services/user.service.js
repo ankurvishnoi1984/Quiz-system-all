@@ -1,5 +1,6 @@
 const bcrypt = require("bcryptjs");
 const path = require("path");
+const { Op } = require("sequelize");
 const {
   User,
   Client,
@@ -24,7 +25,7 @@ const {
   getEffectiveRights,
   getDataScope
 } = require("../config/user-rights");
-const { needsClientOnUser, needsDepartmentOnUser } = require("../config/data-scope");
+const { needsClientOnUser, needsDepartmentOnUser, buildSubAdminUserWhere } = require("../config/data-scope");
 const { getRoleBySlug } = require("./role.service");
 
 const ROLE_LABELS = {
@@ -83,7 +84,8 @@ async function resolveActivePlanId(planId) {
   return plan.plan_id;
 }
 
-async function listUsers() {
+async function listUsers(actor = null) {
+  const scopeWhere = buildSubAdminUserWhere(actor) || {};
   const users = await User.findAll({
     attributes: [
       "user_id",
@@ -103,6 +105,10 @@ async function listUsers() {
       "last_login_at",
       "created_at"
     ],
+    where: {
+      ...scopeWhere,
+      role: { [Op.ne]: "sub_admin" }
+    },
     include: [
       { model: Plan, as: "plan", required: false },
       {
@@ -147,6 +153,11 @@ async function createUserByAdmin(input, adminUser) {
   }
   if (assignedRole.slug === "super_admin") {
     const error = new Error("super_admin cannot be created from this form");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (assignedRole.slug === "sub_admin") {
+    const error = new Error("Sub admins must be created from Sub Admin Management");
     error.statusCode = 400;
     throw error;
   }

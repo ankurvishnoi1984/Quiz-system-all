@@ -1,4 +1,5 @@
 const { Department, Client } = require("../models");
+const { buildSubAdminDepartmentWhere } = require("../config/data-scope");
 
 async function createDepartment(input) {
   const client = await Client.findByPk(input.client_id);
@@ -34,11 +35,13 @@ async function createDepartment(input) {
   });
 }
 
-async function getDepartments(filters = {}) {
+async function getDepartments(filters = {}, actor = null) {
   const where = {};
   if (filters.client_id) {
     where.client_id = filters.client_id;
   }
+  const scopeWhere = buildSubAdminDepartmentWhere(actor);
+  if (scopeWhere) Object.assign(where, scopeWhere);
 
   return Department.findAll({
     where,

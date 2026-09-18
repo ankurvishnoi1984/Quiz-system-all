@@ -1,4 +1,14 @@
-const { Client } = require("../models");
+const { Op } = require("sequelize");
+const { Client, Department } = require("../models");
+const {
+  buildSubAdminClientWhere,
+  canAccessClientId
+} = require("../config/data-scope");
+const {
+  isSubAdmin,
+  getSubAdminAccess,
+  getAllowedDeptIds
+} = require("../config/user-rights");
 
 async function createClient(input) {
   const existing = await Client.findOne({ where: { slug: input.slug } });
@@ -26,18 +36,62 @@ async function createClient(input) {
   return client;
 }
 
-async function getClients() {
+async function resolveClientWhere(actor) {
+  if (!isSubAdmin(actor)) return {};
+  const mode = getSubAdminAccess(actor);
+  if (mode === "all") return {};
+  if (mode === "clients") {
+    return buildSubAdminClientWhere(actor) || { client_id: -1 };
+  }
+  if (mode === "departments") {
+    const deptIds = getAllowedDeptIds(actor);
+    if (!deptIds.length) return { client_id: -1 };
+    const depts = await Department.findAll({
+      where: { dept_id: { [Op.in]: deptIds } },
+      attributes: ["client_id"]
+    });
+    const clientIds = [...new Set(depts.map((d) => Number(d.client_id)).filter(Boolean))];
+    return clientIds.length ? { client_id: { [Op.in]: clientIds } } : { client_id: -1 };
+  }
+  return {};
+}
+
+async function getClients(actor = null) {
+  const where = await resolveClientWhere(actor);
   return Client.findAll({
+    where,
     order: [["client_id", "DESC"]]
   });
 }
 
-async function getClientById(clientId) {
+async function getClientById(clientId, actor = null) {
   const client = await Client.findByPk(clientId);
   if (!client) {
     const error = new Error("Client not found");
     error.statusCode = 404;
     throw error;
+  }
+  if (actor && isSubAdmin(actor)) {
+    const mode = getSubAdminAccess(actor);
+    if (mode === "clients" && !canAccessClientId(actor, client.client_id)) {
+      const error = new Error("Forbidden: client access denied");
+      error.statusCode = 403;
+      throw error;
+    }
+    if (mode === "departments") {
+      const deptIds = getAllowedDeptIds(actor);
+      const allowed = await Department.count({
+        where: {
+          client_id: client.client_id,
+          dept_id: { [Op.in]: deptIds.length ? deptIds : [-1] }
+        }
+      });
+      if (!allowed) {
+        const error = new Error("Forbidden: client access denied");
+        error.statusCode = 403;
+        throw error;
+      }
+    }
   }
   return client;
 }
