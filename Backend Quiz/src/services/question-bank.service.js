@@ -978,6 +978,128 @@ async function addRandomQuestionsToSession({
   });
 }
 
+const MAX_BANK_IMPORT_ROWS = 500;
+
+function normalizeImportRows(rows) {
+  if (!Array.isArray(rows) || !rows.length) {
+    throw createError("At least one question row is required", 400);
+  }
+  if (rows.length > MAX_BANK_IMPORT_ROWS) {
+    throw createError(`A workbook can contain at most ${MAX_BANK_IMPORT_ROWS} questions`, 400);
+  }
+  return rows.map((row, index) => {
+    const rowNumber = Number(row?.row || index + 2);
+    const payload = row?.payload && typeof row.payload === "object" ? row.payload : row;
+    const clientErrors = Array.isArray(row?.errors) ? row.errors.filter(Boolean) : [];
+    return { row: rowNumber, payload, clientErrors };
+  });
+}
+
+async function previewBankImport({ rows, owner_id, user }) {
+  assertAuthor(user);
+  const normalized = normalizeImportRows(rows);
+  // Resolve owner once so admin imports fail early if Host is missing.
+  await resolveActionOwnerId(user, owner_id);
+
+  const resultRows = normalized.map(({ row, payload, clientErrors }) => {
+    const errors = [
+      ...clientErrors,
+      ...validateBankQuestionPayload({
+        ...payload,
+        topic_name: payload.topic_name || payload.topic || null,
+        difficulty: payload.difficulty || "medium",
+        language: payload.language || "en"
+      })
+    ];
+    const uniqueErrors = [...new Set(errors)];
+    return {
+      row,
+      question_text: payload.question_text || "",
+      question_type: payload.question_type || null,
+      valid: uniqueErrors.length === 0,
+      errors: uniqueErrors,
+      payload
+    };
+  });
+
+  return {
+    total_rows: resultRows.length,
+    valid_rows: resultRows.filter((row) => row.valid).length,
+    invalid_rows: resultRows.filter((row) => !row.valid).length,
+    rows: resultRows
+  };
+}
+
+async function importBankQuestions({ questions, owner_id, user }) {
+  assertAuthor(user);
+  const normalized = normalizeImportRows(questions);
+  const ownerId = await resolveActionOwnerId(user, owner_id);
+
+  const prepared = [];
+  const skipped = [];
+  for (const item of normalized) {
+    const payload = {
+      ...item.payload,
+      topic_name: item.payload.topic_name || item.payload.topic || null,
+      difficulty: item.payload.difficulty || "medium",
+      language: item.payload.language || "en",
+      owner_id: ownerId
+    };
+    const errors = [
+      ...item.clientErrors,
+      ...validateBankQuestionPayload(payload)
+    ];
+    const uniqueErrors = [...new Set(errors)];
+    if (uniqueErrors.length) {
+      skipped.push({ row: item.row, errors: uniqueErrors, question_text: payload.question_text || "" });
+      continue;
+    }
+    prepared.push({ row: item.row, payload });
+  }
+
+  if (!prepared.length) {
+    throw createError(
+      "No valid questions to import",
+      400,
+      skipped.map((item) => `Row ${item.row}: ${item.errors.join("; ")}`)
+    );
+  }
+
+  const created = [];
+  await sequelize.transaction(async (transaction) => {
+    for (const item of prepared) {
+      const topic = await resolveQuestionTopic(item.payload, ownerId, user, { transaction });
+      const question = await QuestionBankQuestion.create(
+        {
+          ...normalizeQuestionInput({ ...item.payload, topic_id: topic.topic_id }),
+          owner_id: ownerId,
+          author_id: user.user_id,
+          status: "draft",
+          version: 1
+        },
+        { transaction }
+      );
+      const options = normalizeOptions(item.payload).map((option) => ({
+        ...option,
+        bank_question_id: question.bank_question_id
+      }));
+      if (options.length) await QuestionBankOption.bulkCreate(options, { transaction });
+      created.push({
+        row: item.row,
+        bank_question_id: question.bank_question_id,
+        question_text: item.payload.question_text
+      });
+    }
+  });
+
+  return {
+    created_count: created.length,
+    skipped_count: skipped.length,
+    created,
+    skipped
+  };
+}
+
 module.exports = {
   listOwners,
   listTopics,
@@ -991,5 +1113,7 @@ module.exports = {
   archiveQuestion,
   createRevision,
   copyBankQuestionsToSession,
-  addRandomQuestionsToSession
+  addRandomQuestionsToSession,
+  previewBankImport,
+  importBankQuestions
 };

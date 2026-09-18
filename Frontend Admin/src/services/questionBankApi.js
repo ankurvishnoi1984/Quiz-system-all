@@ -110,6 +110,20 @@ export async function reviseQuestionBankQuestionApi(accessToken, questionId) {
   return data?.question
 }
 
+export async function previewQuestionBankImportApi(accessToken, payload) {
+  return hostAuthRequest('/question-bank/questions/import/preview', accessToken, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function importQuestionBankQuestionsApi(accessToken, payload) {
+  return hostAuthRequest('/question-bank/questions/import', accessToken, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 export async function addQuestionBankQuestionsToSessionApi(
   accessToken,
   sessionId,

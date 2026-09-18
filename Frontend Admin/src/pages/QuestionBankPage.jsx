@@ -13,6 +13,7 @@ import {
   Save,
   Search,
   Send,
+  Upload,
   XCircle,
 } from 'lucide-react'
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
@@ -20,6 +21,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuthStore } from '../store/authStore'
 import Modal from '../components/ui/Modal'
 import { QuestionMediaUpload } from '../components/builder/QuestionMediaUpload'
+import { QuestionBankImportModal } from '../components/builder/QuestionBankImportModal'
 import { QuestionMedia } from '../components/participant-session/QuestionMedia'
 import { HostAlertModal } from '../components/live/HostAlertModal'
 import {
@@ -92,7 +94,39 @@ function friendlyValidationMessage(message) {
   if (normalized.includes('select a host account')) {
     return 'Select the Host account that will own this question.'
   }
+  if (
+    normalized.includes('comments are required') ||
+    normalized.includes('comment explaining')
+  ) {
+    return 'Add a short comment explaining what needs to change or why you are rejecting this question.'
+  }
+  if (normalized.includes('not ready for review')) {
+    return 'This question is not ready for review. Fix the listed issues and try again.'
+  }
   return String(message || 'Please check the question details and try again.')
+}
+
+function actionErrorTitle(variables) {
+  if (variables?.action === 'review') {
+    if (variables.decision === 'approved') return 'Could not approve question'
+    if (variables.decision === 'changes_requested') return 'Could not request changes'
+    if (variables.decision === 'rejected') return 'Could not reject question'
+    return 'Could not complete review'
+  }
+  if (variables?.action === 'submit') return 'Could not submit for review'
+  if (variables?.action === 'revise') return 'Could not create revision'
+  if (variables?.action === 'archive') return 'Could not archive question'
+  return 'Action could not be completed'
+}
+
+function formatActionErrorMessages(error) {
+  const details = Array.isArray(error?.details)
+    ? error.details.filter(Boolean)
+    : []
+  const messages = details.length
+    ? details
+    : [error?.message || 'Something went wrong. Please try again.']
+  return messages.map((message) => `• ${friendlyValidationMessage(message)}`).join('\n')
 }
 
 function HostAccountSelect({
@@ -828,6 +862,8 @@ export default function QuestionBankPage() {
   const deferredSearch = useDeferredValue(search)
   const [detailQuestion, setDetailQuestion] = useState(null)
   const [reviewComments, setReviewComments] = useState({})
+  const [actionAlert, setActionAlert] = useState(null)
+  const [importOpen, setImportOpen] = useState(false)
   const role = user?.role
   const adminRoles = ['super_admin', 'client_admin', 'dept_admin']
   const canAuthor = role === 'author' || adminRoles.includes(role)
@@ -906,7 +942,32 @@ export default function QuestionBankPage() {
         window.scrollTo({ top: 0, behavior: 'smooth' })
       }
     },
+    onError: (error, variables) => {
+      setActionAlert({
+        title: actionErrorTitle(variables),
+        message: formatActionErrorMessages(error),
+      })
+    },
   })
+
+  const runReviewAction = (question, decision) => {
+    const comments = String(reviewComments[question.bank_question_id] || '').trim()
+    if (
+      (decision === 'changes_requested' || decision === 'rejected') &&
+      !comments
+    ) {
+      setActionAlert({
+        title:
+          decision === 'rejected'
+            ? 'Could not reject question'
+            : 'Could not request changes',
+        message:
+          '• Add a short comment explaining what needs to change or why you are rejecting this question.',
+      })
+      return
+    }
+    actionMutation.mutate({ action: 'review', question, decision })
+  }
 
   const statusOptions = useMemo(() => {
     if (role === 'author') return ['', 'draft', 'pending_review', 'changes_requested', 'rejected', 'approved', 'archived']
@@ -959,16 +1020,25 @@ export default function QuestionBankPage() {
             </div>
           </div>
           {canAuthor ? (
-            <button
-              type="button"
-              onClick={() => {
-                setEditing(null)
-                setEditorOpen(true)
-              }}
-              className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-navy-900 shadow-lg transition hover:bg-blue-50"
-            >
-              <Plus className="size-4" /> Create question
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setImportOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl border border-white/40 bg-white/10 px-4 py-2.5 text-sm font-bold text-white shadow-lg backdrop-blur transition hover:bg-white/20"
+              >
+                <Upload className="size-4" /> Upload Excel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditing(null)
+                  setEditorOpen(true)
+                }}
+                className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-navy-900 shadow-lg transition hover:bg-blue-50"
+              >
+                <Plus className="size-4" /> Create question
+              </button>
+            </div>
           ) : null}
         </div>
       </div>
@@ -1119,21 +1189,21 @@ export default function QuestionBankPage() {
                   <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      onClick={() => actionMutation.mutate({ action: 'review', question, decision: 'approved' })}
+                      onClick={() => runReviewAction(question, 'approved')}
                       className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-700"
                     >
                       <CheckCircle2 className="size-4" /> Approve
                     </button>
                     <button
                       type="button"
-                      onClick={() => actionMutation.mutate({ action: 'review', question, decision: 'changes_requested' })}
+                      onClick={() => runReviewAction(question, 'changes_requested')}
                       className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm font-bold text-amber-800 transition hover:bg-amber-100"
                     >
                       <RotateCcw className="size-4" /> Request changes
                     </button>
                     <button
                       type="button"
-                      onClick={() => actionMutation.mutate({ action: 'review', question, decision: 'rejected' })}
+                      onClick={() => runReviewAction(question, 'rejected')}
                       className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-bold text-red-700 transition hover:bg-red-100"
                     >
                       <XCircle className="inline size-4" /> Reject
@@ -1206,15 +1276,38 @@ export default function QuestionBankPage() {
         </div>
       )}
 
-      {actionMutation.error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {actionMutation.error.message}
-        </div>
-      ) : null}
-
       <QuestionDetailsModal
         question={detailQuestion}
         onClose={() => setDetailQuestion(null)}
+      />
+
+      <HostAlertModal
+        open={Boolean(actionAlert)}
+        variant={actionAlert?.variant || 'error'}
+        title={actionAlert?.title || 'Action could not be completed'}
+        message={actionAlert?.message || ''}
+        confirmLabel="Got it"
+        onClose={() => setActionAlert(null)}
+      />
+
+      <QuestionBankImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        accessToken={accessToken}
+        owners={owners}
+        role={role}
+        onImported={(result) => {
+          refresh()
+          const created = Number(result?.created_count || 0)
+          const skipped = Number(result?.skipped_count || 0)
+          setActionAlert({
+            variant: 'success',
+            title: 'Questions imported',
+            message: skipped
+              ? `• ${created} draft${created === 1 ? '' : 's'} created.\n• ${skipped} row${skipped === 1 ? '' : 's'} skipped because of validation errors.`
+              : `• ${created} draft question${created === 1 ? '' : 's'} created. Submit them for review when ready.`,
+          })
+        }}
       />
     </section>
   )

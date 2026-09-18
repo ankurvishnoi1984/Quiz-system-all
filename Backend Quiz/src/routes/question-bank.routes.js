@@ -21,6 +21,16 @@ router.post(
   authorizeRoles("author", "super_admin", "client_admin", "dept_admin"),
   controller.createQuestion
 );
+router.post(
+  "/questions/import/preview",
+  authorizeRoles("author", "super_admin", "client_admin", "dept_admin"),
+  controller.previewImport
+);
+router.post(
+  "/questions/import",
+  authorizeRoles("author", "super_admin", "client_admin", "dept_admin"),
+  controller.confirmImport
+);
 router.put(
   "/questions/:questionId",
   authorizeRoles("author", "super_admin", "client_admin", "dept_admin"),

@@ -178,6 +178,50 @@ async function addRandomToSession(req, res) {
   }
 }
 
+async function previewImport(req, res) {
+  try {
+    const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+    const result = await questionBankService.previewBankImport({
+      rows,
+      owner_id: req.body?.owner_id,
+      user: req.user
+    });
+    return successResponse(
+      res,
+      {
+        filename: req.body?.filename || null,
+        ...result
+      },
+      "Question bank import preview generated"
+    );
+  } catch (err) {
+    return sendError(res, err);
+  }
+}
+
+async function confirmImport(req, res) {
+  try {
+    const questions = Array.isArray(req.body?.questions)
+      ? req.body.questions
+      : Array.isArray(req.body?.rows)
+        ? req.body.rows
+        : [];
+    const result = await questionBankService.importBankQuestions({
+      questions,
+      owner_id: req.body?.owner_id,
+      user: req.user
+    });
+    return successResponse(
+      res,
+      result,
+      `${result.created_count} draft question${result.created_count === 1 ? "" : "s"} imported`,
+      201
+    );
+  } catch (err) {
+    return sendError(res, err);
+  }
+}
+
 module.exports = {
   listOwners,
   listTopics,
@@ -191,5 +235,7 @@ module.exports = {
   archiveQuestion,
   createRevision,
   addToSession,
-  addRandomToSession
+  addRandomToSession,
+  previewImport,
+  confirmImport
 };
