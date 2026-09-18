@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
-import { BarChart3, Search, Trophy } from 'lucide-react'
+import { BarChart3, Maximize2, Search, Trophy, X } from 'lucide-react'
 import { getQuestionResultsApi } from '../../services/liveApi'
 import { getPresentViewQuestionResultsApi } from '../../services/presentViewApi'
 import WordCloudChart from '../../components/charts/WordCloudChart'
@@ -34,6 +35,27 @@ import { PresentJoinBar } from './PresentJoinInfo'
 import { PresentResponsesList } from './PresentResponsesList'
 import { PresentSlideHeader } from './PresentShell'
 import { PresentViewSwitcher } from './PresentViewSwitcher'
+
+function ResultsPanelHeader({ title, onExpand }) {
+  return (
+    <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
+      <p className="text-[clamp(0.65rem,1.2vw,0.75rem)] font-semibold uppercase tracking-wider text-slate-500">
+        {title}
+      </p>
+      {onExpand ? (
+        <button
+          type="button"
+          onClick={onExpand}
+          className="inline-flex items-center gap-1 rounded-lg bg-slate-100/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-navy-800 transition hover:bg-slate-200/90"
+          aria-label="Expand chart"
+        >
+          <Maximize2 className="size-3" />
+          Expand
+        </button>
+      ) : null}
+    </div>
+  )
+}
 
 function PresentResponsesPanel({
   responseRows,
@@ -116,6 +138,7 @@ export function QuestionSlide({
   singleActiveQuestionMode = false,
 }) {
   const [viewMode, setViewMode] = useState('overview')
+  const [chartExpanded, setChartExpanded] = useState(false)
 
   const currentResponses = filterResponsesForQuestion(allResponses, question.id)
 
@@ -206,6 +229,7 @@ export function QuestionSlide({
 
   useEffect(() => {
     setViewMode('overview')
+    setChartExpanded(false)
   }, [question.id])
 
   useEffect(() => {
@@ -214,84 +238,98 @@ export function QuestionSlide({
     }
   }, [viewMode, showQuestionLeaderboard])
 
-  const renderResultsPanel = ({ compact = false } = {}) => {
-    const panelClass = compact
-      ? 'flex min-h-0 flex-1 flex-col rounded-3xl border border-blue-200/70 bg-white/90 p-[clamp(0.65rem,1.5vw,1rem)] shadow-xl shadow-navy-900/10'
-      : 'min-h-0 flex-1 rounded-3xl border border-blue-200/70 bg-white/90 p-6 shadow-xl shadow-navy-900/10'
+  useEffect(() => {
+    if (!chartExpanded) return undefined
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setChartExpanded(false)
+    }
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [chartExpanded])
 
+  const expandChart = () => setChartExpanded(true)
+
+  const renderRankingTable = ({ large = false } = {}) => (
+    <table
+      className={`w-full text-left ${
+        large
+          ? 'text-[clamp(1rem,2vw,1.35rem)]'
+          : 'text-[clamp(0.8rem,1.3vw,0.95rem)]'
+      }`}
+    >
+      <thead className="sticky top-0 bg-white">
+        <tr className="border-b border-blue-100">
+          <th className="px-2 py-1.5 font-semibold text-slate-700">Rank</th>
+          <th className="px-2 py-1.5 font-semibold text-slate-700">Option</th>
+          <th className="px-2 py-1.5 font-semibold text-slate-700">Score</th>
+          <th className="px-2 py-1.5 font-semibold text-slate-700">Avg</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rankingAnalytics.rankings.map((row) => (
+          <tr key={row.optionId} className="border-b border-blue-50 last:border-b-0">
+            <td className="px-2 py-1.5 font-semibold text-navy-900">{row.rank}</td>
+            <td className="px-2 py-1.5 text-slate-700">{row.optionText}</td>
+            <td className="px-2 py-1.5 text-slate-700">{row.totalScore}</td>
+            <td className="px-2 py-1.5 text-slate-700">{row.averageScore}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+
+  const renderChartBody = ({ compact = false, expanded = false } = {}) => {
     if (showEmojiReaction) {
       return (
-        <div className={panelClass}>
-          <p className="mb-2 shrink-0 text-[clamp(0.65rem,1.2vw,0.75rem)] font-semibold uppercase tracking-wider text-slate-500">
-            Emoji reactions
-          </p>
-          <EmojiBarChart
-            rows={emojiBarData.rows}
-            total={emojiBarData.total}
-            size="lg"
-            className={compact ? 'min-h-0 flex-1' : 'min-h-[40vh]'}
-          />
-        </div>
+        <EmojiBarChart
+          rows={emojiBarData.rows}
+          total={emojiBarData.total}
+          size="lg"
+          className={
+            expanded
+              ? 'min-h-[min(70vh,720px)] flex-1'
+              : compact
+                ? 'min-h-0 flex-1'
+                : 'min-h-[40vh]'
+          }
+        />
       )
     }
 
     if (showWordCloud) {
       return (
-        <div className={panelClass}>
-          <p className="mb-2 shrink-0 text-[clamp(0.65rem,1.2vw,0.75rem)] font-semibold uppercase tracking-wider text-slate-500">
-            Word cloud
-          </p>
-          <WordCloudChart
-            words={wordCloudWords}
-            className={compact ? 'min-h-0 flex-1' : 'h-full min-h-[40vh]'}
-            emptyLabel="Waiting for words…"
-            size={compact ? 'md' : 'lg'}
-          />
-        </div>
+        <WordCloudChart
+          words={wordCloudWords}
+          className={
+            expanded
+              ? 'h-full min-h-[min(70vh,720px)] flex-1'
+              : compact
+                ? 'min-h-0 flex-1'
+                : 'h-full min-h-[40vh]'
+          }
+          emptyLabel="Waiting for words…"
+          size={expanded || !compact ? 'lg' : 'md'}
+        />
       )
     }
 
     if (showRanking) {
-      return (
-        <div className={`${panelClass} overflow-auto`}>
-          <p className="mb-2 shrink-0 text-[clamp(0.65rem,1.2vw,0.75rem)] font-semibold uppercase tracking-wider text-slate-500">
-            Ranking results
-          </p>
-          <table className="w-full text-left text-[clamp(0.8rem,1.3vw,0.95rem)]">
-            <thead className="sticky top-0 bg-white">
-              <tr className="border-b border-blue-100">
-                <th className="px-2 py-1.5 font-semibold text-slate-700">Rank</th>
-                <th className="px-2 py-1.5 font-semibold text-slate-700">Option</th>
-                <th className="px-2 py-1.5 font-semibold text-slate-700">Score</th>
-                <th className="px-2 py-1.5 font-semibold text-slate-700">Avg</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rankingAnalytics.rankings.map((row) => (
-                <tr key={row.optionId} className="border-b border-blue-50 last:border-b-0">
-                  <td className="px-2 py-1.5 font-semibold text-navy-900">{row.rank}</td>
-                  <td className="px-2 py-1.5 text-slate-700">{row.optionText}</td>
-                  <td className="px-2 py-1.5 text-slate-700">{row.totalScore}</td>
-                  <td className="px-2 py-1.5 text-slate-700">{row.averageScore}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )
+      return renderRankingTable({ large: expanded })
     }
 
     if (hasChart) {
       return (
-        <div className={panelClass}>
-          <p className="mb-2 shrink-0 text-[clamp(0.65rem,1.2vw,0.75rem)] font-semibold uppercase tracking-wider text-slate-500">
-            Results
-          </p>
+        <>
           <PresentBarChart
             data={usesOptionChart ? optionData : chartData}
             rawType={chartRawType}
             answerRevealed={showRevealUi}
-            compact={compact}
+            compact={compact && !expanded}
           />
           {showRevealUi ? <PresentOptionsKey question={question} chartData={optionData} /> : null}
           {!hasChartResponses ? (
@@ -299,21 +337,83 @@ export function QuestionSlide({
               Waiting for participants to answer…
             </p>
           ) : null}
+        </>
+      )
+    }
+
+    return null
+  }
+
+  const resultsPanelMeta = showEmojiReaction
+    ? { title: 'Emoji reactions' }
+    : showWordCloud
+      ? { title: 'Word cloud' }
+      : showRanking
+        ? { title: 'Ranking results' }
+        : hasChart
+          ? { title: 'Results' }
+          : null
+
+  const renderResultsPanel = ({ compact = false } = {}) => {
+    const panelClass = compact
+      ? 'flex min-h-0 flex-1 flex-col rounded-3xl border border-blue-200/70 bg-white/90 p-[clamp(0.65rem,1.5vw,1rem)] shadow-xl shadow-navy-900/10'
+      : 'min-h-0 flex-1 rounded-3xl border border-blue-200/70 bg-white/90 p-6 shadow-xl shadow-navy-900/10'
+
+    if (!resultsPanelMeta) {
+      return (
+        <div className="flex min-h-0 flex-1 items-center justify-center rounded-3xl border border-dashed border-blue-200 bg-white/60">
+          <p className="text-[clamp(1rem,2.2vw,1.5rem)] font-semibold text-slate-500">
+            Waiting for participants to answer…
+          </p>
         </div>
       )
     }
 
     return (
-      <div className="flex min-h-0 flex-1 items-center justify-center rounded-3xl border border-dashed border-blue-200 bg-white/60">
-        <p className="text-[clamp(1rem,2.2vw,1.5rem)] font-semibold text-slate-500">
-          Waiting for participants to answer…
-        </p>
+      <div className={`${panelClass}${showRanking ? ' overflow-auto' : ''}`}>
+        <ResultsPanelHeader title={resultsPanelMeta.title} onExpand={expandChart} />
+        {renderChartBody({ compact })}
       </div>
     )
   }
 
+  const chartExpandedOverlay =
+    chartExpanded && resultsPanelMeta && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            className="fixed inset-0 z-[300] flex items-center justify-center bg-navy-950/85 p-4 backdrop-blur-sm"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${resultsPanelMeta.title} fullscreen`}
+            onClick={() => setChartExpanded(false)}
+          >
+            <button
+              type="button"
+              onClick={() => setChartExpanded(false)}
+              className="absolute right-4 top-4 z-[1] inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+            >
+              <X className="size-4" />
+              Close
+            </button>
+            <div
+              className="relative z-0 flex max-h-[92vh] min-h-[min(70vh,720px)] w-full max-w-[min(96vw,1400px)] flex-col overflow-hidden rounded-3xl border border-white/15 bg-white p-[clamp(1rem,2.5vw,1.75rem)] shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <p className="mb-3 shrink-0 text-[clamp(0.75rem,1.4vw,0.85rem)] font-semibold uppercase tracking-wider text-slate-500">
+                {resultsPanelMeta.title}
+              </p>
+              <div className={`flex min-h-0 flex-1 flex-col${showRanking ? ' overflow-auto' : ''}`}>
+                {renderChartBody({ compact: false, expanded: true })}
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null
+
   return (
     <div className="quiz-slide-in flex min-h-0 flex-1 flex-col">
+      {chartExpandedOverlay}
       <PresentSlideHeader
         sessionTitle={sessionTitle}
         sessionLogoUrl={session?.logo_url}
