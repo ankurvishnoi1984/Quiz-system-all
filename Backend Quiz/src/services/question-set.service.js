@@ -81,10 +81,10 @@ async function createQuestionSet({ sessionId, user, name }) {
     error.statusCode = 400;
     throw error;
   }
+  // Hosts can enable sets from Builder even if the session was created in
+  // host-paced (no navigation) mode — sets require participant navigation.
   if (session.participant_navigation_enabled === false) {
-    const error = new Error("Question sets are only available when participants can move between questions");
-    error.statusCode = 400;
-    throw error;
+    await session.update({ participant_navigation_enabled: true });
   }
 
   const existing = await QuestionSet.findAll({

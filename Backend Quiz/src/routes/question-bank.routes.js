@@ -57,6 +57,29 @@ router.post(
   controller.archiveQuestion
 );
 
+router.get("/packs", controller.listPacks);
+router.get("/packs/:packId", controller.getPack);
+router.post(
+  "/packs",
+  authorizeRoles("author", "auditor", "super_admin", "client_admin", "dept_admin"),
+  controller.createPack
+);
+router.put(
+  "/packs/:packId",
+  authorizeRoles("author", "auditor", "super_admin", "client_admin", "dept_admin"),
+  controller.updatePack
+);
+router.delete(
+  "/packs/:packId",
+  authorizeRoles("author", "auditor", "super_admin", "client_admin", "dept_admin"),
+  controller.deletePack
+);
+router.post(
+  "/sessions/:sessionId/packs/:packId",
+  authorizeRights("builder"),
+  controller.addPackToSession
+);
+
 router.post(
   "/sessions/:sessionId/add",
   authorizeRights("builder"),

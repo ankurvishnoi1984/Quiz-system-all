@@ -6,8 +6,11 @@ const {
   QuestionBankQuestion,
   QuestionBankOption,
   QuestionBankReview,
+  QuestionBankPack,
+  QuestionBankPackItem,
   Question,
   QuestionOption,
+  QuestionSet,
   Session,
   Department,
   Client,
@@ -46,6 +49,12 @@ const QUESTION_INCLUDE = [
     required: false
   },
   {
+    model: User,
+    as: "archiver",
+    attributes: ["user_id", "full_name", "email"],
+    required: false
+  },
+  {
     model: QuestionBankReview,
     as: "reviews",
     separate: true,
@@ -59,6 +68,20 @@ const QUESTION_INCLUDE = [
     order: [["reviewed_at", "DESC"]]
   }
 ];
+
+async function resolveSessionSetId(sessionId, setId) {
+  if (setId === undefined || setId === null || setId === "") return null;
+  const id = Number(setId);
+  if (!Number.isFinite(id) || id <= 0) {
+    throw createError("set_id must be a number", 400);
+  }
+  const row = await QuestionSet.findOne({
+    where: { set_id: id, session_id: sessionId },
+    attributes: ["set_id"]
+  });
+  if (!row) throw createError("Question set not found in this session", 400);
+  return id;
+}
 
 function createError(message, statusCode, details) {
   const error = new Error(message);
@@ -375,7 +398,15 @@ async function listQuestions({ user, query = {} }) {
   const page = Math.max(1, Number(query.page) || 1);
   const limit = Math.min(100, Math.max(1, Number(query.limit) || 25));
   const requestedStatus = query.status ? String(query.status).toLowerCase() : null;
-  const where = await listScopeWhere(user, requestedStatus);
+  const forPack = query.for_pack === "true" || query.for_pack === true;
+  const where = await listScopeWhere(user, forPack ? "approved" : requestedStatus, {
+    auditorQueueDefault: !forPack
+  });
+  if (forPack && user?.role === "author") {
+    delete where.author_id;
+    where.owner_id = accountOwnerId(user);
+    where.status = "approved";
+  }
   let filteredOwnerId = null;
   if (query.owner_id) {
     filteredOwnerId = await resolveActionOwnerId(user, query.owner_id);
@@ -609,7 +640,8 @@ async function reviewQuestion({ questionId, decision, comments, user }) {
           {
             status: "archived",
             archived_by: user.user_id,
-            archived_at: new Date()
+            archived_at: new Date(),
+            archived_reason: `Superseded by approved version ${question.version}`
           },
           {
             where: {
@@ -629,7 +661,7 @@ async function reviewQuestion({ questionId, decision, comments, user }) {
   });
 }
 
-async function archiveQuestion({ questionId, user }) {
+async function archiveQuestion({ questionId, reason, user }) {
   assertAuditor(user);
   const ownerWhere = await actionOwnerWhere(user);
   const question = await getBankQuestionOrThrow(questionId, {
@@ -638,9 +670,17 @@ async function archiveQuestion({ questionId, user }) {
   if (question.status !== "approved") {
     throw createError("Only approved questions can be archived", 400);
   }
+  const archivedReason = String(reason || "").trim();
+  if (!archivedReason) {
+    throw createError("Archive reason is required", 400);
+  }
+  if (archivedReason.length > 5000) {
+    throw createError("Archive reason must be 5000 characters or less", 400);
+  }
   question.status = "archived";
   question.archived_by = user.user_id;
   question.archived_at = new Date();
+  question.archived_reason = archivedReason;
   await question.save();
   return getBankQuestionOrThrow(question.bank_question_id);
 }
@@ -740,7 +780,7 @@ async function approvedQuestionsByIds(ids, ownerId) {
   });
 }
 
-async function copyBankQuestionsToSession({ sessionId, bankQuestionIds, user }) {
+async function copyBankQuestionsToSession({ sessionId, bankQuestionIds, setId, user }) {
   const ids = [...new Set((bankQuestionIds || []).map(Number).filter(Number.isInteger))];
   if (!ids.length) throw createError("Select at least one approved question", 400);
   if (ids.length > 100) throw createError("At most 100 questions can be added at once", 400);
@@ -751,6 +791,7 @@ async function copyBankQuestionsToSession({ sessionId, bankQuestionIds, user }) 
   if (session.status !== "draft") {
     throw createError("Question bank items can be added only to draft sessions", 400);
   }
+  const targetSetId = await resolveSessionSetId(session.session_id, setId);
   const targetOwnerId = Number(session.user?.parent_id || session.host_id);
 
   const bankQuestions = await approvedQuestionsByIds(ids, targetOwnerId);
@@ -762,7 +803,13 @@ async function copyBankQuestionsToSession({ sessionId, bankQuestionIds, user }) 
 
   const existing = await Question.findAll({
     where: { session_id: session.session_id },
-    attributes: ["question_id", "question_type", "source_bank_question_id", "display_order"],
+    attributes: [
+      "question_id",
+      "question_type",
+      "source_bank_question_id",
+      "set_id",
+      "display_order"
+    ],
     order: [["display_order", "DESC"]]
   });
   const existingTypes = new Set(existing.map((row) => row.question_type));
@@ -771,14 +818,26 @@ async function copyBankQuestionsToSession({ sessionId, bankQuestionIds, user }) 
     throw createError("Selected questions must match the session question type", 400);
   }
 
+  // Same bank question may be copied into different sets. Block only when it is
+  // already present in the target set (or anywhere, when sets are not used).
+  const usedInTarget = existing.filter((row) => {
+    const sourceId = Number(row.source_bank_question_id);
+    if (!Number.isInteger(sourceId)) return false;
+    if (targetSetId == null) return true;
+    return Number(row.set_id) === Number(targetSetId);
+  });
   const usedSourceIds = new Set(
-    existing.map((row) => Number(row.source_bank_question_id)).filter(Number.isInteger)
+    usedInTarget.map((row) => Number(row.source_bank_question_id)).filter(Number.isInteger)
   );
   const duplicates = ids.filter((id) => usedSourceIds.has(id));
   if (duplicates.length) {
-    throw createError("One or more selected questions are already in this session", 409, {
-      duplicate_ids: duplicates
-    });
+    throw createError(
+      targetSetId == null
+        ? "One or more selected questions are already in this session"
+        : "One or more selected questions are already in this set",
+      409,
+      { duplicate_ids: duplicates }
+    );
   }
 
   await assertSessionQuestionCapacity({
@@ -806,8 +865,13 @@ async function copyBankQuestionsToSession({ sessionId, bankQuestionIds, user }) 
           media_type: source.media_type,
           media_thumbnail_url: source.media_thumbnail_url,
           is_quiz_mode: source.is_quiz_mode,
-          points_value: source.is_quiz_mode ? null : 0,
-          time_limit_seconds: null,
+          points_value: source.is_quiz_mode
+            ? Number(source.points_value) > 0
+              ? Number(source.points_value)
+              : 10
+            : 0,
+          time_limit_seconds:
+            source.time_limit_seconds != null ? Number(source.time_limit_seconds) : null,
           allow_multiple_select: source.allow_multiple_select,
           rating_min: source.rating_min,
           rating_max: source.rating_max,
@@ -820,7 +884,7 @@ async function copyBankQuestionsToSession({ sessionId, bankQuestionIds, user }) 
           open_for_reattempt: false,
           submissions_closed: false,
           display_order: displayOrder,
-          set_id: null,
+          set_id: targetSetId,
           source_bank_question_id: source.bank_question_id
         },
         { transaction }
@@ -865,6 +929,7 @@ async function addRandomQuestionsToSession({
   difficultyCounts,
   questionType,
   count,
+  setId,
   user
 }) {
   const normalizedDifficulty = String(difficulty || "mixed").toLowerCase();
@@ -917,11 +982,16 @@ async function addRandomQuestionsToSession({
     where.difficulty = normalizedDifficulty;
   }
 
+  const usedWhere = {
+    session_id: Number(sessionId),
+    source_bank_question_id: { [Op.ne]: null }
+  };
+  const targetSetId = await resolveSessionSetId(session.session_id, setId);
+  if (targetSetId != null) {
+    usedWhere.set_id = targetSetId;
+  }
   const used = await Question.findAll({
-    where: {
-      session_id: Number(sessionId),
-      source_bank_question_id: { [Op.ne]: null }
-    },
+    where: usedWhere,
     attributes: ["source_bank_question_id"],
     raw: true
   });
@@ -958,6 +1028,7 @@ async function addRandomQuestionsToSession({
     return copyBankQuestionsToSession({
       sessionId,
       bankQuestionIds: shuffleUnique(selectedIds),
+      setId,
       user
     });
   }
@@ -974,6 +1045,7 @@ async function addRandomQuestionsToSession({
   return copyBankQuestionsToSession({
     sessionId,
     bankQuestionIds: selectedIds,
+    setId,
     user
   });
 }
@@ -1100,6 +1172,288 @@ async function importBankQuestions({ questions, owner_id, user }) {
   };
 }
 
+const PACK_INCLUDE = [
+  {
+    model: User,
+    as: "owner",
+    attributes: ["user_id", "full_name", "email", "client_id", "dept_id"]
+  },
+  {
+    model: User,
+    as: "creator",
+    attributes: ["user_id", "full_name", "email"]
+  },
+  {
+    model: QuestionBankPackItem,
+    as: "items",
+    separate: true,
+    order: [["display_order", "ASC"]],
+    include: [
+      {
+        model: QuestionBankQuestion,
+        as: "question",
+        include: [
+          { model: QuestionBankTopic, as: "topic" },
+          {
+            model: QuestionBankOption,
+            as: "options",
+            separate: true,
+            order: [["display_order", "ASC"]]
+          }
+        ]
+      }
+    ]
+  }
+];
+
+function assertPackManager(user) {
+  if (
+    !["author", "auditor", "super_admin", "client_admin", "dept_admin"].includes(user?.role)
+  ) {
+    throw createError("Pack management access denied", 403);
+  }
+}
+
+async function packOwnerWhere(user) {
+  if (isSuperAdmin(user)) return {};
+  if (["client_admin", "dept_admin"].includes(user?.role)) {
+    return { owner_id: { [Op.in]: await adminOwnerIds(user) } };
+  }
+  if (["author", "auditor"].includes(user?.role) || userHasRight(user, "builder")) {
+    return { owner_id: accountOwnerId(user) };
+  }
+  throw createError("Question bank access denied", 403);
+}
+
+async function uniquePackSlug(ownerId, name, { excludePackId = null, transaction } = {}) {
+  const base = slugify(name) || "pack";
+  let slug = base;
+  let suffix = 2;
+  while (true) {
+    const where = { owner_id: ownerId, slug };
+    if (excludePackId) where.pack_id = { [Op.ne]: excludePackId };
+    const existing = await QuestionBankPack.findOne({ where, transaction });
+    if (!existing) return slug.slice(0, 140);
+    slug = `${base}-${suffix}`.slice(0, 140);
+    suffix += 1;
+  }
+}
+
+async function validatePackQuestionIds(ownerId, bankQuestionIds) {
+  const ids = [...new Set((bankQuestionIds || []).map(Number).filter(Number.isInteger))];
+  if (!ids.length) throw createError("Select at least one approved question for this pack", 400);
+  if (ids.length > 100) throw createError("A pack can contain at most 100 questions", 400);
+
+  const rows = await QuestionBankQuestion.findAll({
+    where: {
+      owner_id: ownerId,
+      bank_question_id: { [Op.in]: ids },
+      status: "approved"
+    },
+    attributes: ["bank_question_id", "question_type", "question_text", "difficulty"]
+  });
+  if (rows.length !== ids.length) {
+    throw createError(
+      "Every pack question must be an approved question from this Host account",
+      400
+    );
+  }
+  const types = new Set(rows.map((row) => row.question_type));
+  if (types.size !== 1) {
+    throw createError("All questions in a pack must share the same question type", 400);
+  }
+  const byId = new Map(rows.map((row) => [Number(row.bank_question_id), row]));
+  return {
+    ids: ids.filter((id) => byId.has(id)),
+    questionType: rows[0].question_type,
+    rows: ids.map((id) => byId.get(id)).filter(Boolean)
+  };
+}
+
+async function getPackOrThrow(packId, { where = {}, includeItems = true } = {}) {
+  const pack = await QuestionBankPack.findOne({
+    where: { pack_id: Number(packId), ...where },
+    include: includeItems ? PACK_INCLUDE : [
+      {
+        model: User,
+        as: "owner",
+        attributes: ["user_id", "full_name", "email"]
+      },
+      {
+        model: User,
+        as: "creator",
+        attributes: ["user_id", "full_name", "email"]
+      }
+    ]
+  });
+  if (!pack) throw createError("Question pack not found", 404);
+  return pack;
+}
+
+function serializePack(pack) {
+  const plain = typeof pack.toJSON === "function" ? pack.toJSON() : pack;
+  const items = plain.items || [];
+  return {
+    ...plain,
+    question_count: items.length,
+    approved_question_count: items.filter((item) => item.question?.status === "approved").length
+  };
+}
+
+async function listPacks({ user, query = {} }) {
+  const where = await packOwnerWhere(user);
+  if (query.owner_id) {
+    where.owner_id = await resolveActionOwnerId(user, query.owner_id);
+  }
+  if (query.question_type) {
+    where.question_type = String(query.question_type).toLowerCase();
+  }
+  if (query.is_active === "true" || query.is_active === true) where.is_active = true;
+  if (query.is_active === "false" || query.is_active === false) where.is_active = false;
+  if (
+    userHasRight(user, "builder") &&
+    !["author", "auditor", "super_admin", "client_admin", "dept_admin"].includes(user?.role)
+  ) {
+    where.is_active = true;
+  }
+  if (query.search) {
+    const term = `%${String(query.search).trim()}%`;
+    where[Op.or] = [
+      { name: { [Op.like]: term } },
+      { description: { [Op.like]: term } }
+    ];
+  }
+
+  const packs = await QuestionBankPack.findAll({
+    where,
+    include: PACK_INCLUDE,
+    order: [
+      ["updated_at", "DESC"],
+      ["name", "ASC"]
+    ]
+  });
+  return packs.map(serializePack);
+}
+
+async function getPack({ packId, user }) {
+  const where = await packOwnerWhere(user);
+  const pack = await getPackOrThrow(packId, { where });
+  if (
+    userHasRight(user, "builder") &&
+    !["author", "auditor", "super_admin", "client_admin", "dept_admin"].includes(user?.role) &&
+    !pack.is_active
+  ) {
+    throw createError("Question pack not found", 404);
+  }
+  return serializePack(pack);
+}
+
+async function createPack({ input, user }) {
+  assertPackManager(user);
+  const name = String(input?.name || "").trim();
+  if (!name) throw createError("Pack name is required", 400);
+  if (name.length > 120) throw createError("Pack name must be 120 characters or less", 400);
+  const description = String(input?.description || "").trim() || null;
+  const ownerId = await resolveActionOwnerId(
+    user,
+    input?.owner_id || (["author", "auditor"].includes(user.role) ? accountOwnerId(user) : null)
+  );
+  const validated = await validatePackQuestionIds(ownerId, input?.bank_question_ids);
+  const slug = await uniquePackSlug(ownerId, name);
+
+  const packId = await sequelize.transaction(async (transaction) => {
+    const pack = await QuestionBankPack.create(
+      {
+        owner_id: ownerId,
+        name,
+        slug,
+        description,
+        question_type: validated.questionType,
+        is_active: input?.is_active === false ? false : true,
+        created_by: user.user_id
+      },
+      { transaction }
+    );
+    await QuestionBankPackItem.bulkCreate(
+      validated.ids.map((bankQuestionId, index) => ({
+        pack_id: pack.pack_id,
+        bank_question_id: bankQuestionId,
+        display_order: index + 1
+      })),
+      { transaction }
+    );
+    return pack.pack_id;
+  });
+  return getPack({ packId, user });
+}
+
+async function updatePack({ packId, input, user }) {
+  assertPackManager(user);
+  const where = await packOwnerWhere(user);
+  const pack = await getPackOrThrow(packId, { where, includeItems: false });
+
+  if (input?.name !== undefined) {
+    const name = String(input.name || "").trim();
+    if (!name) throw createError("Pack name is required", 400);
+    if (name.length > 120) throw createError("Pack name must be 120 characters or less", 400);
+    pack.name = name;
+    pack.slug = await uniquePackSlug(pack.owner_id, name, { excludePackId: pack.pack_id });
+  }
+  if (input?.description !== undefined) {
+    pack.description = String(input.description || "").trim() || null;
+  }
+  if (input?.is_active !== undefined) {
+    pack.is_active = Boolean(input.is_active);
+  }
+
+  await sequelize.transaction(async (transaction) => {
+    if (input?.bank_question_ids !== undefined) {
+      const validated = await validatePackQuestionIds(pack.owner_id, input.bank_question_ids);
+      pack.question_type = validated.questionType;
+      await QuestionBankPackItem.destroy({ where: { pack_id: pack.pack_id }, transaction });
+      await QuestionBankPackItem.bulkCreate(
+        validated.ids.map((bankQuestionId, index) => ({
+          pack_id: pack.pack_id,
+          bank_question_id: bankQuestionId,
+          display_order: index + 1
+        })),
+        { transaction }
+      );
+    }
+    await pack.save({ transaction });
+  });
+  return getPack({ packId: pack.pack_id, user });
+}
+
+async function deletePack({ packId, user }) {
+  assertPackManager(user);
+  const where = await packOwnerWhere(user);
+  const pack = await getPackOrThrow(packId, { where, includeItems: false });
+  await sequelize.transaction(async (transaction) => {
+    await QuestionBankPackItem.destroy({ where: { pack_id: pack.pack_id }, transaction });
+    await pack.destroy({ transaction });
+  });
+  return { deleted: true, pack_id: Number(packId) };
+}
+
+async function addPackToSession({ sessionId, packId, setId, user }) {
+  const where = await packOwnerWhere(user);
+  const pack = await getPackOrThrow(packId, { where });
+  if (!pack.is_active) throw createError("This question pack is inactive", 400);
+  const ids = (pack.items || [])
+    .filter((item) => item.question?.status === "approved")
+    .map((item) => Number(item.bank_question_id));
+  if (!ids.length) {
+    throw createError("This pack has no approved questions available to add", 400);
+  }
+  return copyBankQuestionsToSession({
+    sessionId,
+    bankQuestionIds: ids,
+    setId,
+    user
+  });
+}
+
 module.exports = {
   listOwners,
   listTopics,
@@ -1115,5 +1469,11 @@ module.exports = {
   copyBankQuestionsToSession,
   addRandomQuestionsToSession,
   previewBankImport,
-  importBankQuestions
+  importBankQuestions,
+  listPacks,
+  getPack,
+  createPack,
+  updatePack,
+  deletePack,
+  addPackToSession
 };

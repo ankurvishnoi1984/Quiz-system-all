@@ -17,6 +17,8 @@ const QuestionBankTopic = require("./question-bank-topic.model");
 const QuestionBankQuestion = require("./question-bank-question.model");
 const QuestionBankOption = require("./question-bank-option.model");
 const QuestionBankReview = require("./question-bank-review.model");
+const QuestionBankPack = require("./question-bank-pack.model");
+const QuestionBankPackItem = require("./question-bank-pack-item.model");
 const Response = require("./response.model");
 const QaQuestion = require("./qa-question.model");
 const QaUpvote = require("./qa-upvote.model");
@@ -112,7 +114,27 @@ QuestionBankReview.belongsTo(QuestionBankQuestion, {
 });
 QuestionBankQuestion.belongsTo(User, { foreignKey: "author_id", as: "author" });
 QuestionBankQuestion.belongsTo(User, { foreignKey: "approved_by", as: "approver" });
+QuestionBankQuestion.belongsTo(User, { foreignKey: "archived_by", as: "archiver" });
 QuestionBankReview.belongsTo(User, { foreignKey: "auditor_id", as: "auditor" });
+User.hasMany(QuestionBankPack, { foreignKey: "owner_id", as: "ownedBankPacks" });
+QuestionBankPack.belongsTo(User, { foreignKey: "owner_id", as: "owner" });
+QuestionBankPack.belongsTo(User, { foreignKey: "created_by", as: "creator" });
+QuestionBankPack.hasMany(QuestionBankPackItem, {
+  foreignKey: "pack_id",
+  as: "items"
+});
+QuestionBankPackItem.belongsTo(QuestionBankPack, {
+  foreignKey: "pack_id",
+  as: "pack"
+});
+QuestionBankQuestion.hasMany(QuestionBankPackItem, {
+  foreignKey: "bank_question_id",
+  as: "packItems"
+});
+QuestionBankPackItem.belongsTo(QuestionBankQuestion, {
+  foreignKey: "bank_question_id",
+  as: "question"
+});
 Question.belongsTo(QuestionBankQuestion, {
   foreignKey: "source_bank_question_id",
   as: "sourceBankQuestion"
@@ -164,6 +186,8 @@ const models = {
   QuestionBankQuestion,
   QuestionBankOption,
   QuestionBankReview,
+  QuestionBankPack,
+  QuestionBankPackItem,
   Response,
   QaQuestion,
   QaUpvote,

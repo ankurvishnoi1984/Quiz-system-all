@@ -71,8 +71,8 @@ import {
   hasNoActivePlan,
 } from '../components/dashboard/PlanExpiredNotice'
 
-/** Temporarily hide question-set management in the builder (backend support unchanged). */
-const QUESTION_SETS_UI_ENABLED = false
+/** Question-set management in the builder (exam Set A / Set B). */
+const QUESTION_SETS_UI_ENABLED = true
 
 function InlineEditableSessionTitle({ title, onSave, isSaving }) {
   const [editing, setEditing] = useState(false)
@@ -1761,10 +1761,34 @@ function BuilderPage() {
   const canQuickAddQuestion =
     isDraftSession && Boolean(sessionQuestionType) && !questionLimitReached
 
-  const canManageSets =
-    QUESTION_SETS_UI_ENABLED &&
-    isDraftSession &&
+  const canManageSets = QUESTION_SETS_UI_ENABLED && isDraftSession
+  const setsModeEnabled = QUESTION_SETS_UI_ENABLED && questionSets.length > 0
+  const navigationEnabledForSets =
     sessionQuery.data?.participant_navigation_enabled !== false
+
+  const setQuestionCounts = useMemo(() => {
+    return questionSets.map((set) => ({
+      set,
+      count: questions.filter((q) => Number(q.setId) === Number(set.set_id)).length,
+    }))
+  }, [questionSets, questions])
+
+  const setsBalanceWarning = useMemo(() => {
+    if (setQuestionCounts.length < 2) return ''
+    const counts = setQuestionCounts.map((row) => row.count)
+    const min = Math.min(...counts)
+    const max = Math.max(...counts)
+    if (max - min <= 1) return ''
+    return `Set sizes differ (${counts.join(' vs ')}). Aim for a similar number of questions in each set.`
+  }, [setQuestionCounts])
+
+  const unassignedQuestionCount = useMemo(
+    () =>
+      setsModeEnabled
+        ? questions.filter((question) => question.setId == null).length
+        : 0,
+    [setsModeEnabled, questions],
+  )
 
   const [renamingSetId, setRenamingSetId] = useState(null)
   const [setRenameDraft, setSetRenameDraft] = useState('')
@@ -1914,12 +1938,64 @@ function BuilderPage() {
   }
 
   const createSetMutation = useMutation({
-    mutationFn: () => createQuestionSetApi(accessToken, Number(sessionId)),
+    mutationFn: async (name) => {
+      const created = await createQuestionSetApi(
+        accessToken,
+        Number(sessionId),
+        typeof name === 'string' ? name : undefined,
+      )
+      if (!navigationEnabledForSets) {
+        await updateSessionApi(accessToken, Number(sessionId), {
+          participant_navigation_enabled: true,
+        })
+      }
+      return created
+    },
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['builder-question-sets', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['builder-session', sessionId] })
       if (created?.set_id) setActiveSetId(Number(created.set_id))
+      setSaveSuccess('Set added. Select it, then add questions from the Question Bank.')
     },
     onError: (error) => setSaveError(error.message || 'Unable to create a set'),
+  })
+
+  const enableSetsMutation = useMutation({
+    mutationFn: async () => {
+      if (!navigationEnabledForSets) {
+        await updateSessionApi(accessToken, Number(sessionId), {
+          participant_navigation_enabled: true,
+        })
+      }
+      const first = await createQuestionSetApi(accessToken, Number(sessionId), 'Set A')
+      const second = await createQuestionSetApi(accessToken, Number(sessionId), 'Set B')
+      return { first, second }
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['builder-question-sets', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['builder-session', sessionId] })
+      if (result?.first?.set_id) setActiveSetId(Number(result.first.set_id))
+      setSaveSuccess(
+        'Sets mode on. Add approved bank questions into Set A and Set B.',
+      )
+    },
+    onError: (error) => setSaveError(error.message || 'Unable to enable sets'),
+  })
+
+  const disableSetsMutation = useMutation({
+    mutationFn: async () => {
+      for (const set of questionSets) {
+        await deleteQuestionSetApi(accessToken, Number(sessionId), set.set_id)
+      }
+    },
+    onSuccess: () => {
+      setQuestions((prev) => prev.map((question) => ({ ...question, setId: null })))
+      setActiveSetId(null)
+      setDirty(true)
+      queryClient.invalidateQueries({ queryKey: ['builder-question-sets', sessionId] })
+      setSaveSuccess('Sets mode off. All questions are in one shared list.')
+    },
+    onError: (error) => setSaveError(error.message || 'Unable to turn off sets'),
   })
 
   const renameSetMutation = useMutation({
@@ -2120,11 +2196,25 @@ function BuilderPage() {
         throw new Error('Cannot remove questions while the session is live.')
       }
 
-      if (QUESTION_SETS_UI_ENABLED && isDraft && questionSets.length >= 2) {
+      if (QUESTION_SETS_UI_ENABLED && isDraft && questionSets.length > 0) {
+        if (questionSets.length < 2) {
+          throw new Error(
+            'Sets mode needs at least Set A and Set B. Add another set, or turn sets off.',
+          )
+        }
         const unassigned = questions.filter((item) => item.setId == null)
         if (unassigned.length) {
           throw new Error(
-            'Assign every question to a set. Each participant is given one random set.',
+            `Assign every question to a set (${unassigned.length} still unassigned). Each participant gets one random set.`,
+          )
+        }
+        const emptySets = questionSets.filter(
+          (set) =>
+            !questions.some((item) => Number(item.setId) === Number(set.set_id)),
+        )
+        if (emptySets.length) {
+          throw new Error(
+            `Add at least one question to: ${emptySets.map((set) => set.name).join(', ')}.`,
           )
         }
       }
@@ -2531,37 +2621,87 @@ function BuilderPage() {
               </span>
             </div>
 
-            {QUESTION_SETS_UI_ENABLED &&
-            sessionQuery.data?.participant_navigation_enabled !== false ? (
+            {QUESTION_SETS_UI_ENABLED ? (
               <div className="mt-3 rounded-xl border border-indigo-200/80 bg-indigo-50/60 px-3 py-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-950">
                       <Layers className="size-3.5" />
-                      Question sets
+                      Session mode
                     </p>
                     <p className="mt-1 text-[11px] leading-relaxed text-indigo-900/80">
-                      Optional. Create Set A, Set B, … with different questions. Each participant
-                      is randomly given one set when they join.
+                      {setsModeEnabled
+                        ? 'Sets mode: build Set A / Set B from approved bank questions. Each participant gets one random set.'
+                        : 'Single list: everyone sees the same questions. Turn on Sets for exam-style variants.'}
                     </p>
+                    {!isDraftSession ? (
+                      <p className="mt-1 text-[11px] font-semibold text-amber-800">
+                        Sets can only be changed while the session is a draft.
+                      </p>
+                    ) : null}
                   </div>
-                  <button
-                    type="button"
-                    disabled={!canManageSets || createSetMutation.isPending}
-                    onClick={() => createSetMutation.mutate()}
-                    className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-indigo-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-indigo-900 transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Plus className="size-3.5" />
-                    Add set
-                  </button>
+                  {canManageSets ? (
+                    setsModeEnabled ? (
+                      <div className="flex shrink-0 flex-col items-stretch gap-1.5">
+                        <button
+                          type="button"
+                          disabled={createSetMutation.isPending}
+                          onClick={() => createSetMutation.mutate()}
+                          className="inline-flex items-center justify-center gap-1 rounded-lg border border-indigo-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-indigo-900 transition hover:bg-indigo-50 disabled:opacity-50"
+                        >
+                          <Plus className="size-3.5" />
+                          Add set
+                        </button>
+                        <button
+                          type="button"
+                          disabled={disableSetsMutation.isPending}
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                'Turn off Sets mode? Questions stay in the session but leave their sets.',
+                              )
+                            ) {
+                              disableSetsMutation.mutate()
+                            }
+                          }}
+                          className="rounded-lg px-2.5 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-white/80 disabled:opacity-50"
+                        >
+                          Use single list
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={enableSetsMutation.isPending}
+                        onClick={() => enableSetsMutation.mutate()}
+                        className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-indigo-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-indigo-900 transition hover:bg-indigo-50 disabled:opacity-50"
+                      >
+                        <Layers className="size-3.5" />
+                        Enable sets
+                      </button>
+                    )
+                  ) : null}
                 </div>
-                {questionSets.length ? (
-                  <p className="mt-2 text-[11px] leading-relaxed text-indigo-900/70">
-                    Questions are grouped by set below. New questions go to the{' '}
-                    <span className="font-semibold">selected</span> set — click a set heading to
-                    select it, or drag questions between sets. Questions outside every set are
-                    shown to all participants.
-                  </p>
+
+                {setsModeEnabled ? (
+                  <div className="mt-2 space-y-1.5">
+                    <p className="text-[11px] leading-relaxed text-indigo-900/70">
+                      1) Select a set below → 2) Add from Question Bank into that set → 3) Save.
+                      Click a set heading to select it, or drag questions between sets.
+                    </p>
+                    {unassignedQuestionCount > 0 ? (
+                      <p className="text-[11px] font-semibold text-amber-800">
+                        {unassignedQuestionCount} question
+                        {unassignedQuestionCount === 1 ? '' : 's'} still unassigned — assign
+                        before saving.
+                      </p>
+                    ) : null}
+                    {setsBalanceWarning ? (
+                      <p className="text-[11px] font-semibold text-amber-800">
+                        {setsBalanceWarning}
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
             ) : null}
@@ -2772,7 +2912,7 @@ function BuilderPage() {
                       }}
                       className="h-8 rounded-lg border border-indigo-200 bg-white px-2 text-xs font-semibold text-indigo-950 outline-none disabled:bg-slate-50"
                     >
-                      <option value="">Unassigned</option>
+                      <option value="">Choose set…</option>
                       {questionSets.map((set) => (
                         <option key={set.set_id} value={set.set_id}>
                           {set.name}
@@ -3177,6 +3317,8 @@ function BuilderPage() {
         onClose={() => setQuestionBankOpen(false)}
         accessToken={accessToken}
         sessionId={sessionId}
+        setId={QUESTION_SETS_UI_ENABLED ? activeSetId : null}
+        sets={QUESTION_SETS_UI_ENABLED ? questionSets : []}
         lockedType={sessionQuestionType}
         remainingSlots={
           maxQuestionsPerSession == null

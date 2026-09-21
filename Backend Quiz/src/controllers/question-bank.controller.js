@@ -128,6 +128,7 @@ async function archiveQuestion(req, res) {
   try {
     const question = await questionBankService.archiveQuestion({
       questionId: req.params.questionId,
+      reason: req.body?.reason || req.body?.comments,
       user: req.user
     });
     return successResponse(res, { question }, "Question archived");
@@ -153,6 +154,7 @@ async function addToSession(req, res) {
     const result = await questionBankService.copyBankQuestionsToSession({
       sessionId: req.params.sessionId,
       bankQuestionIds: req.body?.bank_question_ids,
+      setId: req.body?.set_id,
       user: req.user
     });
     return successResponse(res, result, "Questions added from bank", 201);
@@ -170,9 +172,85 @@ async function addRandomToSession(req, res) {
       difficultyCounts: req.body?.difficulty_counts,
       questionType: req.body?.question_type,
       count: req.body?.count,
+      setId: req.body?.set_id,
       user: req.user
     });
     return successResponse(res, result, "Random questions added from bank", 201);
+  } catch (err) {
+    return sendError(res, err);
+  }
+}
+
+async function listPacks(req, res) {
+  try {
+    const packs = await questionBankService.listPacks({
+      user: req.user,
+      query: req.query
+    });
+    return successResponse(res, { packs }, "Question packs fetched");
+  } catch (err) {
+    return sendError(res, err);
+  }
+}
+
+async function getPack(req, res) {
+  try {
+    const pack = await questionBankService.getPack({
+      packId: req.params.packId,
+      user: req.user
+    });
+    return successResponse(res, { pack }, "Question pack fetched");
+  } catch (err) {
+    return sendError(res, err);
+  }
+}
+
+async function createPack(req, res) {
+  try {
+    const pack = await questionBankService.createPack({
+      input: req.body,
+      user: req.user
+    });
+    return successResponse(res, { pack }, "Question pack created", 201);
+  } catch (err) {
+    return sendError(res, err);
+  }
+}
+
+async function updatePack(req, res) {
+  try {
+    const pack = await questionBankService.updatePack({
+      packId: req.params.packId,
+      input: req.body,
+      user: req.user
+    });
+    return successResponse(res, { pack }, "Question pack updated");
+  } catch (err) {
+    return sendError(res, err);
+  }
+}
+
+async function deletePack(req, res) {
+  try {
+    const result = await questionBankService.deletePack({
+      packId: req.params.packId,
+      user: req.user
+    });
+    return successResponse(res, result, "Question pack deleted");
+  } catch (err) {
+    return sendError(res, err);
+  }
+}
+
+async function addPackToSession(req, res) {
+  try {
+    const result = await questionBankService.addPackToSession({
+      sessionId: req.params.sessionId,
+      packId: req.params.packId,
+      setId: req.body?.set_id,
+      user: req.user
+    });
+    return successResponse(res, result, "Pack questions added to session", 201);
   } catch (err) {
     return sendError(res, err);
   }
@@ -236,6 +314,12 @@ module.exports = {
   createRevision,
   addToSession,
   addRandomToSession,
+  listPacks,
+  getPack,
+  createPack,
+  updatePack,
+  deletePack,
+  addPackToSession,
   previewImport,
   confirmImport
 };

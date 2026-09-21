@@ -92,11 +92,14 @@ export async function reviewQuestionBankQuestionApi(
   return data?.question
 }
 
-export async function archiveQuestionBankQuestionApi(accessToken, questionId) {
+export async function archiveQuestionBankQuestionApi(accessToken, questionId, reason) {
   const data = await hostAuthRequest(
     `/question-bank/questions/${questionId}/archive`,
     accessToken,
-    { method: 'POST' },
+    {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    },
   )
   return data?.question
 }
@@ -128,10 +131,14 @@ export async function addQuestionBankQuestionsToSessionApi(
   accessToken,
   sessionId,
   bankQuestionIds,
+  setId = null,
 ) {
   return hostAuthRequest(`/question-bank/sessions/${sessionId}/add`, accessToken, {
     method: 'POST',
-    body: JSON.stringify({ bank_question_ids: bankQuestionIds }),
+    body: JSON.stringify({
+      bank_question_ids: bankQuestionIds,
+      ...(setId != null ? { set_id: setId } : {}),
+    }),
   })
 }
 
@@ -149,3 +156,4 @@ export async function addRandomQuestionBankQuestionsApi(
     },
   )
 }
+

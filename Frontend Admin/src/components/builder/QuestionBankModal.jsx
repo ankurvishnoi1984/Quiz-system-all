@@ -43,6 +43,8 @@ export function QuestionBankModal({
   onClose,
   accessToken,
   sessionId,
+  setId = null,
+  sets = [],
   lockedType,
   remainingSlots,
   onAdded,
@@ -54,6 +56,7 @@ export function QuestionBankModal({
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState(() => new Set())
   const [mediaPreviewId, setMediaPreviewId] = useState(null)
+  const [targetSetId, setTargetSetId] = useState(setId)
   const [randomCount, setRandomCount] = useState(10)
   const [difficultyCounts, setDifficultyCounts] = useState(() =>
     distributeDifficultyCounts(10),
@@ -68,11 +71,25 @@ export function QuestionBankModal({
     setSearch('')
     setSelected(new Set())
     setMediaPreviewId(null)
+    setTargetSetId(setId)
     const initialRandomCount = Math.max(1, Math.min(10, remainingSlots ?? 10))
     setRandomCount(initialRandomCount)
     setDifficultyCounts(distributeDifficultyCounts(initialRandomCount))
     setError('')
-  }, [open, lockedApiType, remainingSlots])
+  }, [open, lockedApiType, remainingSlots, setId])
+
+  useEffect(() => {
+    if (!sets.length) {
+      setTargetSetId(null)
+      return
+    }
+    if (
+      targetSetId == null ||
+      !sets.some((set) => Number(set.set_id) === Number(targetSetId))
+    ) {
+      setTargetSetId(Number(sets[0].set_id))
+    }
+  }, [sets, targetSetId])
 
   const topicsQuery = useQuery({
     queryKey: ['question-bank-topics', 'host-select'],
@@ -97,6 +114,7 @@ export function QuestionBankModal({
 
   const maxSelectable = remainingSlots == null ? 100 : Math.max(0, remainingSlots)
   const selectedIds = useMemo(() => [...selected].map(Number), [selected])
+  const resolvedSetId = sets.length ? targetSetId : null
 
   const addMutation = useMutation({
     mutationFn: () =>
@@ -104,6 +122,7 @@ export function QuestionBankModal({
         accessToken,
         sessionId,
         selectedIds,
+        resolvedSetId,
       ),
     onSuccess: (result) => {
       onAdded?.(result)
@@ -123,6 +142,7 @@ export function QuestionBankModal({
           difficulty === 'mixed'
             ? undefined
             : Math.max(1, Math.min(Number(randomCount) || 10, maxSelectable)),
+        set_id: resolvedSetId || undefined,
       }),
     onSuccess: (result) => {
       onAdded?.(result)
@@ -146,6 +166,8 @@ export function QuestionBankModal({
   }
 
   const busy = addMutation.isPending || randomMutation.isPending
+  const needsTargetSet = sets.length > 0
+  const hasTargetSet = !needsTargetSet || targetSetId != null
   const mixedTotal = Object.values(difficultyCounts).reduce(
     (sum, value) => sum + (Number(value) || 0),
     0,
@@ -155,6 +177,31 @@ export function QuestionBankModal({
   return (
     <Modal open={open} title="Select from Question Bank" onClose={onClose} size="xl">
       <div className="space-y-5">
+        {sets.length ? (
+          <label className="block space-y-1 text-sm font-semibold text-slate-700">
+            Add questions to set
+            <select
+              value={targetSetId ?? ''}
+              onChange={(event) =>
+                setTargetSetId(event.target.value ? Number(event.target.value) : null)
+              }
+              className="input-modern"
+            >
+              {sets.map((set) => (
+                <option key={set.set_id} value={set.set_id}>
+                  {set.name}
+                </option>
+              ))}
+            </select>
+            <span className="block text-xs font-medium text-slate-500">
+              Each participant will later receive one random set for this session.
+            </span>
+          </label>
+        ) : (
+          <p className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+            Sets mode is off — questions are added to the shared session list.
+          </p>
+        )}
         <div className="grid gap-3 md:grid-cols-4">
           <label className="space-y-1 text-sm font-semibold text-slate-700">
             Topic
@@ -251,6 +298,7 @@ export function QuestionBankModal({
                 !topicId ||
                 !questionType ||
                 busy ||
+                !hasTargetSet ||
                 maxSelectable <= 0 ||
                 randomRequested < 1 ||
                 randomRequested > Math.min(50, maxSelectable)
@@ -379,7 +427,7 @@ export function QuestionBankModal({
             </button>
             <button
               type="button"
-              disabled={!selected.size || busy}
+              disabled={!selected.size || busy || !hasTargetSet}
               onClick={() => addMutation.mutate()}
               className="inline-flex min-w-36 items-center justify-center gap-2 rounded-xl bg-linear-to-r from-blue-700 to-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-blue-700/20 transition hover:from-blue-800 hover:to-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >

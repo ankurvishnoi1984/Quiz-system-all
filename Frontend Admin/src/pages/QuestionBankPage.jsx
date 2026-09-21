@@ -391,10 +391,26 @@ function QuestionDetailsModal({ question, onClose }) {
         <div className="grid gap-3 rounded-2xl bg-slate-50 p-4 text-sm sm:grid-cols-2">
           <div><span className="text-slate-500">Type</span><p className="font-semibold text-slate-900">{label(question.question_type)}</p></div>
           <div><span className="text-slate-500">Status</span><p className="font-semibold text-slate-900">{label(question.status)}</p></div>
+          <div><span className="text-slate-500">Difficulty</span><p className="font-semibold text-slate-900">{label(question.difficulty)}</p></div>
+          <div><span className="text-slate-500">Topic</span><p className="font-semibold text-slate-900">{question.topic?.name || '—'}</p></div>
+          <div><span className="text-slate-500">Points</span><p className="font-semibold text-slate-900">{question.is_quiz_mode ? question.points_value ?? '—' : 'N/A'}</p></div>
+          <div><span className="text-slate-500">Time limit</span><p className="font-semibold text-slate-900">{question.time_limit_seconds ? `${question.time_limit_seconds}s` : '—'}</p></div>
           <div><span className="text-slate-500">Created</span><p className="font-semibold text-slate-900">{question.created_at ? new Date(question.created_at).toLocaleString() : '—'}</p></div>
           <div><span className="text-slate-500">Last updated</span><p className="font-semibold text-slate-900">{question.updated_at ? new Date(question.updated_at).toLocaleString() : '—'}</p></div>
           <div><span className="text-slate-500">Submitted</span><p className="font-semibold text-slate-900">{question.submitted_at ? new Date(question.submitted_at).toLocaleString() : '—'}</p></div>
-          <div><span className="text-slate-500">Approved by</span><p className="font-semibold text-slate-900">{question.approver?.full_name || '—'}</p></div>
+          <div><span className="text-slate-500">Approved by</span><p className="font-semibold text-slate-900">{question.approver?.full_name || question.approver?.email || '—'}</p></div>
+          <div><span className="text-slate-500">Approved at</span><p className="font-semibold text-slate-900">{question.approved_at ? new Date(question.approved_at).toLocaleString() : '—'}</p></div>
+          <div><span className="text-slate-500">Author</span><p className="font-semibold text-slate-900">{question.author?.full_name || question.author?.email || '—'}</p></div>
+          {question.status === 'archived' ? (
+            <>
+              <div><span className="text-slate-500">Archived by</span><p className="font-semibold text-slate-900">{question.archiver?.full_name || question.archiver?.email || '—'}</p></div>
+              <div><span className="text-slate-500">Archived at</span><p className="font-semibold text-slate-900">{question.archived_at ? new Date(question.archived_at).toLocaleString() : '—'}</p></div>
+              <div className="sm:col-span-2">
+                <span className="text-slate-500">Archive reason</span>
+                <p className="font-semibold text-slate-900">{question.archived_reason || '—'}</p>
+              </div>
+            </>
+          ) : null}
         </div>
         <div>
           <h3 className="font-bold text-navy-950">Review history</h3>
@@ -416,6 +432,58 @@ function QuestionDetailsModal({ question, onClose }) {
           ) : (
             <p className="mt-2 text-sm text-slate-500">No review decision recorded yet.</p>
           )}
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function ArchiveReasonModal({ open, question, busy, onClose, onConfirm }) {
+  const [reason, setReason] = useState('')
+  useEffect(() => {
+    if (open) setReason('')
+  }, [open, question?.bank_question_id])
+  if (!open || !question) return null
+  const trimmed = reason.trim()
+  return (
+    <Modal
+      open
+      title="Archive question"
+      subtitle="This removes the question from Host selection. Existing session copies stay unchanged."
+      onClose={busy ? undefined : onClose}
+      size="md"
+    >
+      <div className="space-y-4">
+        <p className="text-sm text-slate-600 line-clamp-3">{question.question_text}</p>
+        <label className="block text-sm font-semibold text-slate-800">
+          Reason for archiving
+          <textarea
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            rows={4}
+            maxLength={5000}
+            placeholder="Explain why this question is being archived…"
+            className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-blue-400"
+          />
+        </label>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onClose}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={busy || !trimmed}
+            onClick={() => onConfirm(trimmed)}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busy ? <LoaderCircle className="size-4 animate-spin" /> : <Archive className="size-4" />}
+            Archive
+          </button>
         </div>
       </div>
     </Modal>
@@ -861,6 +929,7 @@ export default function QuestionBankPage() {
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search)
   const [detailQuestion, setDetailQuestion] = useState(null)
+  const [archiveTarget, setArchiveTarget] = useState(null)
   const [reviewComments, setReviewComments] = useState({})
   const [actionAlert, setActionAlert] = useState(null)
   const [importOpen, setImportOpen] = useState(false)
@@ -919,7 +988,7 @@ export default function QuestionBankPage() {
   }
 
   const actionMutation = useMutation({
-    mutationFn: async ({ action, question, decision }) => {
+    mutationFn: async ({ action, question, decision, reason }) => {
       if (action === 'submit') {
         return submitQuestionBankQuestionApi(accessToken, question.bank_question_id)
       }
@@ -927,7 +996,11 @@ export default function QuestionBankPage() {
         return reviseQuestionBankQuestionApi(accessToken, question.bank_question_id)
       }
       if (action === 'archive') {
-        return archiveQuestionBankQuestionApi(accessToken, question.bank_question_id)
+        return archiveQuestionBankQuestionApi(
+          accessToken,
+          question.bank_question_id,
+          reason,
+        )
       }
       return reviewQuestionBankQuestionApi(accessToken, question.bank_question_id, {
         decision,
@@ -936,6 +1009,9 @@ export default function QuestionBankPage() {
     },
     onSuccess: (result, variables) => {
       refresh()
+      if (variables.action === 'archive') {
+        setArchiveTarget(null)
+      }
       if (variables.action === 'revise' && result) {
         setEditing(result)
         setEditorOpen(true)
@@ -1259,7 +1335,7 @@ export default function QuestionBankPage() {
                 {canAudit && question.status === 'approved' ? (
                   <button
                     type="button"
-                    onClick={() => actionMutation.mutate({ action: 'archive', question })}
+                    onClick={() => setArchiveTarget(question)}
                     className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:border-red-300 hover:bg-red-50 hover:text-red-700"
                   >
                     <Archive className="size-4" /> Archive
@@ -1279,6 +1355,16 @@ export default function QuestionBankPage() {
       <QuestionDetailsModal
         question={detailQuestion}
         onClose={() => setDetailQuestion(null)}
+      />
+
+      <ArchiveReasonModal
+        open={Boolean(archiveTarget)}
+        question={archiveTarget}
+        busy={actionMutation.isPending && actionMutation.variables?.action === 'archive'}
+        onClose={() => setArchiveTarget(null)}
+        onConfirm={(reason) =>
+          actionMutation.mutate({ action: 'archive', question: archiveTarget, reason })
+        }
       />
 
       <HostAlertModal

@@ -95,7 +95,8 @@ const QuestionBankQuestion = sequelize.define(
     approved_by: DataTypes.INTEGER,
     approved_at: DataTypes.DATE,
     archived_by: DataTypes.INTEGER,
-    archived_at: DataTypes.DATE
+    archived_at: DataTypes.DATE,
+    archived_reason: DataTypes.TEXT
   },
   {
     tableName: "question_bank_questions",
