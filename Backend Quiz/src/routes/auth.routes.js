@@ -13,6 +13,7 @@ router.get("/features", authController.features);
 router.post("/signup", authController.signup);
 router.post("/register", authMiddleware, authorizeRoles("super_admin"), authController.register);
 router.post("/login", authController.login);
+router.post("/google", authController.googleLogin);
 router.post("/login/verify-otp", otpVerifyIpRateLimit, authController.verifyLoginOtp);
 router.post("/renew/start", otpSendIpRateLimit, authController.renewStart);
 router.post("/renew/verify-otp", otpVerifyIpRateLimit, authController.renewVerifyOtp);

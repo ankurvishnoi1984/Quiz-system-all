@@ -121,6 +121,7 @@ export async function fetchAuthFeaturesApi() {
     response?.data || {
       payment_otp_enabled: true,
       login_otp_enabled: true,
+      google_auth_enabled: false,
     }
   )
 }

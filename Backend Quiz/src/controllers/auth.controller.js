@@ -2,6 +2,7 @@ const {
   registerUser,
   signupUser,
   loginUser,
+  loginWithGoogle,
   verifyLoginOtp,
   startPlanRenew,
   verifyPlanRenewOtp,
@@ -20,6 +21,7 @@ const {
   validateRegisterPayload,
   validateForgotPasswordPayload,
   validateSignupPayload,
+  validateGoogleLoginPayload,
   validateSendOtpPayload,
   validateVerifyOtpPayload,
   validateVerifyLoginOtpPayload,
@@ -53,7 +55,7 @@ async function signup(req, res) {
     const result = await signupUser(req.body);
     return successResponse(res, result, "Account created successfully", 201);
   } catch (err) {
-    return errorResponse(res, err.message, err.statusCode || 500);
+    return errorResponse(res, err.message, err.statusCode || 500, null, err.code || null);
   }
 }
 
@@ -70,7 +72,27 @@ async function login(req, res) {
       : "Login successful";
     return successResponse(res, result, message, 200);
   } catch (err) {
-    return errorResponse(res, err.message, err.statusCode || 500);
+    return errorResponse(res, err.message, err.statusCode || 500, null, err.code || null);
+  }
+}
+
+async function googleLogin(req, res) {
+  try {
+    const errors = validateGoogleLoginPayload(req.body);
+    if (errors.length > 0) {
+      return errorResponse(res, "Validation failed", 400, errors);
+    }
+
+    const result = await loginWithGoogle(req.body);
+    return successResponse(res, result, "Login successful", 200);
+  } catch (err) {
+    return errorResponse(
+      res,
+      err.message,
+      err.statusCode || 500,
+      null,
+      err.code || null
+    );
   }
 }
 
@@ -317,6 +339,7 @@ module.exports = {
   register,
   signup,
   login,
+  googleLogin,
   verifyLoginOtp: verifyLoginOtpHandler,
   renewStart,
   renewVerifyOtp,

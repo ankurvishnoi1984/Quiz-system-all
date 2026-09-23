@@ -31,12 +31,22 @@ const {
 } = require("./otp.service");
 const { normalizeMobile, isValidMobile } = require("../utils/phone");
 const { getEffectiveRights, getDataScope } = require("../config/user-rights");
+const {
+  isFirebaseAuthConfigured,
+  verifyFirebaseIdToken
+} = require("../config/firebase-admin");
 
 const FORGOT_PASSWORD_SUCCESS_MESSAGE =
   "Reset credentials have been sent to your email. Please check your inbox.";
 
 const FORGOT_PASSWORD_NOT_FOUND_MESSAGE =
   "Account for the given email does not exist";
+
+const GOOGLE_ONLY_LOGIN_MESSAGE =
+  "This account uses Google sign-in. Please continue with Google.";
+
+const GOOGLE_ONLY_FORGOT_PASSWORD_MESSAGE =
+  "This account uses Google sign-in. Use Continue with Google on the login page instead of resetting a password.";
 
 function isMustChangePassword(value) {
   return value === true || value === 1;
@@ -131,12 +141,46 @@ async function signupUser(input) {
   }
   const mobileNumber = normalizeMobile(mobileRaw);
 
+  const firebaseToken = String(
+    input.firebase_id_token || input.firebaseIdToken || input.idToken || input.id_token || ""
+  ).trim();
+  const usingGoogle = Boolean(firebaseToken);
+  let firebaseIdentity = null;
+
+  if (usingGoogle) {
+    firebaseIdentity = await verifyFirebaseIdToken(firebaseToken);
+    if (firebaseIdentity.email !== email) {
+      const error = new Error("Google account email does not match the registration email");
+      error.statusCode = 400;
+      throw error;
+    }
+  } else if (!input.password || typeof input.password !== "string") {
+    const error = new Error("password is required");
+    error.statusCode = 400;
+    throw error;
+  } else if (input.password.length < 8) {
+    const error = new Error("password must be at least 8 characters");
+    error.statusCode = 400;
+    throw error;
+  }
+
   const existingUser = await User.findOne({ where: { email } });
 
   if (existingUser) {
     const error = new Error("Email already registered");
     error.statusCode = 409;
     throw error;
+  }
+
+  if (usingGoogle) {
+    const existingFirebase = await User.findOne({
+      where: { firebase_uid: firebaseIdentity.uid }
+    });
+    if (existingFirebase) {
+      const error = new Error("This Google account is already linked to another user");
+      error.statusCode = 409;
+      throw error;
+    }
   }
 
   const existingMobile = await User.findOne({ where: { mobile_number: mobileNumber } });
@@ -180,7 +224,12 @@ async function signupUser(input) {
     ? addDaysToDateOnly(plan.default_duration_days)
     : null;
 
-  const password_hash = await bcrypt.hash(input.password, 10);
+  const password_hash = usingGoogle
+    ? null
+    : await bcrypt.hash(input.password, 10);
+  const fullName = String(
+    input.full_name || firebaseIdentity?.name || ""
+  ).trim();
   const transaction = await sequelize.transaction();
 
   try {
@@ -188,10 +237,12 @@ async function signupUser(input) {
 
     const user = await User.create(
       {
-        full_name: input.full_name.trim(),
+        full_name: fullName,
         email,
         mobile_number: mobileNumber,
         password_hash,
+        firebase_uid: usingGoogle ? firebaseIdentity.uid : null,
+        avatar_url: usingGoogle ? firebaseIdentity.picture : null,
         role: "host",
         client_id: client.client_id,
         dept_id: department.dept_id,
@@ -224,9 +275,10 @@ async function signupUser(input) {
   try {
     await sendWebsiteSignupWelcomeEmail({
       to: email,
-      fullName: input.full_name.trim(),
+      fullName,
       email,
-      password: input.password,
+      password: usingGoogle ? undefined : input.password,
+      omitCredentials: usingGoogle,
       planName: plan.name,
       planExpiresAt: toDateOnlyString(planExpiresAt),
       companyName: input.company_name ? String(input.company_name).trim() : null
@@ -247,6 +299,12 @@ async function loginUser(input) {
   if (!user) {
     const error = new Error("Invalid email or password");
     error.statusCode = 401;
+    throw error;
+  }
+
+  if (!user.password_hash) {
+    const error = new Error(GOOGLE_ONLY_LOGIN_MESSAGE);
+    error.statusCode = 400;
     throw error;
   }
 
@@ -281,6 +339,78 @@ async function loginUser(input) {
 
   user.last_login_at = new Date();
   await user.save();
+
+  const payload = buildUserPayload(user);
+  const tokens = buildAuthTokens(payload);
+  return { user: payload, tokens };
+}
+
+/**
+ * Host Portal Google login via Firebase ID token.
+ * Links existing email accounts; does not create unpaid hosts.
+ */
+async function loginWithGoogle(input) {
+  if (!isFirebaseAuthConfigured()) {
+    const error = new Error("Google sign-in is not configured");
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const idToken = input.idToken || input.id_token || input.firebase_id_token;
+  const identity = await verifyFirebaseIdToken(idToken);
+
+  let user = await findUserWithRole({ firebase_uid: identity.uid });
+  if (!user) {
+    user = await findUserWithRole({ email: identity.email });
+  }
+
+  if (!user) {
+    const error = new Error(
+      "No account found for this Google email. Please register on the website first."
+    );
+    error.statusCode = 404;
+    error.code = "ACCOUNT_NOT_FOUND";
+    throw error;
+  }
+
+  if (!user.is_active) {
+    const error = new Error("User account is inactive");
+    error.statusCode = 403;
+    throw error;
+  }
+  assertRoleActive(user);
+
+  let dirty = false;
+  if (user.firebase_uid && user.firebase_uid !== identity.uid) {
+    const error = new Error("This email is linked to a different Google account");
+    error.statusCode = 409;
+    throw error;
+  }
+  if (!user.firebase_uid) {
+    user.firebase_uid = identity.uid;
+    dirty = true;
+  }
+  if (!user.email_verified_at) {
+    user.email_verified_at = new Date();
+    dirty = true;
+  }
+  if (!user.full_name && identity.name) {
+    user.full_name = identity.name;
+    dirty = true;
+  }
+  if (!user.avatar_url && identity.picture) {
+    user.avatar_url = identity.picture;
+    dirty = true;
+  }
+  // Google-only users should not be stuck on forced password change.
+  if (!user.password_hash && isMustChangePassword(user.must_change_password)) {
+    user.must_change_password = false;
+    dirty = true;
+  }
+
+  user.last_login_at = new Date();
+  dirty = true;
+  if (dirty) await user.save();
 
   const payload = buildUserPayload(user);
   const tokens = buildAuthTokens(payload);
@@ -370,6 +500,12 @@ async function requestPasswordReset(email) {
     throw error;
   }
 
+  if (!user.password_hash) {
+    const error = new Error(GOOGLE_ONLY_FORGOT_PASSWORD_MESSAGE);
+    error.statusCode = 400;
+    throw error;
+  }
+
   const temporaryPassword = generateTemporaryPassword();
   user.password_hash = await bcrypt.hash(temporaryPassword, 10);
   user.must_change_password = true;
@@ -415,6 +551,12 @@ async function changePassword(userId, body = {}) {
       throw error;
     }
 
+    if (!user.password_hash) {
+      const error = new Error(GOOGLE_ONLY_LOGIN_MESSAGE);
+      error.statusCode = 400;
+      throw error;
+    }
+
     const isCurrentValid = await bcrypt.compare(currentPassword, user.password_hash);
     if (!isCurrentValid) {
       const error = new Error("Current password is incorrect");
@@ -423,11 +565,13 @@ async function changePassword(userId, body = {}) {
     }
   }
 
-  const isSamePassword = await bcrypt.compare(newPassword, user.password_hash);
-  if (isSamePassword) {
-    const error = new Error("New password must be different from the current password");
-    error.statusCode = 400;
-    throw error;
+  if (user.password_hash) {
+    const isSamePassword = await bcrypt.compare(newPassword, user.password_hash);
+    if (isSamePassword) {
+      const error = new Error("New password must be different from the current password");
+      error.statusCode = 400;
+      throw error;
+    }
   }
 
   user.password_hash = await bcrypt.hash(newPassword, 10);
@@ -584,6 +728,7 @@ module.exports = {
   registerUser,
   signupUser,
   loginUser,
+  loginWithGoogle,
   verifyLoginOtp,
   startPlanRenew,
   verifyPlanRenewOtp,

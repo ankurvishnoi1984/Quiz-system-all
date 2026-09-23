@@ -46,12 +46,12 @@ export function validateCompanyName(value) {
   return ''
 }
 
-export function validateRegisterForm(fields) {
+export function validateRegisterForm(fields, { requirePassword = true } = {}) {
   return {
     fullName: validateFullName(fields.fullName),
     email: validateEmail(fields.email),
     mobile: validateMobile(fields.mobile),
-    password: validatePassword(fields.password),
+    password: requirePassword ? validatePassword(fields.password) : '',
     plan: validatePlanId(fields.selectedPlanId),
     companyName: validateCompanyName(fields.companyName),
   }

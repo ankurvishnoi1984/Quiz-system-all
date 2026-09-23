@@ -2,12 +2,14 @@ import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import {
   changePasswordApi,
+  googleLoginApi,
   loginApi,
   meApi,
   refreshApi,
   setHintsCompletedApi,
   verifyLoginOtpApi,
 } from '../services/authApi'
+import { getGoogleIdToken } from '../services/googleAuth'
 
 const AUTH_STORAGE_KEY = 'auth-storage'
 const REMEMBER_ME_KEY = 'auth-remember-me'
@@ -120,6 +122,35 @@ export const useAuthStore = create(
           set({
             isLoading: false,
             error: error.message || 'Login failed',
+          })
+          throw error
+        }
+      },
+      loginWithGoogle: async ({ rememberMe = false } = {}) => {
+        localStorage.setItem(REMEMBER_ME_KEY, rememberMe ? 'true' : 'false')
+        clearAuthStorage()
+
+        set({ isLoading: true, error: null })
+        try {
+          const { idToken } = await getGoogleIdToken()
+          const response = await googleLoginApi({ idToken })
+          const data = response?.data || {}
+          const user = data.user || null
+          const tokens = data.tokens || {}
+
+          set({
+            user,
+            accessToken: tokens.access_token || null,
+            refreshToken: tokens.refresh_token || null,
+            isLoading: false,
+            error: null,
+          })
+
+          return user
+        } catch (error) {
+          set({
+            isLoading: false,
+            error: error.message || 'Google sign-in failed',
           })
           throw error
         }

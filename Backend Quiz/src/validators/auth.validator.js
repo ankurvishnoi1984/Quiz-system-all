@@ -100,7 +100,14 @@ function validateSignupPayload(payload) {
   }
 
   if (!payload?.password || typeof payload.password !== "string") {
-    errors.push("password is required");
+    const googleToken =
+      payload?.firebase_id_token ||
+      payload?.firebaseIdToken ||
+      payload?.idToken ||
+      payload?.id_token;
+    if (!googleToken || typeof googleToken !== "string" || !String(googleToken).trim()) {
+      errors.push("password or firebase_id_token is required");
+    }
   } else if (payload.password.length < 8) {
     errors.push("password must be at least 8 characters");
   }
@@ -119,6 +126,16 @@ function validateSignupPayload(payload) {
     errors.push("payment_id is required");
   }
 
+  return errors;
+}
+
+function validateGoogleLoginPayload(payload) {
+  const errors = [];
+  const idToken =
+    payload?.idToken || payload?.id_token || payload?.firebase_id_token;
+  if (!idToken || typeof idToken !== "string" || !String(idToken).trim()) {
+    errors.push("idToken is required");
+  }
   return errors;
 }
 
@@ -237,6 +254,7 @@ module.exports = {
   validateForgotPasswordPayload,
   validateChangePasswordPayload,
   validateSignupPayload,
+  validateGoogleLoginPayload,
   validateSendOtpPayload,
   validateVerifyOtpPayload,
   validateVerifyLoginOtpPayload,

@@ -10,3 +10,6 @@ yarn-error.log*
 quiz_db.sql
 .env
 *.zip
+*-firebase-adminsdk*.json
+serviceAccount*.json
+firebase-service-account.json

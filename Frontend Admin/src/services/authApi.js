@@ -42,6 +42,13 @@ export async function loginApi({ email, password }) {
   })
 }
 
+export async function googleLoginApi({ idToken }) {
+  return request('/auth/google', {
+    method: 'POST',
+    body: JSON.stringify({ idToken }),
+  })
+}
+
 export async function verifyLoginOtpApi({ challenge_token, code, email }) {
   return request('/auth/login/verify-otp', {
     method: 'POST',
@@ -67,6 +74,7 @@ export async function fetchAuthFeaturesApi() {
       login_otp_enabled: true,
       admin_action_otp_enabled: true,
       participant_join_otp_enabled: true,
+      google_auth_enabled: false,
     }
   )
 }

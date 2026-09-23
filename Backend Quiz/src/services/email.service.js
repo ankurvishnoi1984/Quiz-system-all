@@ -327,7 +327,8 @@ async function sendWebsiteSignupWelcomeEmail({
   password,
   planName,
   planExpiresAt,
-  companyName
+  companyName,
+  omitCredentials = false
 }) {
   const config = await getActiveMailConfig();
   const brandName = config?.sender_name || "Quiz Platform";
@@ -341,7 +342,8 @@ async function sendWebsiteSignupWelcomeEmail({
     planExpiresAt,
     companyName,
     brandName,
-    logoCid: logoAttachment ? EMAIL_LOGO_CID : null
+    logoCid: logoAttachment ? EMAIL_LOGO_CID : null,
+    omitCredentials: Boolean(omitCredentials)
   };
   const userMail = renderWebsiteSignupWelcomeEmail(templateInput);
 

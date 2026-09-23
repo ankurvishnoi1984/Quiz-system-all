@@ -21,7 +21,12 @@ const User = sequelize.define(
     },
     password_hash: {
       type: DataTypes.TEXT,
-      allowNull: false
+      allowNull: true
+    },
+    firebase_uid: {
+      type: DataTypes.STRING(128),
+      allowNull: true,
+      unique: true
     },
     full_name: {
       type: DataTypes.STRING(150),

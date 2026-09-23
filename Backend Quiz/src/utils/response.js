@@ -6,12 +6,20 @@ function successResponse(res, data = {}, message = "Success", statusCode = 200) 
   });
 }
 
-function errorResponse(res, message = "Something went wrong", statusCode = 500, errors = null) {
-  return res.status(statusCode).json({
+function errorResponse(
+  res,
+  message = "Something went wrong",
+  statusCode = 500,
+  errors = null,
+  code = null
+) {
+  const body = {
     success: false,
     message,
     errors
-  });
+  };
+  if (code) body.code = code;
+  return res.status(statusCode).json(body);
 }
 
 module.exports = {
