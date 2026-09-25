@@ -10,6 +10,8 @@ const {
   unblockIp,
   isIpBlocked
 } = require("./blocked-ip.service");
+const { listRecentRateLimitEvents } = require("./rate-limit-event.service");
+const { getLiveRateLimitWindows } = require("../utils/ip-rate-limit");
 const { Session, User, Department, Client } = require("../models");
 const { normalizeIp } = require("../utils/ip");
 
@@ -251,11 +253,15 @@ async function getWebSocketMonitorData() {
   const snapshot = buildSnapshot();
   appendHistory(snapshot);
 
-  const [sessions, connections, blockedIps] = await Promise.all([
+  const [sessions, connections, blockedIps, rateLimitEvents] = await Promise.all([
     enrichSessionsWithMetadata(snapshot.sessions),
     enrichConnectionsWithMetadata(snapshot.connections),
     listBlockedIps().catch((err) => {
       console.error("list blocked ips for monitor failed:", err.message);
+      return [];
+    }),
+    listRecentRateLimitEvents().catch((err) => {
+      console.error("list rate limit events for monitor failed:", err.message);
       return [];
     })
   ]);
@@ -265,6 +271,10 @@ async function getWebSocketMonitorData() {
     sessions,
     connections,
     blocked_ips: blockedIps,
+    rate_limit: {
+      live: getLiveRateLimitWindows({ minCount: 2 }),
+      events: rateLimitEvents
+    },
     history: [...history],
     server: {
       process_uptime_seconds: Math.floor(process.uptime()),

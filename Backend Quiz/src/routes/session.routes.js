@@ -3,14 +3,27 @@ const sessionController = require("../controllers/session.controller");
 const authMiddleware = require("../middlewares/auth.middleware");
 const authorizeStaff = require("../middlewares/staff.middleware");
 const { authorizeRights, authorizeAnyRight } = require("../middlewares/rights.middleware");
+const {
+  joinIpRateLimit,
+  joinOtpSendIpRateLimit,
+  joinOtpVerifyIpRateLimit
+} = require("../middlewares/join-rate-limit.middleware");
 
 const router = express.Router();
 
 // Public join endpoints (no auth token required)
 router.get("/sessions/join/:code", sessionController.lookupByCode);
-router.post("/sessions/join/:code/otp/send", sessionController.sendJoinOtp);
-router.post("/sessions/join/:code/otp/verify", sessionController.verifyJoinOtp);
-router.post("/sessions/join/:code", sessionController.joinByCode);
+router.post(
+  "/sessions/join/:code/otp/send",
+  joinOtpSendIpRateLimit,
+  sessionController.sendJoinOtp
+);
+router.post(
+  "/sessions/join/:code/otp/verify",
+  joinOtpVerifyIpRateLimit,
+  sessionController.verifyJoinOtp
+);
+router.post("/sessions/join/:code", joinIpRateLimit, sessionController.joinByCode);
 
 // Only protect session/department management routes in this router.
 router.use(["/departments", "/sessions"], authMiddleware);

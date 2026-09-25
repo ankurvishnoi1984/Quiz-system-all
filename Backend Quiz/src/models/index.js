@@ -30,6 +30,7 @@ const EmailOtp = require("./email-otp.model");
 const SmsOtp = require("./sms-otp.model");
 const UserPlanHistory = require("./user-plan-history.model");
 const BlockedIp = require("./blocked-ip.model");
+const RateLimitEvent = require("./rate-limit-event.model");
 const AuditLog = require("./audit-log.model");
 const registerAuditHooks = require("./register-audit-hooks");
 
@@ -199,6 +200,7 @@ const models = {
   SmsOtp,
   UserPlanHistory,
   BlockedIp,
+  RateLimitEvent,
   AuditLog
 };
 

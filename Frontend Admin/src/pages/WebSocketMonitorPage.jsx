@@ -1,10 +1,14 @@
-import { Activity, Cpu, MemoryStick, RefreshCw, Server, ShieldBan, Users } from 'lucide-react'
+import { Activity, Cpu, MemoryStick, RefreshCw, Server, ShieldAlert, ShieldBan, Users } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import StatCard from '../components/dashboard/StatCard'
 import { WebSocketMonitorCharts } from '../components/monitor/WebSocketMonitorCharts'
 import { WebSocketSessionsTable } from '../components/monitor/WebSocketSessionsTable'
 import { WebSocketIpSecuritySection } from '../components/monitor/WebSocketIpSecuritySection'
+import {
+  WebSocketRateLimitSection,
+  countRecentRateLimitEvents,
+} from '../components/monitor/WebSocketRateLimitSection'
 import { HostAlertModal } from '../components/live/HostAlertModal'
 import { useAuthStore } from '../store/authStore'
 import {
@@ -131,6 +135,7 @@ function WebSocketMonitorPage() {
   const isLoading = monitorQuery.isLoading && !monitor
   const isLive = !monitorQuery.isError
   const blockedCount = monitor?.blocked_ips?.length ?? 0
+  const recent429Count = countRecentRateLimitEvents(monitor?.rate_limit?.events)
 
   const handleManualRefresh = () => {
     monitorQuery.refetch()
@@ -165,7 +170,7 @@ function WebSocketMonitorPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
         <StatCard
           label="Open connections"
           value={monitor?.total_connections ?? '—'}
@@ -192,6 +197,13 @@ function WebSocketMonitorPage() {
           label="Blocked IPs"
           value={monitor ? blockedCount : '—'}
           trendLabel="Denied WebSocket addresses"
+          sparkline={[]}
+          accent="indigo"
+        />
+        <StatCard
+          label="Rate-limit 429s"
+          value={monitor ? recent429Count : '—'}
+          trendLabel="Last 15 minutes"
           sparkline={[]}
           accent="indigo"
         />
@@ -253,6 +265,13 @@ function WebSocketMonitorPage() {
             </div>
             <div className="flex items-center justify-between gap-3">
               <dt className="inline-flex items-center gap-2 text-slate-600">
+                <ShieldAlert className="size-3.5" />
+                429s (15 min)
+              </dt>
+              <dd className="font-semibold tabular-nums text-navy-900">{recent429Count}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <dt className="inline-flex items-center gap-2 text-slate-600">
                 <Users className="size-3.5" />
                 History points
               </dt>
@@ -277,6 +296,19 @@ function WebSocketMonitorPage() {
 
       <WebSocketIpSecuritySection
         connections={monitor?.connections}
+        blockedIps={monitor?.blocked_ips}
+        isLoading={isLoading}
+        busyKey={ipBusyKey}
+        onBlockIp={async (target) => {
+          await blockIpMutation.mutateAsync(target)
+        }}
+        onUnblockIp={async (target) => {
+          await unblockIpMutation.mutateAsync(target)
+        }}
+      />
+
+      <WebSocketRateLimitSection
+        rateLimit={monitor?.rate_limit}
         blockedIps={monitor?.blocked_ips}
         isLoading={isLoading}
         busyKey={ipBusyKey}
