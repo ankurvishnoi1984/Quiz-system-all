@@ -301,9 +301,14 @@ function ParticipantSessionPage() {
           merged[key] = {
             revealed: true,
             correctOptionIds: q.correctOptionIds || [],
+            correctMatchingPairs: q.correctMatchingPairs || null,
           }
         } else if (merged[key]) {
-          merged[key] = { revealed: false, correctOptionIds: [] }
+          merged[key] = {
+            revealed: false,
+            correctOptionIds: [],
+            correctMatchingPairs: null,
+          }
         }
       })
       return merged
@@ -981,11 +986,13 @@ function ParticipantSessionPage() {
       if (!qid) return
       const revealed = Boolean(data.answer_revealed)
       const correctOptionIds = (data.correct_option_ids || []).map(Number)
+      const correctMatchingPairs = data.correct_matching_pairs || null
       setAnswerRevealByQuestion((prev) => ({
         ...prev,
         [qid]: {
           revealed,
           correctOptionIds,
+          correctMatchingPairs,
         },
       }))
       if (revealed) {
@@ -995,7 +1002,11 @@ function ParticipantSessionPage() {
         const submitted = Boolean((state.quizSubmittedQuestionIds || {})[qid])
         const isCorrect =
           submitted && q
-            ? isParticipantChoiceCorrect(q, response, { revealed: true, correctOptionIds })
+            ? isParticipantChoiceCorrect(q, response, {
+                revealed: true,
+                correctOptionIds,
+                correctMatchingPairs,
+              })
             : null
         if (isCorrect === true) playAnswerCorrect()
         else if (isCorrect === false) playAnswerWrong()
@@ -1572,9 +1583,13 @@ function ParticipantSessionPage() {
           answerRevealByQuestion[String(question?.id)]?.correctOptionIds ??
           question?.correctOptionIds ??
           [],
+        correctMatchingPairs:
+          answerRevealByQuestion[String(question?.id)]?.correctMatchingPairs ??
+          question?.correctMatchingPairs ??
+          null,
       }
     : isAnswerRevealedByHost
-      ? { revealed: true, correctOptionIds: [] }
+      ? { revealed: true, correctOptionIds: [], correctMatchingPairs: null }
       : null
   const isAnswerRevealed = isAnswerRevealedByHost
   const participantAnswerIsCorrect = useMemo(() => {
@@ -2486,6 +2501,10 @@ function ParticipantSessionPage() {
             onRankingChange={(questionId, rankingOrder) => {
               playPickAnswer()
               updateResponse(questionId, { rankingOrder })
+            }}
+            onMatchingChange={(questionId, matchingPairs) => {
+              playPickAnswer()
+              updateResponse(questionId, { matchingPairs })
             }}
             onPrevious={handlePrevious}
             onNextOrSubmit={handleNextOrSubmit}

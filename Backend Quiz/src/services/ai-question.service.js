@@ -9,7 +9,8 @@ const ALLOWED_UI_TYPES = [
   "Rating",
   "Text",
   "True/False",
-  "Ranking"
+  "Ranking",
+  "Match"
 ];
 
 const TYPE_GUIDANCE = {
@@ -19,7 +20,8 @@ const TYPE_GUIDANCE = {
   Rating: `Each item needs question_text. Include rating_min (1) and rating_max (5 or 10). options must be [].`,
   Text: `Each item needs an open-ended question_text. options must be [].`,
   "True/False": `Each item needs question_text and exactly two options with texts "True" and "False". Mark exactly one is_correct: true.`,
-  Ranking: `Each item needs question_text and 3–6 items to rank as options. All is_correct false.`
+  Ranking: `Each item needs question_text and 3–6 items to rank as options. All is_correct false.`,
+  Match: `Each item needs question_text and a "pairs" array of 3–6 objects like { "left": "prompt", "right": "answer" }. Also include options as flattened left/right items with match_side and match_key (same key for a pair). All is_correct false.`
 };
 
 function getCursorApiKey() {
@@ -116,7 +118,9 @@ function normalizeGeneratedQuestions(parsed, questionType) {
       ? row.options
           .map((opt) => ({
             text: String(opt?.option_text || opt?.text || "").trim(),
-            isCorrect: Boolean(opt?.is_correct ?? opt?.isCorrect)
+            isCorrect: Boolean(opt?.is_correct ?? opt?.isCorrect),
+            matchSide: opt?.match_side || opt?.matchSide || null,
+            matchKey: opt?.match_key || opt?.matchKey || null
           }))
           .filter((opt) => opt.text)
       : [];
@@ -183,6 +187,94 @@ function normalizeGeneratedQuestions(parsed, questionType) {
         );
       }
       item.options = item.options.map((o) => ({ ...o, isCorrect: false }));
+    }
+
+    if (questionType === "Match") {
+      const pairs = Array.isArray(row?.pairs)
+        ? row.pairs
+            .map((pair) => ({
+              left: String(pair?.left || pair?.prompt || "").trim(),
+              right: String(pair?.right || pair?.answer || "").trim()
+            }))
+            .filter((pair) => pair.left && pair.right)
+        : [];
+
+      if (pairs.length >= 3) {
+        item.pairs = pairs.slice(0, 6);
+        item.options = [];
+        pairs.slice(0, 6).forEach((pair, pairIndex) => {
+          const key = String.fromCharCode(65 + pairIndex);
+          item.options.push({
+            text: pair.left,
+            isCorrect: false,
+            matchSide: "left",
+            matchKey: key
+          });
+          item.options.push({
+            text: pair.right,
+            isCorrect: false,
+            matchSide: "right",
+            matchKey: key
+          });
+        });
+      } else {
+        const leftOpts = options.filter(
+          (o) => String(o.matchSide || o.match_side || "").toLowerCase() === "left"
+        );
+        const rightOpts = options.filter(
+          (o) => String(o.matchSide || o.match_side || "").toLowerCase() === "right"
+        );
+        if (leftOpts.length >= 3 && leftOpts.length === rightOpts.length) {
+          item.pairs = leftOpts.map((left, i) => ({
+            left: left.text,
+            right: rightOpts[i]?.text || ""
+          }));
+          item.options = [];
+          leftOpts.forEach((left, i) => {
+            const key = String.fromCharCode(65 + i);
+            item.options.push({
+              text: left.text,
+              isCorrect: false,
+              matchSide: "left",
+              matchKey: key
+            });
+            item.options.push({
+              text: rightOpts[i].text,
+              isCorrect: false,
+              matchSide: "right",
+              matchKey: key
+            });
+          });
+        } else if (item.options.length >= 6 && item.options.length % 2 === 0) {
+          const half = item.options.length / 2;
+          item.pairs = item.options.slice(0, half).map((left, i) => ({
+            left: left.text,
+            right: item.options[half + i]?.text || ""
+          }));
+          const rebuilt = [];
+          item.pairs.forEach((pair, i) => {
+            const key = String.fromCharCode(65 + i);
+            rebuilt.push({
+              text: pair.left,
+              isCorrect: false,
+              matchSide: "left",
+              matchKey: key
+            });
+            rebuilt.push({
+              text: pair.right,
+              isCorrect: false,
+              matchSide: "right",
+              matchKey: key
+            });
+          });
+          item.options = rebuilt;
+        } else {
+          throw Object.assign(
+            new Error(`Match question ${index + 1} needs 3–6 left/right pairs`),
+            { statusCode: 502 }
+          );
+        }
+      }
     }
 
     return item;

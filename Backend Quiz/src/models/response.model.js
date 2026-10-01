@@ -41,6 +41,10 @@ const Response = sequelize.define(
       type: DataTypes.JSON,
       allowNull: true
     },
+    matching_pairs: {
+      type: DataTypes.JSON,
+      allowNull: true
+    },
     is_correct: {
       type: DataTypes.BOOLEAN,
       allowNull: true

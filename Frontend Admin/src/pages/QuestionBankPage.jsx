@@ -46,6 +46,7 @@ const TYPES = [
   { value: 'poll', label: 'Poll' },
   { value: 'true_false', label: 'True / False' },
   { value: 'ranking', label: 'Ranking' },
+  { value: 'match', label: 'Match' },
   { value: 'word_cloud', label: 'Word Cloud' },
   { value: 'rating', label: 'Rating' },
   { value: 'open_text', label: 'Open Text' },
@@ -265,7 +266,64 @@ function emptyQuestion(topicId = '') {
 }
 
 function optionsRequired(type) {
-  return ['mcq', 'poll', 'true_false', 'ranking'].includes(type)
+  return ['mcq', 'poll', 'true_false', 'ranking', 'match'].includes(type)
+}
+
+function buildDefaultMatchOptions() {
+  return [0, 1, 2, 3].flatMap((index) => {
+    const key = String.fromCharCode(65 + index)
+    return [
+      {
+        option_text: `Item ${index + 1}`,
+        is_correct: false,
+        match_side: 'left',
+        match_key: key,
+      },
+      {
+        option_text: `Match ${index + 1}`,
+        is_correct: false,
+        match_side: 'right',
+        match_key: key,
+      },
+    ]
+  })
+}
+
+function matchPairsFromOptions(options) {
+  const list = Array.isArray(options) ? options : []
+  const left = list.filter((o) => o.match_side === 'left')
+  const rightByKey = new Map(
+    list.filter((o) => o.match_side === 'right').map((o) => [String(o.match_key), o]),
+  )
+  return left.map((leftOpt, index) => {
+    const key = String(leftOpt.match_key || String.fromCharCode(65 + index))
+    const right = rightByKey.get(key)
+    return {
+      key,
+      left: leftOpt.option_text || '',
+      right: right?.option_text || '',
+    }
+  })
+}
+
+function optionsFromMatchPairs(pairs) {
+  return (pairs || []).flatMap((pair, index) => {
+    const key = String(pair.key || String.fromCharCode(65 + index))
+    return [
+      {
+        option_text: pair.left || `Item ${index + 1}`,
+        is_correct: false,
+        match_side: 'left',
+        match_key: key,
+      },
+      {
+        option_text: pair.right || `Match ${index + 1}`,
+        is_correct: false,
+        match_side: 'right',
+        match_key: key,
+      },
+    ]
+  })
 }
 
 function normalizeFormForType(form, nextType) {
@@ -278,6 +336,14 @@ function normalizeFormForType(form, nextType) {
         { option_text: 'True', is_correct: false },
         { option_text: 'False', is_correct: false },
       ],
+    }
+  }
+  if (nextType === 'match') {
+    return {
+      ...form,
+      question_type: nextType,
+      is_quiz_mode: true,
+      options: buildDefaultMatchOptions(),
     }
   }
   if (nextType === 'mcq' && form.question_type !== 'mcq') {
@@ -511,6 +577,8 @@ function AuthorEditor({
       options: (editing.options || []).map((option) => ({
         option_text: option.option_text,
         is_correct: Boolean(option.is_correct),
+        match_side: option.match_side || null,
+        match_key: option.match_key != null ? String(option.match_key) : null,
       })),
     }
   })
@@ -776,7 +844,106 @@ function AuthorEditor({
         ) : null}
       </div>
 
-      {optionsRequired(form.question_type) ? (
+      {form.question_type === 'match' ? (
+        <div className="mt-4 space-y-3">
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-slate-700">Match pairs</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Add 3–6 pairs. Left is the prompt; right is the correct answer.
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={matchPairsFromOptions(form.options).length >= 6}
+              onClick={() => {
+                const pairs = matchPairsFromOptions(form.options)
+                if (pairs.length >= 6) return
+                const nextIndex = pairs.length
+                setForm((current) => ({
+                  ...current,
+                  options: optionsFromMatchPairs([
+                    ...pairs,
+                    {
+                      key: String.fromCharCode(65 + nextIndex),
+                      left: `Item ${nextIndex + 1}`,
+                      right: `Match ${nextIndex + 1}`,
+                    },
+                  ]),
+                }))
+              }}
+              className="text-sm font-semibold text-blue-700 hover:text-blue-900 disabled:opacity-40"
+            >
+              + Add pair
+            </button>
+          </div>
+          {matchPairsFromOptions(form.options).map((pair, index) => (
+            <div
+              key={pair.key}
+              className="grid gap-2 rounded-2xl border border-slate-200 bg-white p-3 sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto]"
+            >
+              <div className="flex items-center justify-center">
+                <span className="inline-flex size-9 items-center justify-center rounded-xl bg-navy-900 text-xs font-bold text-white">
+                  {pair.key}
+                </span>
+              </div>
+              <label className="block text-xs font-semibold text-slate-600">
+                Left / prompt
+                <input
+                  value={pair.left}
+                  onChange={(event) => {
+                    const pairs = matchPairsFromOptions(form.options)
+                    pairs[index] = { ...pairs[index], left: event.target.value }
+                    setForm((current) => ({
+                      ...current,
+                      options: optionsFromMatchPairs(pairs),
+                    }))
+                  }}
+                  className="input-modern mt-1"
+                  placeholder="e.g. Capital of France"
+                />
+              </label>
+              <label className="block text-xs font-semibold text-slate-600">
+                Right / answer
+                <input
+                  value={pair.right}
+                  onChange={(event) => {
+                    const pairs = matchPairsFromOptions(form.options)
+                    pairs[index] = { ...pairs[index], right: event.target.value }
+                    setForm((current) => ({
+                      ...current,
+                      options: optionsFromMatchPairs(pairs),
+                    }))
+                  }}
+                  className="input-modern mt-1"
+                  placeholder="e.g. Paris"
+                />
+              </label>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  disabled={matchPairsFromOptions(form.options).length <= 3}
+                  onClick={() => {
+                    const pairs = matchPairsFromOptions(form.options).filter((_, i) => i !== index)
+                    setForm((current) => ({
+                      ...current,
+                      options: optionsFromMatchPairs(
+                        pairs.map((item, pairIndex) => ({
+                          ...item,
+                          key: String.fromCharCode(65 + pairIndex),
+                        })),
+                      ),
+                    }))
+                  }}
+                  className="rounded-lg p-2 text-red-600 hover:bg-red-50 disabled:opacity-40"
+                >
+                  <XCircle className="size-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : optionsRequired(form.question_type) ? (
         <div className="mt-4 space-y-2">
           <p className="text-sm font-semibold text-slate-700">Answer options</p>
           {form.options.map((option, index) => (

@@ -18,6 +18,7 @@ export function mapQuestionType(type) {
     open_text: 'Text',
     true_false: 'True/False',
     ranking: 'Ranking',
+    match: 'Match',
     emoji_reaction: 'Emoji Reaction',
     survey: 'Survey',
   }
@@ -64,6 +65,7 @@ export function mapParticipantQuestion(q) {
     isLive: q.is_live === true || q.is_live === 1 || q.is_live === '1',
     answerRevealed: Boolean(q.answer_revealed),
     correctOptionIds: (q.correct_option_ids || []).map(Number),
+    correctMatchingPairs: q.correct_matching_pairs || null,
     showLeaderboard: Boolean(q.show_leaderboard),
     options: q.question_options || [],
     timeLimit: isSurvey ? 0 : Number(q.time_limit_seconds || 0),
@@ -142,6 +144,41 @@ export function buildResponsePayloadForQuestion(q, res) {
       return null
     }
     payload.ranking_order = uniqueOrder
+  }
+
+  if (q.type === 'Match') {
+    const pairs =
+      res.matchingPairs && typeof res.matchingPairs === 'object' && !Array.isArray(res.matchingPairs)
+        ? res.matchingPairs
+        : null
+    if (!pairs) return null
+    const leftIds = (q.options || [])
+      .filter((o) => o.match_side === 'left')
+      .map((o) => Number(o.option_id))
+      .filter(Boolean)
+    const rightIds = new Set(
+      (q.options || [])
+        .filter((o) => o.match_side === 'right')
+        .map((o) => Number(o.option_id))
+        .filter(Boolean),
+    )
+    const normalized = {}
+    for (const [leftRaw, rightRaw] of Object.entries(pairs)) {
+      const leftId = Number(leftRaw)
+      const rightId = Number(rightRaw)
+      if (!leftIds.includes(leftId) || !rightIds.has(rightId)) return null
+      normalized[String(leftId)] = rightId
+    }
+    const mappedLeft = Object.keys(normalized).map(Number)
+    const mappedRight = Object.values(normalized)
+    if (
+      mappedLeft.length !== leftIds.length ||
+      !leftIds.every((id) => mappedLeft.includes(id)) ||
+      new Set(mappedRight).size !== mappedRight.length
+    ) {
+      return null
+    }
+    payload.matching_pairs = normalized
   }
 
   if (q.type === 'Word Cloud') {
@@ -370,6 +407,32 @@ export function participantQuestionHasAnswer(question, response = {}) {
     if (order.length !== optionIds.length) return false
     if (new Set(order).size !== order.length) return false
     return optionIds.every((id) => order.includes(id))
+  }
+  if (question.type === 'Match') {
+    const pairs =
+      response.matchingPairs &&
+      typeof response.matchingPairs === 'object' &&
+      !Array.isArray(response.matchingPairs)
+        ? response.matchingPairs
+        : null
+    if (!pairs) return false
+    const leftIds = (question.options || [])
+      .filter((o) => o.match_side === 'left')
+      .map((o) => Number(o.option_id))
+      .filter(Boolean)
+    const rightIds = new Set(
+      (question.options || [])
+        .filter((o) => o.match_side === 'right')
+        .map((o) => Number(o.option_id))
+        .filter(Boolean),
+    )
+    const mappedLeft = Object.keys(pairs).map(Number)
+    const mappedRight = Object.values(pairs).map(Number)
+    if (mappedLeft.length !== leftIds.length) return false
+    if (!leftIds.every((id) => mappedLeft.includes(id))) return false
+    if (mappedRight.some((id) => !rightIds.has(id))) return false
+    if (new Set(mappedRight).size !== mappedRight.length) return false
+    return true
   }
   if (question.type === 'Word Cloud') {
     return (response.tags || []).length > 0

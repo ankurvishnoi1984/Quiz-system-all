@@ -9,7 +9,7 @@ const {
   Client
 } = require("../models");
 const { formatQuestionForParticipant } = require("./question.service");
-const { notifyLeaderboard, notifyRankingResponseSubmitted } = require("./websocket.service");
+const { notifyLeaderboard, notifyRankingResponseSubmitted, notifyMatchResponseSubmitted } = require("./websocket.service");
 const { assertSessionWriteAccess } = require("../config/data-scope");
 const {
   assignRandomQuestionOrderToParticipant,
@@ -136,6 +136,80 @@ function buildRankingAnalytics(question, responses) {
     totalResponses: validResponses,
     totalOptions,
     rankings
+  };
+}
+
+function buildMatchAnalytics(question, responses) {
+  const options = (question.QuestionOptions || question.question_options || []).map((opt) => ({
+    option_id: Number(opt.option_id),
+    option_text: opt.option_text,
+    match_side: opt.match_side,
+    match_key: String(opt.match_key || "").trim()
+  }));
+  const left = options.filter((o) => o.match_side === "left" && o.match_key);
+  const rightByKey = new Map(
+    options.filter((o) => o.match_side === "right" && o.match_key).map((o) => [o.match_key, o])
+  );
+  if (!left.length) return null;
+
+  const pairStats = left.map((leftOpt) => {
+    const correctRight = rightByKey.get(leftOpt.match_key);
+    return {
+      leftOptionId: leftOpt.option_id,
+      leftOptionText: leftOpt.option_text,
+      correctRightOptionId: correctRight?.option_id || null,
+      correctRightOptionText: correctRight?.option_text || null,
+      correctCount: 0,
+      totalAnswers: 0
+    };
+  });
+  const pairByLeftId = new Map(pairStats.map((row) => [row.leftOptionId, row]));
+
+  let validResponses = 0;
+  let fullyCorrectResponses = 0;
+
+  for (const row of responses || []) {
+    const pairs =
+      row.matching_pairs && typeof row.matching_pairs === "object" && !Array.isArray(row.matching_pairs)
+        ? row.matching_pairs
+        : null;
+    if (!pairs) continue;
+    const entries = Object.entries(pairs).map(([leftId, rightId]) => [
+      Number(leftId),
+      Number(rightId)
+    ]);
+    if (entries.length !== left.length) continue;
+    if (entries.some(([l, r]) => !Number.isFinite(l) || !Number.isFinite(r))) continue;
+    validResponses += 1;
+
+    let correctPairs = 0;
+    for (const [leftId, rightId] of entries) {
+      const stat = pairByLeftId.get(leftId);
+      if (!stat) continue;
+      stat.totalAnswers += 1;
+      if (stat.correctRightOptionId && Number(stat.correctRightOptionId) === rightId) {
+        stat.correctCount += 1;
+        correctPairs += 1;
+      }
+    }
+    if (correctPairs === left.length) fullyCorrectResponses += 1;
+  }
+
+  const pairs = pairStats.map((row) => ({
+    ...row,
+    accuracyPercent: row.totalAnswers
+      ? Number(((row.correctCount / row.totalAnswers) * 100).toFixed(1))
+      : 0
+  }));
+
+  return {
+    totalResponses: validResponses,
+    totalPairs: left.length,
+    fullyCorrectResponses,
+    fullyCorrectPercent: validResponses
+      ? Number(((fullyCorrectResponses / validResponses) * 100).toFixed(1))
+      : 0,
+    pairs
   };
 }
 
@@ -449,6 +523,7 @@ async function submitResponse({ participant, input }) {
     text_response: input.text_response || null,
     rating_value: input.rating_value != null ? input.rating_value : null,
     ranking_order: input.ranking_order || null,
+    matching_pairs: input.matching_pairs || null,
     response_time_ms: input.response_time_ms || null
   };
 
@@ -481,7 +556,81 @@ async function submitResponse({ participant, input }) {
     responsePayload.option_id = null;
     responsePayload.text_response = null;
     responsePayload.rating_value = null;
+    responsePayload.matching_pairs = null;
     responsePayload.ranking_order = uniqueOrder;
+  }
+
+  if (effectiveType === "match") {
+    const options = question.QuestionOptions || question.question_options || [];
+    const leftIds = options
+      .filter((opt) => opt.match_side === "left")
+      .map((opt) => Number(opt.option_id));
+    const rightIds = new Set(
+      options.filter((opt) => opt.match_side === "right").map((opt) => Number(opt.option_id))
+    );
+    const keyByLeft = new Map();
+    const rightByKey = new Map();
+    for (const opt of options) {
+      const key = String(opt.match_key || "").trim();
+      if (!key) continue;
+      if (opt.match_side === "left") keyByLeft.set(Number(opt.option_id), key);
+      if (opt.match_side === "right") rightByKey.set(key, Number(opt.option_id));
+    }
+
+    const rawPairs =
+      input.matching_pairs && typeof input.matching_pairs === "object" && !Array.isArray(input.matching_pairs)
+        ? input.matching_pairs
+        : {};
+    const normalized = {};
+    for (const [leftIdRaw, rightIdRaw] of Object.entries(rawPairs)) {
+      const leftId = Number(leftIdRaw);
+      const rightId = Number(rightIdRaw);
+      if (!leftIds.includes(leftId) || !rightIds.has(rightId)) {
+        const error = new Error("Invalid matching pair selection");
+        error.statusCode = 400;
+        throw error;
+      }
+      normalized[String(leftId)] = rightId;
+    }
+
+    const mappedLeft = Object.keys(normalized).map(Number);
+    const mappedRight = Object.values(normalized);
+    if (
+      mappedLeft.length !== leftIds.length ||
+      !leftIds.every((id) => mappedLeft.includes(id)) ||
+      new Set(mappedRight).size !== mappedRight.length
+    ) {
+      const error = new Error("Match responses must pair every left item with a unique right item");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    let correctPairs = 0;
+    for (const leftId of leftIds) {
+      const key = keyByLeft.get(leftId);
+      const expectedRight = key ? rightByKey.get(key) : null;
+      if (expectedRight && Number(normalized[String(leftId)]) === Number(expectedRight)) {
+        correctPairs += 1;
+      }
+    }
+    const totalPairs = leftIds.length;
+    const allCorrect = correctPairs === totalPairs && totalPairs > 0;
+    const pointsValue = Number(question.points_value || 0);
+
+    responsePayload.option_id = null;
+    responsePayload.text_response = null;
+    responsePayload.rating_value = null;
+    responsePayload.ranking_order = null;
+    responsePayload.matching_pairs = normalized;
+
+    if (nonScored || !question.is_quiz_mode) {
+      responsePayload.is_correct = null;
+      responsePayload.points_earned = 0;
+    } else {
+      responsePayload.is_correct = allCorrect;
+      responsePayload.points_earned =
+        totalPairs > 0 ? Math.round(pointsValue * (correctPairs / totalPairs)) : 0;
+    }
   }
 
   if (responsePayload.option_id) {
@@ -498,7 +647,7 @@ async function submitResponse({ participant, input }) {
       responsePayload.is_correct = Boolean(option.is_correct);
       responsePayload.points_earned = option.is_correct ? Number(question.points_value || 0) : 0;
     }
-  } else if (nonScored || question.is_quiz_mode) {
+  } else if (effectiveType !== "match" && (nonScored || question.is_quiz_mode)) {
     responsePayload.is_correct = null;
     responsePayload.points_earned = 0;
   }
@@ -559,6 +708,21 @@ async function submitResponse({ participant, input }) {
           questionId: question.question_id,
           totalResponses: analytics.totalResponses,
           rankings: analytics.rankings,
+          analytics
+        });
+      }
+    }
+
+    if (effectiveType === "match") {
+      const matchResponses = await Response.findAll({
+        where: { question_id: question.question_id },
+        attributes: ["matching_pairs"]
+      });
+      const analytics = buildMatchAnalytics(question, matchResponses);
+      if (analytics) {
+        notifyMatchResponseSubmitted(session.session_code, {
+          questionId: question.question_id,
+          totalResponses: analytics.totalResponses,
           analytics
         });
       }
@@ -636,7 +800,9 @@ function buildQuestionResultsPayload(question, responses) {
         : null,
     rating_distribution: ratingDistribution,
     ranking_analytics:
-      effectiveType === "ranking" ? buildRankingAnalytics(question, responses) : null
+      effectiveType === "ranking" ? buildRankingAnalytics(question, responses) : null,
+    match_analytics:
+      effectiveType === "match" ? buildMatchAnalytics(question, responses) : null
   };
 }
 
@@ -1081,6 +1247,7 @@ module.exports = {
   buildQuestionLeaderboard,
   buildSessionLeaderboard,
   buildRankingAnalytics,
+  buildMatchAnalytics,
   aggregateWordCloudCounts,
   getSessionForAccess,
   assertStaffAccess,

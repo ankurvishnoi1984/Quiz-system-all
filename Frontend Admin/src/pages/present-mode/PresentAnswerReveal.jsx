@@ -15,9 +15,78 @@ export function PresentAnswerRevealBadge() {
   )
 }
 
+export function PresentMatchKey({ question }) {
+  if (!question?.answerRevealed) return null
+  const options = question.options || []
+  const left = options
+    .filter((o) => o.match_side === 'left' || o.matchSide === 'left')
+    .sort(
+      (a, b) =>
+        Number(a.display_order ?? a.displayOrder ?? 0) -
+        Number(b.display_order ?? b.displayOrder ?? 0),
+    )
+  const rightByKey = new Map(
+    options
+      .filter((o) => o.match_side === 'right' || o.matchSide === 'right')
+      .map((o) => [String(o.match_key ?? o.matchKey ?? ''), o]),
+  )
+  const pairsFromCorrect = question.correctMatchingPairs
+  const rows = left.map((leftOpt) => {
+    const key = String(leftOpt.match_key ?? leftOpt.matchKey ?? '')
+    const fromMap = key ? rightByKey.get(key) : null
+    const fromCorrectId = pairsFromCorrect
+      ? Number(pairsFromCorrect[String(leftOpt.option_id)])
+      : 0
+    const fromCorrect = fromCorrectId
+      ? options.find((o) => Number(o.option_id) === fromCorrectId)
+      : null
+    return {
+      left: leftOpt.option_text,
+      right: (fromMap || fromCorrect)?.option_text || '—',
+      id: leftOpt.option_id,
+    }
+  })
+
+  if (!rows.length) return null
+
+  return (
+    <div className="quiz-banner-in mt-4 border-t border-slate-200/80 pt-4">
+      <p className="mb-3 text-center text-[clamp(0.7rem,1.2vw,0.8rem)] font-semibold uppercase tracking-wider text-slate-500">
+        Correct matches
+      </p>
+      <div className="space-y-2">
+        {rows.map((row, idx) => (
+          <div
+            key={row.id ?? idx}
+            className="quiz-row-in flex flex-wrap items-center gap-3 rounded-xl border border-emerald-300/90 bg-emerald-50/90 px-4 py-3"
+            style={{ animationDelay: `${idx * 70}ms` }}
+          >
+            <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-emerald-600 text-white shadow-sm">
+              <Check className="size-5" strokeWidth={3} />
+            </span>
+            <p className="min-w-0 flex-1 text-[clamp(0.95rem,1.6vw,1.15rem)] font-semibold text-navy-900">
+              {row.left}
+            </p>
+            <span className="text-emerald-600" aria-hidden>
+              →
+            </span>
+            <p className="min-w-0 flex-1 text-[clamp(0.95rem,1.6vw,1.15rem)] font-semibold text-emerald-900">
+              {row.right}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /** All options in a scannable list — correct ones get a green tick badge. */
 export function PresentOptionsKey({ question, chartData = [] }) {
   if (!question?.answerRevealed) return null
+
+  if (question.rawType === 'match' || question.type === 'Match' || question.chartRawType === 'match') {
+    return <PresentMatchKey question={question} />
+  }
 
   const correctIds = new Set((question.correctOptionIds || []).map(Number))
   const options =
@@ -94,11 +163,17 @@ export function getPresentBarFill(entry) {
 }
 
 export function shouldShowAnswerRevealUi(question) {
-  return (
-    Boolean(question?.answerRevealed) &&
-    questionSupportsAnswerReveal(question.type, question.isQuizMode) &&
-    getCorrectOptionsForQuestion(question).length > 0
-  )
+  if (!question?.answerRevealed) return false
+  if (!questionSupportsAnswerReveal(question.type, question.isQuizMode)) return false
+  if (
+    question.rawType === 'match' ||
+    question.type === 'Match' ||
+    question.chartRawType === 'match'
+  ) {
+    const opts = question.options || []
+    return opts.some((o) => o.match_side === 'left' || o.matchSide === 'left')
+  }
+  return getCorrectOptionsForQuestion(question).length > 0
 }
 
 /** Green tick badge above the correct bar(s), including zero-response bars. */

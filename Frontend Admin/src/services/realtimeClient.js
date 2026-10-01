@@ -429,6 +429,7 @@ export const RealtimeEvent = {
   SESSION_PROGRESS: 'session_progress',
   LEADERBOARD_UPDATE: 'leaderboard_update',
   RANKING_RESPONSE_SUBMITTED: 'ranking-response-submitted',
+  MATCH_RESPONSE_SUBMITTED: 'match-response-submitted',
   PARTICIPANT_JOINED: 'participant_joined',
   PARTICIPANT_LEFT: 'participant_left',
   PARTICIPANT_PRESENCE: 'participant_presence',

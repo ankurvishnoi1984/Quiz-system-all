@@ -20,6 +20,7 @@ const TYPES = [
   { api: 'open_text', ui: 'Text' },
   { api: 'true_false', ui: 'True/False' },
   { api: 'ranking', ui: 'Ranking' },
+  { api: 'match', ui: 'Match' },
   { api: 'emoji_reaction', ui: 'Emoji Reaction' },
 ]
 

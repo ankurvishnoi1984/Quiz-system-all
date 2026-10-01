@@ -205,14 +205,18 @@ function normalizeQuestionInput(input) {
 }
 
 function normalizeOptions(input) {
-  const nonScored = ["poll", "survey", "emoji_reaction"].includes(
-    String(input.question_type || "").toLowerCase()
-  );
+  const type = String(input.question_type || "").toLowerCase();
+  const nonScored = ["poll", "survey", "emoji_reaction"].includes(type);
   return (Array.isArray(input.options) ? input.options : []).map((option, index) => ({
     option_text: String(option.option_text || "").trim(),
     media_url: option.media_url || null,
-    is_correct: nonScored ? false : Boolean(option.is_correct),
-    display_order: index + 1
+    is_correct: type === "match" || nonScored ? false : Boolean(option.is_correct),
+    display_order: index + 1,
+    match_side: option.match_side === "left" || option.match_side === "right" ? option.match_side : null,
+    match_key:
+      option.match_key != null && String(option.match_key).trim()
+        ? String(option.match_key).trim()
+        : null
   }));
 }
 
@@ -895,7 +899,9 @@ async function copyBankQuestionsToSession({ sessionId, bankQuestionIds, setId, u
         option_text: option.option_text,
         media_url: option.media_url || null,
         is_correct: Boolean(option.is_correct),
-        display_order: Number(option.display_order) || index + 1
+        display_order: Number(option.display_order) || index + 1,
+        match_side: option.match_side || null,
+        match_key: option.match_key != null ? String(option.match_key) : null
       }));
       if (options.length) await QuestionOption.bulkCreate(options, { transaction });
     }

@@ -483,12 +483,19 @@ function notifyQuestionReattemptOpened(sessionCode, questionId, questionText, ex
   });
 }
 
-function notifyAnswerRevealed(sessionCode, questionId, answerRevealed, correctOptionIds = []) {
+function notifyAnswerRevealed(
+  sessionCode,
+  questionId,
+  answerRevealed,
+  correctOptionIds = [],
+  correctMatchingPairs = null
+) {
   broadcastToSession(sessionCode, {
     type: "answer_revealed",
     question_id: Number(questionId),
     answer_revealed: Boolean(answerRevealed),
-    correct_option_ids: (correctOptionIds || []).map(Number)
+    correct_option_ids: (correctOptionIds || []).map(Number),
+    correct_matching_pairs: correctMatchingPairs || null
   });
 }
 
@@ -520,6 +527,16 @@ function notifyRankingResponseSubmitted(sessionCode, payload) {
     questionId: Number(payload.questionId),
     totalResponses: Number(payload.totalResponses || 0),
     rankings: payload.rankings || [],
+    analytics: payload.analytics || null
+  });
+}
+
+function notifyMatchResponseSubmitted(sessionCode, payload) {
+  if (!sessionCode || !payload) return;
+  broadcastToSession(sessionCode, {
+    type: "match-response-submitted",
+    questionId: Number(payload.questionId),
+    totalResponses: Number(payload.totalResponses || 0),
     analytics: payload.analytics || null
   });
 }
@@ -872,6 +889,7 @@ module.exports = {
   notifyQuestionLeaderboardVisibility,
   notifyLeaderboard,
   notifyRankingResponseSubmitted,
+  notifyMatchResponseSubmitted,
   notifySessionSettings,
   notifyParticipantJoined,
   notifyParticipantPresence,

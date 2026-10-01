@@ -6,6 +6,7 @@ import { getQuestionResultsApi } from '../../services/liveApi'
 import { getPresentViewQuestionResultsApi } from '../../services/presentViewApi'
 import WordCloudChart from '../../components/charts/WordCloudChart'
 import { EmojiBarChart } from '../../components/emoji/EmojiBarChart'
+import { MatchLiveChartPanel } from '../../components/live/MatchLiveChartPanel'
 import { buildEmojiBarData } from '../../utils/emojiReaction'
 import { buildQuestionLeaderboardForQuestion } from '../../utils/leaderboard'
 import { PresentBarChart } from './PresentBarChart'
@@ -198,6 +199,10 @@ export function QuestionSlide({
     chartRawType === 'ranking' &&
     Array.isArray(rankingAnalytics?.rankings) &&
     rankingAnalytics.rankings.length > 0
+  const matchAnalytics = questionResultsQuery.data?.match_analytics || null
+  const showMatch = chartRawType === 'match'
+  const hasMatchPairs =
+    Array.isArray(matchAnalytics?.pairs) && matchAnalytics.pairs.length > 0
   const showTextList = chartRawType === 'open_text'
   const showQuestionLeaderboard = Boolean(question.isQuizMode && question.showLeaderboard)
 
@@ -322,6 +327,29 @@ export function QuestionSlide({
       return renderRankingTable({ large: expanded })
     }
 
+    if (showMatch) {
+      return (
+        <div
+          className={
+            expanded
+              ? 'min-h-[min(70vh,720px)] flex-1'
+              : compact
+                ? 'min-h-0 flex-1'
+                : 'min-h-[40vh]'
+          }
+        >
+          {hasMatchPairs ? (
+            <MatchLiveChartPanel analytics={matchAnalytics} chartView="table" />
+          ) : (
+            <p className="grid h-full min-h-[12rem] place-items-center text-center text-[clamp(0.95rem,1.8vw,1.15rem)] font-semibold text-slate-500">
+              Waiting for participants to submit matches…
+            </p>
+          )}
+          {showRevealUi ? <PresentOptionsKey question={question} /> : null}
+        </div>
+      )
+    }
+
     if (hasChart) {
       return (
         <>
@@ -350,9 +378,11 @@ export function QuestionSlide({
       ? { title: 'Word cloud' }
       : showRanking
         ? { title: 'Ranking results' }
-        : hasChart
-          ? { title: 'Results' }
-          : null
+        : showMatch
+          ? { title: 'Match accuracy' }
+          : hasChart
+            ? { title: 'Results' }
+            : null
 
   const renderResultsPanel = ({ compact = false } = {}) => {
     const panelClass = compact
@@ -370,7 +400,7 @@ export function QuestionSlide({
     }
 
     return (
-      <div className={`${panelClass}${showRanking ? ' overflow-auto' : ''}`}>
+      <div className={`${panelClass}${showRanking || showMatch ? ' overflow-auto' : ''}`}>
         <ResultsPanelHeader title={resultsPanelMeta.title} onExpand={expandChart} />
         {renderChartBody({ compact })}
       </div>
@@ -402,7 +432,7 @@ export function QuestionSlide({
               <p className="mb-3 shrink-0 text-[clamp(0.75rem,1.4vw,0.85rem)] font-semibold uppercase tracking-wider text-slate-500">
                 {resultsPanelMeta.title}
               </p>
-              <div className={`flex min-h-0 flex-1 flex-col${showRanking ? ' overflow-auto' : ''}`}>
+              <div className={`flex min-h-0 flex-1 flex-col${showRanking || showMatch ? ' overflow-auto' : ''}`}>
                 {renderChartBody({ compact: false, expanded: true })}
               </div>
             </div>

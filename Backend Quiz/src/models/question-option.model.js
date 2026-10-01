@@ -30,6 +30,14 @@ const QuestionOption = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false
     },
+    match_side: {
+      type: DataTypes.ENUM("left", "right"),
+      allowNull: true
+    },
+    match_key: {
+      type: DataTypes.STRING(32),
+      allowNull: true
+    },
     created_at: {
       type: DataTypes.DATE,
       allowNull: true

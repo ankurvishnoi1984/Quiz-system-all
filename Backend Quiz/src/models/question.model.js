@@ -28,7 +28,8 @@ const Question = sequelize.define(
         "true_false",
         "ranking",
         "fill_blank",
-        "emoji_reaction"
+        "emoji_reaction",
+        "match"
       ),
       allowNull: false
     },

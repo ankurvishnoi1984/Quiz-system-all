@@ -32,6 +32,31 @@ function validateSubmitResponsePayload(payload) {
       }
     }
   }
+  if (payload.matching_pairs != null) {
+    if (
+      typeof payload.matching_pairs !== "object" ||
+      Array.isArray(payload.matching_pairs) ||
+      payload.matching_pairs === null
+    ) {
+      errors.push("matching_pairs must be an object of left_option_id to right_option_id");
+    } else {
+      const entries = Object.entries(payload.matching_pairs);
+      if (entries.length < 3) {
+        errors.push("matching_pairs must include at least 3 pairs");
+      }
+      const leftIds = entries.map(([left]) => Number(left));
+      const rightIds = entries.map(([, right]) => Number(right));
+      if (
+        leftIds.some((id) => Number.isNaN(id) || id <= 0) ||
+        rightIds.some((id) => Number.isNaN(id) || id <= 0)
+      ) {
+        errors.push("matching_pairs must use numeric option ids");
+      }
+      if (new Set(leftIds).size !== leftIds.length || new Set(rightIds).size !== rightIds.length) {
+        errors.push("matching_pairs cannot reuse the same left or right option");
+      }
+    }
+  }
   return errors;
 }
 

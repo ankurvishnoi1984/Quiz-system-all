@@ -6,6 +6,7 @@ import { QuestionSurveyResults } from './question/QuestionSurveyResults'
 import { QuestionTimer } from './question/QuestionTimer'
 import { RatingOptions } from './question/RatingOptions'
 import { RankingOptions } from './question/RankingOptions'
+import { MatchOptions } from './question/MatchOptions'
 import { TextResponse } from './question/TextResponse'
 import { TrueFalseOptions } from './question/TrueFalseOptions'
 import { WordCloudInput } from './question/WordCloudInput'
@@ -55,6 +56,7 @@ export function ActiveQuestionPanel({
   onSelectRating,
   onTextChange,
   onRankingChange,
+  onMatchingChange,
   onToggleEmojiOption,
   onPrevious,
   onNextOrSubmit,
@@ -211,6 +213,19 @@ export function ActiveQuestionPanel({
         />
       )}
 
+      {question.type === 'Match' && (
+        <MatchOptions
+          question={question}
+          currentResponse={currentResponse}
+          inputsLocked={inputsLocked}
+          canSeeAnswerReveal={canSeeAnswerReveal}
+          correctMatchingPairs={
+            answerRevealMeta?.correctMatchingPairs || question.correctMatchingPairs
+          }
+          onMatchingChange={(matchingPairs) => onMatchingChange(question.id, matchingPairs)}
+        />
+      )}
+
       {question.type === 'Emoji Reaction' && (
         <EmojiReactionOptions
           question={question}
@@ -360,7 +375,7 @@ export function ActiveQuestionPanel({
 
       {canSeeAnswerReveal &&
         !question.isSurvey &&
-        (question.type === 'MCQ' || question.type === 'True/False') &&
+        (question.type === 'MCQ' || question.type === 'True/False' || question.type === 'Match') &&
         participantAnswerIsCorrect !== null && (
           <div
             className={`rounded-2xl border p-4 ${
@@ -374,7 +389,13 @@ export function ActiveQuestionPanel({
                 participantAnswerIsCorrect ? 'text-emerald-800' : 'text-red-800'
               }`}
             >
-              {participantAnswerIsCorrect ? 'Correct Answer' : 'Incorrect Answer'}
+              {participantAnswerIsCorrect
+                ? question.type === 'Match'
+                  ? 'All pairs correct'
+                  : 'Correct Answer'
+                : question.type === 'Match'
+                  ? 'Some pairs were incorrect'
+                  : 'Incorrect Answer'}
             </p>
           </div>
         )}

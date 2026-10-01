@@ -48,6 +48,7 @@ import { HostQuestionControls } from '../components/live/HostQuestionControls'
 import { HostQuestionTimer } from '../components/live/HostQuestionTimer'
 import { LiveChartViewToggle } from '../components/live/LiveChartViewToggle'
 import { RankingLiveChartPanel } from '../components/live/RankingLiveChartPanel'
+import { MatchLiveChartPanel } from '../components/live/MatchLiveChartPanel'
 import { useHostQuestionMutations } from '../hooks/useHostQuestionMutations'
 // Q&A feature disabled — re-enable when bringing Q&A back
 // import { LiveQaPanel } from '../components/leaderboard/LiveQaPanel'
@@ -367,6 +368,11 @@ function LivePage() {
       queryClient.invalidateQueries({ queryKey: ['live-question-results'] })
       queryClient.invalidateQueries({ queryKey: ['live-responses', sessionId] })
     })
+    const offMatchResp = client.on(RealtimeEvent.MATCH_RESPONSE_SUBMITTED, () => {
+      playHostResponseReceived()
+      queryClient.invalidateQueries({ queryKey: ['live-question-results'] })
+      queryClient.invalidateQueries({ queryKey: ['live-responses', sessionId] })
+    })
     const offSession = client.on('session_updated', (data) => {
       queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
       queryClient.invalidateQueries({ queryKey: ['live-dept-sessions'] })
@@ -414,6 +420,7 @@ function LivePage() {
       offError()
       offResp()
       offRankingResp()
+      offMatchResp()
       offSession()
       offQuestion()
       offAnswerReveal()
@@ -833,6 +840,10 @@ function LivePage() {
     chartRawType === 'ranking' &&
     Array.isArray(rankingAnalytics?.rankings) &&
     rankingAnalytics.rankings.length > 0
+  const matchAnalytics = questionResultsQuery.data?.match_analytics || null
+  const showMatchBreakdown = chartRawType === 'match'
+  const hasMatchPairs =
+    Array.isArray(matchAnalytics?.pairs) && matchAnalytics.pairs.length > 0
   const showWordCloud = chartRawType === 'word_cloud'
   const showEmojiReaction = questionUsesEmojiChart(chartRawType)
   const emojiBarData = useMemo(
@@ -1444,12 +1455,28 @@ function LivePage() {
                     {(rankingAnalytics.totalResponses || 0) === 1 ? '' : 's'} · avg score shown per option
                   </p>
                 )}
+                {showMatchBreakdown && hasMatchPairs && (
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {matchAnalytics.totalResponses || 0} match submission
+                    {(matchAnalytics.totalResponses || 0) === 1 ? '' : 's'} ·{' '}
+                    {matchAnalytics.fullyCorrectPercent || 0}% fully correct
+                  </p>
+                )}
               </div>
-              {(showOptionBreakdown || showRatingBreakdown || showRankingBreakdown) && (
+              {(showOptionBreakdown ||
+                showRatingBreakdown ||
+                showRankingBreakdown ||
+                (showMatchBreakdown && hasMatchPairs)) && (
                 <LiveChartViewToggle
                   view={chartView}
                   onChange={setChartView}
-                  modes={showRankingBreakdown ? ['table', 'bar', 'pie'] : ['bar', 'pie']}
+                  modes={
+                    showMatchBreakdown
+                      ? ['table', 'bar']
+                      : showRankingBreakdown
+                        ? ['table', 'bar', 'pie']
+                        : ['bar', 'pie']
+                  }
                 />
               )}
             </div>
@@ -1458,8 +1485,12 @@ function LivePage() {
                 <EmojiBarChart rows={emojiBarData.rows} total={emojiBarData.total} size="md" className="h-full" />
               ) : showWordCloud ? (
                 <WordCloudChart words={wordCloudWords} className="h-full" size="md" />
-              ) : (
-                showRankingBreakdown ? (
+              ) : showMatchBreakdown ? (
+                <MatchLiveChartPanel
+                  analytics={hasMatchPairs ? matchAnalytics : { pairs: [], totalResponses: 0, fullyCorrectPercent: 0 }}
+                  chartView={chartView === 'pie' ? 'bar' : chartView}
+                />
+              ) : showRankingBreakdown ? (
                   <RankingLiveChartPanel
                     rankings={rankingAnalytics.rankings}
                     chartView={chartView}
@@ -1536,8 +1567,7 @@ function LivePage() {
                     </PieChart>
                     )}
                   </ResponsiveContainer>
-                )
-              )}
+                )}
             </div>
             {showWordCloud && !wordCloudWords.length && (
               <p className="mt-2 text-center text-xs text-slate-500">Waiting for participants to submit words…</p>
@@ -1548,6 +1578,11 @@ function LivePage() {
             {chartRawType === 'ranking' && !showRankingBreakdown && (
               <p className="mt-2 text-center text-xs text-slate-500">
                 Waiting for participants to submit rankings…
+              </p>
+            )}
+            {chartRawType === 'match' && !hasMatchPairs && (
+              <p className="mt-2 text-center text-xs text-slate-500">
+                Waiting for participants to submit matches…
               </p>
             )}
           </div>

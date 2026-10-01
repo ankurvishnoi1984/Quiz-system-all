@@ -26,6 +26,14 @@ const QuestionBankOption = sequelize.define(
     display_order: {
       type: DataTypes.INTEGER,
       allowNull: false
+    },
+    match_side: {
+      type: DataTypes.ENUM("left", "right"),
+      allowNull: true
+    },
+    match_key: {
+      type: DataTypes.STRING(32),
+      allowNull: true
     }
   },
   {

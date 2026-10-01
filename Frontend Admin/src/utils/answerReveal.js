@@ -4,8 +4,13 @@ export function questionSupportsAnswerReveal(questionType, isQuizMode) {
       ? 'mcq'
       : questionType === 'True/False'
         ? 'true_false'
-        : questionType
-  return Boolean(isQuizMode) && (apiType === 'mcq' || apiType === 'true_false')
+        : questionType === 'Match'
+          ? 'match'
+          : questionType
+  return (
+    Boolean(isQuizMode) &&
+    (apiType === 'mcq' || apiType === 'true_false' || apiType === 'match')
+  )
 }
 
 /** MCQ / True-False option styling after the host reveals the answer key. */
@@ -33,8 +38,25 @@ export function isOptionCorrectForReveal(option, revealMeta) {
   return revealMeta.correctOptionIds.includes(Number(option.option_id))
 }
 
-/** After reveal: whether the participant's MCQ / True-False choice matches the key. */
+/** After reveal: whether the participant's MCQ / True-False / Match choice matches the key. */
 export function isParticipantChoiceCorrect(question, currentResponse, revealMeta) {
+  if (question?.type === 'Match') {
+    const correct =
+      revealMeta?.correctMatchingPairs ||
+      question?.correctMatchingPairs ||
+      null
+    if (!correct || typeof correct !== 'object') return null
+    const leftIds = Object.keys(correct)
+    if (!leftIds.length) return null
+    const submitted =
+      currentResponse?.matchingPairs && typeof currentResponse.matchingPairs === 'object'
+        ? currentResponse.matchingPairs
+        : {}
+    return leftIds.every(
+      (leftId) => Number(submitted[leftId]) === Number(correct[leftId]),
+    )
+  }
+
   if (!revealMeta?.correctOptionIds?.length) return null
   if (question?.type !== 'MCQ' && question?.type !== 'True/False') return null
 

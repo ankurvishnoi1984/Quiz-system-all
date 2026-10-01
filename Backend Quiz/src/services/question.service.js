@@ -184,7 +184,9 @@ async function createQuestion({ sessionId, input, user }) {
       option_text: option.option_text,
       media_url: option.media_url || null,
       is_correct: isNonScored ? false : option.is_correct ?? false,
-      display_order: option.display_order || idx + 1
+      display_order: option.display_order || idx + 1,
+      match_side: option.match_side || null,
+      match_key: option.match_key != null ? String(option.match_key).trim() || null : null
     }));
     await QuestionOption.bulkCreate(optionsToCreate);
   }
@@ -362,7 +364,10 @@ async function importQuestions({ sessionId, questions, mode = "append", user }) 
             option_text: option.option_text,
             media_url: option.media_url || null,
             is_correct: isNonScored ? false : option.is_correct ?? false,
-            display_order: optionIndex + 1
+            display_order: optionIndex + 1,
+            match_side: option.match_side || null,
+            match_key:
+              option.match_key != null ? String(option.match_key).trim() || null : null
           })),
           { transaction }
         );
@@ -466,7 +471,9 @@ async function updateQuestion({ questionId, input, user }) {
         option_text: option.option_text,
         media_url: option.media_url || null,
         is_correct: isNonScored ? false : option.is_correct ?? false,
-        display_order: option.display_order || idx + 1
+        display_order: option.display_order || idx + 1,
+        match_side: option.match_side || null,
+        match_key: option.match_key != null ? String(option.match_key).trim() || null : null
       }));
       if (optionsToCreate.length > 0) {
         await QuestionOption.bulkCreate(optionsToCreate);
@@ -639,6 +646,24 @@ function getCorrectOptionIds(question) {
     .map((option) => Number(option.option_id));
 }
 
+function getCorrectMatchingPairs(question) {
+  const options = getQuestionOptions(question);
+  const leftByKey = new Map();
+  const rightByKey = new Map();
+  for (const option of options) {
+    const key = String(option.match_key || "").trim();
+    if (!key) continue;
+    if (option.match_side === "left") leftByKey.set(key, Number(option.option_id));
+    if (option.match_side === "right") rightByKey.set(key, Number(option.option_id));
+  }
+  const pairs = {};
+  for (const [key, leftId] of leftByKey) {
+    const rightId = rightByKey.get(key);
+    if (rightId) pairs[String(leftId)] = rightId;
+  }
+  return pairs;
+}
+
 function formatQuestionForParticipant(question, { participantSubmitted = false } = {}) {
   const plain = question.toJSON ? question.toJSON() : { ...question };
   const revealed = Boolean(plain.answer_revealed);
@@ -648,7 +673,8 @@ function formatQuestionForParticipant(question, { participantSubmitted = false }
     option_id: option.option_id,
     option_text: option.option_text,
     media_url: option.media_url || null,
-    display_order: option.display_order
+    display_order: option.display_order,
+    match_side: option.match_side || null
   }));
 
   const correct_option_ids =
@@ -658,12 +684,18 @@ function formatQuestionForParticipant(question, { participantSubmitted = false }
           .map((option) => Number(option.option_id))
       : [];
 
+  let correct_matching_pairs = null;
+  if (revealed && participantSubmitted && plain.question_type === "match") {
+    correct_matching_pairs = getCorrectMatchingPairs(plain);
+  }
+
   return {
     ...plain,
     QuestionOptions: undefined,
     question_options,
     answer_revealed: revealed,
     correct_option_ids,
+    correct_matching_pairs,
     show_leaderboard: Boolean(plain.show_leaderboard),
     live_activated_at: plain.live_activated_at || null,
     submissions_closed: Boolean(plain.submissions_closed),
@@ -675,8 +707,10 @@ async function setQuestionAnswerRevealed({ questionId, user, revealed }) {
   const question = await getQuestionById({ questionId, user });
   const session = await getSessionForQuestionFlow(question.session_id);
 
-  if (!["mcq", "true_false"].includes(question.question_type)) {
-    const error = new Error("Answers can be revealed only for multiple choice or true/false questions");
+  if (!["mcq", "true_false", "match"].includes(question.question_type)) {
+    const error = new Error(
+      "Answers can be revealed only for multiple choice, true/false, or match questions"
+    );
     error.statusCode = 400;
     throw error;
   }
@@ -717,6 +751,7 @@ async function setQuestionLeaderboardVisibility({ questionId, user, visible }) {
       "poll",
       "true_false",
       "ranking",
+      "match",
       "rating",
       "word_cloud",
       "emoji_reaction"
@@ -1027,5 +1062,6 @@ module.exports = {
   ensureAllQuestionsLiveForQuizTotalTimeSession,
   openQuestionForReattempt,
   getCorrectOptionIds,
+  getCorrectMatchingPairs,
   formatQuestionForParticipant
 };

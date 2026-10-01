@@ -9,7 +9,8 @@ function validateCreateQuestionPayload(payload) {
     "open_text",
     "true_false",
     "ranking",
-    "emoji_reaction"
+    "emoji_reaction",
+    "match"
   ];
 
   if (!payload?.question_type || typeof payload.question_type !== "string") {
@@ -131,6 +132,52 @@ function validateCreateQuestionPayload(payload) {
       errors.push("ranking options must include at least 2 entries");
     } else if (payload.options.length > 10) {
       errors.push("ranking options cannot exceed 10 entries");
+    }
+  }
+
+  if (payload?.question_type === "match") {
+    if (!Array.isArray(payload.options) || payload.options.length < 6) {
+      errors.push("match questions need at least 3 left and 3 right options");
+    } else if (payload.options.length > 12) {
+      errors.push("match questions cannot exceed 6 pairs (12 options)");
+    } else if (payload.options.length % 2 !== 0) {
+      errors.push("match questions must have an even number of options (equal left and right)");
+    } else {
+      const left = payload.options.filter((o) => o?.match_side === "left");
+      const right = payload.options.filter((o) => o?.match_side === "right");
+      if (left.length !== right.length || left.length < 3) {
+        errors.push("match questions need 3–6 pairs with equal left and right sides");
+      }
+      const keys = payload.options
+        .map((o) => String(o?.match_key || "").trim())
+        .filter(Boolean);
+      if (keys.length !== payload.options.length) {
+        errors.push("each match option must include a match_key");
+      } else {
+        const byKey = new Map();
+        for (const opt of payload.options) {
+          const key = String(opt.match_key).trim();
+          const side = opt.match_side;
+          if (!byKey.has(key)) byKey.set(key, { left: 0, right: 0 });
+          const bucket = byKey.get(key);
+          if (side === "left") bucket.left += 1;
+          if (side === "right") bucket.right += 1;
+        }
+        for (const [key, sides] of byKey) {
+          if (sides.left !== 1 || sides.right !== 1) {
+            errors.push(`match_key "${key}" must appear once on left and once on right`);
+            break;
+          }
+        }
+      }
+      const leftTexts = left.map((o) => String(o.option_text || "").trim().toLocaleLowerCase());
+      const rightTexts = right.map((o) => String(o.option_text || "").trim().toLocaleLowerCase());
+      if (new Set(leftTexts).size !== leftTexts.length || new Set(rightTexts).size !== rightTexts.length) {
+        errors.push("match left texts and right texts must each be unique");
+      }
+    }
+    if (payload?.allow_multiple_select) {
+      errors.push("match does not support multiple selection");
     }
   }
 

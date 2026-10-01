@@ -24,6 +24,7 @@ import {
   Vote,
   X,
   Sparkles,
+  Columns2,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -154,6 +155,7 @@ const QUESTION_TYPES = [
   { type: 'Text', icon: MessageSquareText, description: 'Open-ended response' },
   { type: 'True/False', icon: BadgeCheck, description: 'Binary choice' },
   { type: 'Ranking', icon: BarChart3, description: 'Rank items by preference' },
+  { type: 'Match', icon: Columns2, description: 'Match prompts to answers' },
 ]
 
 const SURVEY_SUB_TYPES = [
@@ -355,6 +357,7 @@ function questionTypeUsesOptions(type) {
     type === 'Poll' ||
     type === 'True/False' ||
     type === 'Ranking' ||
+    type === 'Match' ||
     type === 'Emoji Reaction'
   )
 }
@@ -419,6 +422,30 @@ function buildOptionsPayload(question) {
       is_correct: false,
       display_order: optionIndex + 1,
     }))
+  }
+  if (question.type === 'Match') {
+    const pairs = Array.isArray(question.matchPairs) ? question.matchPairs : []
+    const options = []
+    pairs.forEach((pair, pairIndex) => {
+      const key = String(pair.matchKey || String.fromCharCode(65 + pairIndex))
+      options.push({
+        ...(pair.leftOptionId != null ? { option_id: pair.leftOptionId } : {}),
+        option_text: pair.left || `Item ${pairIndex + 1}`,
+        is_correct: false,
+        display_order: pairIndex * 2 + 1,
+        match_side: 'left',
+        match_key: key,
+      })
+      options.push({
+        ...(pair.rightOptionId != null ? { option_id: pair.rightOptionId } : {}),
+        option_text: pair.right || `Match ${pairIndex + 1}`,
+        is_correct: false,
+        display_order: pairIndex * 2 + 2,
+        match_side: 'right',
+        match_key: key,
+      })
+    })
+    return options
   }
   return []
 }
@@ -504,6 +531,131 @@ function TrueFalseOptionsEditor({ question, quizMode, onChange, structureLocked,
       {variant === 'quiz' && !quizMode && (
         <p className="text-xs text-amber-700">Enable Quiz mode to select the correct answer.</p>
       )}
+    </div>
+  )
+}
+
+function MatchPairsEditor({ question, onChange, structureLocked }) {
+  const pairs = Array.isArray(question.matchPairs) ? question.matchPairs : []
+
+  const updatePair = (id, patch) => {
+    onChange({
+      ...question,
+      matchPairs: pairs.map((pair) => (pair.id === id ? { ...pair, ...patch } : pair)),
+    })
+  }
+
+  const addPair = () => {
+    if (structureLocked || pairs.length >= 6) return
+    const nextIndex = pairs.length
+    onChange({
+      ...question,
+      matchPairs: [
+        ...pairs,
+        {
+          id: uid('pair'),
+          matchKey: String.fromCharCode(65 + nextIndex),
+          left: `Item ${nextIndex + 1}`,
+          right: `Match ${nextIndex + 1}`,
+          leftOptionId: null,
+          rightOptionId: null,
+        },
+      ],
+    })
+  }
+
+  const removePair = (id) => {
+    if (structureLocked || pairs.length <= 3) return
+    onChange({
+      ...question,
+      matchPairs: pairs
+        .filter((pair) => pair.id !== id)
+        .map((pair, index) => ({
+          ...pair,
+          matchKey: String.fromCharCode(65 + index),
+        })),
+    })
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-navy-900">Match pairs</p>
+          <p className="mt-1 text-xs text-slate-600">
+            Add 3–6 pairs. Left is the prompt participants see; right is the answer they place.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={addPair}
+          disabled={structureLocked || pairs.length >= 6}
+          className="inline-flex h-10 items-center gap-2 rounded-xl border border-blue-200/70 bg-white px-3 text-sm font-semibold text-navy-800 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Plus className="size-4" />
+          Add pair
+        </button>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-blue-200/70 bg-linear-to-br from-slate-50 via-white to-blue-50/40 p-1">
+        <div className="hidden grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-slate-500 sm:grid">
+          <span className="w-9 text-center">#</span>
+          <span>Prompt (left)</span>
+          <span>Answer (right)</span>
+          <span className="w-11" />
+        </div>
+        <div className="space-y-2 p-2 pt-0">
+          {pairs.map((pair, index) => (
+            <div
+              key={pair.id}
+              className="grid gap-2 rounded-2xl border border-blue-200/70 bg-white/95 p-3 shadow-sm sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)_auto]"
+            >
+              <div className="flex items-center justify-center gap-2 sm:flex-col">
+                <span className="inline-flex size-9 items-center justify-center rounded-xl bg-navy-900 text-xs font-bold text-white shadow-sm">
+                  {pair.matchKey || String.fromCharCode(65 + index)}
+                </span>
+                <span className="hidden text-[10px] font-semibold text-slate-400 sm:inline" aria-hidden>
+                  ↔
+                </span>
+              </div>
+              <label className="block text-xs font-semibold text-slate-600">
+                Left / prompt
+                <input
+                  value={pair.left || ''}
+                  disabled={structureLocked}
+                  onChange={(event) => updatePair(pair.id, { left: event.target.value })}
+                  className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-navy-900 outline-none transition focus:border-navy-500 focus:ring-2 focus:ring-navy-500/20 disabled:bg-slate-50"
+                  placeholder="e.g. Capital of France"
+                />
+              </label>
+              <label className="block text-xs font-semibold text-slate-600">
+                Right / answer
+                <input
+                  value={pair.right || ''}
+                  disabled={structureLocked}
+                  onChange={(event) => updatePair(pair.id, { right: event.target.value })}
+                  className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-navy-900 outline-none transition focus:border-navy-500 focus:ring-2 focus:ring-navy-500/20 disabled:bg-slate-50"
+                  placeholder="e.g. Paris"
+                />
+              </label>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={() => removePair(pair.id)}
+                  disabled={structureLocked || pairs.length <= 3}
+                  className="inline-flex size-11 items-center justify-center rounded-xl border border-red-200 bg-white text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  aria-label="Remove pair"
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <p className="text-xs text-slate-500">
+        {pairs.length} pair{pairs.length === 1 ? '' : 's'} · Participants drag or tap answers into slots
+      </p>
     </div>
   )
 }
@@ -1272,6 +1424,7 @@ function BuilderPage() {
       open_text: 'Text',
       true_false: 'True/False',
       ranking: 'Ranking',
+      match: 'Match',
       emoji_reaction: 'Emoji Reaction',
       fill_blank: 'Text',
     }
@@ -1289,6 +1442,7 @@ function BuilderPage() {
       Text: 'open_text',
       'True/False': 'true_false',
       Ranking: 'ranking',
+      Match: 'match',
     }
     return mapping[uiType] || 'open_text'
   }
@@ -1330,7 +1484,7 @@ function BuilderPage() {
 
     const uiType = apiToUiType(question.question_type)
     const apiOptions = question.question_options || question.QuestionOptions || []
-    const options =
+    let options =
       uiType === 'True/False'
         ? normalizeTrueFalseOptions(apiOptions)
         : apiOptions.map((option) => ({
@@ -1338,7 +1492,32 @@ function BuilderPage() {
             optionId: option.option_id,
             text: option.option_text,
             isCorrect: Boolean(option.is_correct),
+            matchSide: option.match_side || null,
+            matchKey: option.match_key || null,
           }))
+
+    let matchPairs = undefined
+    if (uiType === 'Match') {
+      const left = apiOptions
+        .filter((o) => o.match_side === 'left')
+        .sort((a, b) => Number(a.display_order || 0) - Number(b.display_order || 0))
+      const rightByKey = new Map(
+        apiOptions.filter((o) => o.match_side === 'right').map((o) => [String(o.match_key), o]),
+      )
+      matchPairs = left.map((leftOpt, index) => {
+        const key = String(leftOpt.match_key || String.fromCharCode(65 + index))
+        const rightOpt = rightByKey.get(key)
+        return {
+          id: `pair-${leftOpt.option_id}`,
+          matchKey: key,
+          left: leftOpt.option_text || '',
+          right: rightOpt?.option_text || '',
+          leftOptionId: leftOpt.option_id,
+          rightOptionId: rightOpt?.option_id ?? null,
+        }
+      })
+      options = []
+    }
 
     return {
       id: String(question.question_id),
@@ -1357,6 +1536,7 @@ function BuilderPage() {
             ratingMaxLabel: question.rating_max_label || '',
           }
         : {}),
+      ...(uiType === 'Match' ? { matchPairs } : {}),
       answerRevealed: Boolean(question.answer_revealed),
       showLeaderboard: Boolean(question.show_leaderboard),
       timeLimitSeconds: normalizeTimeLimitSeconds(question.time_limit_seconds),
@@ -1671,6 +1851,19 @@ function BuilderPage() {
                   { id: uid('opt'), optionId: null, text: 'Option 2', isCorrect: false },
                 ]
               : [],
+      ...(type === 'Match'
+        ? {
+            matchPairs: [0, 1, 2, 3].map((index) => ({
+              id: uid('pair'),
+              matchKey: String.fromCharCode(65 + index),
+              left: `Item ${index + 1}`,
+              right: `Match ${index + 1}`,
+              leftOptionId: null,
+              rightOptionId: null,
+            })),
+            options: [],
+          }
+        : {}),
     }
     setQuestions((prev) => [...prev, q])
     setSelectedId(q.id)
@@ -1707,14 +1900,53 @@ function BuilderPage() {
     const accepted = generatedList.slice(0, remaining)
     const mapped = accepted.map((item) => {
       const type = item.type || firstType || 'MCQ'
-      const options = Array.isArray(item.options)
+      let options = Array.isArray(item.options)
         ? item.options.map((opt) => ({
             id: uid('opt'),
             optionId: null,
             text: opt.text || 'Option',
             isCorrect: Boolean(opt.isCorrect),
+            matchSide: opt.matchSide || null,
+            matchKey: opt.matchKey || null,
           }))
         : []
+
+      let matchPairs
+      if (type === 'Match') {
+        const pairsFromAi = Array.isArray(item.pairs) ? item.pairs : null
+        if (pairsFromAi?.length) {
+          matchPairs = pairsFromAi.slice(0, 6).map((pair, index) => ({
+            id: uid('pair'),
+            matchKey: String.fromCharCode(65 + index),
+            left: pair.left || `Item ${index + 1}`,
+            right: pair.right || `Match ${index + 1}`,
+            leftOptionId: null,
+            rightOptionId: null,
+          }))
+        } else {
+          const left = options.filter((o) => o.matchSide === 'left')
+          const right = options.filter((o) => o.matchSide === 'right')
+          matchPairs = left.map((leftOpt, index) => ({
+            id: uid('pair'),
+            matchKey: leftOpt.matchKey || String.fromCharCode(65 + index),
+            left: leftOpt.text,
+            right: right[index]?.text || `Match ${index + 1}`,
+            leftOptionId: null,
+            rightOptionId: null,
+          }))
+        }
+        if (!matchPairs.length) {
+          matchPairs = [0, 1, 2].map((index) => ({
+            id: uid('pair'),
+            matchKey: String.fromCharCode(65 + index),
+            left: `Item ${index + 1}`,
+            right: `Match ${index + 1}`,
+            leftOptionId: null,
+            rightOptionId: null,
+          }))
+        }
+        options = []
+      }
 
       return {
         id: uid('q'),
@@ -1732,6 +1964,7 @@ function BuilderPage() {
               ratingMax: Number(item.ratingMax) || DEFAULT_RATING_MAX,
             }
           : {}),
+        ...(type === 'Match' ? { matchPairs } : {}),
         options:
           type === 'True/False'
             ? createTrueFalseOptions(
@@ -2179,6 +2412,19 @@ function BuilderPage() {
           }
           if (opts.length > 10) {
             throw new Error(`Question "${question.text || 'Untitled'}" cannot have more than 10 ranking options.`)
+          }
+        }
+        if (question.type === 'Match') {
+          const pairs = Array.isArray(question.matchPairs) ? question.matchPairs : []
+          if (pairs.length < 3 || pairs.length > 6) {
+            throw new Error(
+              `Question "${question.text || 'Untitled'}" must have 3–6 match pairs.`,
+            )
+          }
+          if (pairs.some((pair) => !String(pair.left || '').trim() || !String(pair.right || '').trim())) {
+            throw new Error(
+              `Question "${question.text || 'Untitled'}" has empty left or right match text.`,
+            )
           }
         }
       }
@@ -3080,6 +3326,16 @@ function BuilderPage() {
                   <OptionsEditor
                     question={selected}
                     quizMode={quizMode}
+                    onChange={updateQuestion}
+                    structureLocked={!isDraftSession}
+                  />
+                </div>
+              )}
+
+              {selected.type === 'Match' && (
+                <div className="rounded-2xl border border-blue-200/70 bg-white/70 p-4">
+                  <MatchPairsEditor
+                    question={selected}
                     onChange={updateQuestion}
                     structureLocked={!isDraftSession}
                   />

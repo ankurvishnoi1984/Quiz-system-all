@@ -12,6 +12,7 @@ const {
   closeQuestionSubmissions,
   openQuestionForReattempt,
   getCorrectOptionIds,
+  getCorrectMatchingPairs,
   validateQuestionImport,
   importQuestions
 } = require("../services/question.service");
@@ -300,11 +301,16 @@ function setAnswerRevealedState(revealed) {
       });
       if (session?.session_code) {
         const correctOptionIds = revealed ? getCorrectOptionIds(question) : [];
+        const correctMatchingPairs =
+          revealed && question.question_type === "match"
+            ? getCorrectMatchingPairs(question)
+            : null;
         notifyAnswerRevealed(
           session.session_code,
           question.question_id,
           revealed,
-          correctOptionIds
+          correctOptionIds,
+          correctMatchingPairs
         );
       }
       return successResponse(

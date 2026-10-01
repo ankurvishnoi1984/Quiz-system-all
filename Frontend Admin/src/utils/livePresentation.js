@@ -33,6 +33,7 @@ export function mapLiveQuestionType(type) {
     open_text: 'Text',
     true_false: 'True/False',
     ranking: 'Ranking',
+    match: 'Match',
     emoji_reaction: 'Emoji Reaction',
   }
   return map[type] || type
@@ -78,6 +79,7 @@ export function questionSupportsParticipantResults(question) {
     chartType === 'poll' ||
     chartType === 'true_false' ||
     chartType === 'ranking' ||
+    chartType === 'match' ||
     chartType === 'rating' ||
     chartType === 'word_cloud' ||
     chartType === 'emoji_reaction'
@@ -133,6 +135,8 @@ export function normalizeQuestionOptions(question) {
     option_text: option.option_text,
     is_correct: Boolean(option.is_correct),
     display_order: option.display_order,
+    match_side: option.match_side || null,
+    match_key: option.match_key != null ? String(option.match_key) : null,
   }))
 }
 
@@ -183,6 +187,7 @@ export function mapLiveQuestions(questions) {
       ratingMaxLabel: q.rating_max_label || '',
       allowMultipleSelect: Boolean(q.allow_multiple_select),
       correctOptionIds: resolveCorrectOptionIds({ ...q, answerRevealed }, options),
+      correctMatchingPairs: q.correct_matching_pairs || null,
       options,
       media: mapApiMediaToQuestionMedia(q),
     }

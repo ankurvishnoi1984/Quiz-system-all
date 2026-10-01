@@ -20,6 +20,7 @@ const AI_QUESTION_TYPES = [
   'Text',
   'True/False',
   'Ranking',
+  'Match',
 ]
 
 const DIFFICULTIES = [
@@ -36,6 +37,7 @@ const TYPE_HINTS = {
   Text: 'Open-ended written responses',
   'True/False': 'Binary true or false statements',
   Ranking: 'Items participants put in order',
+  Match: 'Match prompts on the left to answers on the right',
 }
 
 function optionLetter(index) {
@@ -231,7 +233,7 @@ export function AiGenerateQuestionsModal({
         <div className="rounded-2xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           <p className="font-semibold">Session locked to {lockedType}</p>
           <p className="mt-1 text-amber-900/90">
-            AI currently supports MCQ, Poll, Word Cloud, Rating, Text, True/False, and Ranking.
+            AI currently supports MCQ, Poll, Word Cloud, Rating, Text, True/False, Ranking, and Match.
             Remove existing questions to switch type, or start a new draft session.
           </p>
         </div>
