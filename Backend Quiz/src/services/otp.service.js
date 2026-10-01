@@ -8,8 +8,7 @@ const { isValidMobile, normalizeMobile } = require("../utils/phone");
 const {
   isPaymentOtpEnabled,
   isLoginOtpEnabled,
-  isAdminActionOtpEnabled,
-  isParticipantJoinOtpEnabled
+  isAdminActionOtpEnabled
 } = require("../config/auth-features");
 const env = require("../config/env");
 
@@ -84,11 +83,6 @@ function assertFeatureEnabled(purpose) {
   }
   if (purpose === PURPOSES.ADMIN_ACTION && !isAdminActionOtpEnabled()) {
     const error = new Error("Admin action OTP is disabled");
-    error.statusCode = 400;
-    throw error;
-  }
-  if (purpose === PURPOSES.SESSION_JOIN && !isParticipantJoinOtpEnabled()) {
-    const error = new Error("Participant join OTP is disabled");
     error.statusCode = 400;
     throw error;
   }
@@ -669,14 +663,21 @@ function assertSessionJoinIdentityFields(joinType, { nickname, email, mobile }) 
 async function getSessionForJoinOtp(code) {
   const session = await Session.findOne({
     where: { session_code: String(code || "").trim().toUpperCase() },
-    attributes: ["session_id", "session_code", "join_type", "title", "status"]
+    attributes: [
+      "session_id",
+      "session_code",
+      "join_type",
+      "join_otp_required",
+      "title",
+      "status"
+    ]
   });
   if (!session) {
     const error = new Error("Session not found");
     error.statusCode = 404;
     throw error;
   }
-  if (!isContactJoinType(session.join_type)) {
+  if (!isContactJoinType(session.join_type) || !session.join_otp_required) {
     const error = new Error("This session does not require a verification code");
     error.statusCode = 400;
     throw error;
@@ -776,8 +777,6 @@ async function verifySessionJoinOtp({ code, nickname, email, mobile, channel, ot
 }
 
 function assertSessionJoinOtpToken(token, { sessionCode, nickname, email, mobile } = {}) {
-  if (!isParticipantJoinOtpEnabled()) return null;
-
   if (!token || typeof token !== "string") {
     const error = new Error("Verification is required before joining this session");
     error.statusCode = 401;

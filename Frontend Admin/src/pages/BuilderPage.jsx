@@ -1334,6 +1334,7 @@ function BuilderPage() {
     password: '',
   })
   const [joinRequirement, setJoinRequirement] = useState('name')
+  const [joinOtpRequired, setJoinOtpRequired] = useState(true)
   const [saveError, setSaveError] = useState('')
   const [saveSuccess, setSaveSuccess] = useState('')
   const [lastSavedLabel, setLastSavedLabel] = useState('Never')
@@ -1568,7 +1569,15 @@ function BuilderPage() {
       maxParticipants: Number(sessionQuery.data.max_participants || 300),
       password: '',
     })
-    setJoinRequirement(sessionQuery.data.join_type || (sessionQuery.data.is_anonymous_default ? 'anonymous' : 'name'))
+    const joinType =
+      sessionQuery.data.join_type ||
+      (sessionQuery.data.is_anonymous_default ? 'anonymous' : 'name')
+    setJoinRequirement(joinType)
+    const contactJoin =
+      joinType === 'name_email' ||
+      joinType === 'name_mobile' ||
+      joinType === 'name_email_mobile'
+    setJoinOtpRequired(contactJoin ? sessionQuery.data.join_otp_required !== false : false)
   }, [sessionQuery.data])
 
   useEffect(() => {
@@ -2527,6 +2536,12 @@ function BuilderPage() {
           ? {
               is_anonymous_default: joinRequirement === 'anonymous' || settings.anonymous,
               join_type: joinRequirement || 'name',
+              join_otp_required:
+                joinRequirement === 'name_email' ||
+                joinRequirement === 'name_mobile' ||
+                joinRequirement === 'name_email_mobile'
+                  ? Boolean(joinOtpRequired)
+                  : false,
               max_participants: settings.maxParticipants,
             }
           : {}),
@@ -3438,6 +3453,15 @@ function BuilderPage() {
                     setDirty(true)
                     setJoinRequirement(next)
                     setSettings((prev) => ({ ...prev, anonymous: next === 'anonymous' }))
+                    if (
+                      next === 'name_email' ||
+                      next === 'name_mobile' ||
+                      next === 'name_email_mobile'
+                    ) {
+                      setJoinOtpRequired(true)
+                    } else {
+                      setJoinOtpRequired(false)
+                    }
                   }}
                   className="mt-2 h-10 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15 disabled:cursor-not-allowed disabled:bg-slate-50"
                 >
@@ -3448,6 +3472,29 @@ function BuilderPage() {
                   <option value="name_email_mobile">Name + Email + Mobile</option>
                 </select>
               </div>
+
+              {(joinRequirement === 'name_email' ||
+                joinRequirement === 'name_mobile' ||
+                joinRequirement === 'name_email_mobile') && (
+                <label className="flex items-center justify-between gap-3 rounded-2xl border border-blue-200/70 bg-white p-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-700">Require OTP to join</p>
+                    <p className="text-xs text-slate-500">
+                      Participants verify email or mobile with a code before joining
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    disabled={!isDraftSession}
+                    checked={joinOtpRequired}
+                    onChange={(e) => {
+                      setDirty(true)
+                      setJoinOtpRequired(e.target.checked)
+                    }}
+                    className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40 disabled:cursor-not-allowed"
+                  />
+                </label>
+              )}
 
               <label className="flex items-center justify-between gap-3 rounded-2xl border border-blue-200/70 bg-white p-3">
                 <div>

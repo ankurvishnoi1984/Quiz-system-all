@@ -493,7 +493,14 @@ export default function ShareSessionPanel({
                 : session.join_type === 'name_mobile'
                   ? 'name and mobile'
                   : 'name'}{' '}
-            as required.
+            as required
+            {session.join_otp_required &&
+            (session.join_type === 'name_email' ||
+              session.join_type === 'name_mobile' ||
+              session.join_type === 'name_email_mobile')
+              ? ', then verify with a one-time code'
+              : ''}
+            .
           </p>
         </div>
       )}

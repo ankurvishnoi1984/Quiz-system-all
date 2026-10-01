@@ -16,7 +16,6 @@ import {
   submitResponseApi,
   // upvoteQaApi, // Q&A feature disabled
 } from '../../services/participantApi'
-import { fetchAuthFeaturesApi } from '../../services/authApi'
 import { createRealtimeClient, RealtimeEvent } from '../../services/realtimeClient'
 import { useParticipantStore } from '../../store/participantStore'
 import { useParticipantProgressPersistence } from '../../hooks/useParticipantProgressPersistence'
@@ -441,16 +440,13 @@ function ParticipantSessionPage() {
   ])
 
   const joinRequirement = session?.join_type || 'name'
-  const authFeaturesQuery = useQuery({
-    queryKey: ['auth-features'],
-    queryFn: fetchAuthFeaturesApi,
-    staleTime: 5 * 60 * 1000,
-  })
-  const participantJoinOtpEnabled = authFeaturesQuery.data?.participant_join_otp_enabled !== false
+  const sessionJoinOtpRequired = Boolean(session?.join_otp_required)
   const contactJoinTypes = useMemo(
     () => new Set(['name_email', 'name_mobile', 'name_email_mobile']),
     [],
   )
+  const needsContactOtp =
+    sessionJoinOtpRequired && contactJoinTypes.has(joinRequirement)
   useParticipantProgressPersistence({
     enabled: contactJoinTypes.has(joinRequirement) && Boolean(participantToken),
     participantToken,
@@ -1988,7 +1984,7 @@ function ParticipantSessionPage() {
       let checkMobile = null
       let isAnonymous = false
       const needsContactOtp =
-        participantJoinOtpEnabled && contactJoinTypes.has(joinRequirement)
+        sessionJoinOtpRequired && contactJoinTypes.has(joinRequirement)
 
       if (joinRequirement === 'anonymous') {
         isAnonymous = true
@@ -2357,7 +2353,7 @@ function ParticipantSessionPage() {
         onEmailChange={setEmail}
         mobile={mobile}
         onMobileChange={setMobile}
-        otpEnabled={participantJoinOtpEnabled}
+        otpEnabled={needsContactOtp}
         otpChannel={otpChannel}
         onOtpChannelChange={setOtpChannel}
         otpCode={otpCode}

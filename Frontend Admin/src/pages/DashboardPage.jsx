@@ -519,6 +519,12 @@ function DashboardPage() {
             ? Number(values.quizTotalTimeMinutes)
             : null,
         join_type: values.joinRequirement || 'name',
+        join_otp_required:
+          values.joinRequirement === 'name_email' ||
+          values.joinRequirement === 'name_mobile' ||
+          values.joinRequirement === 'name_email_mobile'
+            ? Boolean(values.joinOtpRequired)
+            : false,
         show_participant_count: Boolean(values.showParticipantCount),
         auto_end_enabled: Boolean(values.autoEndEnabled),
         auto_end_date: values.autoEndEnabled ? values.autoEndDate || null : null,
@@ -538,6 +544,12 @@ function DashboardPage() {
       scheduledTime: toTimeInputValue(editSession.scheduled_time),
       departmentId: String(editSession.dept_id ?? ''),
       joinRequirement: joinType,
+      joinOtpRequired:
+        joinType === 'name_email' ||
+        joinType === 'name_mobile' ||
+        joinType === 'name_email_mobile'
+          ? editSession.join_otp_required !== false
+          : false,
       enableNavigation: Boolean(editSession.participant_navigation_enabled),
       randomQuestionOrder: Boolean(editSession.random_question_order_enabled),
       quizTotalTimeEnabled:
@@ -606,6 +618,12 @@ function DashboardPage() {
             ? Number(values.quizTotalTimeMinutes)
             : null,
         join_type: values.joinRequirement || 'name',
+        join_otp_required:
+          values.joinRequirement === 'name_email' ||
+          values.joinRequirement === 'name_mobile' ||
+          values.joinRequirement === 'name_email_mobile'
+            ? Boolean(values.joinOtpRequired)
+            : false,
         show_participant_count: Boolean(values.showParticipantCount),
         auto_end_enabled: Boolean(values.autoEndEnabled),
         auto_end_date: values.autoEndEnabled ? values.autoEndDate || null : null,

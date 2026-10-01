@@ -280,6 +280,7 @@ async function lookupByCode(req, res) {
           scheduled_time: session.scheduled_time || null,
           department: session.department,
           join_type: session.join_type,
+          join_otp_required: Boolean(session.join_otp_required),
           logo_url: session.logo_url || null,
           leaderboard_enabled: Boolean(session.leaderboard_enabled),
           survey_results_enabled: Boolean(session.survey_results_enabled),

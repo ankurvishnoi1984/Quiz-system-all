@@ -61,6 +61,11 @@ const Session = sequelize.define(
       allowNull: false,
       defaultValue: 'name'
     },
+    join_otp_required: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true
+    },
     password_hash: {
       type: DataTypes.TEXT,
       allowNull: true

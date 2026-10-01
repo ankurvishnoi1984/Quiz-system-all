@@ -94,6 +94,30 @@ function validateQuizTotalTimeMinutes(payload) {
   return null;
 }
 
+const CONTACT_JOIN_TYPES = new Set([
+  "name_email",
+  "name_mobile",
+  "name_email_mobile"
+]);
+
+function isContactJoinType(joinType) {
+  return CONTACT_JOIN_TYPES.has(joinType);
+}
+
+/** Contact join types default OTP on; name/anonymous always off. */
+function resolveJoinOtpRequired(joinType, value) {
+  if (!isContactJoinType(joinType)) return false;
+  if (value === undefined || value === null) return true;
+  return Boolean(value);
+}
+
+function coerceOptionalBoolean(value, fieldName, errors) {
+  if (value === undefined) return;
+  if (typeof value !== "boolean") {
+    errors.push(`${fieldName} must be a boolean`);
+  }
+}
+
 function validateCreateSessionPayload(payload) {
   const errors = [];
 
@@ -121,6 +145,8 @@ function validateCreateSessionPayload(payload) {
       "join_type must be one of: name, anonymous, name_email, name_mobile, name_email_mobile"
     );
   }
+
+  coerceOptionalBoolean(payload?.join_otp_required, "join_otp_required", errors);
 
   if (
     payload?.participant_navigation_enabled !== undefined &&
@@ -175,6 +201,7 @@ function validateUpdateSessionPayload(payload) {
     "quiz_total_time_minutes",
     "random_question_order_enabled",
     "join_type",
+    "join_otp_required",
     "scheduled_date",
     "scheduled_time",
     "auto_end_enabled",
@@ -213,6 +240,8 @@ function validateUpdateSessionPayload(payload) {
       "join_type must be one of: name, anonymous, name_email, name_mobile, name_email_mobile"
     );
   }
+
+  coerceOptionalBoolean(payload?.join_otp_required, "join_otp_required", errors);
 
   const scheduledDateError = validateScheduledDate(payload?.scheduled_date);
   if (scheduledDateError) errors.push(scheduledDateError);
@@ -286,5 +315,7 @@ function validateJoinSessionPayload(payload) {
 module.exports = {
   validateCreateSessionPayload,
   validateUpdateSessionPayload,
-  validateJoinSessionPayload
+  validateJoinSessionPayload,
+  resolveJoinOtpRequired,
+  isContactJoinType
 };

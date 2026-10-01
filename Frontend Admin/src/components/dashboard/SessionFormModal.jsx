@@ -13,6 +13,8 @@ const QUIZ_TOTAL_TIME_MINUTES = [15, 30, 45, 60]
 const LOGO_ACCEPT = QUESTION_MEDIA_SUPPORTED_IMAGE_TYPES.join(',')
 const LOGO_MAX_BYTES = 5 * 1024 * 1024
 
+const CONTACT_JOIN_TYPES = new Set(['name_email', 'name_mobile', 'name_email_mobile'])
+
 const defaultInitial = {
   title: '',
   description: '',
@@ -23,6 +25,7 @@ const defaultInitial = {
   autoEndTime: '',
   departmentId: '',
   joinRequirement: 'name',
+  joinOtpRequired: true,
   enableNavigation: false,
   randomQuestionOrder: false,
   quizTotalTimeEnabled: false,
@@ -51,6 +54,7 @@ function SessionFormModal({
 }) {
   const logoInputRef = useRef(null)
   const [joinRequirement, setJoinRequirement] = useState(defaultInitial.joinRequirement)
+  const [joinOtpRequired, setJoinOtpRequired] = useState(defaultInitial.joinOtpRequired)
   const [enableNavigation, setEnableNavigation] = useState(defaultInitial.enableNavigation)
   const [randomQuestionOrder, setRandomQuestionOrder] = useState(defaultInitial.randomQuestionOrder)
   const [quizTotalTimeEnabled, setQuizTotalTimeEnabled] = useState(defaultInitial.quizTotalTimeEnabled)
@@ -71,6 +75,11 @@ function SessionFormModal({
   useEffect(() => {
     if (!open) return
     setJoinRequirement(initialValues.joinRequirement ?? defaultInitial.joinRequirement)
+    setJoinOtpRequired(
+      CONTACT_JOIN_TYPES.has(initialValues.joinRequirement ?? defaultInitial.joinRequirement)
+        ? initialValues.joinOtpRequired !== false
+        : false,
+    )
     setEnableNavigation(Boolean(initialValues.enableNavigation))
     setRandomQuestionOrder(Boolean(initialValues.randomQuestionOrder))
     setQuizTotalTimeEnabled(Boolean(initialValues.quizTotalTimeEnabled))
@@ -173,6 +182,7 @@ function SessionFormModal({
         ? String(defaultDepartmentId || '')
         : String(form.get('department') || defaultDepartmentId || ''),
       joinRequirement,
+      joinOtpRequired: CONTACT_JOIN_TYPES.has(joinRequirement) ? Boolean(joinOtpRequired) : false,
       enableNavigation,
       randomQuestionOrder: enableNavigation && randomQuestionOrder,
       quizTotalTimeEnabled: enableNavigation && quizTotalTimeEnabled,
@@ -344,7 +354,15 @@ function SessionFormModal({
                 <label className="text-sm font-semibold text-slate-700">Join requirements</label>
                 <select
                   value={joinRequirement}
-                  onChange={(e) => setJoinRequirement(e.target.value)}
+                  onChange={(e) => {
+                    const next = e.target.value
+                    setJoinRequirement(next)
+                    if (CONTACT_JOIN_TYPES.has(next)) {
+                      setJoinOtpRequired(true)
+                    } else {
+                      setJoinOtpRequired(false)
+                    }
+                  }}
                   className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
                 >
                   <option value="anonymous">Anonymous (no name/email)</option>
@@ -354,6 +372,24 @@ function SessionFormModal({
                   <option value="name_email_mobile">Name + Email + Mobile</option>
                 </select>
               </div>
+              {CONTACT_JOIN_TYPES.has(joinRequirement) ? (
+                <div className="md:col-span-2">
+                  <label className="flex items-center justify-between gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-700">Require OTP to join</p>
+                      <p className="text-xs text-slate-500">
+                        Participants must verify their email or mobile with a code before joining.
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={joinOtpRequired}
+                      onChange={(event) => setJoinOtpRequired(event.target.checked)}
+                      className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
+                    />
+                  </label>
+                </div>
+              ) : null}
               <div className="md:col-span-2">
                 <label className="flex items-center justify-between gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
                   <div>
