@@ -82,6 +82,39 @@ function buildEmbedControlsUrl(sessionId, reqOrOrigin) {
   return origin ? `${origin}${path}` : path;
 }
 
+function buildParticipantEmbedPath(sessionCode, identity = null) {
+  const code = sessionCode != null ? String(sessionCode).trim() : "";
+  if (!code) return "/embed/participant";
+  let path = `/embed/participant/${encodeURIComponent(code)}`;
+  return appendJoinIdentityQuery(path, identity);
+}
+
+function appendJoinIdentityQuery(baseUrlOrPath, identity) {
+  if (!identity || typeof identity !== "object") return baseUrlOrPath;
+  const params = new URLSearchParams();
+  const name = String(identity.name || identity.nickname || "").trim();
+  const email = String(identity.email || "").trim();
+  const mobile = String(identity.mobile || "").trim();
+  const joinToken = String(
+    identity.joinToken || identity.join_token || identity.join_identity_token || "",
+  ).trim();
+  if (name) params.set("name", name);
+  if (email) params.set("email", email);
+  if (mobile) params.set("mobile", mobile);
+  if (joinToken) params.set("join_token", joinToken);
+  const qs = params.toString();
+  return qs ? `${baseUrlOrPath}?${qs}` : baseUrlOrPath;
+}
+
+function buildParticipantEmbedUrl(sessionCode, identity = null, reqOrOrigin) {
+  const origin =
+    typeof reqOrOrigin === "string"
+      ? trimTrailingSlash(reqOrOrigin)
+      : getFrontendPublicUrl(reqOrOrigin);
+  const path = buildParticipantEmbedPath(sessionCode, identity);
+  return origin ? `${origin}${path}` : path;
+}
+
 module.exports = {
   getFrontendPublicUrl,
   buildSessionJoinPath,
@@ -89,5 +122,8 @@ module.exports = {
   buildPresentViewPath,
   buildPresentViewUrl,
   buildEmbedDisplayUrl,
-  buildEmbedControlsUrl
+  buildEmbedControlsUrl,
+  buildParticipantEmbedPath,
+  buildParticipantEmbedUrl,
+  appendJoinIdentityQuery
 };

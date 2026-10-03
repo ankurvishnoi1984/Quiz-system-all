@@ -32,6 +32,7 @@ import PresentModePage from './pages/present-mode'
 import PresentViewPage from './pages/present-mode/PresentViewPage'
 import EmbedDisplayPage from './pages/embed/EmbedDisplayPage'
 import EmbedControlsPage from './pages/embed/EmbedControlsPage'
+import EmbedParticipantPage from './pages/embed/EmbedParticipantPage'
 import PreviewModePage from './pages/preview-mode'
 import { SessionsProvider } from './context/SessionsContext'
 import { useAuthStore } from './store/authStore'
@@ -58,6 +59,7 @@ function isPublicAppPath(pathname) {
     pathname.startsWith('/join') ||
     pathname.startsWith('/present/view') ||
     (INTEGRATIONS_ENABLED && pathname.startsWith('/embed/display')) ||
+    (INTEGRATIONS_ENABLED && pathname.startsWith('/embed/participant')) ||
     pathname === '/login' ||
     pathname === '/forgot-password' ||
     pathname === '/verify-email'
@@ -110,6 +112,7 @@ function App() {
             <>
               <Route path="/embed/display" element={<EmbedDisplayPage />} />
               <Route path="/embed/controls" element={<EmbedControlsPage />} />
+              <Route path="/embed/participant/:sessionId" element={<EmbedParticipantPage />} />
             </>
           ) : null}
           <Route

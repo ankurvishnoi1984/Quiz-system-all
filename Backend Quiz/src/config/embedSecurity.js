@@ -3,6 +3,13 @@
  * `Content-Security-Policy: frame-ancestors` is that opt-in: it lists which parent origins
  * are allowed to frame us. `X-Frame-Options` is the older, coarser version of the same idea
  * and must be off, because when both are present the stricter one wins.
+ *
+ * Env:
+ *   EMBED_FRAME_ANCESTORS       — replaces the default allowlist (space/comma separated)
+ *   EMBED_FRAME_ANCESTORS_EXTRA — appended to defaults (ignored when replace is set)
+ *
+ * Frontend Vite uses VITE_EMBED_FRAME_ANCESTORS / VITE_EMBED_FRAME_ANCESTORS_EXTRA — keep
+ * them in sync for custom portal origins. See docs/INTEGRATIONS.md.
  */
 const DEFAULT_FRAME_ANCESTORS = [
   "'self'",

@@ -18,7 +18,8 @@ const {
 const {
   validateCreateSessionPayload,
   validateUpdateSessionPayload,
-  validateJoinSessionPayload
+  validateJoinSessionPayload,
+  validateMintJoinIdentityTokenPayload
 } = require("../validators/session.validator");
 const {
   notifySessionUpdate,
@@ -421,6 +422,73 @@ async function embedLink(req, res) {
   }
 }
 
+async function mintJoinIdentityToken(req, res) {
+  try {
+    const errors = validateMintJoinIdentityTokenPayload(req.body || {});
+    if (errors.length > 0) {
+      return errorResponse(res, "Validation failed", 400, errors);
+    }
+
+    const body = req.body || {};
+    const {
+      mintJoinIdentityTokenForSession
+    } = require("../services/join-identity-token.service");
+    const { getSessionOrThrow } = require("../services/session.service");
+
+    const data = await mintJoinIdentityTokenForSession({
+      sessionId: Number(req.params.sessionId),
+      user: req.user,
+      baseUrl: getFrontendPublicUrl(req),
+      nickname: body.nickname ?? body.name,
+      email: body.email,
+      mobile: body.mobile,
+      ttlSeconds: body.ttl_seconds,
+      getSession: getSessionOrThrow
+    });
+    return successResponse(res, data, "Join identity token created", 200);
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
+async function resolveJoinIdentityToken(req, res) {
+  try {
+    const token =
+      req.body?.join_identity_token ||
+      req.body?.join_token ||
+      req.query?.join_token ||
+      "";
+    if (!token || typeof token !== "string") {
+      return errorResponse(res, "join_identity_token is required", 400);
+    }
+
+    const {
+      resolveJoinIdentityTokenForCode
+    } = require("../services/join-identity-token.service");
+    const identity = resolveJoinIdentityTokenForCode({
+      code: req.params.code,
+      token
+    });
+
+    return successResponse(
+      res,
+      {
+        name: identity.name,
+        email: identity.email,
+        mobile: identity.mobile,
+        session_code: identity.session_code,
+        expires_at: identity.exp
+          ? new Date(identity.exp * 1000).toISOString()
+          : null
+      },
+      "Join identity resolved",
+      200
+    );
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
 async function getPresentSlide(req, res) {
   try {
     const data = await getPresentSlideIndexForHost({
@@ -615,6 +683,8 @@ module.exports = {
   qr,
   presentViewLink,
   embedLink,
+  mintJoinIdentityToken,
+  resolveJoinIdentityToken,
   getPresentSlide,
   presentSlide,
   closeAllQuestions,

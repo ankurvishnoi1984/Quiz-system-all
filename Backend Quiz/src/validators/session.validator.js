@@ -309,6 +309,51 @@ function validateJoinSessionPayload(payload) {
     errors.push("otp_token must be a string when provided");
   }
 
+  if (
+    payload?.join_identity_token !== undefined &&
+    payload?.join_identity_token !== null &&
+    typeof payload.join_identity_token !== "string"
+  ) {
+    errors.push("join_identity_token must be a string when provided");
+  }
+
+  return errors;
+}
+
+function validateMintJoinIdentityTokenPayload(payload) {
+  const errors = [];
+  const nickname = payload?.nickname ?? payload?.name;
+  if (nickname !== undefined && nickname !== null) {
+    if (typeof nickname !== "string" || nickname.trim().length === 0) {
+      errors.push("nickname must be a non-empty string when provided");
+    }
+  } else {
+    errors.push("nickname is required");
+  }
+
+  if (
+    payload?.email !== undefined &&
+    payload?.email !== null &&
+    (typeof payload.email !== "string" || payload.email.trim().length === 0)
+  ) {
+    errors.push("email must be a non-empty string when provided");
+  }
+
+  if (
+    payload?.mobile !== undefined &&
+    payload?.mobile !== null &&
+    (typeof payload.mobile !== "string" || payload.mobile.trim().length === 0)
+  ) {
+    errors.push("mobile must be a non-empty string when provided");
+  }
+
+  if (payload?.ttl_seconds !== undefined && payload?.ttl_seconds !== null) {
+    const ttl = Number(payload.ttl_seconds);
+    if (!Number.isFinite(ttl) || ttl <= 0) {
+      errors.push("ttl_seconds must be a positive number when provided");
+    }
+  }
+
   return errors;
 }
 
@@ -316,6 +361,7 @@ module.exports = {
   validateCreateSessionPayload,
   validateUpdateSessionPayload,
   validateJoinSessionPayload,
+  validateMintJoinIdentityTokenPayload,
   resolveJoinOtpRequired,
   isContactJoinType
 };

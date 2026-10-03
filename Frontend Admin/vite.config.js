@@ -6,6 +6,10 @@ import tailwindcss from '@tailwindcss/vite'
  * Origins allowed to load this app inside an <iframe>. Only applied when
  * integrations are enabled (VITE_INTEGRATIONS_ENABLED not false).
  * Production hosts must send the same header — see docs/INTEGRATIONS.md.
+ *
+ * Env:
+ *   VITE_EMBED_FRAME_ANCESTORS       — replaces the default allowlist
+ *   VITE_EMBED_FRAME_ANCESTORS_EXTRA — appended to defaults (ignored if replace is set)
  */
 const DEFAULT_FRAME_ANCESTORS = [
   "'self'",
@@ -32,11 +36,20 @@ function isIntegrationsEnabled(env) {
   return true
 }
 
-function frameAncestorsHeader(env) {
-  const configured = (env.VITE_EMBED_FRAME_ANCESTORS || '')
+function splitOrigins(raw) {
+  return String(raw || '')
     .split(/[\s,]+/)
+    .map((value) => value.trim())
     .filter(Boolean)
-  const ancestors = configured.length ? configured : DEFAULT_FRAME_ANCESTORS
+}
+
+function frameAncestorsHeader(env) {
+  const configured = splitOrigins(env.VITE_EMBED_FRAME_ANCESTORS)
+  if (configured.length) {
+    return `frame-ancestors ${configured.join(' ')}`
+  }
+  const extra = splitOrigins(env.VITE_EMBED_FRAME_ANCESTORS_EXTRA)
+  const ancestors = [...DEFAULT_FRAME_ANCESTORS, ...extra]
   return `frame-ancestors ${ancestors.join(' ')}`
 }
 

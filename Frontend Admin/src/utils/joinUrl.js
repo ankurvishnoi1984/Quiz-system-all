@@ -14,13 +14,42 @@ export function getPublicAppOrigin() {
   return ''
 }
 
-export function buildSessionJoinUrl(sessionCodeOrId) {
+export function buildSessionJoinUrl(sessionCodeOrId, identity = null) {
   const code =
     sessionCodeOrId != null ? String(sessionCodeOrId).trim() : ''
   if (!code) return ''
   const origin = getPublicAppOrigin()
-  if (!origin) return `/join/${encodeURIComponent(code)}`
-  return `${origin}/join/${encodeURIComponent(code)}`
+  const path = `/join/${encodeURIComponent(code)}`
+  const base = origin ? `${origin}${path}` : path
+  return appendJoinIdentityQuery(base, identity)
+}
+
+/** Slim participant embed URL for iframes (Phase 2). */
+export function buildParticipantEmbedUrl(sessionCodeOrId, identity = null) {
+  const code =
+    sessionCodeOrId != null ? String(sessionCodeOrId).trim() : ''
+  if (!code) return ''
+  const origin = getPublicAppOrigin()
+  const path = `/embed/participant/${encodeURIComponent(code)}`
+  const base = origin ? `${origin}${path}` : path
+  return appendJoinIdentityQuery(base, identity)
+}
+
+function appendJoinIdentityQuery(baseUrl, identity) {
+  if (!identity || typeof identity !== 'object') return baseUrl
+  const params = new URLSearchParams()
+  const name = String(identity.name || identity.nickname || '').trim()
+  const email = String(identity.email || '').trim()
+  const mobile = String(identity.mobile || '').trim()
+  const joinToken = String(
+    identity.joinToken || identity.join_token || identity.join_identity_token || '',
+  ).trim()
+  if (name) params.set('name', name)
+  if (email) params.set('email', email)
+  if (mobile) params.set('mobile', mobile)
+  if (joinToken) params.set('join_token', joinToken)
+  const qs = params.toString()
+  return qs ? `${baseUrl}?${qs}` : baseUrl
 }
 
 /** Base join page — participants enter the session code on this URL. */
@@ -30,7 +59,7 @@ export function buildGenericJoinUrl() {
   return `${origin}/join`
 }
 
-/** True when URL path is `/join/:code` with a non-empty code segment. */
+/** True when URL path carries a session code (`/join/:code` or `/embed/participant/:code`). */
 export function hasSessionCodeInJoinPath(pathname, sessionCodeParam) {
   if (sessionCodeParam != null && String(sessionCodeParam).trim() !== '') {
     return true
@@ -38,7 +67,25 @@ export function hasSessionCodeInJoinPath(pathname, sessionCodeParam) {
   const parts = String(pathname || '')
     .split('/')
     .filter(Boolean)
-  return parts[0] === 'join' && parts.length >= 2 && parts[1].trim() !== ''
+  if (parts[0] === 'join' && parts.length >= 2 && parts[1].trim() !== '') {
+    return true
+  }
+  if (
+    parts[0] === 'embed' &&
+    parts[1] === 'participant' &&
+    parts.length >= 3 &&
+    parts[2].trim() !== ''
+  ) {
+    return true
+  }
+  return false
+}
+
+export function isParticipantEmbedPath(pathname) {
+  const parts = String(pathname || '')
+    .split('/')
+    .filter(Boolean)
+  return parts[0] === 'embed' && parts[1] === 'participant'
 }
 
 export function normalizeSessionCode(code) {

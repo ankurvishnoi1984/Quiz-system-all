@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useParams, useLocation } from 'react-router-dom'
+import { useParams, useLocation, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useShallow } from 'zustand/shallow'
 import {
@@ -20,7 +20,14 @@ import { createRealtimeClient, RealtimeEvent } from '../../services/realtimeClie
 import { useParticipantStore } from '../../store/participantStore'
 import { useParticipantProgressPersistence } from '../../hooks/useParticipantProgressPersistence'
 import { useParticipantPreJoinRealtime } from '../../hooks/useParticipantPreJoinRealtime'
-import { hasSessionCodeInJoinPath, normalizeSessionCode } from '../../utils/joinUrl'
+import { hasSessionCodeInJoinPath, isParticipantEmbedPath, normalizeSessionCode } from '../../utils/joinUrl'
+import { isRunningInIframe } from '../../utils/iframeEmbed'
+import {
+  canAutoJoinWithIdentity,
+  mergeJoinIdentity,
+  parseJoinIdentityFromSearch,
+} from '../../utils/embedJoinIdentity'
+import { resolveJoinIdentityTokenApi } from '../../services/embedApi'
 import { computeResponseTimeMs } from '../../utils/quizResponseTime'
 import {
   playAnswerCorrect,
@@ -86,11 +93,27 @@ import {
   isSessionOpenForNewJoin,
 } from './utils/joinFlow'
 
-function ParticipantSessionPage() {
+function ParticipantSessionPage({ embed = false }) {
   const { sessionId } = useParams()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
   const queryClient = useQueryClient()
   const { participantToken, joinedUser, joinedSessionCode, setParticipant } = useParticipantStore()
+
+  const embedMode = Boolean(embed) || isParticipantEmbedPath(location.pathname) || isRunningInIframe()
+  const queryIdentity = useMemo(
+    () => parseJoinIdentityFromSearch(searchParams.toString()),
+    [searchParams],
+  )
+  const [tokenIdentity, setTokenIdentity] = useState(null)
+  const [tokenIdentityError, setTokenIdentityError] = useState('')
+  const [tokenIdentityLoading, setTokenIdentityLoading] = useState(() =>
+    Boolean(queryIdentity.joinToken),
+  )
+  const resolvedIdentity = useMemo(
+    () => mergeJoinIdentity(queryIdentity, tokenIdentity),
+    [queryIdentity, tokenIdentity],
+  )
 
   const hasSessionCodeInUrl = hasSessionCodeInJoinPath(location.pathname, sessionId)
   const [sessionCodeInput, setSessionCodeInput] = useState('')
@@ -172,15 +195,63 @@ function ParticipantSessionPage() {
   )
   const [countdownTick, setCountdownTick] = useState(0)
   const [step, setStep] = useState('join')
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [mobile, setMobile] = useState('')
+  const [name, setName] = useState(() => queryIdentity.name || '')
+  const [email, setEmail] = useState(() => queryIdentity.email || '')
+  const [mobile, setMobile] = useState(() => queryIdentity.mobile || '')
   const [otpChannel, setOtpChannel] = useState('email')
   const [otpCode, setOtpCode] = useState('')
   const [otpSent, setOtpSent] = useState(false)
   const [otpBusy, setOtpBusy] = useState(false)
   const [joinBusy, setJoinBusy] = useState(false)
   const [joinError, setJoinError] = useState('')
+  const [autoJoinPending, setAutoJoinPending] = useState(false)
+  const autoJoinAttemptedRef = useRef(false)
+  const joinIdentityTokenRef = useRef(queryIdentity.joinToken || '')
+
+  useEffect(() => {
+    joinIdentityTokenRef.current = queryIdentity.joinToken || ''
+  }, [queryIdentity.joinToken])
+
+  useEffect(() => {
+    if (resolvedIdentity.name) setName(resolvedIdentity.name)
+    if (resolvedIdentity.email) setEmail(resolvedIdentity.email)
+    if (resolvedIdentity.mobile) setMobile(resolvedIdentity.mobile)
+  }, [resolvedIdentity.name, resolvedIdentity.email, resolvedIdentity.mobile])
+
+  useEffect(() => {
+    let cancelled = false
+    const token = queryIdentity.joinToken
+    if (!token || !effectiveSessionCode) {
+      setTokenIdentity(null)
+      setTokenIdentityError('')
+      setTokenIdentityLoading(false)
+      return undefined
+    }
+
+    setTokenIdentityLoading(true)
+    setTokenIdentityError('')
+    resolveJoinIdentityTokenApi(effectiveSessionCode, token)
+      .then((data) => {
+        if (cancelled) return
+        setTokenIdentity({
+          name: data?.name || '',
+          email: data?.email || '',
+          mobile: data?.mobile || '',
+        })
+        setTokenIdentityLoading(false)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setTokenIdentity(null)
+        setTokenIdentityError(err?.message || 'Join token is invalid or expired')
+        setTokenIdentityLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [queryIdentity.joinToken, effectiveSessionCode])
+
   const [transitioningLive, setTransitioningLive] = useState(false)
   const [tagsInput, setTagsInput] = useState('')
   // Q&A feature disabled — re-enable when bringing Q&A back
@@ -1958,25 +2029,41 @@ function ParticipantSessionPage() {
     !sessionQuery.isLoading &&
     (!session || sessionQuery.isError)
 
-  const handleJoin = async (event) => {
-    event.preventDefault()
+  const handleJoin = async (event, options = {}) => {
+    event?.preventDefault?.()
     setJoinError('')
     unlockTimerAudio()
 
+    const abortJoin = (message) => {
+      setJoinError(message)
+      setAutoJoinPending(false)
+      setJoinBusy(false)
+    }
+
     if (!effectiveSessionCode) {
-      setJoinError('Please enter a session code')
+      abortJoin('Please enter a session code')
       return
     }
 
     if (!session) {
-      setJoinError('Session not found. Check the code and try again.')
+      abortJoin('Session not found. Check the code and try again.')
       return
     }
 
     if (session.join_blocked && session.join_blocked_reason !== 'plan_limit') {
-      setJoinError(session.join_blocked_message || 'Session has already started')
+      abortJoin(session.join_blocked_message || 'Session has already started')
       return
     }
+
+    const identity = options.identity || {
+      name,
+      email,
+      mobile,
+    }
+    const formName = String(identity.name || '').trim()
+    const formEmail = String(identity.email || '').trim()
+    const formMobile = String(identity.mobile || '').trim()
+    const skipOtpRequirement = Boolean(options.skipOtp)
 
     try {
       let nickname = null
@@ -1984,56 +2071,58 @@ function ParticipantSessionPage() {
       let checkMobile = null
       let isAnonymous = false
       const needsContactOtp =
-        sessionJoinOtpRequired && contactJoinTypes.has(joinRequirement)
+        !skipOtpRequirement &&
+        sessionJoinOtpRequired &&
+        contactJoinTypes.has(joinRequirement)
 
       if (joinRequirement === 'anonymous') {
         isAnonymous = true
       } else if (joinRequirement === 'name') {
-        if (!name?.trim()) {
-          setJoinError('Please enter your name')
+        if (!formName) {
+          abortJoin('Please enter your name')
           return
         }
-        nickname = name.trim()
+        nickname = formName
       } else if (joinRequirement === 'name_email') {
-        if (!name?.trim()) {
-          setJoinError('Please enter your name')
+        if (!formName) {
+          abortJoin('Please enter your name')
           return
         }
-        if (!email?.trim()) {
-          setJoinError('Please enter your email')
+        if (!formEmail) {
+          abortJoin('Please enter your email')
           return
         }
-        nickname = name.trim()
-        checkEmail = email.trim()
+        nickname = formName
+        checkEmail = formEmail
       } else if (joinRequirement === 'name_mobile') {
-        if (!name?.trim()) {
-          setJoinError('Please enter your name')
+        if (!formName) {
+          abortJoin('Please enter your name')
           return
         }
-        if (!mobile?.trim()) {
-          setJoinError('Please enter your mobile number')
+        if (!formMobile) {
+          abortJoin('Please enter your mobile number')
           return
         }
-        nickname = name.trim()
-        checkMobile = mobile.trim()
+        nickname = formName
+        checkMobile = formMobile
       } else if (joinRequirement === 'name_email_mobile') {
-        if (!name?.trim()) {
-          setJoinError('Please enter your name')
+        if (!formName) {
+          abortJoin('Please enter your name')
           return
         }
-        if (!email?.trim()) {
-          setJoinError('Please enter your email')
+        if (!formEmail) {
+          abortJoin('Please enter your email')
           return
         }
-        if (!mobile?.trim()) {
-          setJoinError('Please enter your mobile number')
+        if (!formMobile) {
+          abortJoin('Please enter your mobile number')
           return
         }
-        nickname = name.trim()
-        checkEmail = email.trim()
-        checkMobile = mobile.trim()
+        nickname = formName
+        checkEmail = formEmail
+        checkMobile = formMobile
       } else {
-        setJoinError('Unsupported join requirement for this session')
+        abortJoin('Unsupported join requirement for this session')
         return
       }
 
@@ -2046,11 +2135,11 @@ function ParticipantSessionPage() {
               ? 'email'
               : otpChannel
         if (!otpSent) {
-          setJoinError('Send a verification code first')
+          abortJoin('Send a verification code first')
           return
         }
         if (!/^\d{6}$/.test(String(otpCode || '').trim())) {
-          setJoinError('Enter the 6-digit verification code')
+          abortJoin('Enter the 6-digit verification code')
           return
         }
         setJoinBusy(true)
@@ -2063,8 +2152,7 @@ function ParticipantSessionPage() {
         })
         otpToken = verified.otpToken
         if (!otpToken) {
-          setJoinError('Verification failed. Please try again.')
-          setJoinBusy(false)
+          abortJoin('Verification failed. Please try again.')
           return
         }
       } else {
@@ -2078,6 +2166,9 @@ function ParticipantSessionPage() {
       }
       if (nickname) joinPayload.nickname = nickname
       if (otpToken) joinPayload.otp_token = otpToken
+      const signedJoinToken =
+        options.joinIdentityToken || joinIdentityTokenRef.current || ''
+      if (signedJoinToken) joinPayload.join_identity_token = signedJoinToken
 
       const result = await joinSessionApi(effectiveSessionCode, joinPayload)
       if (result.isReturning && result.sessionState) {
@@ -2104,13 +2195,47 @@ function ParticipantSessionPage() {
         setStep('waiting')
       }
       setJoinError('')
+      setAutoJoinPending(false)
       playJoinedSession()
     } catch (err) {
       setJoinError(err.message || 'Failed to join session')
+      setAutoJoinPending(false)
     } finally {
       setJoinBusy(false)
     }
   }
+
+  useEffect(() => {
+    if (autoJoinAttemptedRef.current) return
+    if (!participantHydrated) return
+    if (canUseStoredJoin || participantToken) return
+    if (step !== 'join') return
+    if (!session || sessionQuery.isLoading) return
+    if (tokenIdentityLoading) return
+    if (tokenIdentityError) return
+    if (!isSessionOpenForNewJoin(session.status)) return
+    if (session.join_blocked && session.join_blocked_reason !== 'plan_limit') return
+    if (!canAutoJoinWithIdentity(session, resolvedIdentity)) return
+
+    autoJoinAttemptedRef.current = true
+    setAutoJoinPending(true)
+    void handleJoin(null, {
+      identity: resolvedIdentity,
+      joinIdentityToken: joinIdentityTokenRef.current || undefined,
+    })
+    // Intentional: run once when session + query identity become eligible.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- auto-join bootstrap
+  }, [
+    participantHydrated,
+    canUseStoredJoin,
+    participantToken,
+    step,
+    session,
+    sessionQuery.isLoading,
+    tokenIdentityLoading,
+    tokenIdentityError,
+    resolvedIdentity,
+  ])
 
   const handleSendJoinOtp = async () => {
     setJoinError('')
@@ -2290,7 +2415,7 @@ function ParticipantSessionPage() {
 
   if (!participantHydrated) {
     return (
-      <PageCenteredShell>
+      <PageCenteredShell compact={embedMode}>
         <p className="text-slate-600">Restoring session...</p>
       </PageCenteredShell>
     )
@@ -2298,7 +2423,7 @@ function ParticipantSessionPage() {
 
   if (ipBlocked) {
     return (
-      <PageCenteredShell>
+      <PageCenteredShell compact={embedMode}>
         <h1 className="text-2xl font-bold text-navy-900">Access blocked</h1>
         <p className="mt-2 text-slate-600">
           This IP address has been blocked by an administrator. You cannot join or stay in this
@@ -2313,6 +2438,19 @@ function ParticipantSessionPage() {
     showJoinForm &&
     Boolean(session) &&
     !isSessionOpenForNewJoin(session.status)
+
+  if (showJoinForm && (autoJoinPending || tokenIdentityLoading) && !joinError && !tokenIdentityError) {
+    return (
+      <PageCenteredShell compact={embedMode}>
+        <p className="text-sm font-semibold text-navy-900">
+          {tokenIdentityLoading ? 'Checking signed join link…' : 'Joining session…'}
+        </p>
+        <p className="mt-2 text-sm text-slate-600">
+          Using your name and contact details from the link.
+        </p>
+      </PageCenteredShell>
+    )
+  }
 
   const handleUseDifferentSessionCode = () => {
     setSessionCodeInput('')
@@ -2362,7 +2500,7 @@ function ParticipantSessionPage() {
         otpBusy={otpBusy}
         joinBusy={joinBusy}
         onSendOtp={handleSendJoinOtp}
-        joinError={joinError}
+        joinError={joinError || tokenIdentityError}
         joinBlocked={joinBlocked}
         joinBlockedMessage={joinBlockedMessage}
         joinBlockedReason={session?.join_blocked_reason || ''}
@@ -2373,7 +2511,7 @@ function ParticipantSessionPage() {
 
   if (effectiveSessionCode && sessionQuery.isLoading) {
     return (
-      <PageCenteredShell>
+      <PageCenteredShell compact={embedMode}>
         <p className="text-slate-600">Loading session...</p>
       </PageCenteredShell>
     )
@@ -2381,7 +2519,7 @@ function ParticipantSessionPage() {
 
   if (effectiveSessionCode && sessionLookupFailed) {
     return (
-      <PageCenteredShell>
+      <PageCenteredShell compact={embedMode}>
         <h1 className="text-2xl font-bold text-navy-900">Session not found</h1>
         <p className="mt-2 text-slate-600">The join link is invalid or this session was removed.</p>
       </PageCenteredShell>
@@ -2390,7 +2528,7 @@ function ParticipantSessionPage() {
 
   if (!session) {
     return (
-      <PageCenteredShell>
+      <PageCenteredShell compact={embedMode}>
         <p className="text-slate-600">Loading session...</p>
       </PageCenteredShell>
     )
@@ -2416,7 +2554,13 @@ function ParticipantSessionPage() {
   }
 
   return (
-    <main className="min-h-screen bg-linear-to-br from-sky-50 via-white to-indigo-50 p-4 md:p-6">
+    <main
+      className={`bg-linear-to-br from-sky-50 via-white to-indigo-50 ${
+        embedMode
+          ? 'min-h-dvh overflow-y-auto p-3 sm:p-4'
+          : 'min-h-dvh p-4 md:min-h-screen md:p-6'
+      }`}
+    >
       <div className="mx-auto w-full max-w-4xl space-y-4">
         <SessionHeader session={session} joinedUser={joinedUser} />
 

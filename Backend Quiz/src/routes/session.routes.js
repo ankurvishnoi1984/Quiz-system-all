@@ -23,6 +23,11 @@ router.post(
   joinOtpVerifyIpRateLimit,
   sessionController.verifyJoinOtp
 );
+router.post(
+  "/sessions/join/:code/identity-token/resolve",
+  joinIpRateLimit,
+  sessionController.resolveJoinIdentityToken
+);
 router.post("/sessions/join/:code", joinIpRateLimit, sessionController.joinByCode);
 
 // Only protect session/department management routes in this router.
@@ -159,6 +164,12 @@ if (require("../config/integrations").isIntegrationsEnabled()) {
     authorizeStaff,
     authorizeRights("present"),
     sessionController.embedLink
+  );
+  router.post(
+    "/sessions/:sessionId/join-identity-token",
+    authorizeStaff,
+    authorizeAnyRight("sessions", "present"),
+    sessionController.mintJoinIdentityToken
   );
 }
 router.get(

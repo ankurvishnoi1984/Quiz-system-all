@@ -5,11 +5,14 @@ import { getPresentViewLinkApi, getSessionQrApi } from '../../services/dashboard
 import {
   buildEmbedControlsUrl,
   buildEmbedIframeSnippet,
+  buildParticipantJoinIframeSnippet,
   getSessionEmbedLinkApi,
+  mintJoinIdentityTokenApi,
 } from '../../services/embedApi'
 import { isIntegrationsEnabled } from '../../utils/integrations'
 import {
   buildGenericJoinUrl,
+  buildParticipantEmbedUrl,
   buildSessionJoinUrl,
   normalizeSessionCode,
   resolveSessionJoinUrl,
@@ -204,6 +207,10 @@ export default function ShareSessionPanel({
   const [embedUrl, setEmbedUrl] = useState('')
   const [embedError, setEmbedError] = useState('')
   const [embedBusy, setEmbedBusy] = useState(false)
+  const [signedJoinUrl, setSignedJoinUrl] = useState('')
+  const [signedJoinBusy, setSignedJoinBusy] = useState(false)
+  const [signedJoinError, setSignedJoinError] = useState('')
+  const [signedJoinExpiresIn, setSignedJoinExpiresIn] = useState(null)
 
   const resolvedSessionDbId = sessionDbId ?? session?.session_id ?? session?.id
   const canSharePresentView = showPresentViewShare && session?.status !== 'archived'
@@ -259,6 +266,27 @@ export default function ShareSessionPanel({
     [embedUrl],
   )
 
+  const participantJoinEmbedUrl = useMemo(() => {
+    if (!sessionCode) return shareJoinUrl || ''
+    return buildParticipantEmbedUrl(sessionCode)
+  }, [sessionCode, shareJoinUrl])
+
+  const participantJoinEmbedSnippet = useMemo(
+    () =>
+      participantJoinEmbedUrl
+        ? buildParticipantJoinIframeSnippet(participantJoinEmbedUrl)
+        : '',
+    [participantJoinEmbedUrl],
+  )
+
+  const participantJoinEmbedExample = useMemo(() => {
+    if (!sessionCode) return ''
+    return buildParticipantEmbedUrl(sessionCode, {
+      name: 'Suraj',
+      email: 'suraj@example.com',
+    })
+  }, [sessionCode])
+
   const loadEmbedLink = useCallback(
     async (action = 'get') => {
       if (!INTEGRATIONS_ENABLED || !accessToken || !resolvedSessionDbId) return
@@ -276,6 +304,27 @@ export default function ShareSessionPanel({
     },
     [accessToken, resolvedSessionDbId],
   )
+
+  const mintSignedParticipantLink = useCallback(async () => {
+    if (!INTEGRATIONS_ENABLED || !accessToken || !resolvedSessionDbId) return
+    setSignedJoinBusy(true)
+    setSignedJoinError('')
+    try {
+      const payload = await mintJoinIdentityTokenApi(accessToken, resolvedSessionDbId, {
+        nickname: 'Suraj',
+        email: 'suraj@example.com',
+        ttl_seconds: 300,
+      })
+      setSignedJoinUrl(payload?.embed_url || '')
+      setSignedJoinExpiresIn(payload?.expires_in ?? null)
+    } catch (err) {
+      setSignedJoinUrl('')
+      setSignedJoinExpiresIn(null)
+      setSignedJoinError(err?.message || 'Could not mint a signed join link')
+    } finally {
+      setSignedJoinBusy(false)
+    }
+  }, [accessToken, resolvedSessionDbId])
 
   useEffect(() => {
     if (!INTEGRATIONS_ENABLED) return
@@ -509,9 +558,11 @@ export default function ShareSessionPanel({
         <div className="space-y-3">
           <label className="text-sm font-semibold text-slate-700">Embed in another app</label>
           <p className="text-xs leading-relaxed text-slate-600">
-            Paste this link into PowerPoint, Microsoft Teams, Zoom, or Google Slides to show live
-            results inside your deck or meeting. Unlike the view display link, it does not expire
-            after a few hours — so a deck you build today still works next month.
+            Paste host display/controls links into PowerPoint, Microsoft Teams, Zoom, or Google Slides.
+            For LMS or portal modals, use the participant join iframe below. Your portal origin must be
+            allowlisted — see docs/INTEGRATIONS.md (
+            <code className="rounded bg-slate-100 px-1">EMBED_FRAME_ANCESTORS_EXTRA</code>
+            ).
           </p>
           {embedError ? (
             <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -553,7 +604,7 @@ export default function ShareSessionPanel({
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">
-                HTML snippet
+                Host display HTML snippet
               </p>
               <textarea
                 readOnly
@@ -570,6 +621,118 @@ export default function ShareSessionPanel({
               />
             </div>
           </div>
+
+          <div className="space-y-3 rounded-2xl border border-emerald-200/80 bg-emerald-50/40 p-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-emerald-900">
+                Participant join (iframe)
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                Embed the participant join experience in your portal modal (
+                <code className="mx-1 rounded bg-white px-1">/embed/participant/&#123;code&#125;</code>
+                ). Optional query params <code className="rounded bg-white px-1">name</code> and{' '}
+                <code className="rounded bg-white px-1">email</code> prefill the form and auto-join
+                when OTP is not required.
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">Join URL</p>
+              <div className="mt-1 flex overflow-hidden rounded-xl border border-blue-200/70 bg-white">
+                <input
+                  readOnly
+                  value={participantJoinEmbedUrl}
+                  className="h-11 min-w-0 flex-1 border-0 bg-transparent px-3 text-sm text-slate-700 outline-none"
+                  aria-label="Participant join embed URL"
+                />
+                <CopyIconButton
+                  value={participantJoinEmbedUrl}
+                  disabled={!participantJoinEmbedUrl}
+                  attached
+                  showLabel
+                />
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">
+                Example with name + email
+              </p>
+              <div className="mt-1 flex overflow-hidden rounded-xl border border-blue-200/70 bg-white">
+                <input
+                  readOnly
+                  value={participantJoinEmbedExample}
+                  className="h-11 min-w-0 flex-1 border-0 bg-transparent px-3 font-mono text-[11px] text-slate-700 outline-none"
+                  aria-label="Participant join URL with identity query params"
+                />
+                <CopyIconButton
+                  value={participantJoinEmbedExample}
+                  disabled={!participantJoinEmbedExample}
+                  attached
+                  showLabel
+                />
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">
+                Participant HTML snippet
+              </p>
+              <textarea
+                readOnly
+                rows={3}
+                value={participantJoinEmbedSnippet}
+                className="mt-1 w-full resize-none rounded-xl border border-blue-200/70 bg-white px-3 py-2 font-mono text-[11px] leading-relaxed text-slate-700 outline-none"
+                aria-label="Participant join iframe snippet"
+              />
+              <CopyButton
+                value={participantJoinEmbedSnippet}
+                disabled={!participantJoinEmbedSnippet}
+                label="Copy participant snippet"
+                className="mt-2 w-full"
+              />
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">
+                Signed join link (Phase 3)
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                Short-lived server-signed <code className="rounded bg-white px-1">join_token</code>{' '}
+                so identity cannot be forged via plain query params. Mint from your portal backend
+                in production; this button creates a 5-minute example for Suraj.
+              </p>
+              <button
+                type="button"
+                disabled={signedJoinBusy || !accessToken || !resolvedSessionDbId}
+                onClick={() => mintSignedParticipantLink()}
+                className="mt-2 h-10 w-full rounded-xl border border-emerald-300 bg-white text-sm font-semibold text-emerald-900 transition hover:bg-emerald-50 disabled:opacity-50"
+              >
+                {signedJoinBusy ? 'Minting…' : 'Mint example signed embed URL'}
+              </button>
+              {signedJoinError ? (
+                <p className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  {signedJoinError}
+                </p>
+              ) : null}
+              {signedJoinUrl ? (
+                <>
+                  <div className="mt-2 flex overflow-hidden rounded-xl border border-blue-200/70 bg-white">
+                    <input
+                      readOnly
+                      value={signedJoinUrl}
+                      className="h-11 min-w-0 flex-1 border-0 bg-transparent px-3 font-mono text-[11px] text-slate-700 outline-none"
+                      aria-label="Signed participant embed URL"
+                    />
+                    <CopyIconButton value={signedJoinUrl} attached showLabel />
+                  </div>
+                  {signedJoinExpiresIn ? (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Expires in about {signedJoinExpiresIn} seconds. Mint a fresh token per
+                      participant from your portal API.
+                    </p>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
+          </div>
+
           <div className="flex gap-2">
             <button
               type="button"
@@ -590,7 +753,8 @@ export default function ShareSessionPanel({
           </div>
           <p className="rounded-xl border border-sky-200 bg-sky-50/80 px-3 py-2 text-xs leading-relaxed text-slate-600">
             Anyone with the display link can watch results, so treat it like a password. Generating a
-            new link immediately stops the old one from working.
+            new link immediately stops the old one from working. Participant join URLs use the session
+            code — protect the code the same way you share it today.
           </p>
         </div>
       )}

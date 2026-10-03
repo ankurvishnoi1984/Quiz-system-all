@@ -799,7 +799,20 @@ async function assertNewParticipantMayJoin(session) {
 
 async function joinSession({ code, payload }) {
   const session = await getSessionByCode(code);
-  const joinPayload = payload || {};
+  const joinPayload = { ...(payload || {}) };
+
+  // Signed portal identity — verified server-side; overrides forgeable body fields.
+  if (joinPayload.join_identity_token) {
+    const {
+      assertJoinIdentityToken
+    } = require("./join-identity-token.service");
+    const claims = assertJoinIdentityToken(joinPayload.join_identity_token, {
+      sessionCode: session.session_code
+    });
+    joinPayload.nickname = claims.nickname;
+    if (claims.email) joinPayload.email = claims.email;
+    if (claims.mobile) joinPayload.mobile = claims.mobile;
+  }
 
   let identity = {
     nickname: normalizeParticipantNickname(joinPayload.nickname),
