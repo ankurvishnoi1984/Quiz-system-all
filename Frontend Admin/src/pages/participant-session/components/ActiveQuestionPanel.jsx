@@ -149,7 +149,15 @@ export function ActiveQuestionPanel({
       <QuestionMedia media={question.media} maxHeightClass="max-h-72" />
 
       {hasCountdown && !question.isSurvey && (
-        <QuestionTimer timer={timer} timeLimit={timeLimit} submittedAtSeconds={submittedAtSeconds} />
+        <QuestionTimer
+          timer={timer}
+          timeLimit={timeLimit}
+          submittedAtSeconds={submittedAtSeconds}
+          timerSoundKey={question.timerSoundKey}
+          timerSoundUrl={question.timerSoundUrl}
+          timerEndingSoundKey={question.timerEndingSoundKey}
+          timerEndingSoundUrl={question.timerEndingSoundUrl}
+        />
       )}
 
       {isAnswerRevealed &&

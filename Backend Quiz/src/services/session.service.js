@@ -2,6 +2,7 @@ const { sequelize } = require("../config/database");
 const {
   normalizePresentModeSettings
 } = require("../utils/presentModeSettings");
+const { normalizeTimerSoundFields } = require("../utils/timerSound");
 const {
   Session,
   Department,
@@ -390,6 +391,21 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
           is_quiz_mode: isNonScored ? false : q.is_quiz_mode ?? false,
           points_value: isNonScored ? 0 : q.points_value ?? 10,
           time_limit_seconds: isSurvey ? null : q.time_limit_seconds,
+          ...normalizeTimerSoundFields(
+            isSurvey
+              ? {
+                  timer_sound_key: "classic",
+                  timer_sound_url: null,
+                  timer_ending_sound_key: "classic",
+                  timer_ending_sound_url: null
+                }
+              : {
+                  timer_sound_key: q.timer_sound_key,
+                  timer_sound_url: q.timer_sound_url,
+                  timer_ending_sound_key: q.timer_ending_sound_key,
+                  timer_ending_sound_url: q.timer_ending_sound_url
+                }
+          ),
           allow_multiple_select: q.allow_multiple_select ?? false,
           survey_subtype: isSurvey ? q.survey_subtype || null : null,
           rating_min: q.rating_min ?? 1,

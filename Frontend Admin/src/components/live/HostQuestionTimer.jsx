@@ -25,6 +25,14 @@ export function HostQuestionTimer({
       variant={variant}
       className={className}
       soundEnabled={soundEnabled}
+      timerSoundKey={question?.timerSoundKey ?? question?.timer_sound_key}
+      timerSoundUrl={question?.timerSoundUrl ?? question?.timer_sound_url}
+      timerEndingSoundKey={
+        question?.timerEndingSoundKey ?? question?.timer_ending_sound_key
+      }
+      timerEndingSoundUrl={
+        question?.timerEndingSoundUrl ?? question?.timer_ending_sound_url
+      }
     />
   )
 }

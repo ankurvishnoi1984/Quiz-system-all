@@ -18,6 +18,7 @@ const {
 const { validateCreateQuestionPayload } = require("../validators/question.validator");
 const { assertHostCanRunSessions, assertSessionQuestionCapacity } = require("./plan.service");
 const { assertSessionWriteAccess } = require("../config/data-scope");
+const { normalizeTimerSoundFields } = require("../utils/timerSound");
 
 function isParticipantNavigationEnabled(session) {
   return session.participant_navigation_enabled !== false;
@@ -166,6 +167,12 @@ async function createQuestion({ sessionId, input, user }) {
     is_quiz_mode: isNonScored ? false : input.is_quiz_mode ?? false,
     points_value: isNonScored ? 0 : input.points_value || 10,
     time_limit_seconds: isSurvey ? null : input.time_limit_seconds || null,
+    ...normalizeTimerSoundFields({
+      timer_sound_key: isSurvey ? "classic" : input.timer_sound_key,
+      timer_sound_url: isSurvey ? null : input.timer_sound_url,
+      timer_ending_sound_key: isSurvey ? "classic" : input.timer_ending_sound_key,
+      timer_ending_sound_url: isSurvey ? null : input.timer_ending_sound_url
+    }),
     allow_multiple_select: isEmojiReaction ? false : input.allow_multiple_select ?? false,
     survey_subtype: isSurvey ? input.survey_subtype || null : null,
     rating_min: input.rating_min ?? 1,
@@ -343,6 +350,24 @@ async function importQuestions({ sessionId, questions, mode = "append", user }) 
             isSurvey || isSessionQuizTotalTimeEnabled(validation.session)
               ? null
               : input.time_limit_seconds || null,
+          ...normalizeTimerSoundFields({
+            timer_sound_key:
+              isSurvey || isSessionQuizTotalTimeEnabled(validation.session)
+                ? "classic"
+                : input.timer_sound_key,
+            timer_sound_url:
+              isSurvey || isSessionQuizTotalTimeEnabled(validation.session)
+                ? null
+                : input.timer_sound_url,
+            timer_ending_sound_key:
+              isSurvey || isSessionQuizTotalTimeEnabled(validation.session)
+                ? "classic"
+                : input.timer_ending_sound_key,
+            timer_ending_sound_url:
+              isSurvey || isSessionQuizTotalTimeEnabled(validation.session)
+                ? null
+                : input.timer_ending_sound_url
+          }),
           allow_multiple_select: isEmojiReaction
             ? false
             : input.allow_multiple_select ?? false,
@@ -437,6 +462,29 @@ async function updateQuestion({ questionId, input, user }) {
         : input.time_limit_seconds !== undefined
           ? input.time_limit_seconds
           : question.time_limit_seconds,
+      ...(input.timer_sound_key !== undefined ||
+      input.timer_sound_url !== undefined ||
+      input.timer_ending_sound_key !== undefined ||
+      input.timer_ending_sound_url !== undefined
+        ? normalizeTimerSoundFields({
+            timer_sound_key:
+              input.timer_sound_key !== undefined
+                ? input.timer_sound_key
+                : question.timer_sound_key,
+            timer_sound_url:
+              input.timer_sound_url !== undefined
+                ? input.timer_sound_url
+                : question.timer_sound_url,
+            timer_ending_sound_key:
+              input.timer_ending_sound_key !== undefined
+                ? input.timer_ending_sound_key
+                : question.timer_ending_sound_key,
+            timer_ending_sound_url:
+              input.timer_ending_sound_url !== undefined
+                ? input.timer_ending_sound_url
+                : question.timer_ending_sound_url
+          })
+        : {}),
       survey_subtype: isSurvey
         ? input.survey_subtype !== undefined
           ? input.survey_subtype

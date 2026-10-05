@@ -14,8 +14,18 @@ export function QuestionTimer({
   variant = 'default',
   className = '',
   soundEnabled = true,
+  timerSoundKey,
+  timerSoundUrl,
+  timerEndingSoundKey,
+  timerEndingSoundUrl,
 }) {
-  useQuestionTimerSound(timer, { enabled: soundEnabled })
+  useQuestionTimerSound(timer, {
+    enabled: soundEnabled,
+    timerSoundKey,
+    timerSoundUrl,
+    timerEndingSoundKey,
+    timerEndingSoundUrl,
+  })
 
   const expired = timer <= 0
   const urgent = !expired && timer <= 5

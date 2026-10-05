@@ -63,6 +63,26 @@ const Question = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: true
     },
+    timer_sound_key: {
+      type: DataTypes.STRING(32),
+      allowNull: false,
+      defaultValue: "classic"
+    },
+    timer_sound_url: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      defaultValue: null
+    },
+    timer_ending_sound_key: {
+      type: DataTypes.STRING(32),
+      allowNull: false,
+      defaultValue: "classic"
+    },
+    timer_ending_sound_url: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      defaultValue: null
+    },
     allow_multiple_select: {
       type: DataTypes.BOOLEAN,
       allowNull: true,

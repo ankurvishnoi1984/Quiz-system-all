@@ -189,6 +189,9 @@ function validateCreateQuestionPayload(payload) {
     }
   }
 
+  const { validateTimerSoundFields } = require("../utils/timerSound");
+  errors.push(...validateTimerSoundFields(payload));
+
   return [...new Set(errors)];
 }
 

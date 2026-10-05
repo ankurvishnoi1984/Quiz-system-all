@@ -69,6 +69,10 @@ export function mapParticipantQuestion(q) {
     showLeaderboard: Boolean(q.show_leaderboard),
     options: q.question_options || [],
     timeLimit: isSurvey ? 0 : Number(q.time_limit_seconds || 0),
+    timerSoundKey: q.timer_sound_key || 'classic',
+    timerSoundUrl: q.timer_sound_url || null,
+    timerEndingSoundKey: q.timer_ending_sound_key || q.timer_sound_key || 'classic',
+    timerEndingSoundUrl: q.timer_ending_sound_url || null,
     liveActivatedAt: q.live_activated_at || null,
     openForReattempt:
       q.open_for_reattempt === true ||

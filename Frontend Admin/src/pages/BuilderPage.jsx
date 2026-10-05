@@ -31,6 +31,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { HostQuestionActionButton } from '../components/live/HostQuestionActionButton'
 import { QuestionMediaUpload } from '../components/builder/QuestionMediaUpload'
+import { QuestionTimerSoundSettings } from '../components/builder/QuestionTimerSoundSettings'
 import { QuestionImportModal } from '../components/builder/QuestionImportModal'
 import { AiGenerateQuestionsModal } from '../components/builder/AiGenerateQuestionsModal'
 import { QuestionBankModal } from '../components/builder/QuestionBankModal'
@@ -77,6 +78,10 @@ import {
   resolveUniformPoolTimeLimit,
   DEFAULT_BAND_POINTS,
 } from '../utils/advancedScoreBands'
+import {
+  DEFAULT_TIMER_SOUND_KEY,
+  normalizeTimerSoundSettings,
+} from '../utils/timerSoundPresets'
 
 /** Question-set management in the builder (exam Set A / Set B). */
 const QUESTION_SETS_UI_ENABLED = true
@@ -1488,6 +1493,10 @@ function BuilderPage() {
         answerRevealed: Boolean(question.answer_revealed),
         showLeaderboard: Boolean(question.show_leaderboard),
         timeLimitSeconds: 0,
+        timerSoundKey: DEFAULT_TIMER_SOUND_KEY,
+        timerSoundUrl: null,
+        timerEndingSoundKey: DEFAULT_TIMER_SOUND_KEY,
+        timerEndingSoundUrl: null,
         options,
       }
     }
@@ -1551,6 +1560,12 @@ function BuilderPage() {
       answerRevealed: Boolean(question.answer_revealed),
       showLeaderboard: Boolean(question.show_leaderboard),
       timeLimitSeconds: normalizeTimeLimitSeconds(question.time_limit_seconds),
+      ...normalizeTimerSoundSettings({
+        timer_sound_key: question.timer_sound_key,
+        timer_sound_url: question.timer_sound_url,
+        timer_ending_sound_key: question.timer_ending_sound_key,
+        timer_ending_sound_url: question.timer_ending_sound_url,
+      }),
       options,
     }
   }
@@ -1856,6 +1871,10 @@ function BuilderPage() {
         : resolveDefaultTimeLimitForNewQuestion(questions, {
             advancedBuilder: isAdvancedBuilder,
           }),
+      timerSoundKey: DEFAULT_TIMER_SOUND_KEY,
+      timerSoundUrl: null,
+      timerEndingSoundKey: DEFAULT_TIMER_SOUND_KEY,
+      timerEndingSoundUrl: null,
       ...(type === 'Survey' ? createSurveyQuestionDefaults('MCQ') : {}),
       ...(type === 'Rating' ? createRatingQuestionDefaults() : {}),
       options:
@@ -1983,6 +2002,10 @@ function BuilderPage() {
         media: null,
         points: type === 'Poll' ? 0 : 10,
         timeLimitSeconds: defaultTime,
+        timerSoundKey: DEFAULT_TIMER_SOUND_KEY,
+        timerSoundUrl: null,
+        timerEndingSoundKey: DEFAULT_TIMER_SOUND_KEY,
+        timerEndingSoundUrl: null,
         ...(type === 'Rating'
           ? {
               ...createRatingQuestionDefaults(),
@@ -2588,6 +2611,18 @@ function BuilderPage() {
             : sessionQuizTotalTimeEnabled
               ? null
               : normalizeTimeLimitSeconds(question.timeLimitSeconds) || null,
+          timer_sound_key: isSurvey
+            ? DEFAULT_TIMER_SOUND_KEY
+            : normalizeTimerSoundSettings(question).timerSoundKey,
+          timer_sound_url: isSurvey
+            ? null
+            : normalizeTimerSoundSettings(question).timerSoundUrl,
+          timer_ending_sound_key: isSurvey
+            ? DEFAULT_TIMER_SOUND_KEY
+            : normalizeTimerSoundSettings(question).timerEndingSoundKey,
+          timer_ending_sound_url: isSurvey
+            ? null
+            : normalizeTimerSoundSettings(question).timerEndingSoundUrl,
           allow_multiple_select:
             isSurvey && (surveySubType === 'MCQ' || surveySubType === 'Poll')
               ? Boolean(question.allowMultipleSelect)
@@ -3609,6 +3644,26 @@ function BuilderPage() {
                     {selectedTimeLimitSeconds === 0 ? 'Off' : `${selectedTimeLimitSeconds}s`}
                   </span>
                 </p>
+                {selectedTimeLimitSeconds > 0 ? (
+                  <QuestionTimerSoundSettings
+                    timerSoundKey={selected.timerSoundKey}
+                    timerSoundUrl={selected.timerSoundUrl}
+                    timerEndingSoundKey={selected.timerEndingSoundKey}
+                    timerEndingSoundUrl={selected.timerEndingSoundUrl}
+                    disabled={!isDraftSession}
+                    deptId={departmentId || sessionQuery.data?.dept_id}
+                    onChange={(next) => {
+                      setDirty(true)
+                      updateQuestion({
+                        ...selected,
+                        timerSoundKey: next.timerSoundKey,
+                        timerSoundUrl: next.timerSoundUrl,
+                        timerEndingSoundKey: next.timerEndingSoundKey,
+                        timerEndingSoundUrl: next.timerEndingSoundUrl,
+                      })
+                    }}
+                  />
+                ) : null}
               </div>
               ) : null}
             </div>
