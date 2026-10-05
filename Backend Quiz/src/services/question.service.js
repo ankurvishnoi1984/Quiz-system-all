@@ -760,7 +760,12 @@ function formatQuestionForParticipant(question, { participantSubmitted = false }
     show_leaderboard: Boolean(plain.show_leaderboard),
     live_activated_at: plain.live_activated_at || null,
     submissions_closed: Boolean(plain.submissions_closed),
-    open_for_reattempt: Boolean(plain.open_for_reattempt)
+    open_for_reattempt: Boolean(plain.open_for_reattempt),
+    // Explicit timer audio fields for participants (never rely on spread alone).
+    timer_sound_key: plain.timer_sound_key || "classic",
+    timer_sound_url: plain.timer_sound_url || null,
+    timer_ending_sound_key: plain.timer_ending_sound_key || plain.timer_sound_key || "classic",
+    timer_ending_sound_url: plain.timer_ending_sound_url || null
   };
 }
 

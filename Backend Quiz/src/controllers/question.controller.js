@@ -234,6 +234,11 @@ function buildQuestionChangePayload(question, isLive) {
     is_live: Boolean(isLive),
     live_activated_at: isLive ? question.live_activated_at ?? null : null,
     time_limit_seconds: question.time_limit_seconds ?? null,
+    timer_sound_key: question.timer_sound_key || "classic",
+    timer_sound_url: question.timer_sound_url || null,
+    timer_ending_sound_key:
+      question.timer_ending_sound_key || question.timer_sound_key || "classic",
+    timer_ending_sound_url: question.timer_ending_sound_url || null,
     submissions_closed: isLive ? Boolean(question.submissions_closed) : false,
     open_for_reattempt: isLive ? Boolean(question.open_for_reattempt) : false
   };

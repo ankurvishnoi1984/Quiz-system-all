@@ -17,12 +17,12 @@ const TABS = [
   {
     id: 'ending',
     label: 'Last 10 seconds',
-    hint: 'Played during the final countdown (ticks / urgent cues). Classic is the default.',
+    hint: 'Played during the final countdown. Built-in presets apply to both tabs; custom upload is for this tab only.',
   },
   {
     id: 'timesUp',
     label: "Time's up",
-    hint: 'Played when the clock hits zero. Classic is the default.',
+    hint: 'Played when the clock hits zero. Built-in presets apply to both tabs; custom upload is for this tab only.',
   },
 ]
 
@@ -209,16 +209,26 @@ export function QuestionTimerSoundSettings({
   const handleSelectPreset = (slot, key) => {
     if (disabled) return
     setError('')
+    // Built-in presets apply to both ending + times-up so participants hear the chosen style.
+    if (key !== 'custom') {
+      emit({
+        timerSoundKey: key,
+        timerSoundUrl: null,
+        timerEndingSoundKey: key,
+        timerEndingSoundUrl: null,
+      })
+      return
+    }
     if (slot === 'ending') {
       emit({
-        timerEndingSoundKey: key,
-        timerEndingSoundUrl: key === 'custom' ? settings.timerEndingSoundUrl : null,
+        timerEndingSoundKey: 'custom',
+        timerEndingSoundUrl: settings.timerEndingSoundUrl,
       })
       return
     }
     emit({
-      timerSoundKey: key,
-      timerSoundUrl: key === 'custom' ? settings.timerSoundUrl : null,
+      timerSoundKey: 'custom',
+      timerSoundUrl: settings.timerSoundUrl,
     })
   }
 
@@ -282,8 +292,8 @@ export function QuestionTimerSoundSettings({
         <div>
           <p className="text-sm font-semibold text-navy-900">Timer audio</p>
           <p className="text-xs text-slate-600">
-            Choose sounds for the ending countdown and for when time runs out. Leave unchanged to
-            keep Classic.
+            Choose Digital (or another style) once — it applies to both last-10-seconds and time&apos;s-up.
+            Save the session so participants receive it.
           </p>
         </div>
       </div>

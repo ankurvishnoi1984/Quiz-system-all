@@ -1815,16 +1815,53 @@ function BuilderPage() {
     if (!selected || selected.type === 'Survey') return
     const normalized = normalizeTimeLimitSeconds(seconds)
     const applyToAll = areAllQuestionsUntimed(questions)
+    const soundPatch =
+      normalized > 0
+        ? normalizeTimerSoundSettings(selected)
+        : {
+            timerSoundKey: DEFAULT_TIMER_SOUND_KEY,
+            timerSoundUrl: null,
+            timerEndingSoundKey: DEFAULT_TIMER_SOUND_KEY,
+            timerEndingSoundUrl: null,
+          }
     setDirty(true)
-    if (applyToAll) {
+    if (applyToAll || isAdvancedBuilder) {
       setQuestions((prev) =>
-        prev.map((q) => (q.type === 'Survey' ? q : { ...q, timeLimitSeconds: normalized })),
+        prev.map((q) =>
+          q.type === 'Survey'
+            ? q
+            : {
+                ...q,
+                timeLimitSeconds: normalized,
+                ...(normalized > 0
+                  ? {
+                      timerSoundKey: soundPatch.timerSoundKey,
+                      timerSoundUrl: soundPatch.timerSoundUrl,
+                      timerEndingSoundKey: soundPatch.timerEndingSoundKey,
+                      timerEndingSoundUrl: soundPatch.timerEndingSoundUrl,
+                    }
+                  : {}),
+              },
+        ),
       )
       return
     }
     setQuestions((prev) =>
       prev.map((q) =>
-        q.id === selected.id && q.type !== 'Survey' ? { ...q, timeLimitSeconds: normalized } : q,
+        q.id === selected.id && q.type !== 'Survey'
+          ? {
+              ...q,
+              timeLimitSeconds: normalized,
+              ...(normalized > 0
+                ? {
+                    timerSoundKey: soundPatch.timerSoundKey,
+                    timerSoundUrl: soundPatch.timerSoundUrl,
+                    timerEndingSoundKey: soundPatch.timerEndingSoundKey,
+                    timerEndingSoundUrl: soundPatch.timerEndingSoundUrl,
+                  }
+                : {}),
+            }
+          : q,
       ),
     )
   }
@@ -3654,12 +3691,45 @@ function BuilderPage() {
                     deptId={departmentId || sessionQuery.data?.dept_id}
                     onChange={(next) => {
                       setDirty(true)
-                      updateQuestion({
-                        ...selected,
+                      const timedCount = questions.filter(
+                        (q) =>
+                          q.type !== 'Survey' &&
+                          normalizeTimeLimitSeconds(q.timeLimitSeconds) > 0,
+                      ).length
+                      // Advanced pools (and multi-timed quizzes): keep audio consistent for every timed question.
+                      const applyToPool = isAdvancedBuilder || timedCount > 1
+                      const soundFields = {
                         timerSoundKey: next.timerSoundKey,
                         timerSoundUrl: next.timerSoundUrl,
                         timerEndingSoundKey: next.timerEndingSoundKey,
                         timerEndingSoundUrl: next.timerEndingSoundUrl,
+                      }
+                      const nextQuestions = questions.map((q) => {
+                        if (q.type === 'Survey') return q
+                        if (q.id === selected.id) return { ...q, ...soundFields }
+                        if (!applyToPool) return q
+                        if (normalizeTimeLimitSeconds(q.timeLimitSeconds) <= 0) return q
+                        return { ...q, ...soundFields }
+                      })
+                      setQuestions(nextQuestions)
+
+                      if (!isDraftSession || !accessToken) return
+                      nextQuestions.forEach((q) => {
+                        if (!q.questionId || q.type === 'Survey') return
+                        if (q.id !== selected.id && normalizeTimeLimitSeconds(q.timeLimitSeconds) <= 0) {
+                          return
+                        }
+                        if (q.id !== selected.id && !applyToPool) return
+                        void updateQuestionApi(accessToken, q.questionId, {
+                          question_type: uiToApiType(q.type),
+                          question_text: q.text || 'Untitled question',
+                          time_limit_seconds:
+                            normalizeTimeLimitSeconds(q.timeLimitSeconds) || null,
+                          timer_sound_key: soundFields.timerSoundKey,
+                          timer_sound_url: soundFields.timerSoundUrl,
+                          timer_ending_sound_key: soundFields.timerEndingSoundKey,
+                          timer_ending_sound_url: soundFields.timerEndingSoundUrl,
+                        }).catch(() => {})
                       })
                     }}
                   />
@@ -3756,9 +3826,26 @@ function BuilderPage() {
                               ? Number(customTime) || 30
                               : Number(String(mode).replace('s', '')) || 30
                         setDirty(true)
+                        const soundPatch =
+                          seconds > 0 && selected
+                            ? normalizeTimerSoundSettings(selected)
+                            : null
                         setQuestions((prev) =>
                           prev.map((q) =>
-                            q.type === 'Survey' ? q : { ...q, timeLimitSeconds: seconds },
+                            q.type === 'Survey'
+                              ? q
+                              : {
+                                  ...q,
+                                  timeLimitSeconds: seconds,
+                                  ...(soundPatch
+                                    ? {
+                                        timerSoundKey: soundPatch.timerSoundKey,
+                                        timerSoundUrl: soundPatch.timerSoundUrl,
+                                        timerEndingSoundKey: soundPatch.timerEndingSoundKey,
+                                        timerEndingSoundUrl: soundPatch.timerEndingSoundUrl,
+                                      }
+                                    : {}),
+                                },
                           ),
                         )
                         if (mode !== 'Custom') setTimeLimitMode(mode)

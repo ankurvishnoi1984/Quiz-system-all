@@ -78,12 +78,8 @@ export function useQuestionTimerSound(
       return
     }
 
-    if (
-      seconds > 0 &&
-      seconds <= WARNING_SECONDS &&
-      previous > WARNING_SECONDS &&
-      !endingStartedRef.current
-    ) {
+    // Entering last-10s window (including late joins that jump to e.g. 8s).
+    if (seconds > 0 && seconds <= WARNING_SECONDS && !endingStartedRef.current) {
       endingStartedRef.current = true
       playQuestionTimerCue('endingStart', { ...sound, secondsLeft: seconds })
     }
