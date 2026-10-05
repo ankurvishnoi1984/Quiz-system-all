@@ -2984,6 +2984,9 @@ function BuilderPage() {
                     ? ` from ${eligiblePoolCount} marked eligible`
                     : ' from the full pool'}
                   . Scoring uses response-time bands (not per-question points).
+                  {advancedSelectionMode === 'random_from_selected'
+                    ? ' Use the checkbox on each question to include it in the eligible pool.'
+                    : ''}
                 </p>
               </div>
             ) : null}
@@ -3093,14 +3096,50 @@ function BuilderPage() {
                         <SortableRow id={q.id} className="border-blue-200/70">
                           {(() => {
                             const isTypeMismatch = Boolean(sessionQuestionType && q.type !== sessionQuestionType)
+                            const showEligibleToggle =
+                              isAdvancedBuilder && advancedSelectionMode === 'random_from_selected'
+                            const isEligible = q.poolEligible !== false
                             return (
+                          <div
+                            className={`flex w-full items-start gap-2 rounded-xl px-2 py-2 ${
+                              showEligibleToggle && !isEligible ? 'opacity-70' : ''
+                            }`}
+                          >
+                            {showEligibleToggle ? (
+                              <label
+                                className="mt-1 flex shrink-0 cursor-pointer flex-col items-center gap-0.5"
+                                title={
+                                  isDraftSession
+                                    ? 'Include this question in the eligible pool'
+                                    : 'Eligible pool (locked while live)'
+                                }
+                                onClick={(e) => e.stopPropagation()}
+                                onPointerDown={(e) => e.stopPropagation()}
+                              >
+                                <input
+                                  type="checkbox"
+                                  disabled={!isDraftSession || isTypeMismatch}
+                                  checked={isEligible}
+                                  onChange={(e) => {
+                                    e.stopPropagation()
+                                    setDirty(true)
+                                    updateQuestion({ ...q, poolEligible: e.target.checked })
+                                  }}
+                                  className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/40 disabled:cursor-not-allowed"
+                                  aria-label={`Mark question ${idx + 1} eligible for random pool`}
+                                />
+                                <span className="text-[9px] font-semibold uppercase tracking-wide text-emerald-800">
+                                  Eligible
+                                </span>
+                              </label>
+                            ) : null}
                           <button
                             type="button"
                             onClick={() => {
                               if (isTypeMismatch) return
                               setSelectedId(q.id)
                             }}
-                            className={`flex w-full items-start justify-between gap-3 rounded-xl px-2 py-2 text-left ${
+                            className={`min-w-0 flex-1 text-left ${
                               isTypeMismatch ? 'cursor-not-allowed opacity-60' : ''
                             }`}
                             disabled={isTypeMismatch}
@@ -3119,6 +3158,11 @@ function BuilderPage() {
                                     {surveySubTypeLabel(q.surveySubType)}
                                   </span>
                                 ) : null}
+                                {showEligibleToggle && isEligible ? (
+                                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-900">
+                                    In pool
+                                  </span>
+                                ) : null}
                               </div>
                               <p className="mt-2 line-clamp-2 text-[15px] font-semibold leading-snug text-navy-900">
                                 {q.text?.trim() ? q.text : `Untitled ${q.type}`}
@@ -3134,6 +3178,7 @@ function BuilderPage() {
                                     : 'No options'}
                               </p>
                             </div>
+                          </button>
                             <button
                               type="button"
                               onClick={(e) => {
@@ -3145,7 +3190,7 @@ function BuilderPage() {
                             >
                               <Trash2 className="size-4" />
                             </button>
-                          </button>
+                          </div>
                             )
                           })()}
                         </SortableRow>
@@ -3177,15 +3222,35 @@ function BuilderPage() {
                       {renderSetGroupHeader(group)}
                       {group.questions.map((q, idx) => {
                   const isTypeMismatch = Boolean(sessionQuestionType && q.type !== sessionQuestionType)
+                  const showEligibleToggle =
+                    isAdvancedBuilder && advancedSelectionMode === 'random_from_selected'
+                  const isEligible = q.poolEligible !== false
                   return (
                     <div
                       key={q.id}
                       className={`rounded-2xl border border-blue-200/70 bg-white/90 shadow-sm shadow-blue-900/5 backdrop-blur ${
                         q.id === selectedId ? 'ring-2 ring-blue-500/25' : ''
-                      }`}
+                      } ${showEligibleToggle && !isEligible ? 'opacity-70' : ''}`}
                     >
                       <div className="px-3 py-2">
-                        <div className="flex w-full items-start justify-between gap-3">
+                        <div className="flex w-full items-start gap-2">
+                          {showEligibleToggle ? (
+                            <label
+                              className="mt-1 flex shrink-0 cursor-default flex-col items-center gap-0.5"
+                              title="Eligible pool (locked while live)"
+                            >
+                              <input
+                                type="checkbox"
+                                disabled
+                                checked={isEligible}
+                                className="h-4 w-4 rounded border-slate-300 text-emerald-600 disabled:cursor-not-allowed"
+                                aria-label={`Question ${idx + 1} eligible for random pool`}
+                              />
+                              <span className="text-[9px] font-semibold uppercase tracking-wide text-emerald-800">
+                                Eligible
+                              </span>
+                            </label>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => {
@@ -3208,6 +3273,11 @@ function BuilderPage() {
                               {q.type === 'Survey' && q.surveySubType ? (
                                 <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-900">
                                   {surveySubTypeLabel(q.surveySubType)}
+                                </span>
+                              ) : null}
+                              {showEligibleToggle && isEligible ? (
+                                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-900">
+                                  In pool
                                 </span>
                               ) : null}
                             </div>
@@ -3595,19 +3665,11 @@ function BuilderPage() {
                   </select>
                 </label>
 
-                {advancedSelectionMode === 'random_from_selected' && selected ? (
-                  <label className="flex items-center gap-2 rounded-xl border border-emerald-200/70 bg-emerald-50/50 px-3 py-2 text-sm text-slate-700">
-                    <input
-                      type="checkbox"
-                      disabled={!isDraftSession}
-                      checked={selected.poolEligible !== false}
-                      onChange={(e) => {
-                        setDirty(true)
-                        updateQuestion({ ...selected, poolEligible: e.target.checked })
-                      }}
-                    />
-                    Include selected question in eligible pool
-                  </label>
+                {advancedSelectionMode === 'random_from_selected' ? (
+                  <p className="rounded-xl border border-emerald-200/70 bg-emerald-50/50 px-3 py-2 text-xs leading-relaxed text-slate-600">
+                    Mark questions in the left list with the <strong>Eligible</strong> checkbox to include
+                    them in the random pool.
+                  </p>
                 ) : null}
 
                 <div>
