@@ -1,15 +1,25 @@
 import { useMemo, useState } from 'react'
 import { ChevronDown, Layers, Search, Shuffle, Users } from 'lucide-react'
 import { PresentSlideHeader } from './PresentShell'
+import { PoolEligibleBadge } from '../../components/live/PoolEligibleBadge'
 import { countResponseSubmissions, filterResponsesForQuestion } from '../../utils/livePresentation'
 import { getPresentModeSettings } from '../../utils/presentModeSettings'
+import { partitionQuestionsByPoolEligibility } from '../../utils/poolEligibleUi'
+import { sessionUsesMarkedEligiblePool } from '../../utils/sessionFlags'
 
 const MODE_COPY = {
   advanced: {
     title: 'Advanced quiz — random subset per participant',
-    body: (session, poolSize) => {
+    body: (session, poolSize, eligibleCount = null) => {
       const k = Number(session?.questions_per_participant)
       const kLabel = Number.isFinite(k) && k > 0 ? k : 'K'
+      if (
+        eligibleCount != null &&
+        Number.isFinite(eligibleCount) &&
+        eligibleCount !== poolSize
+      ) {
+        return `Each participant gets ${kLabel} random question${kLabel === 1 ? '' : 's'} from the ${eligibleCount} marked eligible (of ${poolSize} total). They are not on the same question at the same time — use this overview to monitor the pool.`
+      }
       return `Each participant gets ${kLabel} random question${kLabel === 1 ? '' : 's'} from this pool of ${poolSize}. They are not on the same question at the same time — use this overview to monitor the full pool.`
     },
   },
@@ -49,7 +59,22 @@ export function DistributedQuizSlide({
   const [tab, setTab] = useState('pool')
   const [assignmentSearch, setAssignmentSearch] = useState('')
   const [expandedParticipantIds, setExpandedParticipantIds] = useState(() => new Set())
+  const markedEligiblePoolEnabled =
+    distributedMode === 'advanced' && sessionUsesMarkedEligiblePool(session)
+  const poolPartition = useMemo(
+    () =>
+      markedEligiblePoolEnabled
+        ? partitionQuestionsByPoolEligibility(mappedQuestions)
+        : {
+            eligible: mappedQuestions.map((question, index) => ({ question, index })),
+            ineligible: [],
+            eligibleCount: mappedQuestions.length,
+            totalCount: mappedQuestions.length,
+          },
+    [mappedQuestions, markedEligiblePoolEnabled],
+  )
   const poolSize = mappedQuestions.length
+  const eligibleCount = poolPartition.eligibleCount
   const liveCount = mappedQuestions.filter((q) => q.isLive).length
   const questionsPerParticipant = Number(session?.questions_per_participant)
   const kLabel =
@@ -68,19 +93,48 @@ export function DistributedQuizSlide({
 
   const copy = MODE_COPY[distributedMode] || MODE_COPY.advanced
   const bodyText =
-    typeof copy.body === 'function' ? copy.body(session, poolSize) : copy.body
+    typeof copy.body === 'function'
+      ? copy.body(
+          session,
+          poolSize,
+          markedEligiblePoolEnabled ? eligibleCount : null,
+        )
+      : copy.body
 
-  const rows = useMemo(
-    () =>
-      mappedQuestions.map((q, index) => ({
-        question: q,
+  const poolSections = useMemo(() => {
+    const toRows = (items) =>
+      items.map(({ question, index }) => ({
+        question,
         number: index + 1,
-        responses: responseCountForQuestion(q.id, responses),
-      })),
-    [mappedQuestions, responses],
-  )
+        responses: responseCountForQuestion(question.id, responses),
+      }))
+
+    if (!markedEligiblePoolEnabled) {
+      return [{ key: 'all', label: null, rows: toRows(poolPartition.eligible) }]
+    }
+    return [
+      {
+        key: 'eligible',
+        label: poolPartition.ineligible.length > 0 ? 'In random pool' : null,
+        rows: toRows(poolPartition.eligible),
+      },
+      {
+        key: 'ineligible',
+        label: 'Not in random pool',
+        rows: toRows(poolPartition.ineligible),
+      },
+    ]
+  }, [mappedQuestions, markedEligiblePoolEnabled, poolPartition, responses])
 
   const showAssignmentsTab = distributedMode === 'advanced'
+  const statCols =
+    kLabel != null
+      ? markedEligiblePoolEnabled
+        ? 'sm:grid-cols-5'
+        : 'sm:grid-cols-4'
+      : markedEligiblePoolEnabled
+        ? 'sm:grid-cols-4'
+        : 'sm:grid-cols-3'
 
   const filteredAssignments = useMemo(() => {
     const query = assignmentSearch.trim().toLowerCase()
@@ -141,15 +195,24 @@ export function DistributedQuizSlide({
           <p className="mt-2 text-sm leading-relaxed text-emerald-900/90">{bodyText}</p>
         </div>
 
-        <div
-          className={`grid shrink-0 gap-3 ${
-            kLabel != null ? 'sm:grid-cols-4' : 'sm:grid-cols-3'
-          }`}
-        >
-          <div className="rounded-xl border border-blue-200/70 bg-white/90 px-4 py-3 text-center">
-            <p className="text-2xl font-bold text-navy-900">{poolSize}</p>
-            <p className="text-xs font-semibold text-slate-500">In pool</p>
-          </div>
+        <div className={`grid shrink-0 gap-3 ${statCols}`}>
+          {markedEligiblePoolEnabled ? (
+            <>
+              <div className="rounded-xl border border-emerald-200/70 bg-emerald-50/80 px-4 py-3 text-center">
+                <p className="text-2xl font-bold text-emerald-900">{eligibleCount}</p>
+                <p className="text-xs font-semibold text-emerald-800/80">Eligible</p>
+              </div>
+              <div className="rounded-xl border border-blue-200/70 bg-white/90 px-4 py-3 text-center">
+                <p className="text-2xl font-bold text-navy-900">{poolSize}</p>
+                <p className="text-xs font-semibold text-slate-500">Total</p>
+              </div>
+            </>
+          ) : (
+            <div className="rounded-xl border border-blue-200/70 bg-white/90 px-4 py-3 text-center">
+              <p className="text-2xl font-bold text-navy-900">{poolSize}</p>
+              <p className="text-xs font-semibold text-slate-500">In pool</p>
+            </div>
+          )}
           {kLabel != null ? (
             <div className="rounded-xl border border-emerald-200/70 bg-emerald-50/80 px-4 py-3 text-center">
               <p className="text-2xl font-bold text-emerald-900">{kLabel}</p>
@@ -196,38 +259,81 @@ export function DistributedQuizSlide({
         {tab === 'pool' || !showAssignmentsTab ? (
           <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-blue-200/70 bg-white/95">
             <p className="shrink-0 border-b border-slate-100 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Pool — tap a question to inspect results
+              {markedEligiblePoolEnabled
+                ? 'Questions — tap to inspect results'
+                : 'Pool — tap a question to inspect results'}
             </p>
-            <ul className="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto">
-              {rows.map(({ question, number, responses: count }) => (
-                <li key={question.id}>
-                  <button
-                    type="button"
-                    onClick={() => onInspectQuestion?.(question)}
-                    className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-blue-50/60"
-                  >
-                    <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-bold text-slate-600">
-                      {number}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="line-clamp-2 text-sm font-semibold text-navy-900">
-                        {question.text || 'Untitled question'}
-                      </span>
-                      <span className="mt-1 flex flex-wrap gap-2 text-xs text-slate-500">
-                        <span>
-                          {count} response{count === 1 ? '' : 's'}
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {poolSections.map((section) =>
+                section.rows.length === 0 ? null : (
+                  <div key={section.key}>
+                    {section.label ? (
+                      <p
+                        className={`sticky top-0 z-10 border-b border-slate-100 px-4 py-2 text-[11px] font-semibold uppercase tracking-wide backdrop-blur-sm ${
+                          section.key === 'ineligible'
+                            ? 'bg-slate-50/95 text-slate-500'
+                            : 'bg-emerald-50/95 text-emerald-800'
+                        }`}
+                      >
+                        {section.label}
+                        <span className="ml-1 font-medium normal-case tracking-normal text-slate-400">
+                          ({section.rows.length})
                         </span>
-                        {question.isLive ? (
-                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-800">
-                            Live
-                          </span>
-                        ) : null}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+                      </p>
+                    ) : null}
+                    <ul className="divide-y divide-slate-100">
+                      {section.rows.map(({ question, number, responses: count }) => {
+                        const ineligible =
+                          markedEligiblePoolEnabled && question.poolEligible === false
+                        return (
+                          <li key={question.id}>
+                            <button
+                              type="button"
+                              onClick={() => onInspectQuestion?.(question)}
+                              className={`flex w-full items-start gap-3 px-4 py-3 text-left transition ${
+                                ineligible
+                                  ? 'bg-slate-50/50 opacity-70 hover:bg-slate-50 hover:opacity-90'
+                                  : 'hover:bg-blue-50/60'
+                              }`}
+                            >
+                              <span
+                                className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${
+                                  ineligible
+                                    ? 'bg-slate-100 text-slate-500'
+                                    : 'bg-slate-100 text-slate-600'
+                                }`}
+                              >
+                                {number}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="line-clamp-2 text-sm font-semibold text-navy-900">
+                                  {question.text || 'Untitled question'}
+                                </span>
+                                <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                                  <span>
+                                    {count} response{count === 1 ? '' : 's'}
+                                  </span>
+                                  {markedEligiblePoolEnabled ? (
+                                    <PoolEligibleBadge
+                                      eligible={question.poolEligible !== false}
+                                    />
+                                  ) : null}
+                                  {question.isLive ? (
+                                    <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-800">
+                                      Live
+                                    </span>
+                                  ) : null}
+                                </span>
+                              </span>
+                            </button>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </div>
+                ),
+              )}
+            </div>
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-blue-200/70 bg-white/95">

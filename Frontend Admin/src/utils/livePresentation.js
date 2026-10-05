@@ -191,6 +191,7 @@ export function mapLiveQuestions(questions) {
       correctMatchingPairs: q.correct_matching_pairs || null,
       options,
       media: mapApiMediaToQuestionMedia(q),
+      poolEligible: q.pool_eligible !== false && q.poolEligible !== false,
     }
   })
 }

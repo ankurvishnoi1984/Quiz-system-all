@@ -29,6 +29,12 @@ export function isAdvancedBuilderSession(session) {
   return String(session?.builder_mode || 'normal').toLowerCase() === 'advanced'
 }
 
+/** Advanced + Random K from marked eligible — only pool_eligible questions feed assignment. */
+export function sessionUsesMarkedEligiblePool(session) {
+  if (!isAdvancedBuilderSession(session)) return false
+  return String(session?.advanced_selection_mode || '') === 'random_from_selected'
+}
+
 export function sessionHasTimedQuestions(questions = []) {
   return (questions || []).some(
     (q) => Number(q?.timeLimit ?? q?.time_limit_seconds ?? 0) > 0,

@@ -40,7 +40,8 @@ import { HostAlertModal } from '../components/live/HostAlertModal'
 import { HostSessionInactivityModal } from '../components/session/HostSessionInactivityModal'
 import { HostQuestionActionButton } from '../components/live/HostQuestionActionButton'
 import { canHostActivateAllQuestions, canHostCloseAllQuestions, sessionRequiresActivateAllQuestions } from '../utils/hostQuestionControls'
-import { isAdvancedBuilderSession, isSessionQuizTotalTimeEnabled, isSessionRandomQuestionOrderEnabled } from '../utils/sessionFlags'
+import { isAdvancedBuilderSession, isSessionQuizTotalTimeEnabled, isSessionRandomQuestionOrderEnabled, sessionUsesMarkedEligiblePool } from '../utils/sessionFlags'
+import { partitionQuestionsByPoolEligibility } from '../utils/poolEligibleUi'
 import { HostNoSessionsEmpty } from '../components/layout/HostNoSessionsEmpty'
 import { useHostNavSessions, getLivePresenterSessionId } from '../hooks/useHostNavSessions'
 import { useShell } from '../context/ShellContext'
@@ -49,6 +50,7 @@ import { HostQuestionTimer } from '../components/live/HostQuestionTimer'
 import { LiveChartViewToggle } from '../components/live/LiveChartViewToggle'
 import { RankingLiveChartPanel } from '../components/live/RankingLiveChartPanel'
 import { MatchLiveChartPanel } from '../components/live/MatchLiveChartPanel'
+import { PoolEligibleBadge } from '../components/live/PoolEligibleBadge'
 import { useHostQuestionMutations } from '../hooks/useHostQuestionMutations'
 // Q&A feature disabled — re-enable when bringing Q&A back
 // import { LiveQaPanel } from '../components/leaderboard/LiveQaPanel'
@@ -909,6 +911,18 @@ function LivePage() {
   )
   const randomQuestionOrderEnabled = isSessionRandomQuestionOrderEnabled(session)
   const advancedBuilderEnabled = isAdvancedBuilderSession(session)
+  const markedEligiblePoolEnabled = sessionUsesMarkedEligiblePool(session)
+  const poolEligibilitySections = useMemo(() => {
+    if (!markedEligiblePoolEnabled) {
+      return {
+        eligible: mappedQuestions.map((question, index) => ({ question, index })),
+        ineligible: [],
+        eligibleCount: mappedQuestions.length,
+        totalCount: mappedQuestions.length,
+      }
+    }
+    return partitionQuestionsByPoolEligibility(mappedQuestions)
+  }, [mappedQuestions, markedEligiblePoolEnabled])
   const showSessionControls = session?.status === 'live' || session?.status === 'paused'
   const showCloseAllQuestionsButton = useMemo(
     () =>
@@ -1114,8 +1128,25 @@ function LivePage() {
           <div className="min-w-0">
             <p className="text-sm font-semibold text-navy-900">Session questions</p>
             <p className="text-xs text-slate-600">
-              {mappedQuestions.length} question{mappedQuestions.length === 1 ? '' : 's'} • select a question to control and view results
+              {markedEligiblePoolEnabled ? (
+                <>
+                  {poolEligibilitySections.eligibleCount} eligible of {mappedQuestions.length}{' '}
+                  question{mappedQuestions.length === 1 ? '' : 's'} • select a question to control and
+                  view results
+                </>
+              ) : (
+                <>
+                  {mappedQuestions.length} question{mappedQuestions.length === 1 ? '' : 's'} • select a
+                  question to control and view results
+                </>
+              )}
             </p>
+            {markedEligiblePoolEnabled ? (
+              <p className="mt-1 text-xs font-medium text-emerald-800">
+                Random pool uses marked eligible questions only. Ineligible questions stay listed for
+                monitoring but are not assigned to participants.
+              </p>
+            ) : null}
             {sessionQuizTotalTimeEnabled ? (
               <p className="mt-1 text-xs font-medium text-violet-800">
                 Quiz total time ({session?.quiz_total_time_minutes} min): all questions become
@@ -1225,81 +1256,145 @@ function LivePage() {
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             <div className="space-y-3">
               <div className="max-h-[min(75vh,900px)] space-y-2 overflow-y-auto pr-1">
-              {mappedQuestions.map((q, idx) => {
-                const isSelected = questionIndex === idx
-                const respCount = responseCountByQuestionId[Number(q.id)] || 0
-                return (
-                  <button
-                    key={q.id}
-                    type="button"
-                    onClick={() => {
-                      setQuestionIndex(idx)
-                      // Preview only follows active (live) questions; otherwise keep/share join slide.
-                      if (q.isLive) {
-                        pushPreviewFollow({
-                          screen: 'question',
-                          questionId: q.id,
-                          questionIndex: idx,
-                        })
-                      } else if (!mappedQuestions.some((item) => item.isLive)) {
-                        pushPreviewFollow({ screen: 'join' })
-                      }
-                    }}
-                    className={`w-full rounded-2xl border p-3 text-left transition ${
-                      isSelected
-                        ? 'border-navy-600 bg-linear-to-r from-navy-900 via-navy-800 to-navy-700 text-white shadow-md shadow-navy-900/20'
-                        : 'border-blue-200/70 bg-white hover:border-blue-300 hover:bg-blue-50/60'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                            isSelected ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-700'
+              {(markedEligiblePoolEnabled
+                ? [
+                    {
+                      key: 'eligible',
+                      label:
+                        poolEligibilitySections.ineligible.length > 0
+                          ? 'In random pool'
+                          : null,
+                      items: poolEligibilitySections.eligible,
+                    },
+                    {
+                      key: 'ineligible',
+                      label: 'Not in random pool',
+                      items: poolEligibilitySections.ineligible,
+                    },
+                  ]
+                : [
+                    {
+                      key: 'all',
+                      label: null,
+                      items: poolEligibilitySections.eligible,
+                    },
+                  ]
+              ).map((section) =>
+                section.items.length === 0 ? null : (
+                  <div key={section.key} className="space-y-2">
+                    {section.label ? (
+                      <p
+                        className={`sticky top-0 z-10 px-1 py-1 text-[11px] font-semibold uppercase tracking-wide backdrop-blur-sm ${
+                          section.key === 'ineligible'
+                            ? 'bg-slate-50/95 text-slate-500'
+                            : 'bg-emerald-50/95 text-emerald-800'
+                        }`}
+                      >
+                        {section.label}
+                        <span className="ml-1 font-medium normal-case tracking-normal text-slate-400">
+                          ({section.items.length})
+                        </span>
+                      </p>
+                    ) : null}
+                    {section.items.map(({ question: q, index: idx }) => {
+                      const isSelected = questionIndex === idx
+                      const respCount = responseCountByQuestionId[Number(q.id)] || 0
+                      const showPoolBadge = markedEligiblePoolEnabled
+                      const ineligible = showPoolBadge && q.poolEligible === false
+                      return (
+                        <button
+                          key={q.id}
+                          type="button"
+                          onClick={() => {
+                            setQuestionIndex(idx)
+                            if (q.isLive) {
+                              pushPreviewFollow({
+                                screen: 'question',
+                                questionId: q.id,
+                                questionIndex: idx,
+                              })
+                            } else if (!mappedQuestions.some((item) => item.isLive)) {
+                              pushPreviewFollow({ screen: 'join' })
+                            }
+                          }}
+                          className={`w-full rounded-2xl border p-3 text-left transition ${
+                            isSelected
+                              ? 'border-navy-600 bg-linear-to-r from-navy-900 via-navy-800 to-navy-700 text-white shadow-md shadow-navy-900/20'
+                              : ineligible
+                                ? 'border-slate-200/80 bg-slate-50/80 opacity-70 hover:border-slate-300 hover:bg-slate-50 hover:opacity-90'
+                                : 'border-blue-200/70 bg-white hover:border-blue-300 hover:bg-blue-50/60'
                           }`}
                         >
-                          Q{idx + 1}
-                        </span>
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                            isSelected ? 'bg-white/15 text-white' : 'bg-blue-50 text-navy-700'
-                          }`}
-                        >
-                          {q.type}
-                        </span>
-                        {q.setName ? (
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                              isSelected ? 'bg-white/15 text-white' : 'bg-indigo-50 text-indigo-800'
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                                  isSelected
+                                    ? 'bg-white/15 text-white'
+                                    : 'bg-slate-100 text-slate-700'
+                                }`}
+                              >
+                                Q{idx + 1}
+                              </span>
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                                  isSelected
+                                    ? 'bg-white/15 text-white'
+                                    : 'bg-blue-50 text-navy-700'
+                                }`}
+                              >
+                                {q.type}
+                              </span>
+                              {q.setName ? (
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                                    isSelected
+                                      ? 'bg-white/15 text-white'
+                                      : 'bg-indigo-50 text-indigo-800'
+                                  }`}
+                                >
+                                  {q.setName}
+                                </span>
+                              ) : null}
+                              {showPoolBadge ? (
+                                <PoolEligibleBadge
+                                  eligible={q.poolEligible !== false}
+                                  selected={isSelected}
+                                />
+                              ) : null}
+                              {q.isLive ? (
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                                    isSelected
+                                      ? 'bg-emerald-400/30 text-emerald-100'
+                                      : 'bg-emerald-50 text-emerald-700'
+                                  }`}
+                                >
+                                  Live
+                                </span>
+                              ) : null}
+                            </div>
+                            <span
+                              className={`text-xs font-semibold ${
+                                isSelected ? 'text-blue-100' : 'text-slate-500'
+                              }`}
+                            >
+                              {respCount} resp.
+                            </span>
+                          </div>
+                          <p
+                            className={`mt-2 line-clamp-2 text-sm font-semibold ${
+                              isSelected ? 'text-white' : 'text-navy-900'
                             }`}
                           >
-                            {q.setName}
-                          </span>
-                        ) : null}
-                        {q.isLive ? (
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                              isSelected ? 'bg-emerald-400/30 text-emerald-100' : 'bg-emerald-50 text-emerald-700'
-                            }`}
-                          >
-                            Live
-                          </span>
-                        ) : null}
-                      </div>
-                      <span className={`text-xs font-semibold ${isSelected ? 'text-blue-100' : 'text-slate-500'}`}>
-                        {respCount} resp.
-                      </span>
-                    </div>
-                    <p
-                      className={`mt-2 line-clamp-2 text-sm font-semibold ${
-                        isSelected ? 'text-white' : 'text-navy-900'
-                      }`}
-                    >
-                      {q.text || 'Untitled question'}
-                    </p>
-                  </button>
-                )
-              })}
+                            {q.text || 'Untitled question'}
+                          </p>
+                        </button>
+                      )
+                    })}
+                  </div>
+                ),
+              )}
               </div>
 
               {activeQuestion?.media?.url ? (
