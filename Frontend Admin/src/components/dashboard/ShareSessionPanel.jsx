@@ -1,4 +1,4 @@
-import { Check, Code2, Copy, Download, Hash, Link2, Monitor, QrCode } from 'lucide-react'
+import { Check, Code2, Copy, Download, Hash, Link2, Monitor, QrCode, Video } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import { getPresentViewLinkApi, getSessionQrApi } from '../../services/dashboardApi'
@@ -9,7 +9,8 @@ import {
   getSessionEmbedLinkApi,
   mintJoinIdentityTokenApi,
 } from '../../services/embedApi'
-import { isIntegrationsEnabled } from '../../utils/integrations'
+import { getZoomStatusApi } from '../../services/zoomApi'
+import { isIntegrationsEnabled, isZoomAppEnabled } from '../../utils/integrations'
 import {
   buildGenericJoinUrl,
   buildParticipantEmbedUrl,
@@ -20,6 +21,7 @@ import {
 import { formatScheduledSessionForDisplay } from '../../utils/sessionSchedule'
 
 const INTEGRATIONS_ENABLED = isIntegrationsEnabled()
+const ZOOM_APP_ENABLED = isZoomAppEnabled()
 
 const SHARE_TABS = [
   { id: 'link', label: 'Link', icon: Link2 },
@@ -211,11 +213,48 @@ export default function ShareSessionPanel({
   const [signedJoinBusy, setSignedJoinBusy] = useState(false)
   const [signedJoinError, setSignedJoinError] = useState('')
   const [signedJoinExpiresIn, setSignedJoinExpiresIn] = useState(null)
+  const [zoomStatus, setZoomStatus] = useState(null)
+  const [zoomStatusError, setZoomStatusError] = useState('')
 
   const resolvedSessionDbId = sessionDbId ?? session?.session_id ?? session?.id
   const canSharePresentView = showPresentViewShare && session?.status !== 'archived'
 
   const sessionCode = normalizeSessionCode(session?.session_code)
+
+  const zoomAppUrl = useMemo(() => {
+    const base = window.location.origin.replace(/\/+$/, '')
+    return `${base}/zoom/app`
+  }, [])
+
+  const zoomMockHostUrl = useMemo(() => {
+    if (!sessionCode) return `${zoomAppUrl}?mockMeetingUuid=dev-meeting-1&mockRole=host`
+    return `${zoomAppUrl}?mockMeetingUuid=dev-${sessionCode}&mockRole=host`
+  }, [zoomAppUrl, sessionCode])
+
+  const zoomMockParticipantUrl = useMemo(() => {
+    if (!sessionCode) return `${zoomAppUrl}?mockMeetingUuid=dev-meeting-1&mockRole=participant`
+    return `${zoomAppUrl}?mockMeetingUuid=dev-${sessionCode}&mockRole=participant&mockDisplayName=Guest`
+  }, [zoomAppUrl, sessionCode])
+
+  useEffect(() => {
+    if (!ZOOM_APP_ENABLED || shareTab !== 'zoom') return undefined
+    let cancelled = false
+    ;(async () => {
+      setZoomStatusError('')
+      try {
+        const data = await getZoomStatusApi()
+        if (!cancelled) setZoomStatus(data)
+      } catch (err) {
+        if (!cancelled) {
+          setZoomStatus(null)
+          setZoomStatusError(err?.message || 'Could not load Zoom status')
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [shareTab])
   const genericJoinUrl = buildGenericJoinUrl()
   const sessionDescription = session?.description || ''
   const scheduledLabel = formatScheduledSessionForDisplay(
@@ -250,6 +289,9 @@ export default function ShareSessionPanel({
       if (INTEGRATIONS_ENABLED) {
         tabs.push({ id: 'embed', label: 'Embed', icon: Code2 })
       }
+    }
+    if (ZOOM_APP_ENABLED) {
+      tabs.push({ id: 'zoom', label: 'Zoom', icon: Video })
     }
     return tabs
   }, [canSharePresentView])
@@ -756,6 +798,81 @@ export default function ShareSessionPanel({
             new link immediately stops the old one from working. Participant join URLs use the session
             code — protect the code the same way you share it today.
           </p>
+        </div>
+      )}
+
+      {ZOOM_APP_ENABLED && shareTab === 'zoom' && (
+        <div className="space-y-3">
+          <label className="text-sm font-semibold text-slate-700">Zoom Apps</label>
+          <p className="text-xs leading-relaxed text-slate-600">
+            Hosts and participants open the Quiz app inside a Zoom meeting. The host links this
+            session to the meeting; everyone else joins automatically.
+          </p>
+          {zoomStatusError ? (
+            <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {zoomStatusError}
+            </p>
+          ) : null}
+          <div className="space-y-3 rounded-2xl border border-blue-200/70 bg-white p-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">
+                Zoom App URL
+              </p>
+              <div className="mt-1 flex overflow-hidden rounded-xl border border-blue-200/70 bg-white">
+                <input
+                  readOnly
+                  value={zoomAppUrl}
+                  className="h-11 min-w-0 flex-1 border-0 bg-transparent px-3 text-sm text-slate-700 outline-none"
+                  aria-label="Zoom app URL"
+                />
+                <CopyIconButton value={zoomAppUrl} attached showLabel />
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Set this as the Home URL in your Zoom Marketplace app.
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <p>
+                Marketplace credentials:{' '}
+                <span className="font-semibold">
+                  {zoomStatus?.configured ? 'configured' : 'not configured yet'}
+                </span>
+                {zoomStatus && !zoomStatus.configured
+                  ? ' — local mock testing still works.'
+                  : null}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">
+                Local mock (browser)
+              </p>
+              <div className="mt-2 space-y-2">
+                <div className="flex overflow-hidden rounded-xl border border-blue-200/70 bg-white">
+                  <input
+                    readOnly
+                    value={zoomMockHostUrl}
+                    className="h-11 min-w-0 flex-1 border-0 bg-transparent px-3 text-xs text-slate-700 outline-none"
+                    aria-label="Mock Zoom host URL"
+                  />
+                  <CopyIconButton value={zoomMockHostUrl} attached showLabel />
+                </div>
+                <div className="flex overflow-hidden rounded-xl border border-blue-200/70 bg-white">
+                  <input
+                    readOnly
+                    value={zoomMockParticipantUrl}
+                    className="h-11 min-w-0 flex-1 border-0 bg-transparent px-3 text-xs text-slate-700 outline-none"
+                    aria-label="Mock Zoom participant URL"
+                  />
+                  <CopyIconButton value={zoomMockParticipantUrl} attached showLabel />
+                </div>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Open host mock first, sign in, enter session code{' '}
+                <span className="font-mono font-semibold">{sessionCode || '…'}</span>, then open the
+                participant mock in another window.
+              </p>
+            </div>
+          </div>
         </div>
       )}
 

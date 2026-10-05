@@ -9,6 +9,9 @@ const Client = require("./client.model");
 const Department = require("./department.model");
 const Session = require("./session.model");
 const SessionEmbedToken = require("./session-embed-token.model");
+const ZoomConnection = require("./zoom-connection.model");
+const ZoomMeetingSession = require("./zoom-meeting-session.model");
+const ZoomParticipantMap = require("./zoom-participant-map.model");
 const Participant = require("./participant.model");
 const Question = require("./question.model");
 const QuestionSet = require("./question-set.model");
@@ -69,6 +72,16 @@ User.hasMany(Session, { foreignKey: "host_id" });
 Session.belongsTo(User, { foreignKey: "host_id" });
 Session.hasMany(SessionEmbedToken, { foreignKey: "session_id" });
 SessionEmbedToken.belongsTo(Session, { foreignKey: "session_id" });
+User.hasOne(ZoomConnection, { foreignKey: "user_id", as: "zoomConnection" });
+ZoomConnection.belongsTo(User, { foreignKey: "user_id", as: "user" });
+Session.hasMany(ZoomMeetingSession, { foreignKey: "session_id", as: "zoomMeetingSessions" });
+ZoomMeetingSession.belongsTo(Session, { foreignKey: "session_id", as: "session" });
+User.hasMany(ZoomMeetingSession, { foreignKey: "bound_by_user_id", as: "boundZoomMeetings" });
+ZoomMeetingSession.belongsTo(User, { foreignKey: "bound_by_user_id", as: "boundBy" });
+Session.hasMany(ZoomParticipantMap, { foreignKey: "session_id", as: "zoomParticipantMaps" });
+ZoomParticipantMap.belongsTo(Session, { foreignKey: "session_id", as: "session" });
+Participant.hasMany(ZoomParticipantMap, { foreignKey: "participant_id", as: "zoomMaps" });
+ZoomParticipantMap.belongsTo(Participant, { foreignKey: "participant_id", as: "participant" });
 Session.hasMany(Participant, { foreignKey: "session_id" });
 Participant.belongsTo(Session, { foreignKey: "session_id" });
 Department.hasMany(Participant, { foreignKey: "dept_id" });
@@ -179,6 +192,9 @@ const models = {
   Department,
   Session,
   SessionEmbedToken,
+  ZoomConnection,
+  ZoomMeetingSession,
+  ZoomParticipantMap,
   Participant,
   Question,
   QuestionSet,

@@ -18,7 +18,7 @@ import { sessionUsesQuestionSets } from '../../utils/livePresentation'
  * It signs in inside the frame because browsers keep iframe storage separate from the main tab,
  * so an existing dashboard login is not visible here.
  */
-function EmbedShell({ children }) {
+export function EmbedShell({ children }) {
   return (
     <div className="min-h-dvh bg-slate-50 px-3 py-3 text-slate-800">
       <div className="mx-auto max-w-md space-y-3">{children}</div>
@@ -26,7 +26,7 @@ function EmbedShell({ children }) {
   )
 }
 
-function InFrameSignIn() {
+export function InFrameSignIn() {
   const login = useAuthStore((state) => state.login)
   const isLoading = useAuthStore((state) => state.isLoading)
   const [email, setEmail] = useState('')
@@ -83,7 +83,7 @@ function InFrameSignIn() {
   )
 }
 
-function SessionCodePrompt({ onResolved }) {
+export function SessionCodePrompt({ onResolved }) {
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -133,7 +133,7 @@ function SessionCodePrompt({ onResolved }) {
   )
 }
 
-function EmbedControls({ sessionId }) {
+export function EmbedControls({ sessionId }) {
   const accessToken = useAuthStore((state) => state.accessToken)
   const logout = useAuthStore((state) => state.logout)
   const queryClient = useQueryClient()

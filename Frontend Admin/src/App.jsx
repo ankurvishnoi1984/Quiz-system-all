@@ -33,13 +33,15 @@ import PresentViewPage from './pages/present-mode/PresentViewPage'
 import EmbedDisplayPage from './pages/embed/EmbedDisplayPage'
 import EmbedControlsPage from './pages/embed/EmbedControlsPage'
 import EmbedParticipantPage from './pages/embed/EmbedParticipantPage'
+import ZoomAppPage from './pages/zoom/ZoomAppPage'
 import PreviewModePage from './pages/preview-mode'
 import { SessionsProvider } from './context/SessionsContext'
 import { useAuthStore } from './store/authStore'
 import HostLayout from './layouts/HostLayout'
-import { isIntegrationsEnabled } from './utils/integrations'
+import { isIntegrationsEnabled, isZoomAppEnabled } from './utils/integrations'
 
 const INTEGRATIONS_ENABLED = isIntegrationsEnabled()
+const ZOOM_APP_ENABLED = isZoomAppEnabled()
 
 function getPostLoginPath(user) {
   if (user?.parent_id && !user?.email_verified) {
@@ -60,6 +62,7 @@ function isPublicAppPath(pathname) {
     pathname.startsWith('/present/view') ||
     (INTEGRATIONS_ENABLED && pathname.startsWith('/embed/display')) ||
     (INTEGRATIONS_ENABLED && pathname.startsWith('/embed/participant')) ||
+    (ZOOM_APP_ENABLED && pathname.startsWith('/zoom/')) ||
     pathname === '/login' ||
     pathname === '/forgot-password' ||
     pathname === '/verify-email'
@@ -115,6 +118,7 @@ function App() {
               <Route path="/embed/participant/:sessionId" element={<EmbedParticipantPage />} />
             </>
           ) : null}
+          {ZOOM_APP_ENABLED ? <Route path="/zoom/app" element={<ZoomAppPage />} /> : null}
           <Route
             path="/present"
             element={

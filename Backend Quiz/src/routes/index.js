@@ -22,6 +22,7 @@ const websocketMonitorRoutes = require("./websocket-monitor.routes");
 const auditLogRoutes = require("./audit-log.routes");
 const aiRoutes = require("./ai.routes");
 const questionBankRoutes = require("./question-bank.routes");
+const zoomRoutes = require("./zoom.routes");
 
 const router = express.Router();
 
@@ -49,5 +50,6 @@ router.use("/", presentViewRoutes);
 router.use("/", analyticsRoutes);
 router.use("/", websocketMonitorRoutes);
 router.use("/", aiRoutes);
+router.use("/", zoomRoutes);
 
 module.exports = router;
