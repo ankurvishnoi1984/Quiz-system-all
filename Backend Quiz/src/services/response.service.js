@@ -395,6 +395,25 @@ function isNonScoredQuestion(question) {
   );
 }
 
+function resolveQuizPointsEarned({ session, question, isCorrect, responseTimeMs, fraction = 1 }) {
+  const { isAdvancedBuilderSession, scoreFromResponseTimeBands } = require("../utils/advancedBuilder");
+  if (isAdvancedBuilderSession(session)) {
+    if (!isCorrect) return 0;
+    // Partial credit (e.g. match pairs): scale band points by fraction.
+    const bandPoints = scoreFromResponseTimeBands(
+      responseTimeMs,
+      session.response_time_score_bands,
+      { isCorrect: true }
+    );
+    if (fraction >= 1) return bandPoints;
+    return Math.round(bandPoints * Math.max(0, Math.min(1, fraction)));
+  }
+  if (!isCorrect) return 0;
+  const pointsValue = Number(question.points_value || 0);
+  if (fraction >= 1) return pointsValue;
+  return Math.round(pointsValue * Math.max(0, Math.min(1, fraction)));
+}
+
 async function submitResponse({ participant, input }) {
   const question = await Question.findByPk(Number(input.question_id), {
     include: [{ model: QuestionOption }]
@@ -432,6 +451,17 @@ async function submitResponse({ participant, input }) {
     const error = new Error("Session is not accepting responses");
     error.statusCode = 400;
     throw error;
+  }
+
+  const { isAdvancedBuilderSession } = require("../utils/advancedBuilder");
+  if (isAdvancedBuilderSession(session)) {
+    const { participantCanAccessAssignedQuestion } = require("./advanced-assignment.service");
+    const allowed = await participantCanAccessAssignedQuestion(participant, question);
+    if (!allowed) {
+      const error = new Error("Question is not in your assigned set");
+      error.statusCode = 403;
+      throw error;
+    }
   }
 
   const { touchSessionActivity } = require("./session.service");
@@ -615,7 +645,7 @@ async function submitResponse({ participant, input }) {
     }
     const totalPairs = leftIds.length;
     const allCorrect = correctPairs === totalPairs && totalPairs > 0;
-    const pointsValue = Number(question.points_value || 0);
+    const fraction = totalPairs > 0 ? correctPairs / totalPairs : 0;
 
     responsePayload.option_id = null;
     responsePayload.text_response = null;
@@ -628,8 +658,18 @@ async function submitResponse({ participant, input }) {
       responsePayload.points_earned = 0;
     } else {
       responsePayload.is_correct = allCorrect;
-      responsePayload.points_earned =
-        totalPairs > 0 ? Math.round(pointsValue * (correctPairs / totalPairs)) : 0;
+      responsePayload.points_earned = resolveQuizPointsEarned({
+        session,
+        question,
+        isCorrect: fraction > 0,
+        responseTimeMs: responsePayload.response_time_ms,
+        fraction: allCorrect ? 1 : fraction
+      });
+      // Advanced: only full correct answers score (wrong / partial → 0).
+      const { isAdvancedBuilderSession } = require("../utils/advancedBuilder");
+      if (isAdvancedBuilderSession(session) && !allCorrect) {
+        responsePayload.points_earned = 0;
+      }
     }
   }
 
@@ -645,7 +685,12 @@ async function submitResponse({ participant, input }) {
       responsePayload.points_earned = 0;
     } else if (question.is_quiz_mode) {
       responsePayload.is_correct = Boolean(option.is_correct);
-      responsePayload.points_earned = option.is_correct ? Number(question.points_value || 0) : 0;
+      responsePayload.points_earned = resolveQuizPointsEarned({
+        session,
+        question,
+        isCorrect: Boolean(option.is_correct),
+        responseTimeMs: responsePayload.response_time_ms
+      });
     }
   } else if (effectiveType !== "match" && (nonScored || question.is_quiz_mode)) {
     responsePayload.is_correct = null;
@@ -1146,14 +1191,26 @@ async function listParticipantQuestionsService({ sessionId, participant }) {
   if (participant) {
     const { assignRandomSetToParticipant } = require("./question-set.service");
     await assignRandomSetToParticipant(session, participant);
+    const { assignAdvancedQuestionsToParticipant } = require("./advanced-assignment.service");
+    await assignAdvancedQuestionsToParticipant(session, participant);
   }
 
-  const questionOrder = participant
+  const { isAdvancedBuilderSession } = require("../utils/advancedBuilder");
+  const advancedMode = isAdvancedBuilderSession(session);
+
+  const questionOrder = !advancedMode && participant
     ? await assignRandomQuestionOrderToParticipant(session, participant)
     : [];
 
   const questionWhere = { session_id: sessionId, is_live: true };
-  if (participant?.assigned_set_id) {
+  if (advancedMode && participant?.participant_id) {
+    const { getAssignedQuestionIds } = require("./advanced-assignment.service");
+    const assignedIds = await getAssignedQuestionIds(participant.participant_id);
+    if (!assignedIds.length) {
+      return [];
+    }
+    questionWhere.question_id = { [Op.in]: assignedIds };
+  } else if (participant?.assigned_set_id) {
     // Participants see their assigned set plus shared questions that belong to no set.
     // Op.is is required for NULL — `set_id = NULL` would match nothing.
     questionWhere[Op.and] = [
@@ -1182,7 +1239,11 @@ async function listParticipantQuestionsService({ sessionId, participant }) {
     ]
   });
 
-  if (questionOrder.length) {
+  if (advancedMode && participant?.participant_id) {
+    const { getAssignedQuestionIds } = require("./advanced-assignment.service");
+    const assignedIds = await getAssignedQuestionIds(participant.participant_id);
+    questions = sortQuestionsByOrder(questions, assignedIds);
+  } else if (questionOrder.length) {
     questions = sortQuestionsByOrder(questions, questionOrder);
   }
 

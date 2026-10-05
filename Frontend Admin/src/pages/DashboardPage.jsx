@@ -530,6 +530,16 @@ function DashboardPage() {
         auto_end_date: values.autoEndEnabled ? values.autoEndDate || null : null,
         auto_end_time: values.autoEndEnabled ? values.autoEndTime || null : null,
         logo_url: values.logoUrl || null,
+        builder_mode: values.builderMode === 'advanced' ? 'advanced' : 'normal',
+        questions_per_participant:
+          values.builderMode === 'advanced' ? Number(values.questionsPerParticipant) || null : null,
+        advanced_selection_mode:
+          values.builderMode === 'advanced' && values.advancedSelectionMode === 'random_from_selected'
+            ? 'random_from_selected'
+            : 'random_all',
+        response_time_score_bands:
+          values.builderMode === 'advanced' ? values.responseTimeScoreBands || null : null,
+        present_mode_settings: values.presentModeSettings || null,
       },
     })
   }
@@ -562,6 +572,13 @@ function DashboardPage() {
       autoEndDate: toDateInputValue(editSession.auto_end_date),
       autoEndTime: toTimeInputValue(editSession.auto_end_time),
       logoUrl: editSession.logo_url || '',
+      builderMode: editSession.builder_mode === 'advanced' ? 'advanced' : 'normal',
+      questionsPerParticipant: Number(editSession.questions_per_participant) || 10,
+      advancedSelectionMode:
+        editSession.advanced_selection_mode === 'random_from_selected'
+          ? 'random_from_selected'
+          : 'random_all',
+      presentModeSettings: editSession.present_mode_settings || undefined,
     }
   }, [editSession])
 
@@ -603,6 +620,7 @@ function DashboardPage() {
       title: values.title,
       leaderboard_enabled: values.overallLeaderboard,
       logo_url: values.logoUrl || null,
+      present_mode_settings: values.presentModeSettings || null,
     }
 
     if (!editSessionLiveSettingsOnly) {
@@ -628,6 +646,15 @@ function DashboardPage() {
         auto_end_enabled: Boolean(values.autoEndEnabled),
         auto_end_date: values.autoEndEnabled ? values.autoEndDate || null : null,
         auto_end_time: values.autoEndEnabled ? values.autoEndTime || null : null,
+        builder_mode: values.builderMode === 'advanced' ? 'advanced' : 'normal',
+        questions_per_participant:
+          values.builderMode === 'advanced' ? Number(values.questionsPerParticipant) || null : null,
+        advanced_selection_mode:
+          values.builderMode === 'advanced' && values.advancedSelectionMode === 'random_from_selected'
+            ? 'random_from_selected'
+            : 'random_all',
+        response_time_score_bands:
+          values.builderMode === 'advanced' ? values.responseTimeScoreBands || null : null,
       })
     }
 

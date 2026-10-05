@@ -40,7 +40,7 @@ import { HostAlertModal } from '../components/live/HostAlertModal'
 import { HostSessionInactivityModal } from '../components/session/HostSessionInactivityModal'
 import { HostQuestionActionButton } from '../components/live/HostQuestionActionButton'
 import { canHostActivateAllQuestions, canHostCloseAllQuestions, sessionRequiresActivateAllQuestions } from '../utils/hostQuestionControls'
-import { isSessionQuizTotalTimeEnabled, isSessionRandomQuestionOrderEnabled } from '../utils/sessionFlags'
+import { isAdvancedBuilderSession, isSessionQuizTotalTimeEnabled, isSessionRandomQuestionOrderEnabled } from '../utils/sessionFlags'
 import { HostNoSessionsEmpty } from '../components/layout/HostNoSessionsEmpty'
 import { useHostNavSessions, getLivePresenterSessionId } from '../hooks/useHostNavSessions'
 import { useShell } from '../context/ShellContext'
@@ -908,6 +908,7 @@ function LivePage() {
     [session, mappedQuestions],
   )
   const randomQuestionOrderEnabled = isSessionRandomQuestionOrderEnabled(session)
+  const advancedBuilderEnabled = isAdvancedBuilderSession(session)
   const showSessionControls = session?.status === 'live' || session?.status === 'paused'
   const showCloseAllQuestionsButton = useMemo(
     () =>
@@ -1194,7 +1195,11 @@ function LivePage() {
                 label={
                   activateAllQuestionsMutation.isPending ? 'Activating…' : 'Activate all questions'
                 }
-                title="Make all questions live at once (timed questions share the same start time)"
+                title={
+                  advancedBuilderEnabled
+                    ? 'Activate the full pool at once — each participant only sees their random subset'
+                    : 'Make all questions live at once (timed questions share the same start time)'
+                }
                 tone="emerald"
                 onClick={activateAllQuestions}
               />
@@ -1336,7 +1341,13 @@ function LivePage() {
                   other live question.
                 </p>
               ) : null}
-              {canEditLive && randomQuestionOrderEnabled ? (
+              {canEditLive && advancedBuilderEnabled ? (
+                <p className="mb-3 rounded-xl border border-emerald-200/80 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-900">
+                  Advanced pool: use Activate all questions only. Each participant gets a random
+                  subset, so activating one-by-one would confuse the quiz.
+                </p>
+              ) : null}
+              {canEditLive && randomQuestionOrderEnabled && !advancedBuilderEnabled ? (
                 <p className="mb-3 rounded-xl border border-indigo-200/80 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-900">
                   Random question order: use Activate all questions. Each participant sees questions
                   in a different sequence.

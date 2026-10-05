@@ -66,6 +66,18 @@ export async function listPresentViewParticipantsApi(viewerToken, sessionId) {
   return data?.participants || []
 }
 
+export async function listPresentViewQuestionAssignmentsApi(viewerToken, sessionId) {
+  const data = await viewerRequest(
+    `/present-view/sessions/${sessionId}/question-assignments`,
+    viewerToken,
+  )
+  return {
+    builder_mode: data?.builder_mode || 'normal',
+    questions_per_participant: data?.questions_per_participant ?? null,
+    assignments: data?.assignments || [],
+  }
+}
+
 export async function listPresentViewQaApi(viewerToken, sessionId) {
   const data = await viewerRequest(`/present-view/sessions/${sessionId}/qa`, viewerToken)
   return data?.questions || []

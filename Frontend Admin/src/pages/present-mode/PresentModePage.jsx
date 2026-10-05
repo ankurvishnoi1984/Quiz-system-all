@@ -15,6 +15,7 @@ import {
   getSessionLeaderboardApi,
   getSessionSurveySummaryApi,
   // listQaQuestionsApi, // Q&A feature disabled
+  listSessionQuestionAssignmentsApi,
   setPresentSlideApi,
   setQuestionLiveStateApi,
   updateSessionApi,
@@ -22,17 +23,20 @@ import {
 import {
   getPresentViewSlideApi,
   getPresentViewSurveySummaryApi,
+  listPresentViewQuestionAssignmentsApi,
   // listPresentViewQaApi, // Q&A feature disabled
 } from '../../services/presentViewApi'
 import { canHostActivateAllQuestions, canHostCloseAllQuestions, sessionRequiresActivateAllQuestions } from '../../utils/hostQuestionControls'
 import { broadcastPreviewFollow } from '../../utils/previewFollow'
 import {
+  getDistributedPresentMode,
   sessionSupportsOverallLeaderboard,
   sessionSupportsSurveyEndingScreen,
   sessionUsesQuestionSets,
 } from '../../utils/livePresentation'
 import { SESSION_LEADERBOARD_TOP_N } from '../../utils/leaderboard'
-import { isSessionQuizTotalTimeEnabled } from '../../utils/sessionFlags'
+import { isAdvancedBuilderSession, isSessionQuizTotalTimeEnabled } from '../../utils/sessionFlags'
+import { getPresentModeSettings } from '../../utils/presentModeSettings'
 import {
   HOST_EXTRA_SOUNDS_ENABLED,
   playLeaderboardShown,
@@ -47,6 +51,7 @@ import { PresentNavButton, PresentShell, PresentSlideHeader } from './PresentShe
 import { PresentJoinBar } from './PresentJoinInfo'
 import { PresentParticipantsModal } from './PresentParticipantsModal'
 // import { PresentQaModal } from './PresentQaModal' // Q&A feature disabled
+import { DistributedQuizSlide } from './DistributedQuizSlide'
 import { QuestionSlide } from './QuestionSlide'
 
 function PresentModePage({
@@ -65,6 +70,7 @@ function PresentModePage({
   const didBootstrapSlideRef = useRef(false)
   const prevLeaderboardEnabledRef = useRef(undefined)
   const [slideIndex, setSlideIndex] = useState(0)
+  const [inspectQuestionId, setInspectQuestionId] = useState(null)
 
   const applySyncedSlide = useCallback((data) => {
     const idx = Number(data?.slide_index)
@@ -113,6 +119,27 @@ function PresentModePage({
   const canToggleSurveyResults = sessionSupportsSurveyEndingScreen(mappedQuestions)
   const singleActiveQuestionMode = session?.participant_navigation_enabled === false
   const sessionQuizTotalTimeEnabled = isSessionQuizTotalTimeEnabled(session)
+  const advancedBuilderEnabled = isAdvancedBuilderSession(session)
+  const distributedPresentMode = getDistributedPresentMode(session, mappedQuestions)
+  const distributedPresentEnabled = distributedPresentMode != null
+
+  const assignmentsQuery = useQuery({
+    queryKey: ['present-question-assignments', sessionId, readOnly ? 'viewer' : 'host'],
+    queryFn: () =>
+      readOnly
+        ? listPresentViewQuestionAssignmentsApi(accessToken, sessionId)
+        : listSessionQuestionAssignmentsApi(hostAccessToken, sessionId),
+    enabled: Boolean(
+      accessToken &&
+        sessionId &&
+        advancedBuilderEnabled &&
+        !isViewWaiting &&
+        (readOnly ? viewerToken : hostAccessToken),
+    ),
+    refetchInterval: session?.status === 'live' ? 8000 : false,
+  })
+  const assignmentRows = assignmentsQuery.data?.assignments || []
+
   const disableSingleActivation = useMemo(
     () => sessionRequiresActivateAllQuestions(session, mappedQuestions, sessionUsesQuestionSets),
     [session, mappedQuestions],
@@ -430,14 +457,20 @@ function PresentModePage({
 
   const slides = useMemo(() => {
     const list = [{ type: 'participants' }]
-    mappedQuestions.forEach((q, i) => list.push({ type: 'question', question: q, questionNumber: i + 1 }))
+    if (distributedPresentMode) {
+      list.push({ type: 'distributedQuiz', distributedMode: distributedPresentMode })
+    } else {
+      mappedQuestions.forEach((q, i) =>
+        list.push({ type: 'question', question: q, questionNumber: i + 1 }),
+      )
+    }
     if (sessionSupportsOverallLeaderboard(mappedQuestions)) {
       list.push({ type: 'leaderboard' })
     } else if (sessionSupportsSurveyEndingScreen(mappedQuestions)) {
       list.push({ type: 'surveyEnding' })
     }
     return list
-  }, [mappedQuestions])
+  }, [mappedQuestions, distributedPresentMode])
 
   const surveySummaryQuery = useQuery({
     queryKey: ['present-survey-summary', sessionId, readOnly ? 'viewer' : 'host'],
@@ -458,11 +491,22 @@ function PresentModePage({
   const slideTotal = slides.length
   slideTotalRef.current = slideTotal
   const currentSlide = slides[slideIndex]
-  const currentQuestion = currentSlide?.type === 'question' ? currentSlide.question : null
+  const inspectQuestion = useMemo(
+    () =>
+      mappedQuestions.find((q) => Number(q.id) === Number(inspectQuestionId)) ?? null,
+    [mappedQuestions, inspectQuestionId],
+  )
+  const currentQuestion =
+    currentSlide?.type === 'question'
+      ? currentSlide.question
+      : currentSlide?.type === 'distributedQuiz' && inspectQuestion
+        ? inspectQuestion
+        : null
 
   const goPrev = useCallback(() => {
     const next = Math.max(0, slideIndex - 1)
     if (next === slideIndex) return
+    setInspectQuestionId(null)
     setSlideIndex(next)
     if (!HOST_EXTRA_SOUNDS_ENABLED) return
     if (slides[next]?.type === 'leaderboard') playLeaderboardShown()
@@ -472,6 +516,7 @@ function PresentModePage({
   const goNext = useCallback(() => {
     const next = Math.min(slideTotal - 1, slideIndex + 1)
     if (next === slideIndex) return
+    setInspectQuestionId(null)
     setSlideIndex(next)
     if (!HOST_EXTRA_SOUNDS_ENABLED) return
     if (slides[next]?.type === 'leaderboard') playLeaderboardShown()
@@ -482,6 +527,7 @@ function PresentModePage({
     didBootstrapSlideRef.current = false
     prevLeaderboardEnabledRef.current = undefined
     setSlideIndex(0)
+    setInspectQuestionId(null)
     setHostLeaderboardOpen(false)
   }, [sessionId])
 
@@ -500,6 +546,12 @@ function PresentModePage({
         setSlideIndex(surveyIndex)
         return
       }
+    }
+
+    if (distributedPresentEnabled) {
+      const overviewIndex = slides.findIndex((slide) => slide.type === 'distributedQuiz')
+      if (overviewIndex >= 0) setSlideIndex(overviewIndex)
+      return
     }
 
     const liveQuestions = mappedQuestions.filter((question) => question.isLive)
@@ -522,6 +574,7 @@ function PresentModePage({
     sessionId,
     mappedQuestions,
     slides,
+    distributedPresentEnabled,
   ])
 
   // When overall rankings is toggled on: open host modal + sync Preview for participants.
@@ -546,6 +599,17 @@ function PresentModePage({
     }
 
     setHostLeaderboardOpen(false)
+
+    if (distributedPresentEnabled) {
+      const overviewIndex = slides.findIndex((slide) => slide.type === 'distributedQuiz')
+      if (overviewIndex >= 0) {
+        setSlideIndex((current) =>
+          slides[current]?.type === 'leaderboard' ? overviewIndex : current,
+        )
+      }
+      broadcastPreviewFollow(sessionId, { screen: 'join' })
+      return
+    }
 
     const liveQuestions = mappedQuestions.filter((question) => question.isLive)
     const liveTarget =
@@ -584,6 +648,7 @@ function PresentModePage({
     session?.leaderboard_enabled,
     mappedQuestions,
     slides,
+    distributedPresentEnabled,
   ])
 
   useEffect(() => {
@@ -696,17 +761,27 @@ function PresentModePage({
     session?.scheduled_date,
     session?.scheduled_time,
   )
+  const presentSettings = getPresentModeSettings(session)
   // Join info sits under Responses on question slides; keep top bar elsewhere (not on join slide).
   const showPersistentJoinBar =
+    presentSettings.showSessionInfo &&
     !embed &&
     (isViewWaiting ||
-      (currentSlide?.type !== 'participants' && currentSlide?.type !== 'question'))
+      (currentSlide?.type !== 'participants' &&
+        currentSlide?.type !== 'question' &&
+        !(currentSlide?.type === 'distributedQuiz' && inspectQuestion)))
   const headerRankingsProps = canViewHostOverallRankings
     ? {
         onOverallRankingsClick: openHostLeaderboardModal,
         overallRankingsActive: hostLeaderboardOpen,
       }
     : {}
+  const headerParticipantProps = {
+    showParticipantStats: presentSettings.showParticipantStats,
+    ...(presentSettings.showParticipantStats
+      ? { onParticipantsClick: openParticipantsModal }
+      : {}),
+  }
 
   const renderFooterNav = () => {
     if (isViewWaiting || readOnly) {
@@ -743,7 +818,9 @@ function PresentModePage({
         />
         <div className="flex flex-col items-center gap-2 sm:flex-row">
           <p className="hidden text-xs font-medium text-slate-500 sm:block">
-            ← → arrow keys to change slides
+            {distributedPresentEnabled
+              ? 'Join → pool overview → rankings (not synced to participant screens)'
+              : '← → arrow keys to change slides'}
           </p>
           {!readOnly && canToggleOverallLeaderboard && showSessionControls ? (
             <HostQuestionActionButton
@@ -819,7 +896,11 @@ function PresentModePage({
               label={
                 activateAllQuestionsMutation.isPending ? 'Activating…' : 'Activate all questions'
               }
-              title="Make all questions live at once (timed questions share the same start time)"
+              title={
+                advancedBuilderEnabled
+                  ? 'Activate the full pool at once — each participant only sees their random subset'
+                  : 'Make all questions live at once (timed questions share the same start time)'
+              }
               tone="emerald"
               onClick={activateAllQuestions}
             />
@@ -871,6 +952,17 @@ function PresentModePage({
         <footer className="relative z-20 flex shrink-0 flex-col gap-3 border-t border-blue-200/50 bg-white/60 px-[clamp(1rem,3vw,3rem)] py-4 backdrop-blur-sm">
           {!readOnly && !isViewWaiting && currentQuestion ? (
             <div className="w-full rounded-xl border border-blue-200/70 bg-white/90 px-4 py-3 shadow-sm">
+              {canEditLive && currentSlide?.type === 'distributedQuiz' ? (
+                <p className="mb-2 rounded-lg border border-amber-200/80 bg-amber-50 px-3 py-1.5 text-[11px] font-medium text-amber-900">
+                  Inspecting one question for results only — participants are not necessarily on this
+                  question.
+                </p>
+              ) : null}
+              {canEditLive && advancedBuilderEnabled && currentSlide?.type !== 'distributedQuiz' ? (
+                <p className="mb-2 rounded-lg border border-emerald-200/80 bg-emerald-50 px-3 py-1.5 text-[11px] font-medium text-emerald-900">
+                  Advanced pool: activate all questions together — participants each get a random subset.
+                </p>
+              ) : null}
               <HostQuestionControls
                 question={currentQuestion}
                 canEditLive={canEditLive}
@@ -911,7 +1003,7 @@ function PresentModePage({
               liveParticipantCount={liveParticipantCount}
               // qaCount={qaCount} // Q&A feature disabled
               isSessionLive={false}
-              onParticipantsClick={openParticipantsModal}
+              {...headerParticipantProps}
               {...headerRankingsProps}
               // onQaClick={openQaModal} // Q&A feature disabled
               readOnly
@@ -945,7 +1037,7 @@ function PresentModePage({
             liveParticipantCount={liveParticipantCount}
             // qaCount={qaCount} // Q&A feature disabled
             isSessionLive={isSessionLive}
-            onParticipantsClick={openParticipantsModal}
+            {...headerParticipantProps}
             {...headerRankingsProps}
             // onQaClick={openQaModal} // Q&A feature disabled
             readOnly={readOnly}
@@ -965,12 +1057,61 @@ function PresentModePage({
             liveParticipantCount={liveParticipantCount}
             // qaCount={qaCount} // Q&A feature disabled
             isSessionLive={isSessionLive}
-            onParticipantsClick={openParticipantsModal}
+            {...headerParticipantProps}
             {...headerRankingsProps}
             // onQaClick={openQaModal} // Q&A feature disabled
             readOnly={readOnly}
             singleActiveQuestionMode={singleActiveQuestionMode}
           />
+        ) : null}
+
+        {!isViewWaiting && currentSlide?.type === 'distributedQuiz' && !inspectQuestion ? (
+          <DistributedQuizSlide
+            session={session}
+            sessionTitle={sessionTitle}
+            mappedQuestions={mappedQuestions}
+            responses={responses}
+            assignments={assignmentRows}
+            assignmentsLoading={assignmentsQuery.isLoading}
+            distributedMode={currentSlide.distributedMode}
+            participantCount={participantCount}
+            liveParticipantCount={liveParticipantCount}
+            isSessionLive={isSessionLive}
+            readOnly={readOnly}
+            onInspectQuestion={(q) => setInspectQuestionId(q?.id ?? null)}
+            {...headerParticipantProps}
+            {...headerRankingsProps}
+          />
+        ) : null}
+
+        {!isViewWaiting && currentSlide?.type === 'distributedQuiz' && inspectQuestion ? (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <button
+              type="button"
+              onClick={() => setInspectQuestionId(null)}
+              className="mb-2 inline-flex w-fit items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-navy-800 shadow-sm hover:bg-slate-50"
+            >
+              ← Back to pool overview
+            </button>
+            <QuestionSlide
+              key={inspectQuestion.id}
+              accessToken={accessToken}
+              session={session}
+              sessionTitle={sessionTitle}
+              question={inspectQuestion}
+              questionNumber={
+                mappedQuestions.findIndex((q) => Number(q.id) === Number(inspectQuestion.id)) + 1
+              }
+              allResponses={responses}
+              participantCount={participantCount}
+              liveParticipantCount={liveParticipantCount}
+              isSessionLive={isSessionLive}
+              {...headerParticipantProps}
+              {...headerRankingsProps}
+              readOnly={readOnly}
+              singleActiveQuestionMode={singleActiveQuestionMode}
+            />
+          </div>
         ) : null}
 
         {!isViewWaiting && currentSlide?.type === 'leaderboard' ? (
@@ -982,7 +1123,7 @@ function PresentModePage({
             liveParticipantCount={liveParticipantCount}
             // qaCount={qaCount} // Q&A feature disabled
             isSessionLive={isSessionLive}
-            onParticipantsClick={openParticipantsModal}
+            {...headerParticipantProps}
             {...headerRankingsProps}
             // onQaClick={openQaModal} // Q&A feature disabled
             readOnly={readOnly}
@@ -999,7 +1140,7 @@ function PresentModePage({
             liveParticipantCount={liveParticipantCount}
             // qaCount={qaCount} // Q&A feature disabled
             isSessionLive={isSessionLive}
-            onParticipantsClick={openParticipantsModal}
+            {...headerParticipantProps}
             {...headerRankingsProps}
             // onQaClick={openQaModal} // Q&A feature disabled
             readOnly={readOnly}

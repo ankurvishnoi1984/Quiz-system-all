@@ -12,6 +12,7 @@ const SessionEmbedToken = require("./session-embed-token.model");
 const Participant = require("./participant.model");
 const Question = require("./question.model");
 const QuestionSet = require("./question-set.model");
+const ParticipantQuestionAssignment = require("./participant-question-assignment.model");
 const QuestionOption = require("./question-option.model");
 const QuestionBankTopic = require("./question-bank-topic.model");
 const QuestionBankQuestion = require("./question-bank-question.model");
@@ -81,6 +82,18 @@ QuestionSet.hasMany(Question, { foreignKey: "set_id", as: "questions" });
 Question.belongsTo(QuestionSet, { foreignKey: "set_id", as: "set" });
 QuestionSet.hasMany(Participant, { foreignKey: "assigned_set_id", as: "assignedParticipants" });
 Participant.belongsTo(QuestionSet, { foreignKey: "assigned_set_id", as: "assignedSet" });
+Session.hasMany(ParticipantQuestionAssignment, { foreignKey: "session_id", as: "questionAssignments" });
+ParticipantQuestionAssignment.belongsTo(Session, { foreignKey: "session_id" });
+Participant.hasMany(ParticipantQuestionAssignment, {
+  foreignKey: "participant_id",
+  as: "questionAssignments"
+});
+ParticipantQuestionAssignment.belongsTo(Participant, { foreignKey: "participant_id" });
+Question.hasMany(ParticipantQuestionAssignment, {
+  foreignKey: "question_id",
+  as: "participantAssignments"
+});
+ParticipantQuestionAssignment.belongsTo(Question, { foreignKey: "question_id" });
 Department.hasMany(Question, { foreignKey: "dept_id" });
 Question.belongsTo(Department, { foreignKey: "dept_id" });
 Question.hasMany(QuestionOption, { foreignKey: "question_id" });
@@ -182,6 +195,7 @@ const models = {
   Participant,
   Question,
   QuestionSet,
+  ParticipantQuestionAssignment,
   QuestionOption,
   QuestionBankTopic,
   QuestionBankQuestion,

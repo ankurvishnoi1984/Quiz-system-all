@@ -118,6 +118,62 @@ function coerceOptionalBoolean(value, fieldName, errors) {
   }
 }
 
+const {
+  validatePresentModeSettings
+} = require("../utils/presentModeSettings");
+
+function validateAdvancedBuilderFields(payload, { requireKWhenAdvanced = false } = {}) {
+  const errors = [];
+  if (payload?.builder_mode !== undefined) {
+    if (!["normal", "advanced"].includes(payload.builder_mode)) {
+      errors.push("builder_mode must be normal or advanced");
+    }
+  }
+
+  const mode = payload?.builder_mode;
+  const isAdvanced = mode === "advanced";
+
+  if (
+    payload?.advanced_selection_mode !== undefined &&
+    !["random_all", "random_from_selected"].includes(payload.advanced_selection_mode)
+  ) {
+    errors.push("advanced_selection_mode must be random_all or random_from_selected");
+  }
+
+  if (payload?.questions_per_participant !== undefined && payload.questions_per_participant !== null) {
+    const k = Number(payload.questions_per_participant);
+    if (!Number.isInteger(k) || k < 1) {
+      errors.push("questions_per_participant must be a positive integer");
+    }
+  }
+
+  if (payload?.response_time_score_bands !== undefined && payload.response_time_score_bands !== null) {
+    if (!Array.isArray(payload.response_time_score_bands)) {
+      errors.push("response_time_score_bands must be an array or null");
+    } else {
+      for (const band of payload.response_time_score_bands) {
+        const maxSeconds = Number(band?.max_seconds);
+        const points = Number(band?.points);
+        if (!Number.isFinite(maxSeconds) || maxSeconds <= 0 || !Number.isFinite(points) || points < 0) {
+          errors.push(
+            "each response_time_score_bands entry needs positive max_seconds and non-negative points"
+          );
+          break;
+        }
+      }
+    }
+  }
+
+  if (requireKWhenAdvanced && isAdvanced) {
+    const k = Number(payload?.questions_per_participant);
+    if (!Number.isInteger(k) || k < 1) {
+      errors.push("questions_per_participant is required for Advanced sessions");
+    }
+  }
+
+  return errors;
+}
+
 function validateCreateSessionPayload(payload) {
   const errors = [];
 
@@ -174,6 +230,9 @@ function validateCreateSessionPayload(payload) {
     }
   }
 
+  const presentModeSettingsError = validatePresentModeSettings(payload?.present_mode_settings);
+  if (presentModeSettingsError) errors.push(presentModeSettingsError);
+
   const quizTotalTimeError = validateQuizTotalTimeMinutes(payload);
   if (quizTotalTimeError) errors.push(quizTotalTimeError);
 
@@ -181,6 +240,11 @@ function validateCreateSessionPayload(payload) {
   if (randomOrderError) errors.push(randomOrderError);
 
   errors.push(...validateAutoEndFields(payload));
+  errors.push(
+    ...validateAdvancedBuilderFields(payload, {
+      requireKWhenAdvanced: payload?.builder_mode === "advanced"
+    })
+  );
 
   return errors;
 }
@@ -207,7 +271,12 @@ function validateUpdateSessionPayload(payload) {
     "auto_end_enabled",
     "auto_end_date",
     "auto_end_time",
-    "logo_url"
+    "logo_url",
+    "present_mode_settings",
+    "builder_mode",
+    "questions_per_participant",
+    "advanced_selection_mode",
+    "response_time_score_bands"
   ];
 
   if (!payload || typeof payload !== "object") {
@@ -255,6 +324,9 @@ function validateUpdateSessionPayload(payload) {
     }
   }
 
+  const presentModeSettingsError = validatePresentModeSettings(payload?.present_mode_settings);
+  if (presentModeSettingsError) errors.push(presentModeSettingsError);
+
   const quizTotalTimeError = validateQuizTotalTimeMinutes(payload);
   if (quizTotalTimeError) errors.push(quizTotalTimeError);
 
@@ -264,6 +336,8 @@ function validateUpdateSessionPayload(payload) {
   if (payload?.auto_end_enabled !== undefined) {
     errors.push(...validateAutoEndFields(payload, { requireFuture: false }));
   }
+
+  errors.push(...validateAdvancedBuilderFields(payload));
 
   return errors;
 }

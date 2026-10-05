@@ -36,6 +36,22 @@ import { PresentJoinBar } from './PresentJoinInfo'
 import { PresentResponsesList } from './PresentResponsesList'
 import { PresentSlideHeader } from './PresentShell'
 import { PresentViewSwitcher } from './PresentViewSwitcher'
+import { getPresentModeSettings } from '../../utils/presentModeSettings'
+
+function panelColSpan(visibleCount) {
+  if (visibleCount <= 1) return 12
+  if (visibleCount === 2) return 6
+  return null
+}
+
+const LG_COL_SPAN = {
+  3: 'lg:col-span-3',
+  4: 'lg:col-span-4',
+  5: 'lg:col-span-5',
+  6: 'lg:col-span-6',
+  8: 'lg:col-span-8',
+  12: 'lg:col-span-12',
+}
 
 function ResultsPanelHeader({ title, onExpand }) {
   return (
@@ -141,6 +157,12 @@ export function QuestionSlide({
   const [viewMode, setViewMode] = useState('overview')
   const [chartExpanded, setChartExpanded] = useState(false)
 
+  const presentSettings = getPresentModeSettings(session)
+  const showGraphs = presentSettings.showGraphs
+  const showResponses = presentSettings.showResponses
+  const showSessionInfo = presentSettings.showSessionInfo
+  const showParticipantStats = presentSettings.showParticipantStats
+
   const currentResponses = filterResponsesForQuestion(allResponses, question.id)
 
   const questionResultsQuery = useQuery({
@@ -221,6 +243,19 @@ export function QuestionSlide({
   )
 
   const showSplitLayout = !showTextList
+  const showGraphsPanel = showGraphs && !showTextList
+  const showResponsesPanel = showResponses
+  const showSessionInfoPanel = showSessionInfo
+  const overviewVisibleCount =
+    Number(showGraphsPanel) + Number(showResponsesPanel) + Number(showSessionInfoPanel)
+  const equalSpan = panelColSpan(overviewVisibleCount)
+  const graphSpan = equalSpan ?? 5
+  const responseSpan = equalSpan ?? 4
+  const sessionInfoSpan = equalSpan ?? 3
+  const textVisibleCount = Number(showResponsesPanel) + Number(showSessionInfoPanel)
+  const textEqualSpan = panelColSpan(textVisibleCount)
+  const textResponseSpan = textEqualSpan ?? 8
+  const textSessionInfoSpan = textEqualSpan ?? 4
   const leaderboardViews = useMemo(
     () =>
       showQuestionLeaderboard
@@ -451,11 +486,12 @@ export function QuestionSlide({
         liveParticipantCount={liveParticipantCount}
         qaCount={qaCount}
         isSessionLive={isSessionLive}
-        onParticipantsClick={onParticipantsClick}
+        onParticipantsClick={showParticipantStats ? onParticipantsClick : undefined}
         onOverallRankingsClick={onOverallRankingsClick}
         overallRankingsActive={overallRankingsActive}
         onQaClick={onQaClick}
         readOnly={readOnly}
+        showParticipantStats={showParticipantStats}
       />
 
       <div className="mb-[clamp(0.75rem,2vh,1.25rem)] shrink-0">
@@ -474,9 +510,11 @@ export function QuestionSlide({
               Rankings on
             </span>
           ) : null}
-          <span className="text-[clamp(0.9rem,1.6vw,1.1rem)] font-semibold text-slate-500">
-            {responseSubmissionCount} response{responseSubmissionCount === 1 ? '' : 's'}
-          </span>
+          {showResponses ? (
+            <span className="text-[clamp(0.9rem,1.6vw,1.1rem)] font-semibold text-slate-500">
+              {responseSubmissionCount} response{responseSubmissionCount === 1 ? '' : 's'}
+            </span>
+          ) : null}
           <HostQuestionTimer
             question={question}
             singleActiveQuestionMode={singleActiveQuestionMode}
@@ -512,56 +550,114 @@ export function QuestionSlide({
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
         {viewMode === 'leaderboard' ? (
           <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-3 lg:items-stretch">
-            <div className="min-h-0 min-w-0 lg:col-span-2 lg:max-h-[min(56vh,560px)]">
+            <div
+              className={`min-h-0 min-w-0 lg:max-h-[min(56vh,560px)] ${
+                showSessionInfoPanel ? 'lg:col-span-2' : 'lg:col-span-3'
+              }`}
+            >
               <PresentLeaderboardList
                 entries={questionLeaderboardDisplay.entries}
                 title="Question rankings"
                 emptyMessage={questionLeaderboardDisplay.emptyMessage}
+                timeMode="question"
               />
             </div>
-            <div className="flex min-h-0 min-w-0 flex-col lg:max-h-[min(56vh,560px)]">
-              <PresentJoinBar session={session} placement="column" />
-            </div>
+            {showSessionInfoPanel ? (
+              <div className="flex min-h-0 min-w-0 flex-col lg:max-h-[min(56vh,560px)]">
+                <PresentJoinBar session={session} placement="column" />
+              </div>
+            ) : null}
           </div>
         ) : showSplitLayout ? (
-          <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12 lg:items-stretch">
-            <div className="flex min-h-0 min-w-0 flex-col lg:col-span-5 lg:max-h-[min(56vh,560px)]">
-              {renderResultsPanel({ compact: true })}
+          overviewVisibleCount === 0 ? (
+            <div className="flex min-h-0 flex-1 items-center justify-center rounded-3xl border border-dashed border-blue-200 bg-white/60">
+              <p className="text-[clamp(1rem,2.2vw,1.5rem)] font-semibold text-slate-500">
+                Present panels are hidden for this session.
+              </p>
             </div>
-            <div className="flex min-h-0 min-w-0 flex-col lg:col-span-4 lg:max-h-[min(56vh,560px)]">
-              <PresentResponsesPanel
-                key={question.id}
-                responseRows={responseRows}
-                showRevealUi={showRevealUi}
-                correctLabels={correctLabels}
-              />
+          ) : (
+            <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12 lg:items-stretch">
+              {showGraphsPanel ? (
+                <div
+                  className={`flex min-h-0 min-w-0 flex-col lg:max-h-[min(56vh,560px)] ${LG_COL_SPAN[graphSpan] || 'lg:col-span-5'}`}
+                >
+                  {renderResultsPanel({ compact: true })}
+                </div>
+              ) : null}
+              {showResponsesPanel ? (
+                <div
+                  className={`flex min-h-0 min-w-0 flex-col lg:max-h-[min(56vh,560px)] ${LG_COL_SPAN[responseSpan] || 'lg:col-span-4'}`}
+                >
+                  <PresentResponsesPanel
+                    key={question.id}
+                    responseRows={responseRows}
+                    showRevealUi={showRevealUi}
+                    correctLabels={correctLabels}
+                  />
+                </div>
+              ) : null}
+              {showSessionInfoPanel ? (
+                <div
+                  className={`flex min-h-0 min-w-0 flex-col md:col-span-2 lg:max-h-[min(56vh,560px)] ${LG_COL_SPAN[sessionInfoSpan] || 'lg:col-span-3'}`}
+                >
+                  <PresentJoinBar session={session} placement="column" />
+                </div>
+              ) : null}
             </div>
-            <div className="flex min-h-0 min-w-0 flex-col md:col-span-2 lg:col-span-3 lg:max-h-[min(56vh,560px)]">
-              <PresentJoinBar session={session} placement="column" />
-            </div>
-          </div>
+          )
         ) : showTextList ? (
-          <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-3 lg:items-stretch">
-            <div className="flex min-h-0 min-w-0 flex-col lg:col-span-2 lg:max-h-[min(56vh,560px)]">
-              <PresentResponsesPanel
-                key={question.id}
-                responseRows={responseRows}
-                showRevealUi={showRevealUi}
-                correctLabels={correctLabels}
-              />
+          textVisibleCount === 0 ? (
+            <div className="flex min-h-0 flex-1 items-center justify-center rounded-3xl border border-dashed border-blue-200 bg-white/60">
+              <p className="text-[clamp(1rem,2.2vw,1.5rem)] font-semibold text-slate-500">
+                Present panels are hidden for this session.
+              </p>
             </div>
-            <div className="flex min-h-0 min-w-0 flex-col lg:max-h-[min(56vh,560px)]">
-              <PresentJoinBar session={session} placement="column" />
+          ) : (
+            <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-12 lg:items-stretch">
+              {showResponsesPanel ? (
+                <div
+                  className={`flex min-h-0 min-w-0 flex-col lg:max-h-[min(56vh,560px)] ${LG_COL_SPAN[textResponseSpan] || 'lg:col-span-8'}`}
+                >
+                  <PresentResponsesPanel
+                    key={question.id}
+                    responseRows={responseRows}
+                    showRevealUi={showRevealUi}
+                    correctLabels={correctLabels}
+                  />
+                </div>
+              ) : null}
+              {showSessionInfoPanel ? (
+                <div
+                  className={`flex min-h-0 min-w-0 flex-col lg:max-h-[min(56vh,560px)] ${LG_COL_SPAN[textSessionInfoSpan] || 'lg:col-span-4'}`}
+                >
+                  <PresentJoinBar session={session} placement="column" />
+                </div>
+              ) : null}
             </div>
-          </div>
+          )
         ) : (
           <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-3 lg:items-stretch">
-            <div className="min-h-0 min-w-0 lg:col-span-2 lg:max-h-[min(56vh,560px)]">
-              {renderResultsPanel()}
-            </div>
-            <div className="flex min-h-0 min-w-0 flex-col lg:max-h-[min(56vh,560px)]">
-              <PresentJoinBar session={session} placement="column" />
-            </div>
+            {showGraphsPanel ? (
+              <div
+                className={`min-h-0 min-w-0 lg:max-h-[min(56vh,560px)] ${
+                  showSessionInfoPanel ? 'lg:col-span-2' : 'lg:col-span-3'
+                }`}
+              >
+                {renderResultsPanel()}
+              </div>
+            ) : null}
+            {showSessionInfoPanel ? (
+              <div className="flex min-h-0 min-w-0 flex-col lg:max-h-[min(56vh,560px)]">
+                <PresentJoinBar session={session} placement="column" />
+              </div>
+            ) : null}
+            {!showGraphsPanel && !showSessionInfoPanel ? (
+              <div className="flex min-h-0 flex-1 items-center justify-center rounded-3xl border border-dashed border-blue-200 bg-white/60 lg:col-span-3">
+                <p className="text-[clamp(1rem,2.2vw,1.5rem)] font-semibold text-slate-500">
+                  Present panels are hidden for this session.
+                </p>
+              </div>
+            ) : null}
           </div>
         )}
       </div>

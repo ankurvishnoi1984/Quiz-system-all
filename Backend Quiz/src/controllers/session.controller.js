@@ -117,6 +117,27 @@ async function listParticipants(req, res) {
   }
 }
 
+async function listQuestionAssignments(req, res) {
+  try {
+    const sessionId = Number(req.params.sessionId);
+    const session = await getSessionById({ sessionId, user: req.user });
+    const { listSessionQuestionAssignments } = require("../services/advanced-assignment.service");
+    const assignments = await listSessionQuestionAssignments(sessionId);
+    return successResponse(
+      res,
+      {
+        builder_mode: session.builder_mode || "normal",
+        questions_per_participant: session.questions_per_participant ?? null,
+        assignments
+      },
+      "Question assignments fetched",
+      200
+    );
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
 async function update(req, res) {
   try {
     const errors = validateUpdateSessionPayload(req.body);
@@ -138,7 +159,8 @@ async function update(req, res) {
         participant_navigation_enabled: session.participant_navigation_enabled !== false,
         quiz_total_time_minutes: session.quiz_total_time_minutes ?? null,
         random_question_order_enabled: isSessionRandomQuestionOrderEnabled(session),
-        allow_late_join: Boolean(session.allow_late_join)
+        allow_late_join: Boolean(session.allow_late_join),
+        present_mode_settings: session.present_mode_settings ?? null
       });
       if (req.body.leaderboard_enabled === true && session.leaderboard_enabled) {
         const leaderboard = await buildSessionLeaderboard(session.session_id);
@@ -667,6 +689,7 @@ module.exports = {
   createForDepartment,
   detail,
   listParticipants,
+  listQuestionAssignments,
   update,
   remove,
   resetResponses,

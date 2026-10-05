@@ -175,7 +175,8 @@ async function createQuestion({ sessionId, input, user }) {
     is_live: false,
     show_leaderboard: false,
     display_order: input.display_order || nextOrder,
-    set_id: setId === undefined ? null : setId
+    set_id: setId === undefined ? null : setId,
+    pool_eligible: input.pool_eligible === false ? false : true
   });
 
   if (Array.isArray(input.options) && input.options.length > 0) {
@@ -462,6 +463,10 @@ async function updateQuestion({ questionId, input, user }) {
       question.set_id = await resolveQuestionSetId(question.session_id, input.set_id);
     }
 
+    if (input.pool_eligible !== undefined) {
+      question.pool_eligible = Boolean(input.pool_eligible);
+    }
+
     await question.save();
 
     if (Array.isArray(input.options)) {
@@ -607,6 +612,14 @@ async function setQuestionLiveState({ questionId, user, isLive }) {
     if (isSessionRandomQuestionOrderEnabled(session)) {
       const error = new Error(
         "This session uses random question order. Use \"Activate all questions\" so every participant receives the full set at once."
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+    const { isAdvancedBuilderSession } = require("../utils/advancedBuilder");
+    if (isAdvancedBuilderSession(session)) {
+      const error = new Error(
+        "Advanced sessions assign different questions per participant. Use \"Activate all questions\" so the full pool goes live together."
       );
       error.statusCode = 400;
       throw error;

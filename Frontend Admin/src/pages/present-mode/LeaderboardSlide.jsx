@@ -15,6 +15,7 @@ export function LeaderboardSlide({
   overallRankingsActive = false,
   onQaClick,
   readOnly = false,
+  showParticipantStats = true,
 }) {
   return (
     <div className="quiz-slide-in flex min-h-0 flex-1 flex-col">
@@ -30,6 +31,7 @@ export function LeaderboardSlide({
         overallRankingsActive={overallRankingsActive}
         onQaClick={onQaClick}
         readOnly={readOnly}
+        showParticipantStats={showParticipantStats}
       />
 
       <div className="mb-[clamp(0.75rem,2vh,1.25rem)] flex shrink-0 flex-col items-center justify-center gap-1">

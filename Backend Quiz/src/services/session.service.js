@@ -1,5 +1,8 @@
 const { sequelize } = require("../config/database");
 const {
+  normalizePresentModeSettings
+} = require("../utils/presentModeSettings");
+const {
   Session,
   Department,
   User,
@@ -213,11 +216,26 @@ async function createSession({ deptId, input, user }) {
          : null,
      random_question_order_enabled:
        input.participant_navigation_enabled && Boolean(input.random_question_order_enabled),
+     builder_mode: input.builder_mode === "advanced" ? "advanced" : "normal",
+     questions_per_participant:
+       input.builder_mode === "advanced" && input.questions_per_participant != null
+         ? Number(input.questions_per_participant)
+         : null,
+     advanced_selection_mode:
+       input.builder_mode === "advanced" &&
+       input.advanced_selection_mode === "random_from_selected"
+         ? "random_from_selected"
+         : "random_all",
+     response_time_score_bands:
+       input.builder_mode === "advanced" && input.response_time_score_bands != null
+         ? input.response_time_score_bands
+         : null,
      qr_code_url: input.qr_code_url || null,
      logo_url:
        input.logo_url != null && String(input.logo_url).trim()
          ? String(input.logo_url).trim()
-         : null
+         : null,
+     present_mode_settings: normalizePresentModeSettings(input.present_mode_settings)
    });
 }
 
@@ -306,8 +324,18 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
         participant_navigation_enabled: source.participant_navigation_enabled ?? true,
         quiz_total_time_minutes: source.quiz_total_time_minutes ?? null,
         random_question_order_enabled: Boolean(source.random_question_order_enabled),
+        builder_mode: source.builder_mode === "advanced" ? "advanced" : "normal",
+        questions_per_participant:
+          source.builder_mode === "advanced" ? source.questions_per_participant ?? null : null,
+        advanced_selection_mode:
+          source.builder_mode === "advanced"
+            ? source.advanced_selection_mode || "random_all"
+            : "random_all",
+        response_time_score_bands:
+          source.builder_mode === "advanced" ? source.response_time_score_bands ?? null : null,
         qr_code_url: null,
-        logo_url: source.logo_url || null
+        logo_url: source.logo_url || null,
+        present_mode_settings: normalizePresentModeSettings(source.present_mode_settings)
       },
       { transaction }
     );
@@ -375,7 +403,8 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
           source_bank_question_id: preserveBankSource
             ? q.source_bank_question_id || null
             : null,
-          set_id: q.set_id ? setIdMap.get(Number(q.set_id)) || null : null
+          set_id: q.set_id ? setIdMap.get(Number(q.set_id)) || null : null,
+          pool_eligible: q.pool_eligible !== false
         },
         { transaction }
       );
@@ -426,7 +455,8 @@ async function updateSession({ sessionId, input, user }) {
     "survey_results_enabled",
     "show_participant_count",
     "title",
-    "logo_url"
+    "logo_url",
+    "present_mode_settings"
   ];
   const inputKeys = Object.keys(input || {});
 
@@ -434,7 +464,7 @@ async function updateSession({ sessionId, input, user }) {
     const disallowed = inputKeys.filter((key) => !liveSettingsOnly.includes(key));
     if (disallowed.length > 0) {
       const error = new Error(
-        "Only session title, logo, rankings, survey results, and participant count settings can be updated while the session is live"
+        "Only session title, logo, present mode settings, rankings, survey results, and participant count settings can be updated while the session is live"
       );
       error.statusCode = 400;
       throw error;
@@ -461,6 +491,38 @@ async function updateSession({ sessionId, input, user }) {
     : input.random_question_order_enabled !== undefined
       ? Boolean(input.random_question_order_enabled)
       : session.random_question_order_enabled;
+
+  const nextBuilderMode =
+    input.builder_mode !== undefined
+      ? input.builder_mode === "advanced"
+        ? "advanced"
+        : "normal"
+      : session.builder_mode || "normal";
+
+  let nextQuestionsPerParticipant = session.questions_per_participant;
+  let nextAdvancedSelectionMode = session.advanced_selection_mode || "random_all";
+  let nextResponseTimeScoreBands = session.response_time_score_bands;
+  if (nextBuilderMode === "normal") {
+    nextQuestionsPerParticipant = null;
+    nextAdvancedSelectionMode = "random_all";
+    nextResponseTimeScoreBands = null;
+  } else {
+    if (input.questions_per_participant !== undefined) {
+      nextQuestionsPerParticipant =
+        input.questions_per_participant == null || input.questions_per_participant === ""
+          ? null
+          : Number(input.questions_per_participant);
+    }
+    if (input.advanced_selection_mode !== undefined) {
+      nextAdvancedSelectionMode =
+        input.advanced_selection_mode === "random_from_selected"
+          ? "random_from_selected"
+          : "random_all";
+    }
+    if (input.response_time_score_bands !== undefined) {
+      nextResponseTimeScoreBands = input.response_time_score_bands;
+    }
+  }
 
   Object.assign(session, {
     title: input.title !== undefined ? input.title : session.title,
@@ -499,6 +561,10 @@ async function updateSession({ sessionId, input, user }) {
         : session.participant_navigation_enabled,
     quiz_total_time_minutes: nextQuizTotalTimeMinutes,
     random_question_order_enabled: nextRandomQuestionOrderEnabled,
+    builder_mode: nextBuilderMode,
+    questions_per_participant: nextQuestionsPerParticipant,
+    advanced_selection_mode: nextAdvancedSelectionMode,
+    response_time_score_bands: nextResponseTimeScoreBands,
     join_type:
       input.join_type !== undefined ? input.join_type : session.join_type,
     join_otp_required: (() => {
@@ -535,7 +601,13 @@ async function updateSession({ sessionId, input, user }) {
         ? input.logo_url != null && String(input.logo_url).trim()
           ? String(input.logo_url).trim()
           : null
-        : session.logo_url
+        : session.logo_url,
+    present_mode_settings:
+      input.present_mode_settings !== undefined
+        ? normalizePresentModeSettings(input.present_mode_settings)
+        : session.present_mode_settings != null
+          ? normalizePresentModeSettings(session.present_mode_settings)
+          : session.present_mode_settings
   });
 
   await session.save();
@@ -675,6 +747,11 @@ async function transitionSessionStatus({ sessionId, user, action }) {
 
   if (action === "start" || action === "resume") {
     await assertHostCanRunSessions(session.host_id);
+  }
+
+  if (action === "start") {
+    const { assertAdvancedSessionReadyToStart } = require("./advanced-assignment.service");
+    await assertAdvancedSessionReadyToStart(session);
   }
 
   session.status = rule.to;
@@ -853,8 +930,10 @@ async function joinSession({ code, payload }) {
     }
     const { assignRandomSetToParticipant } = require("./question-set.service");
     const { assignRandomQuestionOrderToParticipant } = require("../utils/participantQuestionOrder");
+    const { assignAdvancedQuestionsToParticipant } = require("./advanced-assignment.service");
     await assignRandomSetToParticipant(session, existingByIdentity);
     await assignRandomQuestionOrderToParticipant(session, existingByIdentity);
+    await assignAdvancedQuestionsToParticipant(session, existingByIdentity);
     return finalizeParticipantJoin(session, existingByIdentity, {
       isReturning: true,
       payload: joinPayload
@@ -880,8 +959,10 @@ async function joinSession({ code, payload }) {
       assertSessionAcceptingJoin(session, { isReturning: true });
       const { assignRandomSetToParticipant } = require("./question-set.service");
       const { assignRandomQuestionOrderToParticipant } = require("../utils/participantQuestionOrder");
+      const { assignAdvancedQuestionsToParticipant } = require("./advanced-assignment.service");
       await assignRandomSetToParticipant(session, existingByDevice);
       await assignRandomQuestionOrderToParticipant(session, existingByDevice);
+      await assignAdvancedQuestionsToParticipant(session, existingByDevice);
       return finalizeParticipantJoin(session, existingByDevice, {
         isReturning: true,
         payload: joinPayload
@@ -926,8 +1007,10 @@ async function joinSession({ code, payload }) {
 
     const { assignRandomSetToParticipant } = require("./question-set.service");
     const { assignRandomQuestionOrderToParticipant } = require("../utils/participantQuestionOrder");
+    const { assignAdvancedQuestionsToParticipant } = require("./advanced-assignment.service");
     await assignRandomSetToParticipant(session, participant);
     await assignRandomQuestionOrderToParticipant(session, participant);
+    await assignAdvancedQuestionsToParticipant(session, participant);
 
     // Slot stays reserved until WebSocket connects (or TTL). Do not release here.
     return finalizeParticipantJoin(session, participant, {

@@ -80,6 +80,12 @@ router.get(
   authorizeAnyRight("sessions", "present"),
   sessionController.listParticipants
 );
+router.get(
+  "/sessions/:sessionId/question-assignments",
+  authorizeStaff,
+  authorizeAnyRight("sessions", "present"),
+  sessionController.listQuestionAssignments
+);
 router.put(
   "/sessions/:sessionId",
   authorizeStaff,

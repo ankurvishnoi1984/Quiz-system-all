@@ -1,5 +1,6 @@
 import { PresentSlideHeader } from './PresentShell'
 import { PresentJoinPanel } from './PresentJoinInfo'
+import { getPresentModeSettings } from '../../utils/presentModeSettings'
 
 export function ParticipantsSlide({
   session,
@@ -12,8 +13,10 @@ export function ParticipantsSlide({
   overallRankingsActive = false,
   onQaClick,
   readOnly = false,
+  showParticipantStats = true,
 }) {
   const sessionTitle = session?.title || 'Live session'
+  const showSessionInfo = getPresentModeSettings(session).showSessionInfo
 
   return (
     <div className="quiz-slide-in flex min-h-0 flex-1 flex-col">
@@ -29,9 +32,10 @@ export function ParticipantsSlide({
         overallRankingsActive={overallRankingsActive}
         onQaClick={onQaClick}
         readOnly={readOnly}
+        showParticipantStats={showParticipantStats}
       />
 
-      <PresentJoinPanel session={session} />
+      {showSessionInfo ? <PresentJoinPanel session={session} /> : null}
     </div>
   )
 }

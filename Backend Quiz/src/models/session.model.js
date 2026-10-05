@@ -120,6 +120,26 @@ const Session = sequelize.define(
       allowNull: false,
       defaultValue: false
     },
+    builder_mode: {
+      type: DataTypes.ENUM("normal", "advanced"),
+      allowNull: false,
+      defaultValue: "normal"
+    },
+    questions_per_participant: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: null
+    },
+    advanced_selection_mode: {
+      type: DataTypes.ENUM("random_all", "random_from_selected"),
+      allowNull: false,
+      defaultValue: "random_all"
+    },
+    response_time_score_bands: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: null
+    },
     qr_code_url: {
       type: DataTypes.TEXT,
       allowNull: true
@@ -127,6 +147,11 @@ const Session = sequelize.define(
     logo_url: {
       type: DataTypes.TEXT,
       allowNull: true
+    },
+    present_mode_settings: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: null
     },
     last_activity_at: {
       type: DataTypes.DATE,

@@ -145,9 +145,10 @@ export function PresentSlideHeader({
   overallRankingsActive = false,
   // onQaClick, // Q&A feature disabled
   readOnly = false,
+  showParticipantStats = true,
 }) {
   const modeLabel = readOnly ? 'View display' : 'Present mode'
-  const showParticipantsTile = Boolean(onParticipantsClick)
+  const showParticipantsTile = showParticipantStats && Boolean(onParticipantsClick)
   const showOverallRankingsTile = Boolean(onOverallRankingsClick)
   // const showQaTile = Boolean(onQaClick) // Q&A feature disabled
   const showStatTiles = showParticipantsTile || showOverallRankingsTile
@@ -207,7 +208,7 @@ export function PresentSlideHeader({
             />
           ) : null}
         </div>
-      ) : (
+      ) : showParticipantStats ? (
         <div className="text-right">
           <div className="flex items-center justify-end gap-2">
             <PresentLiveIndicator isSessionLive={isSessionLive} />
@@ -217,7 +218,7 @@ export function PresentSlideHeader({
           </div>
           <PresentParticipantCounts joinedCount={joined} liveCount={live} />
         </div>
-      )}
+      ) : null}
     </header>
   )
 }

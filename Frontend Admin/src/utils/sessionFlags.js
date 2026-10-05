@@ -24,6 +24,11 @@ export function isSessionRandomQuestionOrderEnabled(session) {
   return session.participant_navigation_enabled !== false && randomEnabled
 }
 
+/** Advanced builder: each participant gets a random subset; host must activate the whole pool at once. */
+export function isAdvancedBuilderSession(session) {
+  return String(session?.builder_mode || 'normal').toLowerCase() === 'advanced'
+}
+
 export function sessionHasTimedQuestions(questions = []) {
   return (questions || []).some(
     (q) => Number(q?.timeLimit ?? q?.time_limit_seconds ?? 0) > 0,

@@ -74,7 +74,6 @@ import {
   canShowPreviousForUntimedMultiNav,
   canShowPreviousForQuizTotalTimeMultiNav,
   ensureParticipantQuestionOrder,
-  getSessionLastQuestionId,
   isMultiNavLastQuestionFinalized,
   getLastActivatedLiveQuestion,
   canAutoNavigateToActivatedQuestion,
@@ -453,29 +452,25 @@ function ParticipantSessionPage({ embed = false }) {
   }, [activeQuestionsBase, randomQuestionOrderEnabled, quizQuestionOrder])
 
   const sessionLastQuestionId = useMemo(() => {
-    if (randomQuestionOrderEnabled) {
-      return activeQuestions.length ? activeQuestions[activeQuestions.length - 1]?.id ?? null : null
-    }
-    return getSessionLastQuestionId(mappedQuestions)
-  }, [randomQuestionOrderEnabled, activeQuestions, mappedQuestions])
+    if (!activeQuestions.length) return null
+    // Always use participant navigation order. Re-sorting by host display_order breaks
+    // Advanced assignments (and any custom order) — a mid-list question can look "final".
+    return activeQuestions[activeQuestions.length - 1]?.id ?? null
+  }, [activeQuestions])
 
   const participantEditPolicy = useMemo(
     () => ({
       sessionQuizTotalTimeEnabled,
       lastQuestionFinalized:
         navigationEnabled &&
-        isMultiNavLastQuestionFinalized(
-          randomQuestionOrderEnabled ? activeQuestions : mappedQuestions,
-          quizExplicitSubmittedQuestionIds,
-          { useParticipantOrder: randomQuestionOrderEnabled },
-        ),
+        isMultiNavLastQuestionFinalized(activeQuestions, quizExplicitSubmittedQuestionIds, {
+          useParticipantOrder: true,
+        }),
     }),
     [
       sessionQuizTotalTimeEnabled,
       navigationEnabled,
-      randomQuestionOrderEnabled,
       activeQuestions,
-      mappedQuestions,
       quizExplicitSubmittedQuestionIds,
     ],
   )
@@ -1361,17 +1356,8 @@ function ParticipantSessionPage({ embed = false }) {
 
   const isLastDisplayedQuestion = useMemo(() => {
     if (!navigationEnabled) return true
-    if (sessionLastQuestionId != null && question?.id != null) {
-      return Number(question.id) === Number(sessionLastQuestionId)
-    }
     return activeQuestions.length > 0 && displayQuestionIndex === activeQuestions.length - 1
-  }, [
-    navigationEnabled,
-    sessionLastQuestionId,
-    question?.id,
-    activeQuestions.length,
-    displayQuestionIndex,
-  ])
+  }, [navigationEnabled, activeQuestions.length, displayQuestionIndex])
 
   const multiNavTimedSession = useMemo(
     () => navigationEnabled && sessionHasTimedQuestions(activeQuestions),

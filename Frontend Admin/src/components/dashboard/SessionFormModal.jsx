@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { FileUp, Loader2, X } from 'lucide-react'
+import { ChevronDown, FileUp, Loader2, X } from 'lucide-react'
 import Modal from '../ui/Modal'
 import { uploadQuestionMediaApi } from '../../services/mediaApi'
 import { compressQuestionImage } from '../../utils/compressQuestionImage'
@@ -9,11 +9,45 @@ import {
   resolveQuestionMediaUrl,
 } from '../../utils/questionMedia'
 
+import {
+  buildScoreBandsForTimer,
+} from '../../utils/advancedScoreBands'
+import {
+  DEFAULT_PRESENT_MODE_SETTINGS,
+  normalizePresentModeSettings,
+  toPresentModeSettingsApi,
+} from '../../utils/presentModeSettings'
+
 const QUIZ_TOTAL_TIME_MINUTES = [15, 30, 45, 60]
 const LOGO_ACCEPT = QUESTION_MEDIA_SUPPORTED_IMAGE_TYPES.join(',')
 const LOGO_MAX_BYTES = 5 * 1024 * 1024
 
 const CONTACT_JOIN_TYPES = new Set(['name_email', 'name_mobile', 'name_email_mobile'])
+
+const DEFAULT_SCORE_BANDS = buildScoreBandsForTimer(30, 6)
+
+const PRESENT_MODE_SETTING_OPTIONS = [
+  {
+    key: 'showGraphs',
+    label: 'Show graphs',
+    description: 'Results charts (bars, word cloud, emoji, etc.) on question slides.',
+  },
+  {
+    key: 'showResponses',
+    label: 'Show responses',
+    description: 'Live list of participant answers beside the results.',
+  },
+  {
+    key: 'showSessionInfo',
+    label: 'Show session info',
+    description: 'Join code, QR, and schedule panel on the present screen.',
+  },
+  {
+    key: 'showParticipantStats',
+    label: 'Show participant counts',
+    description: 'Joined / live participant stats in the present header.',
+  },
+]
 
 const defaultInitial = {
   title: '',
@@ -33,6 +67,10 @@ const defaultInitial = {
   overallLeaderboard: false,
   showParticipantCount: false,
   logoUrl: '',
+  builderMode: 'normal',
+  questionsPerParticipant: 10,
+  advancedSelectionMode: 'random_all',
+  presentModeSettings: { ...DEFAULT_PRESENT_MODE_SETTINGS },
 }
 
 function SessionFormModal({
@@ -67,6 +105,17 @@ function SessionFormModal({
   const [logoUrl, setLogoUrl] = useState('')
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoError, setLogoError] = useState('')
+  const [builderMode, setBuilderMode] = useState(defaultInitial.builderMode)
+  const [questionsPerParticipant, setQuestionsPerParticipant] = useState(
+    defaultInitial.questionsPerParticipant,
+  )
+  const [advancedSelectionMode, setAdvancedSelectionMode] = useState(
+    defaultInitial.advancedSelectionMode,
+  )
+  const [presentModeSettings, setPresentModeSettings] = useState(() => ({
+    ...DEFAULT_PRESENT_MODE_SETTINGS,
+  }))
+  const [presentSettingsOpen, setPresentSettingsOpen] = useState(false)
 
   const uploadDeptId = useWorkspaceDepartment
     ? String(defaultDepartmentId || '')
@@ -94,9 +143,34 @@ function SessionFormModal({
     setLogoUrl(initialValues.logoUrl || '')
     setLogoError('')
     setLogoUploading(false)
+    setBuilderMode(initialValues.builderMode === 'advanced' ? 'advanced' : 'normal')
+    setQuestionsPerParticipant(
+      Number(initialValues.questionsPerParticipant) > 0
+        ? Number(initialValues.questionsPerParticipant)
+        : 10,
+    )
+    setAdvancedSelectionMode(
+      initialValues.advancedSelectionMode === 'random_from_selected'
+        ? 'random_from_selected'
+        : 'random_all',
+    )
+    setPresentModeSettings(normalizePresentModeSettings(initialValues.presentModeSettings))
+    setPresentSettingsOpen(false)
   }, [open, initialValues])
 
+  const handleBuilderModeChange = (mode) => {
+    setBuilderMode(mode)
+    if (mode === 'advanced') {
+      // Advanced sessions need multi-question navigation so each participant can take their K.
+      setEnableNavigation(true)
+    }
+  }
+
   const handleNavigationChange = (enabled) => {
+    if (builderMode === 'advanced' && !enabled) {
+      window.alert('Advanced sessions require multiple active questions so participants can answer their assigned set.')
+      return
+    }
     setEnableNavigation(enabled)
     if (!enabled) {
       setQuizTotalTimeEnabled(false)
@@ -173,6 +247,14 @@ function SessionFormModal({
       return
     }
 
+    if (!liveSettingsOnly && builderMode === 'advanced') {
+      const k = Number(questionsPerParticipant)
+      if (!Number.isInteger(k) || k < 1) {
+        window.alert('Questions per participant must be a positive whole number.')
+        return
+      }
+    }
+
     onSubmit({
       title: String(form.get('title') ?? '').trim(),
       description: String(form.get('description') ?? '').trim(),
@@ -183,7 +265,7 @@ function SessionFormModal({
         : String(form.get('department') || defaultDepartmentId || ''),
       joinRequirement,
       joinOtpRequired: CONTACT_JOIN_TYPES.has(joinRequirement) ? Boolean(joinOtpRequired) : false,
-      enableNavigation,
+      enableNavigation: builderMode === 'advanced' ? true : enableNavigation,
       randomQuestionOrder: enableNavigation && randomQuestionOrder,
       quizTotalTimeEnabled: enableNavigation && quizTotalTimeEnabled,
       quizTotalTimeMinutes: enableNavigation && quizTotalTimeEnabled ? quizTotalTimeMinutes : null,
@@ -195,6 +277,14 @@ function SessionFormModal({
       logoUrl: logoUrl
         ? normalizeQuestionMediaUrlForStorage(logoUrl) || logoUrl
         : null,
+      builderMode: liveSettingsOnly ? undefined : builderMode,
+      questionsPerParticipant:
+        !liveSettingsOnly && builderMode === 'advanced' ? Number(questionsPerParticipant) : null,
+      advancedSelectionMode:
+        !liveSettingsOnly && builderMode === 'advanced' ? advancedSelectionMode : 'random_all',
+      responseTimeScoreBands:
+        !liveSettingsOnly && builderMode === 'advanced' ? DEFAULT_SCORE_BANDS : null,
+      presentModeSettings: toPresentModeSettingsApi(presentModeSettings),
     })
   }
 
@@ -216,6 +306,68 @@ function SessionFormModal({
               required
             />
           </div>
+          {!liveSettingsOnly ? (
+            <div className="md:col-span-2 rounded-xl border border-blue-200/70 bg-slate-50/80 p-3">
+              <label className="text-sm font-semibold text-slate-700">Question builder</label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleBuilderModeChange('normal')}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium ${
+                    builderMode === 'normal'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white text-slate-700 ring-1 ring-slate-200'
+                  }`}
+                >
+                  Normal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleBuilderModeChange('advanced')}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium ${
+                    builderMode === 'advanced'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white text-slate-700 ring-1 ring-slate-200'
+                  }`}
+                >
+                  Advanced
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                {builderMode === 'advanced'
+                  ? 'Build a large pool; each participant gets a random subset scored by response-time bands.'
+                  : 'Classic builder — everyone can see the same questions (or Sets A/B).'}
+              </p>
+              {builderMode === 'advanced' ? (
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600">
+                      Questions per participant (K)
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={500}
+                      value={questionsPerParticipant}
+                      onChange={(e) => setQuestionsPerParticipant(Number(e.target.value) || 1)}
+                      className="mt-1 h-10 w-full rounded-lg border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600">Selection mode</label>
+                    <select
+                      value={advancedSelectionMode}
+                      onChange={(e) => setAdvancedSelectionMode(e.target.value)}
+                      className="mt-1 h-10 w-full rounded-lg border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400"
+                    >
+                      <option value="random_all">Random K from entire pool</option>
+                      <option value="random_from_selected">Random K from marked eligible</option>
+                    </select>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {!liveSettingsOnly ? (
             <>
               {mode === 'create' && useWorkspaceDepartment && !hideDepartment ? (
@@ -574,6 +726,54 @@ function SessionFormModal({
               <p className="mt-1.5 text-xs text-amber-800">
                 Choose a department first so the logo can be uploaded.
               </p>
+            ) : null}
+          </div>
+
+          <div className="md:col-span-2 rounded-xl border border-blue-200/70 bg-white">
+            <button
+              type="button"
+              onClick={() => setPresentSettingsOpen((open) => !open)}
+              aria-expanded={presentSettingsOpen}
+              className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
+            >
+              <div>
+                <p className="text-sm font-semibold text-slate-700">Present mode settings</p>
+                <p className="text-xs text-slate-500">
+                  Choose what appears on the fullscreen present display.
+                </p>
+              </div>
+              <ChevronDown
+                className={`size-4 shrink-0 text-slate-400 transition ${
+                  presentSettingsOpen ? 'rotate-180' : ''
+                }`}
+                aria-hidden
+              />
+            </button>
+            {presentSettingsOpen ? (
+              <div className="space-y-2 border-t border-slate-100 px-3 py-3">
+                {PRESENT_MODE_SETTING_OPTIONS.map((option) => (
+                  <label
+                    key={option.key}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-blue-100 bg-slate-50/80 px-3 py-2.5"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-slate-700">{option.label}</p>
+                      <p className="text-xs text-slate-500">{option.description}</p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(presentModeSettings[option.key])}
+                      onChange={(event) =>
+                        setPresentModeSettings((prev) => ({
+                          ...prev,
+                          [option.key]: event.target.checked,
+                        }))
+                      }
+                      className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
+                    />
+                  </label>
+                ))}
+              </div>
             ) : null}
           </div>
         </div>

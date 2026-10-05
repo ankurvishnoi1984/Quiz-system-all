@@ -1,5 +1,6 @@
 import { sortLeaderboardEntries } from './leaderboard'
 import { mapApiMediaToQuestionMedia } from './questionMedia'
+import { isAdvancedBuilderSession, isSessionRandomQuestionOrderEnabled } from './sessionFlags'
 import { wordCountsFromApiResults, wordCountsFromResponses } from './wordCloud'
 
 /** High-contrast palette for fullscreen present mode (MCQ / rating). */
@@ -197,6 +198,21 @@ export function mapLiveQuestions(questions) {
 /** True when any question is assigned to a set — then activation is all-or-nothing. */
 export function sessionUsesQuestionSets(mappedQuestions) {
   return (mappedQuestions || []).some((question) => question.setId != null)
+}
+
+/**
+ * Present Mode: participants do not share one sequential "current question".
+ * @returns {'advanced' | 'sets' | 'randomOrder' | null}
+ */
+export function getDistributedPresentMode(session, mappedQuestions) {
+  if (isAdvancedBuilderSession(session)) return 'advanced'
+  if (sessionUsesQuestionSets(mappedQuestions)) return 'sets'
+  if (isSessionRandomQuestionOrderEnabled(session)) return 'randomOrder'
+  return null
+}
+
+export function sessionUsesDistributedPresentMode(session, mappedQuestions) {
+  return getDistributedPresentMode(session, mappedQuestions) != null
 }
 
 export function questionAllowsMultipleSelect(question) {

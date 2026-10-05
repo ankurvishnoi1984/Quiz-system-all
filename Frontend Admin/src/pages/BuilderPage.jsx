@@ -71,9 +71,17 @@ import {
   formatNoActivePlanMessage,
   hasNoActivePlan,
 } from '../components/dashboard/PlanExpiredNotice'
+import {
+  buildScoreBandsForTimer,
+  formatScoreBandRange,
+  resolveUniformPoolTimeLimit,
+  DEFAULT_BAND_POINTS,
+} from '../utils/advancedScoreBands'
 
 /** Question-set management in the builder (exam Set A / Set B). */
 const QUESTION_SETS_UI_ENABLED = true
+
+const DEFAULT_ADVANCED_SCORE_BANDS = buildScoreBandsForTimer(30, 6)
 
 function InlineEditableSessionTitle({ title, onSave, isSaving }) {
   const [editing, setEditing] = useState(false)
@@ -301,13 +309,13 @@ function areAllQuestionsUntimed(questions) {
   return (questions || []).every((q) => normalizeTimeLimitSeconds(q.timeLimitSeconds) === 0)
 }
 
-function resolveDefaultTimeLimitForNewQuestion(questions) {
-  if (!questions.length) return 0
-  if (areAllQuestionsUntimed(questions)) return 0
+function resolveDefaultTimeLimitForNewQuestion(questions, { advancedBuilder = false } = {}) {
+  if (!questions.length) return advancedBuilder ? 30 : 0
+  if (areAllQuestionsUntimed(questions)) return advancedBuilder ? 30 : 0
   const limits = questions.map((q) => normalizeTimeLimitSeconds(q.timeLimitSeconds))
   const unique = new Set(limits)
   if (unique.size === 1) return limits[0]
-  return 0
+  return advancedBuilder ? 30 : 0
 }
 
 function isSessionQuizTotalTimeEnabled(sessionData) {
@@ -1466,6 +1474,7 @@ function BuilderPage() {
         id: String(question.question_id),
         questionId: question.question_id,
         setId: question.set_id ?? null,
+        poolEligible: question.pool_eligible !== false,
         type: 'Survey',
         surveySubType,
         allowMultipleSelect: Boolean(question.allow_multiple_select),
@@ -1524,6 +1533,7 @@ function BuilderPage() {
       id: String(question.question_id),
       questionId: question.question_id,
       setId: question.set_id ?? null,
+      poolEligible: question.pool_eligible !== false,
       type: uiType,
       text: question.question_text || '',
       media: mapApiMediaToQuestionMedia(question),
@@ -1737,6 +1747,7 @@ function BuilderPage() {
         ? `${planUsageQuery.data?.plan?.name || 'Your plan'} allows ${maxQuestionsPerSession} questions per session (plan ${planUsageQuery.data?.plan_question_limit ?? planUsageQuery.data?.plan?.max_questions_per_session} + extra ${Number(planUsageQuery.data.extra_questions)}).`
         : `${planUsageQuery.data?.plan?.name || 'Your plan'} allows ${maxQuestionsPerSession} questions per session.`
   const isDraftSession = session?.rawStatus === 'draft'
+  const isAdvancedBuilder = sessionQuery.data?.builder_mode === 'advanced'
   const sessionQuizTotalTimeEnabled = isSessionQuizTotalTimeEnabled(sessionQuery.data)
   const sessionQuizTotalTimeMinutes = sessionQuizTotalTimeEnabled
     ? Number(sessionQuery.data?.quiz_total_time_minutes)
@@ -1838,10 +1849,13 @@ function BuilderPage() {
       text: '',
       media: null,
         points: type === 'Survey' || type === 'Poll' || type === 'Emoji Reaction' ? 0 : 10,
-        setId: targetSetId ?? null,
+        setId: isAdvancedBuilder ? null : targetSetId ?? null,
+        poolEligible: true,
         timeLimitSeconds: sessionQuizTotalTimeEnabled
         ? 0
-        : resolveDefaultTimeLimitForNewQuestion(questions),
+        : resolveDefaultTimeLimitForNewQuestion(questions, {
+            advancedBuilder: isAdvancedBuilder,
+          }),
       ...(type === 'Survey' ? createSurveyQuestionDefaults('MCQ') : {}),
       ...(type === 'Rating' ? createRatingQuestionDefaults() : {}),
       options:
@@ -1904,7 +1918,9 @@ function BuilderPage() {
 
     const defaultTime = sessionQuizTotalTimeEnabled
       ? 0
-      : resolveDefaultTimeLimitForNewQuestion(questions)
+      : resolveDefaultTimeLimitForNewQuestion(questions, {
+          advancedBuilder: isAdvancedBuilder,
+        })
 
     const accepted = generatedList.slice(0, remaining)
     const mapped = accepted.map((item) => {
@@ -1960,7 +1976,8 @@ function BuilderPage() {
       return {
         id: uid('q'),
         questionId: null,
-        setId: activeSetId,
+        setId: isAdvancedBuilder ? null : activeSetId,
+        poolEligible: true,
         type,
         text: item.text || '',
         media: null,
@@ -2003,10 +2020,70 @@ function BuilderPage() {
   const canQuickAddQuestion =
     isDraftSession && Boolean(sessionQuestionType) && !questionLimitReached
 
-  const canManageSets = QUESTION_SETS_UI_ENABLED && isDraftSession
-  const setsModeEnabled = QUESTION_SETS_UI_ENABLED && questionSets.length > 0
+  const setsUiEnabled = QUESTION_SETS_UI_ENABLED && !isAdvancedBuilder
+  const canManageSets = setsUiEnabled && isDraftSession
+  const setsModeEnabled = setsUiEnabled && questionSets.length > 0
   const navigationEnabledForSets =
     sessionQuery.data?.participant_navigation_enabled !== false
+  const advancedSelectionMode =
+    sessionQuery.data?.advanced_selection_mode === 'random_from_selected'
+      ? 'random_from_selected'
+      : 'random_all'
+  const questionsPerParticipant = Number(sessionQuery.data?.questions_per_participant) || 10
+  const eligiblePoolCount = useMemo(
+    () =>
+      advancedSelectionMode === 'random_from_selected'
+        ? questions.filter((q) => q.poolEligible !== false).length
+        : questions.length,
+    [questions, advancedSelectionMode],
+  )
+  const poolTimeLimitSeconds = useMemo(
+    () => resolveUniformPoolTimeLimit(questions),
+    [questions],
+  )
+
+  const [scoreBandCount, setScoreBandCount] = useState(6)
+  const [localScoreBands, setLocalScoreBands] = useState(null)
+
+  useEffect(() => {
+    const raw = sessionQuery.data?.response_time_score_bands
+    if (Array.isArray(raw) && raw.length) {
+      setScoreBandCount(raw.length)
+      setLocalScoreBands(null)
+    }
+  }, [sessionQuery.data?.session_id, sessionQuery.data?.response_time_score_bands])
+
+  const scoreBands = useMemo(() => {
+    if (localScoreBands?.length) return localScoreBands
+    const raw = sessionQuery.data?.response_time_score_bands
+    if (Array.isArray(raw) && raw.length) {
+      return raw.map((b) => ({
+        max_seconds: Number(b.max_seconds) || 0,
+        points: Number(b.points) || 0,
+      }))
+    }
+    if (poolTimeLimitSeconds > 0) {
+      return buildScoreBandsForTimer(poolTimeLimitSeconds, scoreBandCount)
+    }
+    return DEFAULT_ADVANCED_SCORE_BANDS
+  }, [
+    localScoreBands,
+    sessionQuery.data?.response_time_score_bands,
+    poolTimeLimitSeconds,
+    scoreBandCount,
+  ])
+
+  const persistScoreBands = (next) => {
+    setLocalScoreBands(next)
+    sessionSettingsMutation.mutate({ response_time_score_bands: next })
+  }
+
+  const rebuildBandsFromTimer = (timerSeconds, count = scoreBandCount, keepPoints = true) => {
+    const limit = Number(timerSeconds) > 0 ? Number(timerSeconds) : 30
+    const existingPoints = keepPoints ? scoreBands.map((b) => b.points) : DEFAULT_BAND_POINTS
+    const next = buildScoreBandsForTimer(limit, count, existingPoints)
+    persistScoreBands(next)
+  }
 
   const setQuestionCounts = useMemo(() => {
     return questionSets.map((set) => ({
@@ -2451,7 +2528,7 @@ function BuilderPage() {
         throw new Error('Cannot remove questions while the session is live.')
       }
 
-      if (QUESTION_SETS_UI_ENABLED && isDraft && questionSets.length > 0) {
+      if (setsUiEnabled && isDraft && questionSets.length > 0) {
         if (questionSets.length < 2) {
           throw new Error(
             'Sets mode needs at least Set A and Set B. Add another set, or turn sets off.',
@@ -2470,6 +2547,20 @@ function BuilderPage() {
         if (emptySets.length) {
           throw new Error(
             `Add at least one question to: ${emptySets.map((set) => set.name).join(', ')}.`,
+          )
+        }
+      }
+
+      if (isAdvancedBuilder && isDraft) {
+        const k = Number(sessionQuery.data?.questions_per_participant)
+        if (!Number.isInteger(k) || k < 1) {
+          throw new Error('Set questions per participant (K) in Advanced settings before saving.')
+        }
+        if (eligiblePoolCount < k) {
+          throw new Error(
+            advancedSelectionMode === 'random_from_selected'
+              ? `Mark at least ${k} eligible questions (currently ${eligiblePoolCount}).`
+              : `Add at least ${k} questions to the pool (currently ${eligiblePoolCount}).`,
           )
         }
       }
@@ -2508,7 +2599,8 @@ function BuilderPage() {
                 ? buildOptionsPayload(question)
                 : [],
           display_order: index + 1,
-          set_id: question.setId ?? null,
+          set_id: isAdvancedBuilder ? null : question.setId ?? null,
+          pool_eligible: question.poolEligible !== false,
           ...(isSurvey
             ? {
                 survey_subtype: uiToApiType(surveySubType),
@@ -2882,7 +2974,21 @@ function BuilderPage() {
               </span>
             </div>
 
-            {QUESTION_SETS_UI_ENABLED ? (
+            {isAdvancedBuilder ? (
+              <div className="mt-3 rounded-xl border border-emerald-200/80 bg-emerald-50/60 px-3 py-3">
+                <p className="text-xs font-semibold text-emerald-950">Advanced pool</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-emerald-900/80">
+                  Pool size {questions.length}. Each participant gets {questionsPerParticipant} random
+                  question{questionsPerParticipant === 1 ? '' : 's'}
+                  {advancedSelectionMode === 'random_from_selected'
+                    ? ` from ${eligiblePoolCount} marked eligible`
+                    : ' from the full pool'}
+                  . Scoring uses response-time bands (not per-question points).
+                </p>
+              </div>
+            ) : null}
+
+            {setsUiEnabled ? (
               <div className="mt-3 rounded-xl border border-indigo-200/80 bg-indigo-50/60 px-3 py-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -3154,7 +3260,7 @@ function BuilderPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">Editing</p>
-                {QUESTION_SETS_UI_ENABLED && questionSets.length ? (
+                {setsUiEnabled && questionSets.length ? (
                   <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-slate-600">
                     Set
                     <select
@@ -3254,7 +3360,7 @@ function BuilderPage() {
                     tone="violet"
                   />
                 ) : null}
-                {quizMode ? (
+                {quizMode && !isAdvancedBuilder ? (
                   <div className="flex items-center gap-2 rounded-2xl border border-blue-200/70 bg-white px-3 py-2">
                     <p className="text-sm font-semibold text-slate-700">Points</p>
                     <input
@@ -3270,6 +3376,10 @@ function BuilderPage() {
                       }`}
                     />
                   </div>
+                ) : isAdvancedBuilder && quizMode ? (
+                  <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900">
+                    Points from response-time bands
+                  </span>
                 ) : selected?.type === 'Survey' ? (
                   <span className="rounded-full bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-900">
                     Survey — no timer or scoring
@@ -3391,9 +3501,11 @@ function BuilderPage() {
                   <div>
                     <p className="text-sm font-semibold text-navy-900">Time limit</p>
                     <p className="text-xs text-slate-600">
-                      {sessionAllUntimed
-                        ? 'All questions are untimed — changing this applies to every question.'
-                        : 'Per-question timing — adjust individually or turn off for specific questions.'}
+                      {isAdvancedBuilder
+                        ? 'Countdown shown to participants for this question (used with score bands).'
+                        : sessionAllUntimed
+                          ? 'All questions are untimed — changing this applies to every question.'
+                          : 'Per-question timing — adjust individually or turn off for specific questions.'}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -3437,6 +3549,239 @@ function BuilderPage() {
 
         {/* Right: Session settings */}
         <aside className="space-y-4">
+          {isAdvancedBuilder ? (
+            <div className="rounded-2xl border border-emerald-200/80 bg-white/90 p-5 shadow-sm shadow-blue-900/5 backdrop-blur">
+              <p className="text-xs font-semibold uppercase tracking-wider text-emerald-800">
+                Advanced builder
+              </p>
+              <h3 className="mt-1 text-lg font-bold text-navy-900">Pool & scoring</h3>
+              <p className="mt-1 text-xs text-slate-600">
+                Participants each receive a random subset. Wrong or expired answers score 0.
+              </p>
+
+              <div className="mt-4 space-y-3">
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">Questions per participant (K)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={500}
+                    disabled={!isDraftSession}
+                    value={questionsPerParticipant}
+                    onChange={(e) => {
+                      const next = Number(e.target.value) || 1
+                      sessionSettingsMutation.mutate({
+                        questions_per_participant: next,
+                      })
+                    }}
+                    className="mt-1 h-10 w-full rounded-xl border border-emerald-200/70 bg-white px-3 text-sm outline-none focus:border-emerald-400 disabled:bg-slate-50"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">Selection mode</span>
+                  <select
+                    disabled={!isDraftSession}
+                    value={advancedSelectionMode}
+                    onChange={(e) => {
+                      sessionSettingsMutation.mutate({
+                        advanced_selection_mode: e.target.value,
+                      })
+                    }}
+                    className="mt-1 h-10 w-full rounded-xl border border-emerald-200/70 bg-white px-3 text-sm outline-none focus:border-emerald-400 disabled:bg-slate-50"
+                  >
+                    <option value="random_all">Random K from entire pool</option>
+                    <option value="random_from_selected">Random K from marked eligible</option>
+                  </select>
+                </label>
+
+                {advancedSelectionMode === 'random_from_selected' && selected ? (
+                  <label className="flex items-center gap-2 rounded-xl border border-emerald-200/70 bg-emerald-50/50 px-3 py-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      disabled={!isDraftSession}
+                      checked={selected.poolEligible !== false}
+                      onChange={(e) => {
+                        setDirty(true)
+                        updateQuestion({ ...selected, poolEligible: e.target.checked })
+                      }}
+                    />
+                    Include selected question in eligible pool
+                  </label>
+                ) : null}
+
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">Time limit (all pool questions)</p>
+                  <p className="mt-0.5 text-[11px] text-slate-500">
+                    Participants see a countdown per question. Required for time-band scoring to matter.
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <select
+                      disabled={!isDraftSession || sessionQuizTotalTimeEnabled}
+                      value={
+                        questions.length &&
+                        questions.every(
+                          (q) =>
+                            q.type === 'Survey' ||
+                            normalizeTimeLimitSeconds(q.timeLimitSeconds) ===
+                              normalizeTimeLimitSeconds(questions[0]?.timeLimitSeconds),
+                        )
+                          ? timeLimitSecondsToMode(questions[0]?.timeLimitSeconds)
+                          : 'Mixed'
+                      }
+                      onChange={(e) => {
+                        const mode = e.target.value
+                        if (mode === 'Mixed') return
+                        const seconds =
+                          mode === 'Off'
+                            ? 0
+                            : mode === 'Custom'
+                              ? Number(customTime) || 30
+                              : Number(String(mode).replace('s', '')) || 30
+                        setDirty(true)
+                        setQuestions((prev) =>
+                          prev.map((q) =>
+                            q.type === 'Survey' ? q : { ...q, timeLimitSeconds: seconds },
+                          ),
+                        )
+                        if (mode !== 'Custom') setTimeLimitMode(mode)
+                        else setTimeLimitMode('Custom')
+                        if (seconds > 0) {
+                          rebuildBandsFromTimer(seconds, scoreBandCount)
+                        }
+                      }}
+                      className="h-10 rounded-xl border border-emerald-200/70 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-emerald-400 disabled:bg-slate-50"
+                    >
+                      {['Off', '15s', '30s', '60s', '120s', 'Custom'].map((x) => (
+                        <option key={x} value={x}>
+                          {x}
+                        </option>
+                      ))}
+                      <option value="Mixed" disabled>
+                        Mixed
+                      </option>
+                    </select>
+                  </div>
+                  <p className="mt-2 text-[11px] text-slate-500">
+                    Or set a timer on each question in the editor (Time limit panel). Changing the
+                    pool timer rebuilds score ranges to cover the full time.
+                  </p>
+                </div>
+
+                <div>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-700">Response-time score bands</p>
+                    <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600">
+                      Ranges
+                      <select
+                        disabled={!isDraftSession}
+                        value={scoreBandCount}
+                        onChange={(e) => {
+                          const count = Number(e.target.value) || 6
+                          setScoreBandCount(count)
+                          rebuildBandsFromTimer(
+                            poolTimeLimitSeconds > 0 ? poolTimeLimitSeconds : 30,
+                            count,
+                          )
+                        }}
+                        className="h-8 rounded-lg border border-emerald-200/70 bg-white px-2 text-xs disabled:bg-slate-50"
+                      >
+                        {[3, 4, 5, 6, 7, 8].map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    {poolTimeLimitSeconds > 0
+                      ? `Ranges divide the ${poolTimeLimitSeconds}s timer. Faster answers earn more points.`
+                      : 'Set a pool time limit first — ranges will divide that timer evenly.'}
+                  </p>
+                  <div className="mt-2 space-y-2">
+                    {scoreBands.map((band, index) => (
+                      <div key={`band-${index}`} className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="w-16 shrink-0 font-semibold text-slate-600">
+                          {formatScoreBandRange(scoreBands, index)}
+                        </span>
+                        <span className="text-slate-400">→</span>
+                        <label className="flex items-center gap-1 text-slate-500">
+                          ≤
+                          <input
+                            type="number"
+                            min={index === 0 ? 1 : Number(scoreBands[index - 1]?.max_seconds || 0) + 1}
+                            max={
+                              index === scoreBands.length - 1
+                                ? Math.max(poolTimeLimitSeconds || 30, band.max_seconds)
+                                : undefined
+                            }
+                            disabled={!isDraftSession}
+                            value={band.max_seconds}
+                            onChange={(e) => {
+                              const maxSeconds = Math.max(1, Number(e.target.value) || 1)
+                              const next = scoreBands.map((row, i) =>
+                                i === index ? { ...row, max_seconds: maxSeconds } : row,
+                              )
+                              // Keep ranges increasing
+                              for (let i = 1; i < next.length; i += 1) {
+                                if (next[i].max_seconds <= next[i - 1].max_seconds) {
+                                  next[i] = {
+                                    ...next[i],
+                                    max_seconds: next[i - 1].max_seconds + 1,
+                                  }
+                                }
+                              }
+                              if (poolTimeLimitSeconds > 0) {
+                                next[next.length - 1] = {
+                                  ...next[next.length - 1],
+                                  max_seconds: Math.max(
+                                    next[next.length - 1].max_seconds,
+                                    poolTimeLimitSeconds,
+                                  ),
+                                }
+                              }
+                              persistScoreBands(next)
+                            }}
+                            className="h-8 w-14 rounded-lg border border-emerald-200/70 bg-white px-1.5 text-sm disabled:bg-slate-50"
+                          />
+                          s
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          disabled={!isDraftSession}
+                          value={band.points}
+                          onChange={(e) => {
+                            const next = scoreBands.map((row, i) =>
+                              i === index
+                                ? { ...row, points: Number(e.target.value) || 0 }
+                                : row,
+                            )
+                            persistScoreBands(next)
+                          }}
+                          className="h-8 w-20 rounded-lg border border-emerald-200/70 bg-white px-2 text-sm disabled:bg-slate-50"
+                        />
+                        <span className="text-slate-500">pts</span>
+                      </div>
+                    ))}
+                  </div>
+                  {isDraftSession && poolTimeLimitSeconds > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        rebuildBandsFromTimer(poolTimeLimitSeconds, scoreBandCount, false)
+                      }
+                      className="mt-2 text-[11px] font-semibold text-emerald-800 underline-offset-2 hover:underline"
+                    >
+                      Reset ranges to even split of {poolTimeLimitSeconds}s
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           <div className="rounded-2xl border border-blue-200/70 bg-white/90 p-5 shadow-sm shadow-blue-900/5 backdrop-blur">
             <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">Session settings</p>
             <h3 className="mt-1 text-lg font-bold text-navy-900">Controls</h3>
@@ -3620,8 +3965,8 @@ function BuilderPage() {
         onClose={() => setQuestionBankOpen(false)}
         accessToken={accessToken}
         sessionId={sessionId}
-        setId={QUESTION_SETS_UI_ENABLED ? activeSetId : null}
-        sets={QUESTION_SETS_UI_ENABLED ? questionSets : []}
+        setId={setsUiEnabled ? activeSetId : null}
+        sets={setsUiEnabled ? questionSets : []}
         lockedType={sessionQuestionType}
         remainingSlots={
           maxQuestionsPerSession == null

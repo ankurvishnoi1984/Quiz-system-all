@@ -53,6 +53,15 @@ export async function listSessionParticipantsApi(accessToken, sessionId) {
   return data?.participants || []
 }
 
+export async function listSessionQuestionAssignmentsApi(accessToken, sessionId) {
+  const data = await authRequest(`/sessions/${sessionId}/question-assignments`, accessToken)
+  return {
+    builder_mode: data?.builder_mode || 'normal',
+    questions_per_participant: data?.questions_per_participant ?? null,
+    assignments: data?.assignments || [],
+  }
+}
+
 export async function listQaQuestionsApi(accessToken, sessionId) {
   const data = await authRequest(`/qa/${sessionId}/questions`, accessToken)
   return data?.questions || []

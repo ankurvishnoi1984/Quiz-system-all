@@ -76,6 +76,11 @@ async function createQuestionSet({ sessionId, user, name }) {
   const session = await getSessionOrThrow(sessionId);
   assertSessionWriteAccess(user, session);
   await assertHostCanRunSessions(session.host_id);
+  if (session.builder_mode === "advanced") {
+    const error = new Error("Question sets are not available in Advanced builder mode");
+    error.statusCode = 400;
+    throw error;
+  }
   if (session.status !== "draft") {
     const error = new Error("Question sets can be created only for draft sessions");
     error.statusCode = 400;

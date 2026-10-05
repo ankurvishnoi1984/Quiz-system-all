@@ -145,6 +145,11 @@ const Question = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: true
     },
+    pool_eligible: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true
+    },
     created_at: {
       type: DataTypes.DATE,
       allowNull: true

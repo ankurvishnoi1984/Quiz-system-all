@@ -1,4 +1,7 @@
-import { isSessionRandomQuestionOrderEnabled } from './sessionFlags'
+import {
+  isAdvancedBuilderSession,
+  isSessionRandomQuestionOrderEnabled,
+} from './sessionFlags'
 
 /** Untimed single-active-question sessions: host may close submissions while question stays live. */
 export function canHostCloseQuestion(question, singleActiveQuestionMode) {
@@ -16,8 +19,9 @@ export function canHostCloseAllQuestions(questions, { canEditLive, singleActiveQ
   return live.some((q) => !q.submissionsClosed)
 }
 
-/** Per-question Activate is hidden when sets or random order require all-or-nothing activation. */
+/** Per-question Activate is hidden when sets, random order, or Advanced pool require all-or-nothing. */
 export function sessionRequiresActivateAllQuestions(session, mappedQuestions, sessionUsesQuestionSets) {
+  if (isAdvancedBuilderSession(session)) return true
   if (typeof sessionUsesQuestionSets === 'function') {
     return sessionUsesQuestionSets(mappedQuestions) || isSessionRandomQuestionOrderEnabled(session)
   }
