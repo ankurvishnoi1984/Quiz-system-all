@@ -24,6 +24,7 @@ const aiRoutes = require("./ai.routes");
 const questionBankRoutes = require("./question-bank.routes");
 const zoomRoutes = require("./zoom.routes");
 const sessionAdminRoutes = require("./session-admin.routes");
+const zoomRoutes = require("./zoom.routes");
 
 const router = express.Router();
 
