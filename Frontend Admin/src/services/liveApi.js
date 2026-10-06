@@ -118,6 +118,24 @@ export async function activateAllQuestionsApi(accessToken, sessionId) {
   return data
 }
 
+export async function activateAdvancedAssignmentSlotApi(accessToken, sessionId, slot) {
+  const data = await authRequest(`/sessions/${sessionId}/activate-assignment-slot`, accessToken, {
+    method: 'POST',
+    body: JSON.stringify({ slot: Number(slot) }),
+  })
+  return data
+}
+
+/** Turn off the active Advanced slot (participants return to waiting). */
+export async function deactivateAdvancedAssignmentSlotApi(accessToken, sessionId) {
+  // Same route as activate — body `{ deactivate: true }` — so it works as soon as
+  // the activate-assignment-slot handler is updated (no separate route required).
+  return authRequest(`/sessions/${sessionId}/activate-assignment-slot`, accessToken, {
+    method: 'POST',
+    body: JSON.stringify({ deactivate: true, slot: null }),
+  })
+}
+
 export async function qaModerateApi(accessToken, qaId, action, body = null) {
   const data = await authRequest(`/qa/${qaId}/${action}`, accessToken, {
     method: 'PUT',

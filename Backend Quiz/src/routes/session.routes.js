@@ -152,6 +152,18 @@ router.post(
   authorizeRights("present"),
   sessionController.activateAllQuestions
 );
+router.post(
+  "/sessions/:sessionId/activate-assignment-slot",
+  authorizeStaff,
+  authorizeRights("present"),
+  sessionController.activateAdvancedAssignmentSlot
+);
+router.post(
+  "/sessions/:sessionId/deactivate-assignment-slot",
+  authorizeStaff,
+  authorizeRights("present"),
+  sessionController.deactivateAdvancedAssignmentSlot
+);
 router.get(
   "/sessions/:sessionId/qr",
   authorizeStaff,

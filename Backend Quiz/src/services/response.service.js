@@ -456,9 +456,16 @@ async function submitResponse({ participant, input }) {
   const { isAdvancedBuilderSession } = require("../utils/advancedBuilder");
   if (isAdvancedBuilderSession(session)) {
     const { participantCanAccessAssignedQuestion } = require("./advanced-assignment.service");
-    const allowed = await participantCanAccessAssignedQuestion(participant, question);
-    if (!allowed) {
-      const error = new Error("Question is not in your assigned set");
+    const activeSlot = Number(session.advanced_active_slot) || 0;
+    const allowed = await participantCanAccessAssignedQuestion(participant, question, {
+      activeSlot: activeSlot > 0 ? activeSlot : null
+    });
+    if (!activeSlot || !allowed) {
+      const error = new Error(
+        activeSlot
+          ? "This question is not active for you right now"
+          : "Wait for the host to activate the next question"
+      );
       error.statusCode = 403;
       throw error;
     }
@@ -730,7 +737,7 @@ async function submitResponse({ participant, input }) {
       question_leaderboard: null
     };
 
-    if (session.leaderboard_enabled) {
+    if (session.leaderboard_enabled || session.current_rankings_enabled) {
       payload.leaderboard = await buildSessionLeaderboard(question.session_id);
     }
 
@@ -1204,12 +1211,21 @@ async function listParticipantQuestionsService({ sessionId, participant }) {
 
   const questionWhere = { session_id: sessionId, is_live: true };
   if (advancedMode && participant?.participant_id) {
-    const { getAssignedQuestionIds } = require("./advanced-assignment.service");
-    const assignedIds = await getAssignedQuestionIds(participant.participant_id);
-    if (!assignedIds.length) {
+    // Host-paced: only the assignment for the currently activated slot (1..K).
+    // Shared pool questions can stay is_live for other participants' slots — do not list those.
+    const activeSlot = Number(session.advanced_active_slot) || 0;
+    if (!activeSlot) {
       return [];
     }
-    questionWhere.question_id = { [Op.in]: assignedIds };
+    const { getAssignedQuestionIdForSlot } = require("./advanced-assignment.service");
+    const slotQuestionId = await getAssignedQuestionIdForSlot(
+      participant.participant_id,
+      activeSlot
+    );
+    if (!slotQuestionId) {
+      return [];
+    }
+    questionWhere.question_id = slotQuestionId;
   } else if (participant?.assigned_set_id) {
     // Participants see their assigned set plus shared questions that belong to no set.
     // Op.is is required for NULL — `set_id = NULL` would match nothing.
@@ -1240,9 +1256,7 @@ async function listParticipantQuestionsService({ sessionId, participant }) {
   });
 
   if (advancedMode && participant?.participant_id) {
-    const { getAssignedQuestionIds } = require("./advanced-assignment.service");
-    const assignedIds = await getAssignedQuestionIds(participant.participant_id);
-    questions = sortQuestionsByOrder(questions, assignedIds);
+    // Host-paced Advanced returns at most one question (current slot) — keep API order.
   } else if (questionOrder.length) {
     questions = sortQuestionsByOrder(questions, questionOrder);
   }
@@ -1268,7 +1282,7 @@ async function listParticipantQuestionsService({ sessionId, participant }) {
 
 async function getParticipantSessionLeaderboard({ sessionId, participant }) {
   const session = await Session.findByPk(sessionId, {
-    attributes: ["session_id", "leaderboard_enabled"]
+    attributes: ["session_id", "leaderboard_enabled", "current_rankings_enabled"]
   });
   if (!session) {
     const error = new Error("Session not found");
@@ -1280,7 +1294,9 @@ async function getParticipantSessionLeaderboard({ sessionId, participant }) {
     error.statusCode = 403;
     throw error;
   }
-  const leaderboardEnabled = coerceSessionFlag(session.leaderboard_enabled);
+  const leaderboardEnabled =
+    coerceSessionFlag(session.leaderboard_enabled) ||
+    coerceSessionFlag(session.current_rankings_enabled);
   if (!leaderboardEnabled) {
     return [];
   }

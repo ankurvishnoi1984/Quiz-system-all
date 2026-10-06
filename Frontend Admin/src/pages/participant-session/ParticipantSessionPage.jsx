@@ -42,7 +42,7 @@ import {
   playSubmitSuccess,
   unlockTimerAudio,
 } from '../../utils/timerSounds'
-import { isSessionQuizTotalTimeEnabled, isSessionRandomQuestionOrderEnabled, isStrictLateJoinSession, sessionHasTimedQuestions } from '../../utils/sessionFlags'
+import { isAdvancedBuilderSession, isSessionQuizTotalTimeEnabled, isSessionRandomQuestionOrderEnabled, isStrictLateJoinSession, sessionHasTimedQuestions } from '../../utils/sessionFlags'
 import {
   questionSupportsLeaderboard,
   questionSupportsParticipantResults,
@@ -387,7 +387,13 @@ function ParticipantSessionPage({ embed = false }) {
   const session = sessionQuery.data
   const isSessionEnded =
     session?.status === 'completed' || session?.status === 'archived'
-  const showOverallLeaderboard = Boolean(session?.leaderboard_enabled)
+  const showOverallLeaderboard = Boolean(
+    session?.leaderboard_enabled || session?.current_rankings_enabled,
+  )
+  const rankingsTitle = session?.current_rankings_enabled
+    ? 'Current rankings'
+    : 'Overall Rankings'
+  // Rankings replace the live question — participants only see the leaderboard screen.
   const showOverallLeaderboardTab =
     showOverallLeaderboard &&
     (sessionSupportsOverallLeaderboard(mappedQuestions) || mappedQuestions.length === 0)
@@ -404,7 +410,9 @@ function ParticipantSessionPage({ embed = false }) {
     sessionSupportsSurveyEndingScreen(mappedQuestions)
   const showSurveyEndingScreen = showSurveyResults || showSurveyThanks
   const endingScreenOnlyMode = showOverallLeaderboardTab || showSurveyEndingScreen
-  const navigationEnabled = session?.participant_navigation_enabled !== false
+  // Advanced is host-paced (one slot at a time) — no Previous/Next across assigned questions.
+  const navigationEnabled =
+    !isAdvancedBuilderSession(session) && session?.participant_navigation_enabled !== false
   const randomQuestionOrderEnabled = isSessionRandomQuestionOrderEnabled(session)
   const sessionQuizTotalTimeEnabled = useMemo(
     () => isSessionQuizTotalTimeEnabled(session),
@@ -859,16 +867,23 @@ function ParticipantSessionPage({ embed = false }) {
     })
 
     const offSession = client.on(RealtimeEvent.SESSION_UPDATED, (data) => {
-      if (data?.status) {
+      if (data?.status || data?.advanced_active_slot != null) {
         const ended = data.status === 'completed' || data.status === 'archived'
         queryClient.setQueryData(['participant-session', effectiveSessionCode], (old) =>
           old
             ? {
                 ...old,
-                status: data.status,
+                ...(data?.status ? { status: data.status } : {}),
+                ...(data?.advanced_active_slot != null
+                  ? { advanced_active_slot: data.advanced_active_slot }
+                  : {}),
                 // Match backend clearParticipantFacingDisplaysOnEnd before settings WS lands.
                 ...(ended
-                  ? { leaderboard_enabled: false, survey_results_enabled: false }
+                  ? {
+                      leaderboard_enabled: false,
+                      current_rankings_enabled: false,
+                      survey_results_enabled: false,
+                    }
                   : {}),
               }
             : old,
@@ -902,7 +917,11 @@ function ParticipantSessionPage({ embed = false }) {
       closedNoticeShownRef.current.delete(String(qid))
       setAllQuestionsClosedByHost(false)
 
-      const cachedQuestions = queryClient.getQueryData(['participant-questions', dbSessionId])
+      const cachedQuestions = queryClient.getQueryData([
+        'participant-questions',
+        dbSessionId,
+        participantToken,
+      ])
       const cachedQuestion = Array.isArray(cachedQuestions)
         ? cachedQuestions.find((q) => Number(q.question_id) === qid)
         : null
@@ -913,7 +932,9 @@ function ParticipantSessionPage({ embed = false }) {
       const liveActivatedAt = data?.live_activated_at || new Date().toISOString()
 
       if (dbSessionId) {
-        queryClient.setQueryData(['participant-questions', dbSessionId], (old) => {
+        queryClient.setQueryData(
+          ['participant-questions', dbSessionId, participantToken],
+          (old) => {
           if (!Array.isArray(old)) return old
           return old.map((q) =>
             Number(q.question_id) === qid
@@ -951,7 +972,9 @@ function ParticipantSessionPage({ embed = false }) {
 
     const offQuestion = client.on('question_changed', (data) => {
       if (dbSessionId && data?.question_id != null) {
-        queryClient.setQueryData(['participant-questions', dbSessionId], (old) => {
+        queryClient.setQueryData(
+          ['participant-questions', dbSessionId, participantToken],
+          (old) => {
           if (!Array.isArray(old)) return old
           const qid = Number(data.question_id)
           return old.map((q) => {
@@ -1002,7 +1025,9 @@ function ParticipantSessionPage({ embed = false }) {
         if (!qid) return
 
         if (dbSessionId) {
-          queryClient.setQueryData(['participant-questions', dbSessionId], (old) => {
+          queryClient.setQueryData(
+            ['participant-questions', dbSessionId, participantToken],
+            (old) => {
             if (!Array.isArray(old)) return old
             return old.map((q) =>
               Number(q.question_id) === qid
@@ -1026,7 +1051,9 @@ function ParticipantSessionPage({ embed = false }) {
       RealtimeEvent.ALL_QUESTIONS_SUBMISSIONS_CLOSED,
       () => {
         if (dbSessionId) {
-          queryClient.setQueryData(['participant-questions', dbSessionId], (old) => {
+          queryClient.setQueryData(
+            ['participant-questions', dbSessionId, participantToken],
+            (old) => {
             if (!Array.isArray(old)) return old
             return old.map((q) =>
               q.is_live === true || q.is_live === 1 || q.is_live === '1'
@@ -1098,10 +1125,12 @@ function ParticipantSessionPage({ embed = false }) {
 
     const offSessionSettings = client.on(RealtimeEvent.SESSION_SETTINGS_UPDATED, (data) => {
       const previousSession = queryClient.getQueryData(['participant-session', effectiveSessionCode])
-      const wasLeaderboardEnabled = Boolean(previousSession?.leaderboard_enabled)
+      const wasLeaderboardEnabled = Boolean(
+        previousSession?.leaderboard_enabled || previousSession?.current_rankings_enabled,
+      )
       const isLeaderboardEnabled =
-        data.leaderboard_enabled !== undefined
-          ? Boolean(data.leaderboard_enabled)
+        data.leaderboard_enabled !== undefined || data.current_rankings_enabled !== undefined
+          ? Boolean(data.leaderboard_enabled) || Boolean(data.current_rankings_enabled)
           : wasLeaderboardEnabled
       const wasSurveyResultsEnabled = Boolean(previousSession?.survey_results_enabled)
       const isSurveyResultsEnabled =
@@ -1118,7 +1147,14 @@ function ParticipantSessionPage({ embed = false }) {
         old
           ? {
               ...old,
-              leaderboard_enabled: isLeaderboardEnabled,
+              leaderboard_enabled:
+                data.leaderboard_enabled !== undefined
+                  ? Boolean(data.leaderboard_enabled)
+                  : old.leaderboard_enabled,
+              current_rankings_enabled:
+                data.current_rankings_enabled !== undefined
+                  ? Boolean(data.current_rankings_enabled)
+                  : old.current_rankings_enabled,
               survey_results_enabled: isSurveyResultsEnabled,
               show_participant_count: isParticipantCountVisible,
               participants_count: isParticipantCountVisible
@@ -2557,6 +2593,7 @@ function ParticipantSessionPage({ embed = false }) {
             leaderboard={leaderboard}
             sessionStatus={session?.status}
             isLoading={leaderboardQuery.isLoading}
+            title={rankingsTitle}
           />
         ) : showSurveyEndingScreen ? (
           <SurveySessionEndingPanel
@@ -2575,6 +2612,7 @@ function ParticipantSessionPage({ embed = false }) {
             {step === 'active' && isSessionEnded ? <SessionEndedPanel /> : null}
 
             {step === 'active' && !question && !isSessionEnded && <WaitingForQuestion />}
+
 
             {step === 'active' && question && !isSessionEnded && (
               <ActiveQuestionPanel

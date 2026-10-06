@@ -38,6 +38,20 @@ async function getAssignedQuestionIds(participantId) {
   return rows.map((row) => Number(row.question_id));
 }
 
+/** Question id for this participant at host slot display_order (1..K), or null. */
+async function getAssignedQuestionIdForSlot(participantId, slot) {
+  const slotNum = Number(slot);
+  if (!Number.isInteger(slotNum) || slotNum < 1) return null;
+  const row = await ParticipantQuestionAssignment.findOne({
+    where: {
+      participant_id: Number(participantId),
+      display_order: slotNum
+    },
+    attributes: ["question_id"]
+  });
+  return row ? Number(row.question_id) : null;
+}
+
 /**
  * Persist a random K-question assignment for Advanced sessions (once per participant).
  */
@@ -86,13 +100,19 @@ async function assignAdvancedQuestionsToParticipant(session, participant) {
   return picked;
 }
 
-async function participantCanAccessAssignedQuestion(participant, question) {
+async function participantCanAccessAssignedQuestion(participant, question, { activeSlot } = {}) {
   if (!participant?.participant_id || !question?.question_id) return false;
+  const where = {
+    participant_id: Number(participant.participant_id),
+    question_id: Number(question.question_id)
+  };
+  if (activeSlot != null) {
+    const slotNum = Number(activeSlot);
+    if (!Number.isInteger(slotNum) || slotNum < 1) return false;
+    where.display_order = slotNum;
+  }
   const row = await ParticipantQuestionAssignment.findOne({
-    where: {
-      participant_id: Number(participant.participant_id),
-      question_id: Number(question.question_id)
-    },
+    where,
     attributes: ["assignment_id"]
   });
   return Boolean(row);
@@ -187,6 +207,7 @@ async function listSessionQuestionAssignments(sessionId) {
 module.exports = {
   loadEligiblePoolQuestionIds,
   getAssignedQuestionIds,
+  getAssignedQuestionIdForSlot,
   assignAdvancedQuestionsToParticipant,
   participantCanAccessAssignedQuestion,
   assertAdvancedSessionReadyToStart,

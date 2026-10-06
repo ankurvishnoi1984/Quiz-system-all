@@ -9,7 +9,8 @@ const {
   Client,
   User,
   Response,
-  Participant
+  Participant,
+  ParticipantQuestionAssignment
 } = require("../models");
 const {
   isSessionQuizTotalTimeEnabled,
@@ -19,6 +20,10 @@ const { validateCreateQuestionPayload } = require("../validators/question.valida
 const { assertHostCanRunSessions, assertSessionQuestionCapacity } = require("./plan.service");
 const { assertSessionWriteAccess } = require("../config/data-scope");
 const { normalizeTimerSoundFields } = require("../utils/timerSound");
+const {
+  isAdvancedBuilderSession,
+  resolveQuestionsPerParticipant
+} = require("../utils/advancedBuilder");
 
 function isParticipantNavigationEnabled(session) {
   return session.participant_navigation_enabled !== false;
@@ -908,6 +913,14 @@ async function activateAllQuestionsForSession({ sessionId, user }) {
     throw error;
   }
 
+  if (isAdvancedBuilderSession(session)) {
+    const error = new Error(
+      'Advanced sessions use "Question 1, 2, …" activation in Present mode instead of activating the full pool.'
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
   if (!isParticipantNavigationEnabled(session)) {
     const error = new Error(
       "Activate all questions is only available in multiple active question mode"
@@ -952,6 +965,165 @@ async function activateAllQuestionsForSession({ sessionId, user }) {
     where: { question_id: questionIds },
     include: [{ model: QuestionOption, order: [["display_order", "ASC"]] }]
   });
+}
+
+/**
+ * Advanced Present: host activates participant slot N (1..K). Each participant sees
+ * their assigned question for that slot; only those pool questions go live.
+ */
+async function activateAdvancedAssignmentSlot({ sessionId, user, slot }) {
+  const session = await getSessionForQuestionFlow(sessionId);
+  assertScopeAccess(user, session);
+
+  if (!isAdvancedBuilderSession(session)) {
+    const error = new Error("Assignment slot activation is only for Advanced sessions");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (isSessionQuizTotalTimeEnabled(session)) {
+    const error = new Error(
+      "Question activation is managed automatically for quiz total time sessions"
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (session.status !== "live" && session.status !== "paused") {
+    const error = new Error("Questions can be activated only while the session is live");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const poolIds = await (async () => {
+    const { loadEligiblePoolQuestionIds } = require("./advanced-assignment.service");
+    return loadEligiblePoolQuestionIds(session);
+  })();
+  const k = resolveQuestionsPerParticipant(session, poolIds.length);
+  if (!k) {
+    const error = new Error("Set questions per participant (K) before activating slots");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const slotNum = Number(slot);
+  if (!Number.isInteger(slotNum) || slotNum < 1 || slotNum > k) {
+    const error = new Error(`slot must be an integer from 1 to ${k}`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const assignmentRows = await ParticipantQuestionAssignment.findAll({
+    where: {
+      session_id: session.session_id,
+      display_order: slotNum
+    },
+    attributes: ["question_id"]
+  });
+  const questionIds = [
+    ...new Set(assignmentRows.map((row) => Number(row.question_id)).filter(Boolean))
+  ];
+  if (!questionIds.length) {
+    const error = new Error(
+      "No participant assignments yet for this slot. Wait for participants to join."
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const previouslyLive = await Question.findAll({
+    where: { session_id: session.session_id, is_live: true },
+    attributes: ["question_id"]
+  });
+  const previouslyLiveIds = previouslyLive.map((row) => Number(row.question_id));
+
+  const now = new Date();
+  await Question.update(
+    {
+      is_live: false,
+      live_activated_at: null,
+      open_for_reattempt: false,
+      answer_revealed: false,
+      show_leaderboard: false,
+      submissions_closed: false
+    },
+    { where: { session_id: session.session_id } }
+  );
+
+  await Question.update(
+    {
+      is_live: true,
+      live_activated_at: now,
+      submissions_closed: false,
+      open_for_reattempt: false,
+      answer_revealed: false,
+      show_leaderboard: false
+    },
+    { where: { session_id: session.session_id, question_id: questionIds } }
+  );
+
+  session.advanced_active_slot = slotNum;
+  await session.save();
+
+  const activatedQuestions = await Question.findAll({
+    where: { question_id: questionIds },
+    include: [{ model: QuestionOption, order: [["display_order", "ASC"]] }]
+  });
+
+  const deactivatedIds = previouslyLiveIds.filter((id) => !questionIds.includes(id));
+  return {
+    slot: slotNum,
+    advanced_active_slot: slotNum,
+    activatedQuestions,
+    deactivatedQuestionIds: deactivatedIds,
+    activatedQuestionIds: questionIds
+  };
+}
+
+/**
+ * Advanced Present: turn off the active slot — participants wait until the host activates again.
+ */
+async function deactivateAdvancedAssignmentSlot({ sessionId, user }) {
+  const session = await getSessionForQuestionFlow(sessionId);
+  assertScopeAccess(user, session);
+
+  if (!isAdvancedBuilderSession(session)) {
+    const error = new Error("Assignment slot deactivation is only for Advanced sessions");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (session.status !== "live" && session.status !== "paused") {
+    const error = new Error("Questions can be deactivated only while the session is live");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const previouslyLive = await Question.findAll({
+    where: { session_id: session.session_id, is_live: true },
+    attributes: ["question_id"]
+  });
+  const previouslyLiveIds = previouslyLive.map((row) => Number(row.question_id));
+
+  await Question.update(
+    {
+      is_live: false,
+      live_activated_at: null,
+      open_for_reattempt: false,
+      answer_revealed: false,
+      show_leaderboard: false,
+      submissions_closed: false
+    },
+    { where: { session_id: session.session_id } }
+  );
+
+  session.advanced_active_slot = null;
+  await session.save();
+
+  return {
+    advanced_active_slot: null,
+    deactivatedQuestionIds: previouslyLiveIds
+  };
 }
 
 /** Quiz total time: make every question live when the host launches the session. */
@@ -1125,6 +1297,8 @@ module.exports = {
   closeQuestionSubmissions,
   closeAllQuestionSubmissionsForSession,
   activateAllQuestionsForSession,
+  activateAdvancedAssignmentSlot,
+  deactivateAdvancedAssignmentSlot,
   ensureAllQuestionsLiveForQuizTotalTimeSession,
   openQuestionForReattempt,
   getCorrectOptionIds,

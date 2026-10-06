@@ -100,6 +100,11 @@ const Session = sequelize.define(
       allowNull: true,
       defaultValue: false
     },
+    current_rankings_enabled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
     survey_results_enabled: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
@@ -147,6 +152,11 @@ const Session = sequelize.define(
     },
     response_time_score_bands: {
       type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: null
+    },
+    advanced_active_slot: {
+      type: DataTypes.INTEGER,
       allowNull: true,
       defaultValue: null
     },

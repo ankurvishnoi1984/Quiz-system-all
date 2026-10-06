@@ -264,6 +264,7 @@ function validateUpdateSessionPayload(payload) {
     "max_participants",
     "show_results_to_participants",
     "leaderboard_enabled",
+    "current_rankings_enabled",
     "survey_results_enabled",
     "show_participant_count",
     "show_question_leaderboard",

@@ -12,6 +12,8 @@ import { useAuthStore } from '../../store/authStore'
 import { useHostQuestionMutations } from '../../hooks/useHostQuestionMutations'
 import { useLiveSession } from '../../hooks/useLiveSession'
 import {
+  activateAdvancedAssignmentSlotApi,
+  deactivateAdvancedAssignmentSlotApi,
   getSessionLeaderboardApi,
   getSessionSurveySummaryApi,
   // listQaQuestionsApi, // Q&A feature disabled
@@ -26,7 +28,12 @@ import {
   listPresentViewQuestionAssignmentsApi,
   // listPresentViewQaApi, // Q&A feature disabled
 } from '../../services/presentViewApi'
-import { canHostActivateAllQuestions, canHostCloseAllQuestions, sessionRequiresActivateAllQuestions } from '../../utils/hostQuestionControls'
+import {
+  canHostActivateAllQuestions,
+  canHostCloseAllQuestions,
+  sessionRequiresActivateAllQuestions,
+  sessionUsesAdvancedSlotActivation,
+} from '../../utils/hostQuestionControls'
 import { broadcastPreviewFollow } from '../../utils/previewFollow'
 import {
   getDistributedPresentMode,
@@ -120,6 +127,7 @@ function PresentModePage({
   const singleActiveQuestionMode = session?.participant_navigation_enabled === false
   const sessionQuizTotalTimeEnabled = isSessionQuizTotalTimeEnabled(session)
   const advancedBuilderEnabled = isAdvancedBuilderSession(session)
+  const advancedSlotActivation = sessionUsesAdvancedSlotActivation(session)
   const distributedPresentMode = getDistributedPresentMode(session, mappedQuestions)
   const distributedPresentEnabled = distributedPresentMode != null
 
@@ -147,13 +155,72 @@ function PresentModePage({
 
   const showActivateAllQuestionsButton = useMemo(
     () =>
+      !advancedSlotActivation &&
       canHostActivateAllQuestions(mappedQuestions, {
         canEditLive,
         singleActiveQuestionMode,
         sessionQuizTotalTimeEnabled,
       }),
-    [mappedQuestions, canEditLive, singleActiveQuestionMode, sessionQuizTotalTimeEnabled],
+    [
+      advancedSlotActivation,
+      mappedQuestions,
+      canEditLive,
+      singleActiveQuestionMode,
+      sessionQuizTotalTimeEnabled,
+    ],
   )
+
+  const activateAssignmentSlotMutation = useMutation({
+    mutationFn: (slot) =>
+      activateAdvancedAssignmentSlotApi(hostAccessToken, sessionId, slot),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['live-questions', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['live-session', sessionId, 'host'] })
+      queryClient.invalidateQueries({ queryKey: ['live-dept-sessions'] })
+    },
+    onError: (error) => {
+      setHostAlert({
+        variant: 'error',
+        title: 'Could not activate question',
+        message: error?.message || 'Unable to activate this question slot. Please try again.',
+        confirmLabel: 'Close',
+      })
+    },
+  })
+
+  const deactivateAssignmentSlotMutation = useMutation({
+    mutationFn: async () => {
+      await deactivateAdvancedAssignmentSlotApi(hostAccessToken, sessionId)
+      const current =
+        queryClient.getQueryData(['live-session', sessionId]) ||
+        queryClient.getQueryData(['live-session', sessionId, 'host']) ||
+        session
+      if (current?.leaderboard_enabled || current?.current_rankings_enabled) {
+        await updateSessionApi(hostAccessToken, sessionId, {
+          leaderboard_enabled: false,
+          current_rankings_enabled: false,
+        })
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['live-questions', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['live-session', sessionId, 'host'] })
+      queryClient.invalidateQueries({ queryKey: ['live-dept-sessions'] })
+    },
+    onError: (error) => {
+      setHostAlert({
+        variant: 'error',
+        title: 'Could not inactivate question',
+        message: error?.message || 'Unable to inactivate this question. Please try again.',
+        confirmLabel: 'Close',
+      })
+    },
+  })
+
+  const slotControlPending =
+    activateAssignmentSlotMutation.isPending || deactivateAssignmentSlotMutation.isPending
 
   const showCloseAllQuestionsButton = useMemo(
     () =>
@@ -185,16 +252,19 @@ function PresentModePage({
       queryClient.getQueryData(['live-session', sessionId, 'host']) ||
       session
     const clearLb = Boolean(current?.leaderboard_enabled)
+    const clearCurrent = Boolean(current?.current_rankings_enabled)
     const clearSurvey = Boolean(current?.survey_results_enabled)
-    if (!clearLb && !clearSurvey) return null
+    if (!clearLb && !clearCurrent && !clearSurvey) return null
 
     const updated = await updateSessionApi(hostAccessToken, sessionId, {
       ...(clearLb ? { leaderboard_enabled: false } : {}),
+      ...(clearCurrent ? { current_rankings_enabled: false } : {}),
       ...(clearSurvey ? { survey_results_enabled: false } : {}),
     })
     if (updated) {
       const patch = {
         leaderboard_enabled: updated.leaderboard_enabled,
+        current_rankings_enabled: updated.current_rankings_enabled,
         survey_results_enabled: updated.survey_results_enabled,
       }
       queryClient.setQueryData(['live-session', sessionId], (old) =>
@@ -220,18 +290,41 @@ function PresentModePage({
   }, [readOnly, hostAccessToken, mappedQuestions, queryClient, sessionId])
 
   const sessionLeaderboardMutation = useMutation({
-    mutationFn: async (enabled) => {
-      if (enabled) await deactivateAllLiveQuestions()
-      return updateSessionApi(hostAccessToken, sessionId, { leaderboard_enabled: enabled })
+    mutationFn: async ({ enabled, mode = 'overall' }) => {
+      if (enabled) {
+        if (advancedSlotActivation) {
+          await deactivateAdvancedAssignmentSlotApi(hostAccessToken, sessionId)
+        } else {
+          await deactivateAllLiveQuestions()
+        }
+      }
+      if (mode === 'current') {
+        return updateSessionApi(hostAccessToken, sessionId, {
+          current_rankings_enabled: enabled,
+          ...(enabled ? { leaderboard_enabled: false } : {}),
+        })
+      }
+      return updateSessionApi(hostAccessToken, sessionId, {
+        leaderboard_enabled: enabled,
+        ...(enabled ? { current_rankings_enabled: false } : {}),
+      })
     },
     onSuccess: (updated) => {
       if (updated) {
+        const patch = {
+          leaderboard_enabled: updated.leaderboard_enabled,
+          current_rankings_enabled: updated.current_rankings_enabled,
+          ...(advancedSlotActivation &&
+          (updated.leaderboard_enabled || updated.current_rankings_enabled)
+            ? { advanced_active_slot: null }
+            : {}),
+        }
         queryClient.setQueryData(['live-session', sessionId], (old) =>
           old
             ? {
                 ...old,
                 ...updated,
-                leaderboard_enabled: updated.leaderboard_enabled,
+                ...patch,
               }
             : updated,
         )
@@ -240,19 +333,20 @@ function PresentModePage({
             ? {
                 ...old,
                 ...updated,
-                leaderboard_enabled: updated.leaderboard_enabled,
+                ...patch,
               }
             : old,
         )
       }
       queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['live-questions', sessionId] })
       queryClient.invalidateQueries({ queryKey: ['live-dept-sessions'] })
     },
     onError: () => {
       setHostAlert({
         variant: 'error',
         title: 'Could not update rankings',
-        message: 'Unable to update the overall rankings setting. Please try again.',
+        message: 'Unable to update the rankings setting. Please try again.',
         confirmLabel: 'Close',
       })
     },
@@ -538,7 +632,9 @@ function PresentModePage({
     if (didBootstrapSlideRef.current) return
 
     didBootstrapSlideRef.current = true
-    prevLeaderboardEnabledRef.current = Boolean(session.leaderboard_enabled)
+    prevLeaderboardEnabledRef.current = Boolean(
+      session.leaderboard_enabled || session.current_rankings_enabled,
+    )
 
     if (session.survey_results_enabled) {
       const surveyIndex = slides.findIndex((slide) => slide.type === 'surveyEnding')
@@ -577,13 +673,13 @@ function PresentModePage({
     distributedPresentEnabled,
   ])
 
-  // When overall rankings is toggled on: open host modal + sync Preview for participants.
+  // When rankings is toggled on: open host modal + sync Preview for participants.
   // Do not jump Present to the rankings slide.
   useEffect(() => {
     if (readOnly || isViewWaiting || isLoading || !session || !sessionId) return
     if (!didBootstrapSlideRef.current) return
 
-    const enabled = Boolean(session.leaderboard_enabled)
+    const enabled = Boolean(session.leaderboard_enabled || session.current_rankings_enabled)
     const previous = prevLeaderboardEnabledRef.current
     if (previous === undefined || previous === enabled) {
       prevLeaderboardEnabledRef.current = enabled
@@ -646,6 +742,7 @@ function PresentModePage({
     session,
     sessionId,
     session?.leaderboard_enabled,
+    session?.current_rankings_enabled,
     mappedQuestions,
     slides,
     distributedPresentEnabled,
@@ -822,25 +919,51 @@ function PresentModePage({
               ? 'Join → pool overview → rankings (not synced to participant screens)'
               : '← → arrow keys to change slides'}
           </p>
+          {!readOnly && canToggleOverallLeaderboard && showSessionControls && advancedSlotActivation ? (
+            <HostQuestionActionButton
+              disabled={sessionLeaderboardMutation.isPending}
+              icon={Trophy}
+              size="compact"
+              label={
+                sessionLeaderboardMutation.isPending ? 'Updating…' : 'Current rankings'
+              }
+              title={
+                session?.current_rankings_enabled
+                  ? 'Hide current rankings from participants'
+                  : 'Show current rankings and close the live question'
+              }
+              active={Boolean(session?.current_rankings_enabled)}
+              tone="amber"
+              onClick={() =>
+                sessionLeaderboardMutation.mutate({
+                  enabled: !session?.current_rankings_enabled,
+                  mode: 'current',
+                })
+              }
+            />
+          ) : null}
           {!readOnly && canToggleOverallLeaderboard && showSessionControls ? (
             <HostQuestionActionButton
               disabled={sessionLeaderboardMutation.isPending}
               icon={Trophy}
               size="compact"
               label={
-                sessionLeaderboardMutation.isPending
-                  ? 'Updating…'
-                  : 'Overall rankings'
+                sessionLeaderboardMutation.isPending ? 'Updating…' : 'Overall rankings'
               }
               title={
                 session?.leaderboard_enabled
                   ? 'Hide overall rankings from participants'
-                  : 'Show overall rankings to participants and open the host rankings modal'
+                  : advancedSlotActivation
+                    ? 'Show overall rankings and close the live question'
+                    : 'Show overall rankings to participants and open the host rankings modal'
               }
               active={Boolean(session?.leaderboard_enabled)}
               tone="amber"
               onClick={() =>
-                sessionLeaderboardMutation.mutate(!session?.leaderboard_enabled)
+                sessionLeaderboardMutation.mutate({
+                  enabled: !session?.leaderboard_enabled,
+                  mode: 'overall',
+                })
               }
             />
           ) : null}
@@ -1078,6 +1201,18 @@ function PresentModePage({
             liveParticipantCount={liveParticipantCount}
             isSessionLive={isSessionLive}
             readOnly={readOnly}
+            activeAssignmentSlot={Number(session?.advanced_active_slot) || 0}
+            onActivateAssignmentSlot={
+              readOnly || !canEditLive
+                ? undefined
+                : (slot) => activateAssignmentSlotMutation.mutate(slot)
+            }
+            onDeactivateAssignmentSlot={
+              readOnly || !canEditLive
+                ? undefined
+                : () => deactivateAssignmentSlotMutation.mutate()
+            }
+            slotActivationPending={slotControlPending}
             onInspectQuestion={(q) => setInspectQuestionId(q?.id ?? null)}
             {...headerParticipantProps}
             {...headerRankingsProps}

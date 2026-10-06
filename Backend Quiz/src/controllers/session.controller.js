@@ -34,6 +34,8 @@ const {
 const { buildSessionLeaderboard } = require("../services/response.service");
 const {
   activateAllQuestionsForSession,
+  activateAdvancedAssignmentSlot,
+  deactivateAdvancedAssignmentSlot,
   closeAllQuestionSubmissionsForSession
 } = require("../services/question.service");
 const { getSessionSummaryReport, getSessionQuestionsReport, getSessionParticipantsReport, getSessionQaReport } = require("../services/session-report.service");
@@ -153,6 +155,7 @@ async function update(req, res) {
     if (session.session_code) {
       notifySessionSettings(session.session_code, {
         leaderboard_enabled: session.leaderboard_enabled,
+        current_rankings_enabled: session.current_rankings_enabled,
         survey_results_enabled: session.survey_results_enabled,
         show_participant_count: session.show_participant_count,
         show_question_leaderboard: session.show_question_leaderboard,
@@ -162,7 +165,10 @@ async function update(req, res) {
         allow_late_join: Boolean(session.allow_late_join),
         present_mode_settings: session.present_mode_settings ?? null
       });
-      if (req.body.leaderboard_enabled === true && session.leaderboard_enabled) {
+      if (
+        (req.body.leaderboard_enabled === true && session.leaderboard_enabled) ||
+        (req.body.current_rankings_enabled === true && session.current_rankings_enabled)
+      ) {
         const leaderboard = await buildSessionLeaderboard(session.session_id);
         notifyLeaderboard(session.session_code, { leaderboard });
       }
@@ -235,6 +241,7 @@ function lifecycleAction(action) {
           if (action === "end") {
             notifySessionSettings(session.session_code, {
               leaderboard_enabled: session.leaderboard_enabled,
+              current_rankings_enabled: session.current_rankings_enabled,
               survey_results_enabled: session.survey_results_enabled,
               show_participant_count: session.show_participant_count,
               show_question_leaderboard: session.show_question_leaderboard,
@@ -306,6 +313,7 @@ async function lookupByCode(req, res) {
           join_otp_required: Boolean(session.join_otp_required),
           logo_url: session.logo_url || null,
           leaderboard_enabled: Boolean(session.leaderboard_enabled),
+          current_rankings_enabled: Boolean(session.current_rankings_enabled),
           survey_results_enabled: Boolean(session.survey_results_enabled),
           show_participant_count: showParticipantCount,
           // Participant join page shows currently connected people only (not join history).
@@ -315,6 +323,9 @@ async function lookupByCode(req, res) {
           participant_navigation_enabled: session.participant_navigation_enabled !== false,
           quiz_total_time_minutes: session.quiz_total_time_minutes ?? null,
           random_question_order_enabled: isSessionRandomQuestionOrderEnabled(session),
+          builder_mode: session.builder_mode || "normal",
+          advanced_active_slot: session.advanced_active_slot ?? null,
+          questions_per_participant: session.questions_per_participant ?? null,
           allow_late_join: Boolean(session.allow_late_join),
           last_activity_at: session.last_activity_at || null,
           started_at: session.started_at || null,
@@ -604,6 +615,142 @@ async function activateAllQuestions(req, res) {
   }
 }
 
+async function activateAdvancedAssignmentSlotHandler(req, res) {
+  try {
+    const sessionId = Number(req.params.sessionId);
+    const rawSlot = req.body?.slot;
+    const shouldDeactivate =
+      req.body?.deactivate === true || rawSlot === null || Number(rawSlot) === 0;
+
+    if (shouldDeactivate) {
+      const result = await deactivateAdvancedAssignmentSlot({
+        sessionId,
+        user: req.user
+      });
+
+      const session = await Session.findByPk(sessionId, {
+        attributes: ["session_code", "status", "advanced_active_slot"]
+      });
+
+      if (session?.session_code) {
+        for (const questionId of result.deactivatedQuestionIds || []) {
+          notifyQuestionChange(session.session_code, {
+            question_id: questionId,
+            is_live: false,
+            live_activated_at: null,
+            submissions_closed: false,
+            open_for_reattempt: false
+          });
+        }
+        notifySessionUpdate(session.session_code, session.status, {
+          advanced_active_slot: null
+        });
+      }
+
+      return successResponse(
+        res,
+        {
+          advanced_active_slot: null,
+          deactivated_count: (result.deactivatedQuestionIds || []).length
+        },
+        "Question deactivated for participants",
+        200
+      );
+    }
+
+    const slot = Number(rawSlot);
+    if (!Number.isInteger(slot) || slot < 1) {
+      return errorResponse(res, "Validation failed", 400, ["slot must be a positive integer"]);
+    }
+
+    const result = await activateAdvancedAssignmentSlot({
+      sessionId,
+      user: req.user,
+      slot
+    });
+
+    const session = await Session.findByPk(sessionId, {
+      attributes: ["session_code", "status", "advanced_active_slot"]
+    });
+
+    if (session?.session_code) {
+      for (const questionId of result.deactivatedQuestionIds || []) {
+        notifyQuestionChange(session.session_code, {
+          question_id: questionId,
+          is_live: false,
+          live_activated_at: null,
+          submissions_closed: false,
+          open_for_reattempt: false
+        });
+      }
+      for (const question of result.activatedQuestions || []) {
+        notifyQuestionChange(
+          session.session_code,
+          buildActivatedQuestionChangePayload(question)
+        );
+      }
+      notifySessionUpdate(session.session_code, session.status, {
+        advanced_active_slot: result.advanced_active_slot
+      });
+    }
+
+    return successResponse(
+      res,
+      {
+        slot: result.slot,
+        advanced_active_slot: result.advanced_active_slot,
+        activated_count: (result.activatedQuestionIds || []).length,
+        deactivated_count: (result.deactivatedQuestionIds || []).length
+      },
+      `Question ${result.slot} activated for participants`,
+      200
+    );
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
+async function deactivateAdvancedAssignmentSlotHandler(req, res) {
+  try {
+    const sessionId = Number(req.params.sessionId);
+    const result = await deactivateAdvancedAssignmentSlot({
+      sessionId,
+      user: req.user
+    });
+
+    const session = await Session.findByPk(sessionId, {
+      attributes: ["session_code", "status", "advanced_active_slot"]
+    });
+
+    if (session?.session_code) {
+      for (const questionId of result.deactivatedQuestionIds || []) {
+        notifyQuestionChange(session.session_code, {
+          question_id: questionId,
+          is_live: false,
+          live_activated_at: null,
+          submissions_closed: false,
+          open_for_reattempt: false
+        });
+      }
+      notifySessionUpdate(session.session_code, session.status, {
+        advanced_active_slot: null
+      });
+    }
+
+    return successResponse(
+      res,
+      {
+        advanced_active_slot: null,
+        deactivated_count: (result.deactivatedQuestionIds || []).length
+      },
+      "Question deactivated for participants",
+      200
+    );
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
 async function closeAllQuestions(req, res) {
   try {
     const sessionId = Number(req.params.sessionId);
@@ -711,5 +858,7 @@ module.exports = {
   getPresentSlide,
   presentSlide,
   closeAllQuestions,
-  activateAllQuestions
+  activateAllQuestions,
+  activateAdvancedAssignmentSlot: activateAdvancedAssignmentSlotHandler,
+  deactivateAdvancedAssignmentSlot: deactivateAdvancedAssignmentSlotHandler
 };

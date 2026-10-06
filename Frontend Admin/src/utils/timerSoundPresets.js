@@ -1,10 +1,8 @@
 import { resolveQuestionMediaUrl } from './questionMedia'
 import {
-  playTimerTick,
   playTimerTickPreset,
   playTimerTimesUp,
   playTimerTimesUpPreset,
-  playTimerUrgentBeep,
   playTimerUrgentPreset,
   unlockTimerAudio,
 } from './timerSounds'
@@ -195,9 +193,7 @@ export function playQuestionTimerCue(kind, soundInput = {}) {
 
   // Last 10 seconds ticks / urgent beeps
   if (settings.timerEndingSoundKey === 'custom') {
-    // Custom ending track already started at 10s; keep light beeps as accents.
-    if (kind === 'urgent') playTimerUrgentBeep(secondsLeft)
-    else playTimerTick()
+    // Custom ending track already started at endingStart — do not layer default beeps.
     return
   }
 

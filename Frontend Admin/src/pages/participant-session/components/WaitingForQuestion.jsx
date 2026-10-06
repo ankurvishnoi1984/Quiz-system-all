@@ -8,8 +8,8 @@ export function WaitingForQuestion() {
       </div>
       <h2 className="text-xl font-bold text-navy-900">Waiting for a question</h2>
       <p className="text-sm text-slate-600">
-        The host will open each question one at a time (or several at once). This page updates
-        automatically when a question is activated.
+        The host will open each question one at a time. This page updates automatically when a
+        question is activated.
       </p>
     </section>
   )

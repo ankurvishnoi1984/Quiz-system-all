@@ -41,6 +41,7 @@ async function processDueAutoEndSessions() {
       notifySessionUpdate(ended.session_code, ended.status);
       notifySessionSettings(ended.session_code, {
         leaderboard_enabled: ended.leaderboard_enabled,
+        current_rankings_enabled: ended.current_rankings_enabled,
         survey_results_enabled: ended.survey_results_enabled,
         show_participant_count: ended.show_participant_count,
         show_question_leaderboard: ended.show_question_leaderboard,

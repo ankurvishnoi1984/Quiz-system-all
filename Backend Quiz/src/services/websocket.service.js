@@ -549,6 +549,11 @@ function notifySessionSettings(sessionCode, settings) {
         settings.leaderboard_enabled === 1 ||
         settings.leaderboard_enabled === "1"
     ),
+    current_rankings_enabled: Boolean(
+      settings.current_rankings_enabled === true ||
+        settings.current_rankings_enabled === 1 ||
+        settings.current_rankings_enabled === "1"
+    ),
     survey_results_enabled: Boolean(
       settings.survey_results_enabled === true ||
         settings.survey_results_enabled === 1 ||

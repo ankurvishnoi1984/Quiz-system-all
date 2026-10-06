@@ -2,6 +2,10 @@ import { useMemo, useState } from 'react'
 import { ChevronDown, Layers, Search, Shuffle, Users } from 'lucide-react'
 import { PresentSlideHeader } from './PresentShell'
 import { PoolEligibleBadge } from '../../components/live/PoolEligibleBadge'
+import {
+  AdvancedSlotActivationPanel,
+  buildAdvancedSlotStats,
+} from '../../components/live/AdvancedSlotActivationPanel'
 import { countResponseSubmissions, filterResponsesForQuestion } from '../../utils/livePresentation'
 import { getPresentModeSettings } from '../../utils/presentModeSettings'
 import { partitionQuestionsByPoolEligibility } from '../../utils/poolEligibleUi'
@@ -9,18 +13,17 @@ import { sessionUsesMarkedEligiblePool } from '../../utils/sessionFlags'
 
 const MODE_COPY = {
   advanced: {
-    title: 'Advanced quiz — random subset per participant',
+    title: 'Advanced quiz — host-paced questions',
     body: (session, poolSize, eligibleCount = null) => {
       const k = Number(session?.questions_per_participant)
       const kLabel = Number.isFinite(k) && k > 0 ? k : 'K'
-      if (
+      const poolNote =
         eligibleCount != null &&
         Number.isFinite(eligibleCount) &&
         eligibleCount !== poolSize
-      ) {
-        return `Each participant gets ${kLabel} random question${kLabel === 1 ? '' : 's'} from the ${eligibleCount} marked eligible (of ${poolSize} total). They are not on the same question at the same time — use this overview to monitor the pool.`
-      }
-      return `Each participant gets ${kLabel} random question${kLabel === 1 ? '' : 's'} from this pool of ${poolSize}. They are not on the same question at the same time — use this overview to monitor the full pool.`
+          ? `${eligibleCount} eligible in pool (${poolSize} total). `
+          : `Pool of ${poolSize}. `
+      return `${poolNote}Each participant has ${kLabel} random question${kLabel === 1 ? '' : 's'}. Activate Question 1, then 2, … — participants only see their own assignment for that step (you do not see question text).`
     },
   },
   randomOrder: {
@@ -51,12 +54,17 @@ export function DistributedQuizSlide({
   liveParticipantCount,
   isSessionLive,
   readOnly,
+  activeAssignmentSlot = 0,
+  onActivateAssignmentSlot,
+  onDeactivateAssignmentSlot,
+  slotActivationPending = false,
   onInspectQuestion,
   onParticipantsClick,
   onOverallRankingsClick,
   overallRankingsActive,
 }) {
-  const [tab, setTab] = useState('pool')
+  const hostAdvancedSlotMode = distributedMode === 'advanced' && !readOnly
+  const [tab, setTab] = useState(hostAdvancedSlotMode ? 'activate' : 'pool')
   const [assignmentSearch, setAssignmentSearch] = useState('')
   const [expandedParticipantIds, setExpandedParticipantIds] = useState(() => new Set())
   const markedEligiblePoolEnabled =
@@ -165,6 +173,14 @@ export function DistributedQuizSlide({
   const collapseAll = () => setExpandedParticipantIds(new Set())
   const presentSettings = getPresentModeSettings(session)
 
+  const slotStats = useMemo(
+    () =>
+      distributedMode === 'advanced' && kLabel
+        ? buildAdvancedSlotStats({ kLabel, assignments, responses })
+        : [],
+    [distributedMode, kLabel, assignments, responses],
+  )
+
   return (
     <div className="quiz-slide-in flex min-h-0 flex-1 flex-col">
       <PresentSlideHeader
@@ -229,7 +245,32 @@ export function DistributedQuizSlide({
           </div>
         </div>
 
-        {showAssignmentsTab ? (
+        {showAssignmentsTab && hostAdvancedSlotMode ? (
+          <div className="flex shrink-0 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
+            <button
+              type="button"
+              onClick={() => setTab('activate')}
+              className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                tab === 'activate'
+                  ? 'bg-white text-navy-900 shadow-sm'
+                  : 'text-slate-600 hover:text-navy-800'
+              }`}
+            >
+              Activate
+            </button>
+            <button
+              type="button"
+              onClick={() => setTab('progress')}
+              className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                tab === 'progress'
+                  ? 'bg-white text-navy-900 shadow-sm'
+                  : 'text-slate-600 hover:text-navy-800'
+              }`}
+            >
+              Participants
+            </button>
+          </div>
+        ) : showAssignmentsTab ? (
           <div className="flex shrink-0 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
             <button
               type="button"
@@ -256,7 +297,44 @@ export function DistributedQuizSlide({
           </div>
         ) : null}
 
-        {tab === 'pool' || !showAssignmentsTab ? (
+        {hostAdvancedSlotMode && tab === 'activate' ? (
+          <AdvancedSlotActivationPanel
+            slotStats={slotStats}
+            activeAssignmentSlot={activeAssignmentSlot}
+            isSessionLive={isSessionLive}
+            readOnly={readOnly}
+            onActivateAssignmentSlot={onActivateAssignmentSlot}
+            onDeactivateAssignmentSlot={onDeactivateAssignmentSlot}
+            slotActivationPending={slotActivationPending}
+            assignmentsLoading={assignmentsLoading}
+          />
+        ) : null}
+
+        {hostAdvancedSlotMode && tab === 'progress' ? (
+          <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-blue-200/70 bg-white/95">
+            <p className="shrink-0 border-b border-slate-100 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Participants — slot progress (no question text)
+            </p>
+            <div className="min-h-0 flex-1 overflow-y-auto p-2">
+              {(assignments || []).map((row) => (
+                <div
+                  key={row.participant_id}
+                  className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 text-sm"
+                >
+                  <span className="font-semibold text-navy-900">{row.display_name}</span>
+                  <span className="text-xs text-slate-500">
+                    {(row.questions || [])
+                      .sort((a, b) => Number(a.display_order) - Number(b.display_order))
+                      .map((q) => `Q${q.display_order}`)
+                      .join(' · ') || '—'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {!hostAdvancedSlotMode && (tab === 'pool' || !showAssignmentsTab) ? (
           <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-blue-200/70 bg-white/95">
             <p className="shrink-0 border-b border-slate-100 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
               {markedEligiblePoolEnabled
@@ -335,7 +413,9 @@ export function DistributedQuizSlide({
               )}
             </div>
           </div>
-        ) : (
+        ) : null}
+
+        {!hostAdvancedSlotMode && tab === 'assignments' ? (
           <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-blue-200/70 bg-white/95">
             <div className="shrink-0 space-y-2 border-b border-slate-100 px-4 py-2.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -435,7 +515,7 @@ export function DistributedQuizSlide({
               </ul>
             )}
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   )

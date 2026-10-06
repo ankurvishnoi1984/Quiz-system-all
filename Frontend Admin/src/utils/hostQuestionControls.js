@@ -19,9 +19,14 @@ export function canHostCloseAllQuestions(questions, { canEditLive, singleActiveQ
   return live.some((q) => !q.submissionsClosed)
 }
 
+/** Advanced Present: host activates participant slots 1..K (not full pool at once). */
+export function sessionUsesAdvancedSlotActivation(session) {
+  return isAdvancedBuilderSession(session)
+}
+
 /** Per-question Activate is hidden when sets, random order, or Advanced pool require all-or-nothing. */
 export function sessionRequiresActivateAllQuestions(session, mappedQuestions, sessionUsesQuestionSets) {
-  if (isAdvancedBuilderSession(session)) return true
+  if (sessionUsesAdvancedSlotActivation(session)) return true
   if (typeof sessionUsesQuestionSets === 'function') {
     return sessionUsesQuestionSets(mappedQuestions) || isSessionRandomQuestionOrderEnabled(session)
   }

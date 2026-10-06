@@ -211,6 +211,7 @@ async function createSession({ deptId, input, user }) {
      show_results_to_participants: input.show_results_to_participants ?? true,
      allow_late_join: false,
      leaderboard_enabled: input.leaderboard_enabled ?? false,
+     current_rankings_enabled: false,
      survey_results_enabled: input.survey_results_enabled ?? false,
      show_participant_count: input.show_participant_count ?? false,
      show_question_leaderboard: input.show_question_leaderboard ?? false,
@@ -333,6 +334,7 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
         show_results_to_participants: source.show_results_to_participants ?? true,
         allow_late_join: source.allow_late_join ?? false,
         leaderboard_enabled: source.leaderboard_enabled ?? false,
+        current_rankings_enabled: false,
         survey_results_enabled: source.survey_results_enabled ?? false,
         show_participant_count: source.show_participant_count ?? false,
         show_question_leaderboard: source.show_question_leaderboard ?? false,
@@ -482,6 +484,7 @@ async function updateSession({ sessionId, input, user }) {
 
   const liveSettingsOnly = [
     "leaderboard_enabled",
+    "current_rankings_enabled",
     "survey_results_enabled",
     "show_participant_count",
     "title",
@@ -569,10 +572,28 @@ async function updateSession({ sessionId, input, user }) {
       input.show_results_to_participants !== undefined
         ? Boolean(input.show_results_to_participants)
         : session.show_results_to_participants,
-    leaderboard_enabled:
-      input.leaderboard_enabled !== undefined
-        ? Boolean(input.leaderboard_enabled)
-        : session.leaderboard_enabled,
+    ...(() => {
+      let nextLeaderboard =
+        input.leaderboard_enabled !== undefined
+          ? Boolean(input.leaderboard_enabled)
+          : Boolean(session.leaderboard_enabled);
+      let nextCurrent =
+        input.current_rankings_enabled !== undefined
+          ? Boolean(input.current_rankings_enabled)
+          : Boolean(session.current_rankings_enabled);
+      // Mutually exclusive participant ranking screens.
+      if (input.current_rankings_enabled === true) {
+        nextCurrent = true;
+        nextLeaderboard = false;
+      } else if (input.leaderboard_enabled === true) {
+        nextLeaderboard = true;
+        nextCurrent = false;
+      }
+      return {
+        leaderboard_enabled: nextLeaderboard,
+        current_rankings_enabled: nextCurrent
+      };
+    })(),
     survey_results_enabled:
       input.survey_results_enabled !== undefined
         ? Boolean(input.survey_results_enabled)
@@ -748,6 +769,7 @@ async function hideQuestionResultsForSession(sessionId) {
 /** Close overall rankings, survey results, and per-question Show results when a session ends. */
 async function clearParticipantFacingDisplaysOnEnd(session) {
   session.leaderboard_enabled = false;
+  session.current_rankings_enabled = false;
   session.survey_results_enabled = false;
   const hiddenQuestionIds = await hideQuestionResultsForSession(session.session_id);
   session.hiddenQuestionResultIds = hiddenQuestionIds;
