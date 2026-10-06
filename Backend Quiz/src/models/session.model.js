@@ -66,6 +66,16 @@ const Session = sequelize.define(
       allowNull: false,
       defaultValue: true
     },
+    join_allowlist_enabled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+    join_allowlist: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: null
+    },
     password_hash: {
       type: DataTypes.TEXT,
       allowNull: true

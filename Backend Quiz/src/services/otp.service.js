@@ -668,6 +668,8 @@ async function getSessionForJoinOtp(code) {
       "session_code",
       "join_type",
       "join_otp_required",
+      "join_allowlist_enabled",
+      "join_allowlist",
       "title",
       "status"
     ]
@@ -693,6 +695,11 @@ async function sendSessionJoinOtp({ code, nickname, email, mobile, channel }) {
     nickname,
     email,
     mobile
+  });
+  const { assertJoinAllowlist } = require("../utils/joinAllowlist");
+  assertJoinAllowlist(session, {
+    email: identity.email,
+    mobile: identity.mobile
   });
   const resolvedChannel = resolveSessionJoinChannel(session.join_type, channel);
   const purpose = PURPOSES.SESSION_JOIN;
@@ -747,6 +754,11 @@ async function verifySessionJoinOtp({ code, nickname, email, mobile, channel, ot
     nickname,
     email,
     mobile
+  });
+  const { assertJoinAllowlist } = require("../utils/joinAllowlist");
+  assertJoinAllowlist(session, {
+    email: identity.email,
+    mobile: identity.mobile
   });
   const resolvedChannel = resolveSessionJoinChannel(session.join_type, channel);
   const purpose = PURPOSES.SESSION_JOIN;

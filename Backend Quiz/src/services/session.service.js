@@ -4,6 +4,10 @@ const {
 } = require("../utils/presentModeSettings");
 const { normalizeTimerSoundFields } = require("../utils/timerSound");
 const {
+  resolveJoinAllowlistFields,
+  assertJoinAllowlist
+} = require("../utils/joinAllowlist");
+const {
   Session,
   Department,
   User,
@@ -200,6 +204,9 @@ async function createSession({ deptId, input, user }) {
        input.join_type ?? "name",
        input.join_otp_required
      ),
+     ...resolveJoinAllowlistFields(input, {
+       joinType: input.join_type ?? "name"
+     }),
      max_participants: input.max_participants || 500,
      show_results_to_participants: input.show_results_to_participants ?? true,
      allow_late_join: false,
@@ -314,6 +321,13 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
         join_otp_required: resolveJoinOtpRequired(
           source.join_type || "name",
           source.join_otp_required
+        ),
+        ...resolveJoinAllowlistFields(
+          {
+            join_allowlist_enabled: source.join_allowlist_enabled,
+            join_allowlist: source.join_allowlist
+          },
+          { joinType: source.join_type || "name" }
         ),
         max_participants: source.max_participants ?? 500,
         show_results_to_participants: source.show_results_to_participants ?? true,
@@ -591,6 +605,21 @@ async function updateSession({ sessionId, input, user }) {
           ? input.join_otp_required
           : session.join_otp_required;
       return resolveJoinOtpRequired(nextJoinType, nextOtpFlag);
+    })(),
+    ...(() => {
+      const nextJoinType =
+        input.join_type !== undefined ? input.join_type : session.join_type;
+      if (
+        input.join_allowlist_enabled === undefined &&
+        input.join_allowlist === undefined &&
+        input.join_type === undefined
+      ) {
+        return {};
+      }
+      return resolveJoinAllowlistFields(input, {
+        joinType: nextJoinType,
+        previous: session
+      });
     })(),
     scheduled_date:
       input.scheduled_date !== undefined ? input.scheduled_date || null : session.scheduled_date,
@@ -915,6 +944,10 @@ async function joinSession({ code, payload }) {
 
   if (isContactJoinType(session.join_type)) {
     identity = assertSessionJoinIdentityFields(session.join_type, joinPayload);
+    assertJoinAllowlist(session, {
+      email: identity.email,
+      mobile: identity.mobile
+    });
     if (session.join_otp_required) {
       assertSessionJoinOtpToken(joinPayload.otp_token, {
         sessionCode: session.session_code,

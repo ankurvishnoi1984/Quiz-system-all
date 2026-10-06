@@ -525,6 +525,19 @@ function DashboardPage() {
           values.joinRequirement === 'name_email_mobile'
             ? Boolean(values.joinOtpRequired)
             : false,
+        join_allowlist_enabled:
+          values.joinRequirement === 'name_email' ||
+          values.joinRequirement === 'name_mobile' ||
+          values.joinRequirement === 'name_email_mobile'
+            ? Boolean(values.joinAllowlistEnabled)
+            : false,
+        join_allowlist:
+          values.joinAllowlistEnabled &&
+          (values.joinRequirement === 'name_email' ||
+            values.joinRequirement === 'name_mobile' ||
+            values.joinRequirement === 'name_email_mobile')
+            ? values.joinAllowlist || null
+            : null,
         show_participant_count: Boolean(values.showParticipantCount),
         auto_end_enabled: Boolean(values.autoEndEnabled),
         auto_end_date: values.autoEndEnabled ? values.autoEndDate || null : null,
@@ -560,6 +573,8 @@ function DashboardPage() {
         joinType === 'name_email_mobile'
           ? editSession.join_otp_required !== false
           : false,
+      joinAllowlistEnabled: Boolean(editSession.join_allowlist_enabled),
+      joinAllowlist: editSession.join_allowlist || null,
       enableNavigation: Boolean(editSession.participant_navigation_enabled),
       randomQuestionOrder: Boolean(editSession.random_question_order_enabled),
       quizTotalTimeEnabled:
@@ -642,6 +657,19 @@ function DashboardPage() {
           values.joinRequirement === 'name_email_mobile'
             ? Boolean(values.joinOtpRequired)
             : false,
+        join_allowlist_enabled:
+          values.joinRequirement === 'name_email' ||
+          values.joinRequirement === 'name_mobile' ||
+          values.joinRequirement === 'name_email_mobile'
+            ? Boolean(values.joinAllowlistEnabled)
+            : false,
+        join_allowlist:
+          values.joinAllowlistEnabled &&
+          (values.joinRequirement === 'name_email' ||
+            values.joinRequirement === 'name_mobile' ||
+            values.joinRequirement === 'name_email_mobile')
+            ? values.joinAllowlist || null
+            : null,
         show_participant_count: Boolean(values.showParticipantCount),
         auto_end_enabled: Boolean(values.autoEndEnabled),
         auto_end_date: values.autoEndEnabled ? values.autoEndDate || null : null,

@@ -1,3 +1,7 @@
+const {
+  validateJoinAllowlistFields
+} = require("../utils/joinAllowlist");
+
 function validateScheduledDate(value) {
   if (value == null || value === "") return null;
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
@@ -203,6 +207,8 @@ function validateCreateSessionPayload(payload) {
   }
 
   coerceOptionalBoolean(payload?.join_otp_required, "join_otp_required", errors);
+  coerceOptionalBoolean(payload?.join_allowlist_enabled, "join_allowlist_enabled", errors);
+  errors.push(...validateJoinAllowlistFields(payload));
 
   if (
     payload?.participant_navigation_enabled !== undefined &&
@@ -266,6 +272,8 @@ function validateUpdateSessionPayload(payload) {
     "random_question_order_enabled",
     "join_type",
     "join_otp_required",
+    "join_allowlist_enabled",
+    "join_allowlist",
     "scheduled_date",
     "scheduled_time",
     "auto_end_enabled",
@@ -311,6 +319,8 @@ function validateUpdateSessionPayload(payload) {
   }
 
   coerceOptionalBoolean(payload?.join_otp_required, "join_otp_required", errors);
+  coerceOptionalBoolean(payload?.join_allowlist_enabled, "join_allowlist_enabled", errors);
+  errors.push(...validateJoinAllowlistFields(payload));
 
   const scheduledDateError = validateScheduledDate(payload?.scheduled_date);
   if (scheduledDateError) errors.push(scheduledDateError);

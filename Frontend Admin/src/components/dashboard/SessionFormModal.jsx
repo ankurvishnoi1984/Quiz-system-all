@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, FileUp, Loader2, X } from 'lucide-react'
+import { ChevronDown, Download, FileUp, Loader2, X } from 'lucide-react'
 import Modal from '../ui/Modal'
 import { uploadQuestionMediaApi } from '../../services/mediaApi'
 import { compressQuestionImage } from '../../utils/compressQuestionImage'
@@ -17,10 +17,21 @@ import {
   normalizePresentModeSettings,
   toPresentModeSettingsApi,
 } from '../../utils/presentModeSettings'
+import {
+  MAX_ALLOWLIST_ENTRIES,
+  allowlistEntryCount,
+  isJoinAllowlistOverLimit,
+  parseJoinAllowlistExcel,
+  parseJoinAllowlistText,
+  summarizeJoinAllowlist,
+} from '../../utils/joinAllowlist'
+import { downloadJoinAllowlistSample } from '../../utils/joinAllowlistSample'
 
 const QUIZ_TOTAL_TIME_MINUTES = [15, 30, 45, 60]
 const LOGO_ACCEPT = QUESTION_MEDIA_SUPPORTED_IMAGE_TYPES.join(',')
 const LOGO_MAX_BYTES = 5 * 1024 * 1024
+const ALLOWLIST_FILE_ACCEPT =
+  '.xlsx,.csv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain'
 
 const CONTACT_JOIN_TYPES = new Set(['name_email', 'name_mobile', 'name_email_mobile'])
 
@@ -60,6 +71,8 @@ const defaultInitial = {
   departmentId: '',
   joinRequirement: 'name',
   joinOtpRequired: true,
+  joinAllowlistEnabled: false,
+  joinAllowlist: null,
   enableNavigation: false,
   randomQuestionOrder: false,
   quizTotalTimeEnabled: false,
@@ -91,8 +104,14 @@ function SessionFormModal({
   isSubmitting = false,
 }) {
   const logoInputRef = useRef(null)
+  const allowlistInputRef = useRef(null)
   const [joinRequirement, setJoinRequirement] = useState(defaultInitial.joinRequirement)
   const [joinOtpRequired, setJoinOtpRequired] = useState(defaultInitial.joinOtpRequired)
+  const [joinAllowlistEnabled, setJoinAllowlistEnabled] = useState(false)
+  const [joinAllowlist, setJoinAllowlist] = useState(null)
+  const [allowlistFileName, setAllowlistFileName] = useState('')
+  const [allowlistError, setAllowlistError] = useState('')
+  const [allowlistSampleDownloading, setAllowlistSampleDownloading] = useState(false)
   const [enableNavigation, setEnableNavigation] = useState(defaultInitial.enableNavigation)
   const [randomQuestionOrder, setRandomQuestionOrder] = useState(defaultInitial.randomQuestionOrder)
   const [quizTotalTimeEnabled, setQuizTotalTimeEnabled] = useState(defaultInitial.quizTotalTimeEnabled)
@@ -129,6 +148,24 @@ function SessionFormModal({
         ? initialValues.joinOtpRequired !== false
         : false,
     )
+    const nextJoinType = initialValues.joinRequirement ?? defaultInitial.joinRequirement
+    const nextAllowlistEnabled =
+      CONTACT_JOIN_TYPES.has(nextJoinType) && Boolean(initialValues.joinAllowlistEnabled)
+    setJoinAllowlistEnabled(nextAllowlistEnabled)
+    setJoinAllowlist(
+      nextAllowlistEnabled && initialValues.joinAllowlist
+        ? {
+            emails: Array.isArray(initialValues.joinAllowlist.emails)
+              ? [...initialValues.joinAllowlist.emails]
+              : [],
+            mobiles: Array.isArray(initialValues.joinAllowlist.mobiles)
+              ? [...initialValues.joinAllowlist.mobiles]
+              : [],
+          }
+        : null,
+    )
+    setAllowlistFileName('')
+    setAllowlistError('')
     setEnableNavigation(Boolean(initialValues.enableNavigation))
     setRandomQuestionOrder(Boolean(initialValues.randomQuestionOrder))
     setQuizTotalTimeEnabled(Boolean(initialValues.quizTotalTimeEnabled))
@@ -210,6 +247,82 @@ function SessionFormModal({
     }
   }
 
+  const clearJoinAllowlist = () => {
+    setJoinAllowlist(null)
+    setAllowlistFileName('')
+    setAllowlistError('')
+    if (allowlistInputRef.current) allowlistInputRef.current.value = ''
+  }
+
+  const applyParsedAllowlist = (parsed, fileName = '') => {
+    const count = allowlistEntryCount(parsed)
+    if (count === 0) {
+      setAllowlistError('No valid emails or mobile numbers found in that file.')
+      setJoinAllowlist(null)
+      setAllowlistFileName('')
+      return
+    }
+    if (isJoinAllowlistOverLimit(parsed)) {
+      setAllowlistError(`Participant list supports at most ${MAX_ALLOWLIST_ENTRIES} contacts.`)
+      return
+    }
+    setJoinAllowlist(parsed)
+    setAllowlistFileName(fileName)
+    setAllowlistError('')
+    setJoinAllowlistEnabled(true)
+  }
+
+  const handleAllowlistFile = async (file) => {
+    if (!file) return
+    const name = String(file.name || '').toLowerCase()
+    const isExcel = name.endsWith('.xlsx')
+    const isText = name.endsWith('.csv') || name.endsWith('.txt') || file.type?.startsWith('text/')
+
+    if (!isExcel && !isText) {
+      setAllowlistError('Please upload an Excel (.xlsx), CSV, or TXT file.')
+      if (allowlistInputRef.current) allowlistInputRef.current.value = ''
+      return
+    }
+
+    try {
+      if (isExcel) {
+        const parsed = await parseJoinAllowlistExcel(file)
+        applyParsedAllowlist(parsed, file.name || 'participants.xlsx')
+      } else {
+        const text = await file.text()
+        applyParsedAllowlist(parseJoinAllowlistText(text), file.name || 'participants.csv')
+      }
+    } catch (err) {
+      setAllowlistError(err.message || 'Could not read that file.')
+    } finally {
+      if (allowlistInputRef.current) allowlistInputRef.current.value = ''
+    }
+  }
+
+  const handleDownloadAllowlistSample = async () => {
+    if (allowlistSampleDownloading) return
+    setAllowlistSampleDownloading(true)
+    setAllowlistError('')
+    try {
+      await downloadJoinAllowlistSample(joinRequirement)
+    } catch (err) {
+      setAllowlistError(err.message || 'Could not download the sample file.')
+    } finally {
+      setAllowlistSampleDownloading(false)
+    }
+  }
+
+  const handleJoinRequirementChange = (next) => {
+    setJoinRequirement(next)
+    if (CONTACT_JOIN_TYPES.has(next)) {
+      setJoinOtpRequired(true)
+    } else {
+      setJoinOtpRequired(false)
+      setJoinAllowlistEnabled(false)
+      clearJoinAllowlist()
+    }
+  }
+
   const handleSubmit = (event) => {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
@@ -255,6 +368,13 @@ function SessionFormModal({
       }
     }
 
+    const contactJoin = CONTACT_JOIN_TYPES.has(joinRequirement)
+    const allowlistOn = contactJoin && joinAllowlistEnabled
+    if (allowlistOn && allowlistEntryCount(joinAllowlist) === 0) {
+      window.alert('Upload a participant list with at least one email or mobile number, or turn off restrict join.')
+      return
+    }
+
     onSubmit({
       title: String(form.get('title') ?? '').trim(),
       description: String(form.get('description') ?? '').trim(),
@@ -264,7 +384,9 @@ function SessionFormModal({
         ? String(defaultDepartmentId || '')
         : String(form.get('department') || defaultDepartmentId || ''),
       joinRequirement,
-      joinOtpRequired: CONTACT_JOIN_TYPES.has(joinRequirement) ? Boolean(joinOtpRequired) : false,
+      joinOtpRequired: contactJoin ? Boolean(joinOtpRequired) : false,
+      joinAllowlistEnabled: allowlistOn,
+      joinAllowlist: allowlistOn ? joinAllowlist : null,
       enableNavigation: builderMode === 'advanced' ? true : enableNavigation,
       randomQuestionOrder: enableNavigation && randomQuestionOrder,
       quizTotalTimeEnabled: enableNavigation && quizTotalTimeEnabled,
@@ -506,15 +628,7 @@ function SessionFormModal({
                 <label className="text-sm font-semibold text-slate-700">Join requirements</label>
                 <select
                   value={joinRequirement}
-                  onChange={(e) => {
-                    const next = e.target.value
-                    setJoinRequirement(next)
-                    if (CONTACT_JOIN_TYPES.has(next)) {
-                      setJoinOtpRequired(true)
-                    } else {
-                      setJoinOtpRequired(false)
-                    }
-                  }}
+                  onChange={(e) => handleJoinRequirementChange(e.target.value)}
                   className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
                 >
                   <option value="anonymous">Anonymous (no name/email)</option>
@@ -540,6 +654,101 @@ function SessionFormModal({
                       className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
                     />
                   </label>
+                </div>
+              ) : null}
+              {CONTACT_JOIN_TYPES.has(joinRequirement) ? (
+                <div className="md:col-span-2 space-y-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
+                  <label className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-700">
+                        Restrict join to uploaded list
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Only people whose{' '}
+                        {joinRequirement === 'name_mobile'
+                          ? 'mobile number'
+                          : joinRequirement === 'name_email'
+                            ? 'email'
+                            : 'email or mobile'}{' '}
+                        is on the list can join this session.
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={joinAllowlistEnabled}
+                      onChange={(event) => {
+                        const next = event.target.checked
+                        setJoinAllowlistEnabled(next)
+                        if (!next) {
+                          clearJoinAllowlist()
+                        }
+                      }}
+                      className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
+                    />
+                  </label>
+                  {joinAllowlistEnabled ? (
+                    <div className="space-y-2 border-t border-slate-100 pt-3">
+                      <input
+                        ref={allowlistInputRef}
+                        type="file"
+                        accept={ALLOWLIST_FILE_ACCEPT}
+                        className="hidden"
+                        onChange={(event) => handleAllowlistFile(event.target.files?.[0])}
+                      />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => allowlistInputRef.current?.click()}
+                          className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-blue-200 bg-slate-50 px-3 text-sm font-semibold text-navy-800 transition hover:bg-blue-50"
+                        >
+                          <FileUp className="size-4" />
+                          {allowlistEntryCount(joinAllowlist) > 0
+                            ? 'Replace list'
+                            : 'Upload Excel / CSV'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={allowlistSampleDownloading}
+                          onClick={() => void handleDownloadAllowlistSample()}
+                          className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          {allowlistSampleDownloading ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <Download className="size-4" />
+                          )}
+                          Download sample
+                        </button>
+                        {allowlistEntryCount(joinAllowlist) > 0 ? (
+                          <button
+                            type="button"
+                            onClick={clearJoinAllowlist}
+                            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 text-sm font-semibold text-red-700 transition hover:bg-red-50"
+                          >
+                            <X className="size-4" />
+                            Clear list
+                          </button>
+                        ) : null}
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        Download the sample Excel for column format, then replace rows with your
+                        participants (.xlsx, .csv, or .txt also work).
+                      </p>
+                      {allowlistEntryCount(joinAllowlist) > 0 ? (
+                        <p className="text-xs font-semibold text-emerald-700">
+                          {summarizeJoinAllowlist(joinAllowlist)}
+                          {allowlistFileName ? ` from ${allowlistFileName}` : ''} loaded.
+                        </p>
+                      ) : (
+                        <p className="text-xs font-semibold text-amber-800">
+                          Upload a participant list to enable restricted join.
+                        </p>
+                      )}
+                      {allowlistError ? (
+                        <p className="text-xs font-semibold text-red-700">{allowlistError}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               <div className="md:col-span-2">
