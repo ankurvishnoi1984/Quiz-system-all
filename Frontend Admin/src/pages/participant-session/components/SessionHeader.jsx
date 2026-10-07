@@ -10,7 +10,7 @@ export function SessionHeader({ session, joinedUser }) {
     showParticipantCount && Number.isFinite(participantCount) && participantCount >= 0
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200/70 bg-white p-4 shadow-sm">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200/70 bg-white/92 p-4 shadow-sm shadow-navy-900/5 backdrop-blur-sm">
       <div className="min-w-0 flex-1">
         <BrandLogoPair
           variant="header"

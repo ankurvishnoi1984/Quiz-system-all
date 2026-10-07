@@ -2577,7 +2577,7 @@ function ParticipantSessionPage({ embed = false }) {
 
   return (
     <main
-      className={`bg-linear-to-br from-sky-50 via-white to-indigo-50 ${
+      className={`participant-session-bg ${
         embedMode
           ? 'min-h-dvh overflow-y-auto p-3 sm:p-4'
           : 'min-h-dvh p-4 md:min-h-screen md:p-6'
