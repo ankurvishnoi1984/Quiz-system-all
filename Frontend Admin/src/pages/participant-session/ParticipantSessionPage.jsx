@@ -2586,12 +2586,12 @@ function ParticipantSessionPage({ embed = false }) {
     <main
       className={`participant-session-bg ${
         embedMode
-          ? 'min-h-dvh overflow-y-auto p-3 sm:p-4'
-          : 'min-h-dvh p-4 md:min-h-screen md:p-6'
+          ? 'h-dvh min-h-dvh overflow-x-hidden overflow-y-auto overscroll-y-contain p-3 pb-8 sm:p-4'
+          : 'h-dvh min-h-dvh overflow-x-hidden overflow-y-auto overscroll-y-contain p-4 pb-28 md:h-auto md:min-h-screen md:overflow-visible md:pb-6 md:p-6'
       }`}
       data-participant-theme={participantTheme}
     >
-      <div className="mx-auto w-full max-w-6xl space-y-4">
+      <div className="mx-auto w-full max-w-6xl space-y-4 pb-4">
         <SessionHeader session={session} joinedUser={joinedUser} />
 
         {isSessionEnded && endingScreenOnlyMode ? <SessionEndedBanner /> : null}

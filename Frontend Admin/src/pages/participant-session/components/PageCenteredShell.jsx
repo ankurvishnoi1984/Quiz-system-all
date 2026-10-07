@@ -17,8 +17,8 @@ export function PageCenteredShell({
     <main
       className={`participant-session-bg grid place-items-center ${
         inIframe
-          ? 'min-h-dvh overflow-y-auto p-3 sm:p-4'
-          : 'min-h-dvh p-6 md:min-h-screen'
+          ? 'h-dvh min-h-dvh overflow-x-hidden overflow-y-auto overscroll-y-contain p-3 pb-8 sm:p-4'
+          : 'h-dvh min-h-dvh overflow-x-hidden overflow-y-auto overscroll-y-contain p-6 pb-24 md:h-auto md:min-h-screen md:overflow-visible md:pb-6'
       }`}
       data-participant-theme={normalizeParticipantTheme(theme)}
     >

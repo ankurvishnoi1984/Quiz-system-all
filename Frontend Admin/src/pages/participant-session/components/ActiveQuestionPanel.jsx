@@ -266,7 +266,9 @@ export function ActiveQuestionPanel({
       )}
 
       <div
-        className={`flex items-center gap-2 ${navigationEnabled ? 'justify-between' : 'justify-center'}`}
+        className={`sticky bottom-0 z-20 -mx-5 mt-2 flex items-center gap-2 border-t border-blue-100/80 bg-white/95 px-5 py-3 backdrop-blur-md md:static md:mx-0 md:mt-0 md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none ${
+          navigationEnabled ? 'justify-between' : 'justify-center'
+        }`}
       >
         {navigationEnabled && canShowPreviousQuestion ? (
           <button

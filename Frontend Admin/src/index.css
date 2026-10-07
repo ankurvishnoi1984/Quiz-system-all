@@ -51,7 +51,10 @@
     --pt-btn-secondary-hover: #eef5fa;
     position: relative;
     isolation: isolate;
-    overflow-x: clip;
+    /* Keep overflow-x clipping off the scroll root — clip + default overflow-y
+       creates a non-scrolling container on mobile and hides Submit below the fold. */
+    overflow-x: hidden;
+    overflow-y: visible;
     background-color: #d7e4ee;
     background-image:
       radial-gradient(ellipse 100% 70% at 0% 0%, rgba(27, 75, 107, 0.22), transparent 55%),
