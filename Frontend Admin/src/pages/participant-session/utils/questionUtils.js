@@ -73,6 +73,8 @@ export function mapParticipantQuestion(q) {
     timerSoundUrl: q.timer_sound_url || null,
     timerEndingSoundKey: q.timer_ending_sound_key || q.timer_sound_key || 'classic',
     timerEndingSoundUrl: q.timer_ending_sound_url || null,
+    timerSoundStartSeconds:
+      q.timer_sound_start_seconds != null ? Number(q.timer_sound_start_seconds) : null,
     liveActivatedAt: q.live_activated_at || null,
     openForReattempt:
       q.open_for_reattempt === true ||

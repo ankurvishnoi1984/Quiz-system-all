@@ -4,6 +4,7 @@ import { uploadQuestionMediaApi } from '../../services/mediaApi'
 import { normalizeQuestionMediaUrlForStorage, resolveQuestionMediaUrl } from '../../utils/questionMedia'
 import {
   DEFAULT_TIMER_SOUND_KEY,
+  DEFAULT_TIMER_SOUND_START_SECONDS,
   TIMER_SOUND_PRESETS,
   normalizeTimerSoundSettings,
   previewTimerSound,
@@ -13,18 +14,21 @@ const AUDIO_ACCEPT =
   'audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/ogg,audio/webm,audio/mp4,audio/aac,.mp3,.wav,.ogg,.m4a,.aac'
 const AUDIO_MAX_BYTES = 5 * 1024 * 1024
 
-const TABS = [
-  {
-    id: 'ending',
-    label: 'Last 10 seconds',
-    hint: 'Played during the final countdown. Built-in presets apply to both tabs; custom upload is for this tab only.',
-  },
-  {
-    id: 'timesUp',
-    label: "Time's up",
-    hint: 'Played when the clock hits zero. Built-in presets apply to both tabs; custom upload is for this tab only.',
-  },
-]
+function buildTabs(startSeconds) {
+  const n = Number(startSeconds) || DEFAULT_TIMER_SOUND_START_SECONDS
+  return [
+    {
+      id: 'ending',
+      label: `Last ${n} second${n === 1 ? '' : 's'}`,
+      hint: `Played during the final ${n} second${n === 1 ? '' : 's'}. Built-in presets apply to both tabs; custom upload is for this tab only.`,
+    },
+    {
+      id: 'timesUp',
+      label: "Time's up",
+      hint: "Played when the clock hits zero. Built-in presets apply to both tabs; custom upload is for this tab only.",
+    },
+  ]
+}
 
 function SoundOptionPanel({
   tabId,
@@ -117,7 +121,7 @@ function SoundOptionPanel({
               <span className="block text-sm font-semibold text-navy-900">Custom upload</span>
               <span className="mt-0.5 block text-[11px] leading-snug text-slate-500">
                 {tabId === 'ending'
-                  ? 'Starts in the last 10 seconds of the countdown.'
+                  ? 'Plays during the configurable ending countdown window.'
                   : 'Plays once when time runs out.'}
               </span>
               {customPreviewSrc ? (
@@ -180,6 +184,8 @@ export function QuestionTimerSoundSettings({
   timerSoundUrl = null,
   timerEndingSoundKey = DEFAULT_TIMER_SOUND_KEY,
   timerEndingSoundUrl = null,
+  timerSoundStartSeconds = null,
+  timeLimitSeconds = 0,
   onChange,
   disabled = false,
   deptId,
@@ -195,16 +201,24 @@ export function QuestionTimerSoundSettings({
     timerSoundUrl,
     timerEndingSoundKey,
     timerEndingSoundUrl,
+    timerSoundStartSeconds,
+    timeLimitSeconds,
   })
 
   const emit = (patch) => {
     onChange?.(
       normalizeTimerSoundSettings({
         ...settings,
+        timeLimitSeconds,
         ...patch,
       }),
     )
   }
+
+  const startSeconds =
+    settings.timerSoundStartSeconds ??
+    Math.min(DEFAULT_TIMER_SOUND_START_SECONDS, Math.max(1, Number(timeLimitSeconds) || 1))
+  const tabs = buildTabs(startSeconds)
 
   const handleSelectPreset = (slot, key) => {
     if (disabled) return
@@ -283,7 +297,11 @@ export function QuestionTimerSoundSettings({
     }
   }
 
-  const activeTab = TABS.find((item) => item.id === tab) || TABS[0]
+  const activeTab = tabs.find((item) => item.id === tab) || tabs[0]
+  const limitSeconds = Math.max(1, Math.floor(Number(timeLimitSeconds) || 1))
+  const remainingSeconds = Math.min(limitSeconds, Math.max(1, startSeconds))
+  const maxAfterSeconds = Math.max(0, limitSeconds - 1)
+  const afterSeconds = Math.min(maxAfterSeconds, Math.max(0, limitSeconds - remainingSeconds))
 
   return (
     <div className="mt-4 border-t border-blue-100 pt-4">
@@ -292,14 +310,42 @@ export function QuestionTimerSoundSettings({
         <div>
           <p className="text-sm font-semibold text-navy-900">Timer audio</p>
           <p className="text-xs text-slate-600">
-            Choose Digital (or another style) once — it applies to both last-10-seconds and time&apos;s-up.
-            Save the session so participants receive it.
+            Choose a style once — it applies to all timed questions, and to both the ending
+            countdown and time&apos;s-up. Save the session so participants receive it.
           </p>
         </div>
       </div>
 
+      <label className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-emerald-200/70 bg-emerald-50/40 px-3 py-2.5">
+        <span className="text-sm font-semibold text-navy-900">Start sound after</span>
+        <input
+          type="number"
+          min={0}
+          max={maxAfterSeconds}
+          disabled={disabled}
+          value={afterSeconds}
+          onChange={(e) => {
+            const nextAfter = Number(e.target.value)
+            if (!Number.isFinite(nextAfter)) return
+            const clampedAfter = Math.min(maxAfterSeconds, Math.max(0, Math.round(nextAfter)))
+            emit({
+              timerSoundStartSeconds: Math.min(
+                limitSeconds,
+                Math.max(1, limitSeconds - clampedAfter),
+              ),
+            })
+          }}
+          className="h-9 w-20 rounded-lg border border-emerald-200/80 bg-white px-2 text-sm font-semibold text-navy-900 outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/15 disabled:cursor-not-allowed disabled:bg-slate-50"
+          aria-label="Seconds after question start when countdown sound begins"
+        />
+        <span className="text-sm text-slate-600">
+          seconds
+          <span className="ml-1 text-xs text-slate-500">(when {remainingSeconds}s left)</span>
+        </span>
+      </label>
+
       <div className="mt-3 flex gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1">
-        {TABS.map((item) => (
+        {tabs.map((item) => (
           <button
             key={item.id}
             type="button"

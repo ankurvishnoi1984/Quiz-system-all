@@ -173,10 +173,12 @@ async function createQuestion({ sessionId, input, user }) {
     points_value: isNonScored ? 0 : input.points_value || 10,
     time_limit_seconds: isSurvey ? null : input.time_limit_seconds || null,
     ...normalizeTimerSoundFields({
+      time_limit_seconds: isSurvey ? null : input.time_limit_seconds || null,
       timer_sound_key: isSurvey ? "classic" : input.timer_sound_key,
       timer_sound_url: isSurvey ? null : input.timer_sound_url,
       timer_ending_sound_key: isSurvey ? "classic" : input.timer_ending_sound_key,
-      timer_ending_sound_url: isSurvey ? null : input.timer_ending_sound_url
+      timer_ending_sound_url: isSurvey ? null : input.timer_ending_sound_url,
+      timer_sound_start_seconds: isSurvey ? null : input.timer_sound_start_seconds
     }),
     allow_multiple_select: isEmojiReaction ? false : input.allow_multiple_select ?? false,
     survey_subtype: isSurvey ? input.survey_subtype || null : null,
@@ -356,6 +358,10 @@ async function importQuestions({ sessionId, questions, mode = "append", user }) 
               ? null
               : input.time_limit_seconds || null,
           ...normalizeTimerSoundFields({
+            time_limit_seconds:
+              isSurvey || isSessionQuizTotalTimeEnabled(validation.session)
+                ? null
+                : input.time_limit_seconds || null,
             timer_sound_key:
               isSurvey || isSessionQuizTotalTimeEnabled(validation.session)
                 ? "classic"
@@ -371,7 +377,11 @@ async function importQuestions({ sessionId, questions, mode = "append", user }) 
             timer_ending_sound_url:
               isSurvey || isSessionQuizTotalTimeEnabled(validation.session)
                 ? null
-                : input.timer_ending_sound_url
+                : input.timer_ending_sound_url,
+            timer_sound_start_seconds:
+              isSurvey || isSessionQuizTotalTimeEnabled(validation.session)
+                ? null
+                : input.timer_sound_start_seconds
           }),
           allow_multiple_select: isEmojiReaction
             ? false
@@ -470,8 +480,15 @@ async function updateQuestion({ questionId, input, user }) {
       ...(input.timer_sound_key !== undefined ||
       input.timer_sound_url !== undefined ||
       input.timer_ending_sound_key !== undefined ||
-      input.timer_ending_sound_url !== undefined
+      input.timer_ending_sound_url !== undefined ||
+      input.timer_sound_start_seconds !== undefined ||
+      input.time_limit_seconds !== undefined
         ? normalizeTimerSoundFields({
+            time_limit_seconds: isSurvey
+              ? null
+              : input.time_limit_seconds !== undefined
+                ? input.time_limit_seconds
+                : question.time_limit_seconds,
             timer_sound_key:
               input.timer_sound_key !== undefined
                 ? input.timer_sound_key
@@ -487,7 +504,11 @@ async function updateQuestion({ questionId, input, user }) {
             timer_ending_sound_url:
               input.timer_ending_sound_url !== undefined
                 ? input.timer_ending_sound_url
-                : question.timer_ending_sound_url
+                : question.timer_ending_sound_url,
+            timer_sound_start_seconds:
+              input.timer_sound_start_seconds !== undefined
+                ? input.timer_sound_start_seconds
+                : question.timer_sound_start_seconds
           })
         : {}),
       survey_subtype: isSurvey
@@ -770,7 +791,11 @@ function formatQuestionForParticipant(question, { participantSubmitted = false }
     timer_sound_key: plain.timer_sound_key || "classic",
     timer_sound_url: plain.timer_sound_url || null,
     timer_ending_sound_key: plain.timer_ending_sound_key || plain.timer_sound_key || "classic",
-    timer_ending_sound_url: plain.timer_ending_sound_url || null
+    timer_ending_sound_url: plain.timer_ending_sound_url || null,
+    timer_sound_start_seconds:
+      plain.timer_sound_start_seconds != null
+        ? Number(plain.timer_sound_start_seconds)
+        : null
   };
 }
 

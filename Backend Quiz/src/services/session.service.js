@@ -413,16 +413,20 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
           ...normalizeTimerSoundFields(
             isSurvey
               ? {
+                  time_limit_seconds: null,
                   timer_sound_key: "classic",
                   timer_sound_url: null,
                   timer_ending_sound_key: "classic",
-                  timer_ending_sound_url: null
+                  timer_ending_sound_url: null,
+                  timer_sound_start_seconds: null
                 }
               : {
+                  time_limit_seconds: q.time_limit_seconds,
                   timer_sound_key: q.timer_sound_key,
                   timer_sound_url: q.timer_sound_url,
                   timer_ending_sound_key: q.timer_ending_sound_key,
-                  timer_ending_sound_url: q.timer_ending_sound_url
+                  timer_ending_sound_url: q.timer_ending_sound_url,
+                  timer_sound_start_seconds: q.timer_sound_start_seconds
                 }
           ),
           allow_multiple_select: q.allow_multiple_select ?? false,

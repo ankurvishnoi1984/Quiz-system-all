@@ -8,7 +8,29 @@ import {
 } from './timerSounds'
 
 export const DEFAULT_TIMER_SOUND_KEY = 'classic'
+/** Default seconds remaining when ending-window countdown audio starts. */
 export const TIMER_ENDING_WINDOW_SECONDS = 10
+export const DEFAULT_TIMER_SOUND_START_SECONDS = TIMER_ENDING_WINDOW_SECONDS
+
+/**
+ * Seconds remaining when ending audio starts.
+ * Untimed → null. Timed → clamp to [1, timeLimit]; default min(10, timeLimit).
+ */
+export function normalizeTimerSoundStartSeconds(rawStart, timeLimitSeconds) {
+  const limit = Number(timeLimitSeconds)
+  if (!Number.isFinite(limit) || limit <= 0) return null
+
+  const maxStart = Math.floor(limit)
+  const fallback = Math.min(DEFAULT_TIMER_SOUND_START_SECONDS, maxStart)
+
+  if (rawStart === undefined || rawStart === null || rawStart === '') {
+    return fallback
+  }
+
+  const n = Number(rawStart)
+  if (!Number.isFinite(n)) return fallback
+  return Math.min(maxStart, Math.max(1, Math.round(n)))
+}
 
 /** Five built-in styles + custom upload. Classic is the default. */
 export const TIMER_SOUND_PRESETS = [
@@ -66,7 +88,7 @@ function normalizeOneSlot(keyInput, urlInput) {
   return { key, url: key === 'custom' ? url : null }
 }
 
-/** Times-up + last-10s ending clock settings. */
+/** Times-up + ending-window countdown settings. */
 export function normalizeTimerSoundSettings(input = {}) {
   const timesUp = normalizeOneSlot(
     input.timerSoundKey ?? input.timer_sound_key ?? DEFAULT_TIMER_SOUND_KEY,
@@ -79,11 +101,17 @@ export function normalizeTimerSoundSettings(input = {}) {
     input.timerEndingSoundUrl ?? input.timer_ending_sound_url,
   )
 
+  const timeLimit =
+    input.timeLimitSeconds ?? input.time_limit_seconds ?? input.timeLimit ?? null
+  const startRaw =
+    input.timerSoundStartSeconds ?? input.timer_sound_start_seconds
+
   return {
     timerSoundKey: timesUp.key,
     timerSoundUrl: timesUp.url,
     timerEndingSoundKey: ending.key,
     timerEndingSoundUrl: ending.url,
+    timerSoundStartSeconds: normalizeTimerSoundStartSeconds(startRaw, timeLimit),
   }
 }
 

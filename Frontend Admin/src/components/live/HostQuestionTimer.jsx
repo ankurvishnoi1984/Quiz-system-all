@@ -33,6 +33,9 @@ export function HostQuestionTimer({
       timerEndingSoundUrl={
         question?.timerEndingSoundUrl ?? question?.timer_ending_sound_url
       }
+      timerSoundStartSeconds={
+        question?.timerSoundStartSeconds ?? question?.timer_sound_start_seconds
+      }
     />
   )
 }

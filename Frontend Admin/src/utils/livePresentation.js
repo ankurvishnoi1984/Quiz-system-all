@@ -178,6 +178,12 @@ export function mapLiveQuestions(questions) {
       timerSoundUrl: q.timer_sound_url || null,
       timerEndingSoundKey: q.timer_ending_sound_key || q.timer_sound_key || 'classic',
       timerEndingSoundUrl: q.timer_ending_sound_url || null,
+      timerSoundStartSeconds:
+        q.timer_sound_start_seconds != null
+          ? Number(q.timer_sound_start_seconds)
+          : q.timerSoundStartSeconds != null
+            ? Number(q.timerSoundStartSeconds)
+            : null,
       liveActivatedAt: q.live_activated_at || null,
       submissionsClosed: Boolean(q.submissions_closed),
       isQuizMode:

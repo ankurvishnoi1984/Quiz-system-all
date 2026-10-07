@@ -1503,6 +1503,7 @@ function BuilderPage() {
         timerSoundUrl: null,
         timerEndingSoundKey: DEFAULT_TIMER_SOUND_KEY,
         timerEndingSoundUrl: null,
+        timerSoundStartSeconds: null,
         options,
       }
     }
@@ -1567,10 +1568,12 @@ function BuilderPage() {
       showLeaderboard: Boolean(question.show_leaderboard),
       timeLimitSeconds: normalizeTimeLimitSeconds(question.time_limit_seconds),
       ...normalizeTimerSoundSettings({
+        time_limit_seconds: question.time_limit_seconds,
         timer_sound_key: question.timer_sound_key,
         timer_sound_url: question.timer_sound_url,
         timer_ending_sound_key: question.timer_ending_sound_key,
         timer_ending_sound_url: question.timer_ending_sound_url,
+        timer_sound_start_seconds: question.timer_sound_start_seconds,
       }),
       options,
     }
@@ -1837,15 +1840,19 @@ function BuilderPage() {
     const applyToAll = areAllQuestionsUntimed(questions)
     const soundPatch =
       normalized > 0
-        ? normalizeTimerSoundSettings(selected)
+        ? normalizeTimerSoundSettings({
+            ...selected,
+            timeLimitSeconds: normalized,
+          })
         : {
             timerSoundKey: DEFAULT_TIMER_SOUND_KEY,
             timerSoundUrl: null,
             timerEndingSoundKey: DEFAULT_TIMER_SOUND_KEY,
             timerEndingSoundUrl: null,
+            timerSoundStartSeconds: null,
           }
     setDirty(true)
-    if (applyToAll || isAdvancedBuilder) {
+    if (applyToAll) {
       setQuestions((prev) =>
         prev.map((q) =>
           q.type === 'Survey'
@@ -1859,8 +1866,9 @@ function BuilderPage() {
                       timerSoundUrl: soundPatch.timerSoundUrl,
                       timerEndingSoundKey: soundPatch.timerEndingSoundKey,
                       timerEndingSoundUrl: soundPatch.timerEndingSoundUrl,
+                      timerSoundStartSeconds: soundPatch.timerSoundStartSeconds,
                     }
-                  : {}),
+                  : { timerSoundStartSeconds: null }),
               },
         ),
       )
@@ -1878,8 +1886,9 @@ function BuilderPage() {
                     timerSoundUrl: soundPatch.timerSoundUrl,
                     timerEndingSoundKey: soundPatch.timerEndingSoundKey,
                     timerEndingSoundUrl: soundPatch.timerEndingSoundUrl,
+                    timerSoundStartSeconds: soundPatch.timerSoundStartSeconds,
                   }
-                : {}),
+                : { timerSoundStartSeconds: null }),
             }
           : q,
       ),
@@ -1914,6 +1923,14 @@ function BuilderPage() {
     }
     setSaveError('')
     setDirty(true)
+    const defaultTimeLimit = sessionQuizTotalTimeEnabled
+      ? 0
+      : resolveDefaultTimeLimitForNewQuestion(questions, {
+          advancedBuilder: isAdvancedBuilder,
+        })
+    const defaultSounds = normalizeTimerSoundSettings({
+      timeLimitSeconds: defaultTimeLimit,
+    })
     const q = {
       id: uid('q'),
       questionId: null,
@@ -1923,15 +1940,12 @@ function BuilderPage() {
         points: type === 'Survey' || type === 'Poll' || type === 'Emoji Reaction' ? 0 : 10,
         setId: isAdvancedBuilder ? null : targetSetId ?? null,
         poolEligible: true,
-        timeLimitSeconds: sessionQuizTotalTimeEnabled
-        ? 0
-        : resolveDefaultTimeLimitForNewQuestion(questions, {
-            advancedBuilder: isAdvancedBuilder,
-          }),
-      timerSoundKey: DEFAULT_TIMER_SOUND_KEY,
-      timerSoundUrl: null,
-      timerEndingSoundKey: DEFAULT_TIMER_SOUND_KEY,
-      timerEndingSoundUrl: null,
+        timeLimitSeconds: defaultTimeLimit,
+      timerSoundKey: defaultSounds.timerSoundKey,
+      timerSoundUrl: defaultSounds.timerSoundUrl,
+      timerEndingSoundKey: defaultSounds.timerEndingSoundKey,
+      timerEndingSoundUrl: defaultSounds.timerEndingSoundUrl,
+      timerSoundStartSeconds: defaultSounds.timerSoundStartSeconds,
       ...(type === 'Survey' ? createSurveyQuestionDefaults('MCQ') : {}),
       ...(type === 'Rating' ? createRatingQuestionDefaults() : {}),
       options:
@@ -2059,10 +2073,7 @@ function BuilderPage() {
         media: null,
         points: type === 'Poll' ? 0 : 10,
         timeLimitSeconds: defaultTime,
-        timerSoundKey: DEFAULT_TIMER_SOUND_KEY,
-        timerSoundUrl: null,
-        timerEndingSoundKey: DEFAULT_TIMER_SOUND_KEY,
-        timerEndingSoundUrl: null,
+        ...normalizeTimerSoundSettings({ timeLimitSeconds: defaultTime }),
         ...(type === 'Rating'
           ? {
               ...createRatingQuestionDefaults(),
@@ -2680,6 +2691,9 @@ function BuilderPage() {
           timer_ending_sound_url: isSurvey
             ? null
             : normalizeTimerSoundSettings(question).timerEndingSoundUrl,
+          timer_sound_start_seconds: isSurvey
+            ? null
+            : normalizeTimerSoundSettings(question).timerSoundStartSeconds,
           allow_multiple_select:
             isSurvey && (surveySubType === 'MCQ' || surveySubType === 'Poll')
               ? Boolean(question.allowMultipleSelect)
@@ -3664,10 +3678,10 @@ function BuilderPage() {
                   <div>
                     <p className="text-sm font-semibold text-navy-900">Time limit</p>
                     <p className="text-xs text-slate-600">
-                      {isAdvancedBuilder
-                        ? 'Countdown shown to participants for this question (used with score bands).'
-                        : sessionAllUntimed
-                          ? 'All questions are untimed — changing this applies to every question.'
+                      {sessionAllUntimed
+                        ? 'All questions are untimed — changing this applies to every question.'
+                        : isAdvancedBuilder
+                          ? 'Per-question timing — adjust individually or turn off for specific questions. Use the sidebar to set the whole pool at once.'
                           : 'Per-question timing — adjust individually or turn off for specific questions.'}
                     </p>
                   </div>
@@ -3708,48 +3722,61 @@ function BuilderPage() {
                     timerSoundUrl={selected.timerSoundUrl}
                     timerEndingSoundKey={selected.timerEndingSoundKey}
                     timerEndingSoundUrl={selected.timerEndingSoundUrl}
+                    timerSoundStartSeconds={selected.timerSoundStartSeconds}
+                    timeLimitSeconds={selectedTimeLimitSeconds}
                     disabled={!isDraftSession}
                     deptId={departmentId || sessionQuery.data?.dept_id}
                     onChange={(next) => {
+                      const selectedSounds = normalizeTimerSoundSettings({
+                        ...next,
+                        timeLimitSeconds: selectedTimeLimitSeconds,
+                      })
+                      const soundKeysChanged =
+                        selectedSounds.timerSoundKey !== selected.timerSoundKey ||
+                        selectedSounds.timerSoundUrl !== selected.timerSoundUrl ||
+                        selectedSounds.timerEndingSoundKey !== selected.timerEndingSoundKey ||
+                        selectedSounds.timerEndingSoundUrl !== selected.timerEndingSoundUrl
+
                       setDirty(true)
-                      const timedCount = questions.filter(
-                        (q) =>
-                          q.type !== 'Survey' &&
-                          normalizeTimeLimitSeconds(q.timeLimitSeconds) > 0,
-                      ).length
-                      // Advanced pools (and multi-timed quizzes): keep audio consistent for every timed question.
-                      const applyToPool = isAdvancedBuilder || timedCount > 1
-                      const soundFields = {
-                        timerSoundKey: next.timerSoundKey,
-                        timerSoundUrl: next.timerSoundUrl,
-                        timerEndingSoundKey: next.timerEndingSoundKey,
-                        timerEndingSoundUrl: next.timerEndingSoundUrl,
-                      }
                       const nextQuestions = questions.map((q) => {
                         if (q.type === 'Survey') return q
-                        if (q.id === selected.id) return { ...q, ...soundFields }
-                        if (!applyToPool) return q
-                        if (normalizeTimeLimitSeconds(q.timeLimitSeconds) <= 0) return q
-                        return { ...q, ...soundFields }
+                        const limit = normalizeTimeLimitSeconds(q.timeLimitSeconds)
+                        const isSelected = q.id === selected.id
+                        if (!isSelected && (!soundKeysChanged || limit <= 0)) return q
+
+                        const patched = {
+                          ...q,
+                          ...(isSelected || soundKeysChanged
+                            ? {
+                                timerSoundKey: selectedSounds.timerSoundKey,
+                                timerSoundUrl: selectedSounds.timerSoundUrl,
+                                timerEndingSoundKey: selectedSounds.timerEndingSoundKey,
+                                timerEndingSoundUrl: selectedSounds.timerEndingSoundUrl,
+                              }
+                            : {}),
+                          ...(isSelected
+                            ? { timerSoundStartSeconds: selectedSounds.timerSoundStartSeconds }
+                            : {}),
+                        }
+                        return patched
                       })
                       setQuestions(nextQuestions)
 
                       if (!isDraftSession || !accessToken) return
                       nextQuestions.forEach((q) => {
                         if (!q.questionId || q.type === 'Survey') return
-                        if (q.id !== selected.id && normalizeTimeLimitSeconds(q.timeLimitSeconds) <= 0) {
-                          return
-                        }
-                        if (q.id !== selected.id && !applyToPool) return
+                        const limit = normalizeTimeLimitSeconds(q.timeLimitSeconds)
+                        const isSelected = q.id === selected.id
+                        if (!isSelected && (!soundKeysChanged || limit <= 0)) return
                         void updateQuestionApi(accessToken, q.questionId, {
                           question_type: uiToApiType(q.type),
                           question_text: q.text || 'Untitled question',
-                          time_limit_seconds:
-                            normalizeTimeLimitSeconds(q.timeLimitSeconds) || null,
-                          timer_sound_key: soundFields.timerSoundKey,
-                          timer_sound_url: soundFields.timerSoundUrl,
-                          timer_ending_sound_key: soundFields.timerEndingSoundKey,
-                          timer_ending_sound_url: soundFields.timerEndingSoundUrl,
+                          time_limit_seconds: limit || null,
+                          timer_sound_key: q.timerSoundKey,
+                          timer_sound_url: q.timerSoundUrl,
+                          timer_ending_sound_key: q.timerEndingSoundKey,
+                          timer_ending_sound_url: q.timerEndingSoundUrl,
+                          timer_sound_start_seconds: q.timerSoundStartSeconds,
                         }).catch(() => {})
                       })
                     }}
@@ -3849,7 +3876,10 @@ function BuilderPage() {
                         setDirty(true)
                         const soundPatch =
                           seconds > 0 && selected
-                            ? normalizeTimerSoundSettings(selected)
+                            ? normalizeTimerSoundSettings({
+                                ...selected,
+                                timeLimitSeconds: seconds,
+                              })
                             : null
                         setQuestions((prev) =>
                           prev.map((q) =>
@@ -3864,8 +3894,10 @@ function BuilderPage() {
                                         timerSoundUrl: soundPatch.timerSoundUrl,
                                         timerEndingSoundKey: soundPatch.timerEndingSoundKey,
                                         timerEndingSoundUrl: soundPatch.timerEndingSoundUrl,
+                                        timerSoundStartSeconds:
+                                          soundPatch.timerSoundStartSeconds,
                                       }
-                                    : {}),
+                                    : { timerSoundStartSeconds: null }),
                                 },
                           ),
                         )

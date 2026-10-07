@@ -1,16 +1,16 @@
 import { useEffect, useRef } from 'react'
 import {
   TIMER_ENDING_WINDOW_SECONDS,
+  normalizeTimerSoundStartSeconds,
   playQuestionTimerCue,
   stopCustomTimerAudio,
 } from '../utils/timerSoundPresets'
 import { unlockTimerAudio } from '../utils/timerSounds'
 
-const WARNING_SECONDS = TIMER_ENDING_WINDOW_SECONDS
-const URGENT_SECONDS = 5
+const DEFAULT_URGENT_SECONDS = 5
 
 /**
- * Plays countdown ticks in the last 10s, urgent beeps in the last 5s,
+ * Plays countdown ticks in the configured ending window, urgent beeps near zero,
  * and a times-up sound when the timer reaches 0.
  * Skips the first observed value so late joiners / remounts do not blast on load.
  */
@@ -22,6 +22,8 @@ export function useQuestionTimerSound(
     timerSoundUrl,
     timerEndingSoundKey,
     timerEndingSoundUrl,
+    timerSoundStartSeconds,
+    timeLimitSeconds,
   } = {},
 ) {
   const lastPlayedRef = useRef(null)
@@ -38,6 +40,20 @@ export function useQuestionTimerSound(
     timerEndingSoundKey,
     timerEndingSoundUrl,
   }
+
+  const warningSeconds = (() => {
+    const limit = Number(timeLimitSeconds)
+    if (Number.isFinite(limit) && limit > 0) {
+      return (
+        normalizeTimerSoundStartSeconds(timerSoundStartSeconds, limit) ||
+        TIMER_ENDING_WINDOW_SECONDS
+      )
+    }
+    const start = Number(timerSoundStartSeconds)
+    if (Number.isFinite(start) && start >= 1) return Math.round(start)
+    return TIMER_ENDING_WINDOW_SECONDS
+  })()
+  const urgentSeconds = Math.min(DEFAULT_URGENT_SECONDS, warningSeconds)
 
   useEffect(() => {
     if (!enabled) return undefined
@@ -64,7 +80,7 @@ export function useQuestionTimerSound(
 
     if (lastPlayedRef.current == null) {
       lastPlayedRef.current = seconds
-      endingStartedRef.current = seconds > 0 && seconds <= WARNING_SECONDS
+      endingStartedRef.current = seconds > 0 && seconds <= warningSeconds
       return
     }
 
@@ -78,23 +94,23 @@ export function useQuestionTimerSound(
       return
     }
 
-    // Entering last-10s window (including late joins that jump to e.g. 8s).
-    if (seconds > 0 && seconds <= WARNING_SECONDS && !endingStartedRef.current) {
+    // Entering ending window (including late joins that jump into it).
+    if (seconds > 0 && seconds <= warningSeconds && !endingStartedRef.current) {
       endingStartedRef.current = true
       playQuestionTimerCue('endingStart', { ...sound, secondsLeft: seconds })
     }
 
-    if (seconds > WARNING_SECONDS) {
+    if (seconds > warningSeconds) {
       endingStartedRef.current = false
     }
 
-    if (seconds > 0 && seconds <= URGENT_SECONDS) {
+    if (seconds > 0 && seconds <= urgentSeconds) {
       playQuestionTimerCue('urgent', { ...sound, secondsLeft: seconds })
       return
     }
 
-    if (seconds > URGENT_SECONDS && seconds <= WARNING_SECONDS) {
+    if (seconds > urgentSeconds && seconds <= warningSeconds) {
       playQuestionTimerCue('tick', sound)
     }
-  }, [timer, enabled])
+  }, [timer, enabled, warningSeconds, urgentSeconds])
 }

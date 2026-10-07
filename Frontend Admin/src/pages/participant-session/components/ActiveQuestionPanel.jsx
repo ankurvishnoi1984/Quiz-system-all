@@ -157,6 +157,7 @@ export function ActiveQuestionPanel({
           timerSoundUrl={question.timerSoundUrl}
           timerEndingSoundKey={question.timerEndingSoundKey}
           timerEndingSoundUrl={question.timerEndingSoundUrl}
+          timerSoundStartSeconds={question.timerSoundStartSeconds}
         />
       )}
 

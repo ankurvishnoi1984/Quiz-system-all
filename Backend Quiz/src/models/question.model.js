@@ -83,6 +83,12 @@ const Question = sequelize.define(
       allowNull: true,
       defaultValue: null
     },
+    /** Seconds remaining when ending-window countdown audio starts (NULL → default 10). */
+    timer_sound_start_seconds: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: null
+    },
     allow_multiple_select: {
       type: DataTypes.BOOLEAN,
       allowNull: true,
