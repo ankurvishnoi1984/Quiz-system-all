@@ -23,7 +23,7 @@ export function PageCenteredShell({
       data-participant-theme={normalizeParticipantTheme(theme)}
     >
       <div
-        className={`w-full ${maxWidth} rounded-2xl border border-blue-200/70 bg-white/92 text-center shadow-sm shadow-navy-900/5 backdrop-blur-sm ${
+        className={`participant-surface w-full ${maxWidth} rounded-2xl border border-blue-200/70 bg-white/92 text-center shadow-sm shadow-navy-900/5 backdrop-blur-sm ${
           inIframe ? 'p-5 sm:p-6' : 'p-8'
         }`}
       >

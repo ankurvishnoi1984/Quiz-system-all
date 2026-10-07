@@ -14,7 +14,7 @@ export function WaitingView({ session, transitioningLive }) {
         : 0
 
   return (
-    <PageCenteredShell maxWidth="max-w-2xl" theme={session?.participant_theme}>
+    <PageCenteredShell maxWidth="max-w-4xl" theme={session?.participant_theme}>
       <div className="quiz-enter space-y-4">
         <BrandLogoPair
           variant="hero"
@@ -24,7 +24,7 @@ export function WaitingView({ session, transitioningLive }) {
         <div className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-blue-700">
           <Clock3 className={`size-7 ${transitioningLive ? 'animate-spin' : 'animate-pulse'}`} />
         </div>
-        <h1 className="text-3xl font-bold text-navy-900">
+        <h1 className="participant-heading text-3xl font-bold text-navy-900">
           {transitioningLive ? 'Session is live!' : 'Waiting for the host to start...'}
         </h1>
         <p className="text-slate-600">{session.title}</p>

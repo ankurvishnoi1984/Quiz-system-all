@@ -1063,6 +1063,13 @@ async function activateAdvancedAssignmentSlot({ sessionId, user, slot }) {
   );
 
   session.advanced_active_slot = slotNum;
+  // Activating a question dismisses participant ranking screens.
+  const clearedRankings =
+    Boolean(session.leaderboard_enabled) || Boolean(session.current_rankings_enabled);
+  if (clearedRankings) {
+    session.leaderboard_enabled = false;
+    session.current_rankings_enabled = false;
+  }
   await session.save();
 
   const activatedQuestions = await Question.findAll({
@@ -1076,7 +1083,10 @@ async function activateAdvancedAssignmentSlot({ sessionId, user, slot }) {
     advanced_active_slot: slotNum,
     activatedQuestions,
     deactivatedQuestionIds: deactivatedIds,
-    activatedQuestionIds: questionIds
+    activatedQuestionIds: questionIds,
+    rankingsCleared: clearedRankings,
+    leaderboard_enabled: Boolean(session.leaderboard_enabled),
+    current_rankings_enabled: Boolean(session.current_rankings_enabled)
   };
 }
 

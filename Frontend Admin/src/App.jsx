@@ -34,6 +34,7 @@ import EmbedDisplayPage from './pages/embed/EmbedDisplayPage'
 import EmbedControlsPage from './pages/embed/EmbedControlsPage'
 import EmbedParticipantPage from './pages/embed/EmbedParticipantPage'
 import PreviewModePage from './pages/preview-mode'
+import QuickViewModePage from './pages/quick-view'
 import { SessionsProvider } from './context/SessionsContext'
 import { useAuthStore } from './store/authStore'
 import HostLayout from './layouts/HostLayout'
@@ -134,6 +135,20 @@ function App() {
             element={
               user && !mustChangePassword && !mustVerifyEmail ? (
                 <PreviewModePage />
+              ) : (
+                <Navigate to={user ? postLoginPath : '/login'} replace />
+              )
+            }
+          />
+          <Route
+            path="/quick-view"
+            element={
+              user && !mustChangePassword && !mustVerifyEmail ? (
+                <RequireRight right="present">
+                  <RequireActivePlan>
+                    <QuickViewModePage />
+                  </RequireActivePlan>
+                </RequireRight>
               ) : (
                 <Navigate to={user ? postLoginPath : '/login'} replace />
               )

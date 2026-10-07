@@ -57,7 +57,7 @@ export function SessionNotLiveView({
         </div>
 
         <div className="space-y-2 text-center">
-          <h1 className="text-2xl font-bold text-navy-900">{copy.title}</h1>
+          <h1 className="participant-heading text-2xl font-bold text-navy-900">{copy.title}</h1>
           <p className="text-sm leading-relaxed text-slate-600">{copy.message}</p>
         </div>
 

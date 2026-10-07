@@ -672,7 +672,22 @@ async function activateAdvancedAssignmentSlotHandler(req, res) {
     });
 
     const session = await Session.findByPk(sessionId, {
-      attributes: ["session_code", "status", "advanced_active_slot"]
+      attributes: [
+        "session_code",
+        "status",
+        "advanced_active_slot",
+        "leaderboard_enabled",
+        "current_rankings_enabled",
+        "survey_results_enabled",
+        "show_participant_count",
+        "show_question_leaderboard",
+        "participant_navigation_enabled",
+        "random_question_order_enabled",
+        "allow_late_join",
+        "quiz_total_time_minutes",
+        "present_mode_settings",
+        "participant_theme"
+      ]
     });
 
     if (session?.session_code) {
@@ -694,6 +709,9 @@ async function activateAdvancedAssignmentSlotHandler(req, res) {
       notifySessionUpdate(session.session_code, session.status, {
         advanced_active_slot: result.advanced_active_slot
       });
+      if (result.rankingsCleared) {
+        notifySessionSettings(session.session_code, session);
+      }
     }
 
     return successResponse(
@@ -702,7 +720,9 @@ async function activateAdvancedAssignmentSlotHandler(req, res) {
         slot: result.slot,
         advanced_active_slot: result.advanced_active_slot,
         activated_count: (result.activatedQuestionIds || []).length,
-        deactivated_count: (result.deactivatedQuestionIds || []).length
+        deactivated_count: (result.deactivatedQuestionIds || []).length,
+        leaderboard_enabled: Boolean(result.leaderboard_enabled),
+        current_rankings_enabled: Boolean(result.current_rankings_enabled)
       },
       `Question ${result.slot} activated for participants`,
       200

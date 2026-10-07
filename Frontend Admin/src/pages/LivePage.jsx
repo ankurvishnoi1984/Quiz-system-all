@@ -117,6 +117,7 @@ import {
   buildPreviewModeUrl,
   subscribePreviewFollow,
 } from '../utils/previewFollow'
+import { buildQuickViewModeUrl } from '../utils/quickView'
 
 function LivePage() {
   const [searchParams] = useSearchParams()
@@ -270,7 +271,20 @@ function LivePage() {
 
   const activateAssignmentSlotMutation = useMutation({
     mutationFn: (slot) => activateAdvancedAssignmentSlotApi(accessToken, sessionId, slot),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      // Activating a slot clears Current/Overall rankings (backend + host UI).
+      const patch = {
+        advanced_active_slot:
+          result?.advanced_active_slot ?? result?.slot ?? undefined,
+        leaderboard_enabled: false,
+        current_rankings_enabled: false,
+      }
+      queryClient.setQueryData(['live-session', sessionId], (old) =>
+        old ? { ...old, ...patch } : old,
+      )
+      queryClient.setQueryData(['live-session', sessionId, 'host'], (old) =>
+        old ? { ...old, ...patch } : old,
+      )
       queryClient.invalidateQueries({ queryKey: ['live-questions', sessionId] })
       queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
       queryClient.invalidateQueries({ queryKey: ['live-session', sessionId, 'host'] })
@@ -392,6 +406,12 @@ function LivePage() {
     // Re-assert current selection shortly after the new tab can subscribe.
     window.setTimeout(() => pushCurrentPreviewFollow(), 500)
     window.setTimeout(() => pushCurrentPreviewFollow(), 1400)
+  }
+
+  const openQuickViewMode = () => {
+    if (!sessionId) return
+    syncAuthForNewBrowserTab()
+    window.open(buildQuickViewModeUrl(sessionId), '_blank', 'noopener,noreferrer')
   }
 
   const questionResultsQuery = useQuery({
@@ -1213,7 +1233,18 @@ function LivePage() {
               Present
             </button>
           ) : null}
-          {canEditLive ? (
+          {canEditLive && advancedSlotActivation ? (
+            <button
+              type="button"
+              onClick={openQuickViewMode}
+              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-emerald-300/80 bg-emerald-50/90 px-4 text-sm font-semibold text-emerald-950 shadow-sm transition hover:bg-emerald-100"
+              title="Open Quick View for screen share — activate questions and rankings from a clean control surface."
+            >
+              <MonitorPlay className="size-4" />
+              Quick View Mode
+            </button>
+          ) : null}
+          {canEditLive && !advancedSlotActivation ? (
             <button
               type="button"
               onClick={openPreviewMode}

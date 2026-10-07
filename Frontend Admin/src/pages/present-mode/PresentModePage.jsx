@@ -173,7 +173,19 @@ function PresentModePage({
   const activateAssignmentSlotMutation = useMutation({
     mutationFn: (slot) =>
       activateAdvancedAssignmentSlotApi(hostAccessToken, sessionId, slot),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      const patch = {
+        advanced_active_slot:
+          result?.advanced_active_slot ?? result?.slot ?? undefined,
+        leaderboard_enabled: false,
+        current_rankings_enabled: false,
+      }
+      queryClient.setQueryData(['live-session', sessionId], (old) =>
+        old ? { ...old, ...patch } : old,
+      )
+      queryClient.setQueryData(['live-session', sessionId, 'host'], (old) =>
+        old ? { ...old, ...patch } : old,
+      )
       queryClient.invalidateQueries({ queryKey: ['live-questions', sessionId] })
       queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
       queryClient.invalidateQueries({ queryKey: ['live-session', sessionId, 'host'] })

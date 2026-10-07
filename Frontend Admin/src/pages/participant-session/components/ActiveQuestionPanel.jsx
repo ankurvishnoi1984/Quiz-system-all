@@ -67,12 +67,12 @@ export function ActiveQuestionPanel({
   return (
     <section
       key={question.id}
-      className="quiz-fade-in space-y-4 rounded-2xl border border-blue-200/70 bg-white/92 p-5 shadow-sm shadow-navy-900/5 backdrop-blur-sm"
+      className="participant-surface quiz-fade-in space-y-4 rounded-2xl border border-blue-200/70 bg-white/92 p-5 shadow-sm shadow-navy-900/5 backdrop-blur-sm"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         {navigationEnabled ? (
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <p className="min-w-0 truncate text-xs font-semibold uppercase tracking-wider text-navy-700">
+            <p className="participant-accent-text min-w-0 truncate text-xs font-semibold uppercase tracking-wider text-navy-700">
               Question {displayQuestionIndex + 1} / {activeQuestions.length}
             </p>
           </div>
@@ -140,7 +140,7 @@ export function ActiveQuestionPanel({
         </p>
       ) : null}
 
-      <h2 className="text-2xl font-bold text-navy-900">
+      <h2 className="participant-heading text-2xl font-bold text-navy-900">
         {question.type === 'Emoji Reaction' && !String(question.text || '').trim()
           ? 'Share your reaction'
           : question.text || 'Untitled question'}
@@ -274,7 +274,7 @@ export function ActiveQuestionPanel({
             aria-label="Previous question"
             disabled={displayQuestionIndex <= 0}
             onClick={onPrevious}
-            className="h-11 rounded-xl border border-blue-200/70 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="participant-btn-secondary h-11 rounded-xl border border-blue-200/70 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Previous
           </button>
@@ -327,7 +327,7 @@ export function ActiveQuestionPanel({
                           : undefined
             }
             onClick={onNextOrSubmit}
-            className={`h-11 rounded-xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 text-sm font-semibold text-white shadow-lg shadow-blue-900/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 ${
+            className={`participant-btn-primary h-11 rounded-xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 text-sm font-semibold text-white shadow-lg shadow-blue-900/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 ${
               highlightNextButton && useNextNav ? 'participant-next-highlight' : ''
             }`}
           >

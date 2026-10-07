@@ -38,7 +38,7 @@ export function McqOptions({
             })}`}
           >
             <span className="flex items-start gap-2">
-              <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs">
+              <span className="participant-option-badge inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs">
                 {allowMultipleSelect && isSelected ? (
                   <Check className="size-3.5 text-navy-800" aria-hidden />
                 ) : (

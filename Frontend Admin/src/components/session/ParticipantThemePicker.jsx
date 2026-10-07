@@ -48,121 +48,116 @@ function FullscreenThemePreview({
 
   return createPortal(
     <div
-      className="host-print-hide fixed inset-0 z-[200] flex flex-col"
+      className="host-print-hide participant-theme-stage participant-session-bg fixed inset-0 z-[200] flex flex-col"
+      data-participant-theme={theme.id}
       role="dialog"
       aria-modal="true"
       aria-labelledby="participant-theme-preview-title"
     >
-      <div
-        className="participant-theme-stage participant-session-bg absolute inset-0"
-        data-participant-theme={theme.id}
-        aria-hidden
-      />
-
-      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/50 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-md sm:px-6">
-          <div className="min-w-0">
-            <p
-              id="participant-theme-preview-title"
-              className="truncate text-base font-bold text-navy-900 sm:text-lg"
-            >
-              {theme.label} theme preview
-            </p>
-            <p className="truncate text-xs text-slate-600 sm:text-sm">{theme.description}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded-xl border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-slate-50"
-            aria-label="Close preview"
+      <header className="relative z-10 flex shrink-0 items-center justify-between gap-3 border-b border-white/50 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-md sm:px-6">
+        <div className="min-w-0">
+          <p
+            id="participant-theme-preview-title"
+            className="participant-heading truncate text-base font-bold text-navy-900 sm:text-lg"
           >
-            <X className="size-4" />
-          </button>
-        </header>
-
-        <div className="flex min-h-0 flex-1 items-start justify-center overflow-y-auto p-4 sm:p-6 md:p-8">
-          <div className="w-full max-w-4xl space-y-4">
-            <section className="quiz-fade-in space-y-4 rounded-2xl border border-blue-200/70 bg-white/92 p-5 shadow-sm shadow-navy-900/5 backdrop-blur-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="min-w-0 truncate text-xs font-semibold uppercase tracking-wider text-navy-700">
-                  Question 1 / 10
-                </p>
-                <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
-                  Answer this question or wait for the timer to use Next.
-                </p>
-              </div>
-
-              <h2 className="text-2xl font-bold text-navy-900">What is the capital of France?</h2>
-
-              <QuestionTimer
-                timer={PREVIEW_TIMER_SECONDS}
-                timeLimit={PREVIEW_TIME_LIMIT}
-                soundEnabled={false}
-              />
-
-              <div className="grid gap-2 md:grid-cols-2">
-                {PREVIEW_OPTIONS.map((option) => (
-                  <button
-                    key={option.key}
-                    type="button"
-                    tabIndex={-1}
-                    className={`quiz-option rounded-2xl border px-4 py-4 text-left text-sm font-semibold transition ${
-                      option.selected ? 'quiz-option-selected' : ''
-                    }`}
-                  >
-                    <span className="flex items-start gap-2">
-                      <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs">
-                        {option.key}
-                      </span>
-                      <span className="min-w-0 flex-1">{option.label}</span>
-                    </span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex flex-wrap gap-2 pt-1">
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600"
-                >
-                  Previous
-                </button>
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  className="ml-auto rounded-xl bg-navy-700 px-5 py-2.5 text-sm font-semibold text-white"
-                >
-                  Submit answer
-                </button>
-              </div>
-            </section>
-
-            <p className="text-center text-xs font-medium uppercase tracking-wide text-slate-500">
-              Dummy question · Preview only · {theme.label}
-            </p>
-          </div>
+            {theme.label} theme preview
+          </p>
+          <p className="truncate text-xs text-slate-600 sm:text-sm">{theme.description}</p>
         </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="participant-btn-secondary shrink-0 rounded-xl border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-slate-50"
+          aria-label="Close preview"
+        >
+          <X className="size-4" />
+        </button>
+      </header>
 
-        <footer className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-white/50 bg-white/90 px-4 py-3 backdrop-blur-md sm:px-6">
+      <div className="relative z-10 flex min-h-0 flex-1 items-start justify-center overflow-y-auto p-4 sm:p-6 md:p-8">
+        <div className="w-full max-w-4xl space-y-4">
+          <section className="participant-surface quiz-fade-in space-y-4 rounded-2xl border border-blue-200/70 bg-white/92 p-5 shadow-sm shadow-navy-900/5 backdrop-blur-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="participant-accent-text min-w-0 truncate text-xs font-semibold uppercase tracking-wider text-navy-700">
+                Question 1 / 10
+              </p>
+              <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
+                Answer this question or wait for the timer to use Next.
+              </p>
+            </div>
+
+            <h2 className="participant-heading text-2xl font-bold text-navy-900">
+              What is the capital of France?
+            </h2>
+
+            <QuestionTimer
+              timer={PREVIEW_TIMER_SECONDS}
+              timeLimit={PREVIEW_TIME_LIMIT}
+              soundEnabled={false}
+            />
+
+            <div className="grid gap-2 md:grid-cols-2">
+              {PREVIEW_OPTIONS.map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  tabIndex={-1}
+                  className={`quiz-option rounded-2xl border px-4 py-4 text-left text-sm font-semibold transition ${
+                    option.selected ? 'quiz-option-selected' : ''
+                  }`}
+                >
+                  <span className="flex items-start gap-2">
+                    <span className="participant-option-badge inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs">
+                      {option.key}
+                    </span>
+                    <span className="min-w-0 flex-1">{option.label}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button
+                type="button"
+                tabIndex={-1}
+                className="participant-btn-secondary rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600"
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                tabIndex={-1}
+                className="participant-btn-primary ml-auto rounded-xl bg-navy-700 px-5 py-2.5 text-sm font-semibold text-white"
+              >
+                Submit answer
+              </button>
+            </div>
+          </section>
+
+          <p className="text-center text-xs font-medium uppercase tracking-wide text-slate-500">
+            Dummy question · Preview only · {theme.label}
+          </p>
+        </div>
+      </div>
+
+      <footer className="relative z-10 flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-white/50 bg-white/90 px-4 py-3 backdrop-blur-md sm:px-6">
+        <button
+          type="button"
+          onClick={onClose}
+          className="participant-btn-secondary rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+        >
+          Close
+        </button>
+        {!disabled ? (
           <button
             type="button"
-            onClick={onClose}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            onClick={onApply}
+            className="participant-btn-primary rounded-xl bg-navy-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-navy-800"
           >
-            Close
+            {isSelected ? 'Keep selected' : `Use ${theme.label}`}
           </button>
-          {!disabled ? (
-            <button
-              type="button"
-              onClick={onApply}
-              className="rounded-xl bg-navy-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-navy-800"
-            >
-              {isSelected ? 'Keep selected' : `Use ${theme.label}`}
-            </button>
-          ) : null}
-        </footer>
-      </div>
+        ) : null}
+      </footer>
     </div>,
     document.body,
   )

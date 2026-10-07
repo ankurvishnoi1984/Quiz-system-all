@@ -26,10 +26,29 @@
    * Participant screen themes.
    * Use: class="participant-session-bg" data-participant-theme="default|ocean|meadow|ember|graphite"
    * Harbor (`default`) is the current production look.
+   * CSS vars also tint surfaces, options, timer, and primary actions.
    */
   .participant-session-bg {
     --participant-orb-a: rgba(61, 127, 160, 0.28);
     --participant-orb-b: rgba(27, 75, 107, 0.22);
+    --pt-accent: #1b4b6b;
+    --pt-accent-strong: #12354a;
+    --pt-accent-soft: #e8f1f7;
+    --pt-heading: #0a1f2e;
+    --pt-surface: rgba(255, 255, 255, 0.92);
+    --pt-surface-border: rgba(27, 75, 107, 0.22);
+    --pt-surface-shadow: 0 1px 2px rgba(10, 31, 46, 0.06);
+    --pt-option-bg: rgba(255, 255, 255, 0.96);
+    --pt-option-border: rgba(27, 75, 107, 0.2);
+    --pt-option-hover-bg: #f0f7fb;
+    --pt-option-selected-bg: #e4f0f8;
+    --pt-option-selected-ring: rgba(27, 75, 107, 0.22);
+    --pt-badge-bg: #e8eef3;
+    --pt-badge-fg: #1b4b6b;
+    --pt-timer-track: #e8eef3;
+    --pt-btn-secondary-bg: #ffffff;
+    --pt-btn-secondary-border: rgba(27, 75, 107, 0.2);
+    --pt-btn-secondary-hover: #eef5fa;
     position: relative;
     isolation: isolate;
     overflow-x: clip;
@@ -47,6 +66,24 @@
   .participant-session-bg[data-participant-theme="ocean"] {
     --participant-orb-a: rgba(14, 116, 144, 0.32);
     --participant-orb-b: rgba(21, 94, 117, 0.24);
+    --pt-accent: #0e7490;
+    --pt-accent-strong: #155e75;
+    --pt-accent-soft: #e0f4fa;
+    --pt-heading: #164e63;
+    --pt-surface: rgba(255, 255, 255, 0.9);
+    --pt-surface-border: rgba(14, 116, 144, 0.28);
+    --pt-surface-shadow: 0 1px 3px rgba(8, 51, 68, 0.08);
+    --pt-option-bg: rgba(255, 255, 255, 0.95);
+    --pt-option-border: rgba(14, 116, 144, 0.26);
+    --pt-option-hover-bg: #e6f6fb;
+    --pt-option-selected-bg: #d5f0f8;
+    --pt-option-selected-ring: rgba(14, 116, 144, 0.28);
+    --pt-badge-bg: #d0ebf3;
+    --pt-badge-fg: #0e7490;
+    --pt-timer-track: #d7eef5;
+    --pt-btn-secondary-bg: #ffffff;
+    --pt-btn-secondary-border: rgba(14, 116, 144, 0.28);
+    --pt-btn-secondary-hover: #e6f6fb;
     background-color: #b9d7e6;
     background-image:
       radial-gradient(ellipse 95% 65% at 8% -5%, rgba(14, 116, 144, 0.28), transparent 55%),
@@ -59,6 +96,24 @@
   .participant-session-bg[data-participant-theme="meadow"] {
     --participant-orb-a: rgba(5, 150, 105, 0.26);
     --participant-orb-b: rgba(4, 120, 87, 0.2);
+    --pt-accent: #047857;
+    --pt-accent-strong: #065f46;
+    --pt-accent-soft: #e7f7ef;
+    --pt-heading: #064e3b;
+    --pt-surface: rgba(255, 255, 255, 0.9);
+    --pt-surface-border: rgba(4, 120, 87, 0.26);
+    --pt-surface-shadow: 0 1px 3px rgba(6, 78, 59, 0.07);
+    --pt-option-bg: rgba(255, 255, 255, 0.95);
+    --pt-option-border: rgba(5, 150, 105, 0.24);
+    --pt-option-hover-bg: #eef8f3;
+    --pt-option-selected-bg: #dff3ea;
+    --pt-option-selected-ring: rgba(4, 120, 87, 0.22);
+    --pt-badge-bg: #d1efe0;
+    --pt-badge-fg: #047857;
+    --pt-timer-track: #d9f0e4;
+    --pt-btn-secondary-bg: #ffffff;
+    --pt-btn-secondary-border: rgba(4, 120, 87, 0.26);
+    --pt-btn-secondary-hover: #e8f8f0;
     background-color: #d5ebe0;
     background-image:
       radial-gradient(ellipse 90% 60% at 5% 0%, rgba(4, 120, 87, 0.2), transparent 55%),
@@ -71,6 +126,24 @@
   .participant-session-bg[data-participant-theme="ember"] {
     --participant-orb-a: rgba(244, 63, 94, 0.2);
     --participant-orb-b: rgba(159, 18, 57, 0.16);
+    --pt-accent: #be123c;
+    --pt-accent-strong: #9f1239;
+    --pt-accent-soft: #fce8ee;
+    --pt-heading: #881337;
+    --pt-surface: rgba(255, 255, 255, 0.92);
+    --pt-surface-border: rgba(190, 18, 60, 0.24);
+    --pt-surface-shadow: 0 1px 3px rgba(136, 19, 55, 0.07);
+    --pt-option-bg: rgba(255, 255, 255, 0.96);
+    --pt-option-border: rgba(190, 18, 60, 0.22);
+    --pt-option-hover-bg: #faf2f4;
+    --pt-option-selected-bg: #f6e8ec;
+    --pt-option-selected-ring: rgba(190, 18, 60, 0.2);
+    --pt-badge-bg: #f8d7e0;
+    --pt-badge-fg: #be123c;
+    --pt-timer-track: #f6dde4;
+    --pt-btn-secondary-bg: #ffffff;
+    --pt-btn-secondary-border: rgba(190, 18, 60, 0.24);
+    --pt-btn-secondary-hover: #fdf0f3;
     background-color: #f0e2e5;
     background-image:
       radial-gradient(ellipse 90% 60% at 10% -5%, rgba(190, 18, 60, 0.16), transparent 55%),
@@ -83,6 +156,24 @@
   .participant-session-bg[data-participant-theme="graphite"] {
     --participant-orb-a: rgba(100, 116, 139, 0.28);
     --participant-orb-b: rgba(51, 65, 85, 0.2);
+    --pt-accent: #334155;
+    --pt-accent-strong: #1e293b;
+    --pt-accent-soft: #eef2f6;
+    --pt-heading: #0f172a;
+    --pt-surface: rgba(255, 255, 255, 0.92);
+    --pt-surface-border: rgba(51, 65, 85, 0.22);
+    --pt-surface-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+    --pt-option-bg: rgba(255, 255, 255, 0.96);
+    --pt-option-border: rgba(71, 85, 105, 0.28);
+    --pt-option-hover-bg: #f1f5f9;
+    --pt-option-selected-bg: #e2e8f0;
+    --pt-option-selected-ring: rgba(51, 65, 85, 0.24);
+    --pt-badge-bg: #e2e8f0;
+    --pt-badge-fg: #334155;
+    --pt-timer-track: #e2e8f0;
+    --pt-btn-secondary-bg: #ffffff;
+    --pt-btn-secondary-border: rgba(71, 85, 105, 0.28);
+    --pt-btn-secondary-hover: #f1f5f9;
     background-color: #d8dee6;
     background-image:
       radial-gradient(ellipse 90% 60% at 0% 0%, rgba(51, 65, 85, 0.18), transparent 55%),
@@ -90,6 +181,111 @@
       radial-gradient(ellipse 55% 40% at 60% 100%, rgba(71, 85, 105, 0.12), transparent 55%),
       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M0 20h40M20 0v40' stroke='%23334155' stroke-opacity='0.08' stroke-width='1'/%3E%3Ccircle cx='20' cy='20' r='1.5' fill='%2364748b' fill-opacity='0.14'/%3E%3C/svg%3E"),
       linear-gradient(160deg, #c9d1db 0%, #e8ecf1 40%, #f4f6f8 68%, #d3dae3 100%);
+  }
+
+  /* Themed middle UI: cards, options, timer, buttons */
+  .participant-session-bg .participant-surface {
+    border-color: var(--pt-surface-border) !important;
+    background: var(--pt-surface) !important;
+    box-shadow: var(--pt-surface-shadow) !important;
+  }
+
+  .participant-session-bg .participant-heading {
+    color: var(--pt-heading) !important;
+  }
+
+  .participant-session-bg .participant-accent-text {
+    color: var(--pt-accent) !important;
+  }
+
+  .participant-session-bg .quiz-option:not(.quiz-option-reveal) {
+    border-color: var(--pt-option-border) !important;
+    background: var(--pt-option-bg) !important;
+    color: var(--pt-heading);
+  }
+
+  .participant-session-bg .quiz-option:not(.quiz-option-reveal):hover:not(:disabled) {
+    border-color: var(--pt-accent) !important;
+    background: var(--pt-option-hover-bg) !important;
+  }
+
+  .participant-session-bg .quiz-option-selected:not(.quiz-option-reveal) {
+    border-color: var(--pt-accent) !important;
+    background: var(--pt-option-selected-bg) !important;
+    box-shadow: 0 0 0 2px var(--pt-option-selected-ring);
+  }
+
+  .participant-session-bg .quiz-option:not(.quiz-option-reveal) .participant-option-badge {
+    background: var(--pt-badge-bg) !important;
+    color: var(--pt-badge-fg) !important;
+  }
+
+  /* Correct / wrong reveal colors stay fixed (never themed) */
+  .quiz-option-reveal--correct {
+    border-color: #10b981 !important;
+    background: #ecfdf5 !important;
+    color: #064e3b !important;
+    box-shadow: 0 0 0 1px #a7f3d0 !important;
+  }
+
+  .quiz-option-reveal--wrong {
+    border-color: #ef4444 !important;
+    background: #fef2f2 !important;
+    color: #7f1d1d !important;
+    box-shadow: 0 0 0 1px #fecaca !important;
+  }
+
+  .quiz-option-reveal--muted {
+    border-color: rgba(147, 197, 253, 0.55) !important;
+    background: #ffffff !important;
+    color: #64748b !important;
+    box-shadow: none !important;
+  }
+
+  .quiz-option-reveal .participant-option-badge {
+    background: rgba(15, 23, 42, 0.06) !important;
+    color: inherit !important;
+  }
+
+  .participant-session-bg .participant-timer-panel {
+    border-color: var(--pt-surface-border) !important;
+    background: var(--pt-surface) !important;
+  }
+
+  .participant-session-bg .participant-timer-ring-track {
+    stroke: var(--pt-timer-track) !important;
+  }
+
+  .participant-session-bg .participant-timer-ring-progress:not(.participant-timer-ring--alert) {
+    stroke: var(--pt-accent) !important;
+  }
+
+  .participant-session-bg .participant-timer-label:not(.participant-timer-label--alert) {
+    color: var(--pt-heading) !important;
+  }
+
+  .participant-session-bg .participant-timer-icon:not(.participant-timer-icon--alert) {
+    color: var(--pt-accent) !important;
+  }
+
+  .participant-session-bg .participant-btn-primary {
+    background-image: linear-gradient(
+      90deg,
+      var(--pt-accent-strong),
+      var(--pt-accent)
+    ) !important;
+    background-color: var(--pt-accent) !important;
+    box-shadow: 0 8px 18px color-mix(in srgb, var(--pt-accent) 28%, transparent) !important;
+  }
+
+  .participant-session-bg .participant-btn-secondary {
+    border-color: var(--pt-btn-secondary-border) !important;
+    background: var(--pt-btn-secondary-bg) !important;
+    color: var(--pt-heading) !important;
+  }
+
+  .participant-session-bg .participant-btn-secondary:hover:not(:disabled) {
+    background: var(--pt-btn-secondary-hover) !important;
   }
 
   .participant-session-bg::before,
@@ -173,8 +369,8 @@
     height: 0.75rem;
     width: 72%;
     border-radius: 0.4rem;
-    background: rgba(255, 255, 255, 0.88);
-    border: 1px solid rgba(27, 75, 107, 0.12);
+    background: var(--pt-surface, rgba(255, 255, 255, 0.88));
+    border: 1px solid var(--pt-surface-border, rgba(27, 75, 107, 0.12));
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
   }
 
@@ -182,6 +378,8 @@
     width: 46%;
     height: 0.55rem;
     opacity: 0.85;
+    background: var(--pt-option-selected-bg, rgba(255, 255, 255, 0.75));
+    border-color: var(--pt-accent, rgba(27, 75, 107, 0.35));
   }
 
   /* Full theme preview modal stage (orbs scoped to the box, not the viewport) */

@@ -2591,7 +2591,7 @@ function ParticipantSessionPage({ embed = false }) {
       }`}
       data-participant-theme={participantTheme}
     >
-      <div className="mx-auto w-full max-w-4xl space-y-4">
+      <div className="mx-auto w-full max-w-6xl space-y-4">
         <SessionHeader session={session} joinedUser={joinedUser} />
 
         {isSessionEnded && endingScreenOnlyMode ? <SessionEndedBanner /> : null}

@@ -52,7 +52,7 @@ export function JoinFormView({
             sessionLogoUrl={session?.logo_url}
             sessionTitle={session?.title || 'Session'}
           />
-          <h1 className="text-2xl font-bold text-navy-900">
+          <h1 className="participant-heading text-2xl font-bold text-navy-900">
             {showJoinDetails ? session.title : 'Join a session'}
           </h1>
           <p className="mt-1 text-sm text-slate-600">
@@ -217,7 +217,7 @@ export function JoinFormView({
             busy ||
             (needsOtp && (!otpSent || String(otpCode || '').length !== 6))
           }
-          className="h-11 w-full rounded-xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 text-sm font-semibold text-white shadow-lg shadow-blue-900/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+          className="participant-btn-primary h-11 w-full rounded-xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 text-sm font-semibold text-white shadow-lg shadow-blue-900/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {joinBusy ? 'Joining…' : needsOtp ? 'Verify & join' : 'Join'}
         </button>
