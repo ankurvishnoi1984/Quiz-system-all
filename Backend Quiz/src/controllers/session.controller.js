@@ -163,7 +163,8 @@ async function update(req, res) {
         quiz_total_time_minutes: session.quiz_total_time_minutes ?? null,
         random_question_order_enabled: isSessionRandomQuestionOrderEnabled(session),
         allow_late_join: Boolean(session.allow_late_join),
-        present_mode_settings: session.present_mode_settings ?? null
+        present_mode_settings: session.present_mode_settings ?? null,
+        participant_theme: session.participant_theme || "default"
       });
       if (
         (req.body.leaderboard_enabled === true && session.leaderboard_enabled) ||
@@ -326,6 +327,7 @@ async function lookupByCode(req, res) {
           builder_mode: session.builder_mode || "normal",
           advanced_active_slot: session.advanced_active_slot ?? null,
           questions_per_participant: session.questions_per_participant ?? null,
+          participant_theme: session.participant_theme || "default",
           allow_late_join: Boolean(session.allow_late_join),
           last_activity_at: session.last_activity_at || null,
           started_at: session.started_at || null,

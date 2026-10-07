@@ -543,6 +543,7 @@ function DashboardPage() {
         auto_end_date: values.autoEndEnabled ? values.autoEndDate || null : null,
         auto_end_time: values.autoEndEnabled ? values.autoEndTime || null : null,
         logo_url: values.logoUrl || null,
+        participant_theme: values.participantTheme || 'default',
         builder_mode: values.builderMode === 'advanced' ? 'advanced' : 'normal',
         questions_per_participant:
           values.builderMode === 'advanced' ? Number(values.questionsPerParticipant) || null : null,
@@ -587,6 +588,7 @@ function DashboardPage() {
       autoEndDate: toDateInputValue(editSession.auto_end_date),
       autoEndTime: toTimeInputValue(editSession.auto_end_time),
       logoUrl: editSession.logo_url || '',
+      participantTheme: editSession.participant_theme || 'default',
       builderMode: editSession.builder_mode === 'advanced' ? 'advanced' : 'normal',
       questionsPerParticipant: Number(editSession.questions_per_participant) || 10,
       advancedSelectionMode:
@@ -635,6 +637,7 @@ function DashboardPage() {
       title: values.title,
       leaderboard_enabled: values.overallLeaderboard,
       logo_url: values.logoUrl || null,
+      participant_theme: values.participantTheme || 'default',
       present_mode_settings: values.presentModeSettings || null,
     }
 

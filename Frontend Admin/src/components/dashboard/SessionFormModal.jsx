@@ -18,6 +18,11 @@ import {
   toPresentModeSettingsApi,
 } from '../../utils/presentModeSettings'
 import {
+  DEFAULT_PARTICIPANT_THEME,
+  normalizeParticipantTheme,
+} from '../../utils/participantTheme'
+import { ParticipantThemePicker } from '../session/ParticipantThemePicker'
+import {
   MAX_ALLOWLIST_ENTRIES,
   allowlistEntryCount,
   isJoinAllowlistOverLimit,
@@ -80,6 +85,7 @@ const defaultInitial = {
   overallLeaderboard: false,
   showParticipantCount: false,
   logoUrl: '',
+  participantTheme: DEFAULT_PARTICIPANT_THEME,
   builderMode: 'normal',
   questionsPerParticipant: 10,
   advancedSelectionMode: 'random_all',
@@ -124,6 +130,7 @@ function SessionFormModal({
   const [logoUrl, setLogoUrl] = useState('')
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoError, setLogoError] = useState('')
+  const [participantTheme, setParticipantTheme] = useState(DEFAULT_PARTICIPANT_THEME)
   const [builderMode, setBuilderMode] = useState(defaultInitial.builderMode)
   const [questionsPerParticipant, setQuestionsPerParticipant] = useState(
     defaultInitial.questionsPerParticipant,
@@ -180,6 +187,7 @@ function SessionFormModal({
     setLogoUrl(initialValues.logoUrl || '')
     setLogoError('')
     setLogoUploading(false)
+    setParticipantTheme(normalizeParticipantTheme(initialValues.participantTheme))
     setBuilderMode(initialValues.builderMode === 'advanced' ? 'advanced' : 'normal')
     setQuestionsPerParticipant(
       Number(initialValues.questionsPerParticipant) > 0
@@ -399,6 +407,7 @@ function SessionFormModal({
       logoUrl: logoUrl
         ? normalizeQuestionMediaUrlForStorage(logoUrl) || logoUrl
         : null,
+      participantTheme: normalizeParticipantTheme(participantTheme),
       builderMode: liveSettingsOnly ? undefined : builderMode,
       questionsPerParticipant:
         !liveSettingsOnly && builderMode === 'advanced' ? Number(questionsPerParticipant) : null,
@@ -936,6 +945,13 @@ function SessionFormModal({
                 Choose a department first so the logo can be uploaded.
               </p>
             ) : null}
+          </div>
+
+          <div className="md:col-span-2 rounded-xl border border-blue-200/70 bg-white p-3">
+            <ParticipantThemePicker
+              value={participantTheme}
+              onChange={setParticipantTheme}
+            />
           </div>
 
           <div className="md:col-span-2 rounded-xl border border-blue-200/70 bg-white">

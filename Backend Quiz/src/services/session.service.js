@@ -2,6 +2,7 @@ const { sequelize } = require("../config/database");
 const {
   normalizePresentModeSettings
 } = require("../utils/presentModeSettings");
+const { normalizeParticipantTheme } = require("../utils/participantTheme");
 const { normalizeTimerSoundFields } = require("../utils/timerSound");
 const {
   resolveJoinAllowlistFields,
@@ -244,6 +245,7 @@ async function createSession({ deptId, input, user }) {
        input.logo_url != null && String(input.logo_url).trim()
          ? String(input.logo_url).trim()
          : null,
+     participant_theme: normalizeParticipantTheme(input.participant_theme),
      present_mode_settings: normalizePresentModeSettings(input.present_mode_settings)
    });
 }
@@ -352,6 +354,7 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
           source.builder_mode === "advanced" ? source.response_time_score_bands ?? null : null,
         qr_code_url: null,
         logo_url: source.logo_url || null,
+        participant_theme: normalizeParticipantTheme(source.participant_theme),
         present_mode_settings: normalizePresentModeSettings(source.present_mode_settings)
       },
       { transaction }
@@ -489,7 +492,8 @@ async function updateSession({ sessionId, input, user }) {
     "show_participant_count",
     "title",
     "logo_url",
-    "present_mode_settings"
+    "present_mode_settings",
+    "participant_theme"
   ];
   const inputKeys = Object.keys(input || {});
 
@@ -497,7 +501,7 @@ async function updateSession({ sessionId, input, user }) {
     const disallowed = inputKeys.filter((key) => !liveSettingsOnly.includes(key));
     if (disallowed.length > 0) {
       const error = new Error(
-        "Only session title, logo, present mode settings, rankings, survey results, and participant count settings can be updated while the session is live"
+        "Only session title, logo, present mode settings, participant theme, rankings, survey results, and participant count settings can be updated while the session is live"
       );
       error.statusCode = 400;
       throw error;
@@ -668,6 +672,10 @@ async function updateSession({ sessionId, input, user }) {
           ? String(input.logo_url).trim()
           : null
         : session.logo_url,
+    participant_theme:
+      input.participant_theme !== undefined
+        ? normalizeParticipantTheme(input.participant_theme)
+        : normalizeParticipantTheme(session.participant_theme),
     present_mode_settings:
       input.present_mode_settings !== undefined
         ? normalizePresentModeSettings(input.present_mode_settings)

@@ -573,7 +573,10 @@ function notifySessionSettings(sessionCode, settings) {
     show_question_leaderboard: Boolean(settings.show_question_leaderboard),
     participant_navigation_enabled: settings.participant_navigation_enabled !== false,
     random_question_order_enabled: Boolean(settings.random_question_order_enabled),
-    allow_late_join: Boolean(settings.allow_late_join)
+    allow_late_join: Boolean(settings.allow_late_join),
+    quiz_total_time_minutes: settings.quiz_total_time_minutes ?? null,
+    present_mode_settings: settings.present_mode_settings ?? null,
+    participant_theme: settings.participant_theme || "default"
   });
 }
 

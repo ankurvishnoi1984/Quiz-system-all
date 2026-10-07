@@ -30,6 +30,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { HostQuestionActionButton } from '../components/live/HostQuestionActionButton'
+import { ParticipantThemePicker } from '../components/session/ParticipantThemePicker'
+import {
+  DEFAULT_PARTICIPANT_THEME,
+  normalizeParticipantTheme,
+} from '../utils/participantTheme'
 import { QuestionMediaUpload } from '../components/builder/QuestionMediaUpload'
 import { QuestionTimerSoundSettings } from '../components/builder/QuestionTimerSoundSettings'
 import { QuestionImportModal } from '../components/builder/QuestionImportModal'
@@ -1345,6 +1350,7 @@ function BuilderPage() {
     leaderboard: false,
     maxParticipants: 300,
     password: '',
+    participantTheme: DEFAULT_PARTICIPANT_THEME,
   })
   const [joinRequirement, setJoinRequirement] = useState('name')
   const [joinOtpRequired, setJoinOtpRequired] = useState(true)
@@ -1593,6 +1599,7 @@ function BuilderPage() {
       leaderboard: Boolean(sessionQuery.data.leaderboard_enabled),
       maxParticipants: Number(sessionQuery.data.max_participants || 300),
       password: '',
+      participantTheme: normalizeParticipantTheme(sessionQuery.data.participant_theme),
     })
     const joinType =
       sessionQuery.data.join_type ||
@@ -1653,6 +1660,9 @@ function BuilderPage() {
         setSettings((prev) => ({
           ...prev,
           leaderboard: Boolean(updated.leaderboard_enabled),
+          participantTheme: normalizeParticipantTheme(
+            updated.participant_theme ?? prev.participantTheme,
+          ),
         }))
       }
       queryClient.invalidateQueries({ queryKey: ['builder-session', sessionId] })
@@ -1683,11 +1693,21 @@ function BuilderPage() {
   const patchSessionSettings = (partial) => {
     const next = {
       leaderboard: partial.leaderboard ?? settings.leaderboard,
+      participantTheme: normalizeParticipantTheme(
+        partial.participantTheme ?? settings.participantTheme,
+      ),
     }
-    setSettings((prev) => ({ ...prev, ...partial }))
-    sessionSettingsMutation.mutate({
-      leaderboard_enabled: next.leaderboard,
-    })
+    setSettings((prev) => ({ ...prev, ...partial, participantTheme: next.participantTheme }))
+    const payload = {}
+    if (partial.leaderboard !== undefined) {
+      payload.leaderboard_enabled = next.leaderboard
+    }
+    if (partial.participantTheme !== undefined) {
+      payload.participant_theme = next.participantTheme
+    }
+    if (Object.keys(payload).length) {
+      sessionSettingsMutation.mutate(payload)
+    }
   }
 
   const questionLeaderboardMutation = useMutation({
@@ -2710,6 +2730,7 @@ function BuilderPage() {
             }
           : {}),
         leaderboard_enabled: settings.leaderboard,
+        participant_theme: normalizeParticipantTheme(settings.participantTheme),
       })
     },
     onSuccess: async () => {
@@ -4082,6 +4103,23 @@ function BuilderPage() {
                   className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
                 />
               </label>
+
+              <div className="rounded-2xl border border-blue-200/70 bg-white p-3">
+                <ParticipantThemePicker
+                  value={settings.participantTheme || DEFAULT_PARTICIPANT_THEME}
+                  onChange={(themeId) => {
+                    if (isDraftSession) {
+                      setDirty(true)
+                      setSettings((prev) => ({
+                        ...prev,
+                        participantTheme: normalizeParticipantTheme(themeId),
+                      }))
+                    } else {
+                      patchSessionSettings({ participantTheme: themeId })
+                    }
+                  }}
+                />
+              </div>
 
               <div className="rounded-2xl border border-blue-200/70 bg-sky-50/80 p-3 text-xs text-slate-600">
                 Per-question rankings visibility is controlled from the question editor (or Live page) for each

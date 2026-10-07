@@ -1,7 +1,13 @@
 import { isRunningInIframe } from '../../../utils/iframeEmbed'
 import { isParticipantEmbedPath } from '../../../utils/joinUrl'
+import { normalizeParticipantTheme } from '../../../utils/participantTheme'
 
-export function PageCenteredShell({ children, maxWidth = 'max-w-lg', compact = null }) {
+export function PageCenteredShell({
+  children,
+  maxWidth = 'max-w-lg',
+  compact = null,
+  theme = 'default',
+}) {
   const inIframe =
     compact == null
       ? isRunningInIframe() ||
@@ -14,6 +20,7 @@ export function PageCenteredShell({ children, maxWidth = 'max-w-lg', compact = n
           ? 'min-h-dvh overflow-y-auto p-3 sm:p-4'
           : 'min-h-dvh p-6 md:min-h-screen'
       }`}
+      data-participant-theme={normalizeParticipantTheme(theme)}
     >
       <div
         className={`w-full ${maxWidth} rounded-2xl border border-blue-200/70 bg-white/92 text-center shadow-sm shadow-navy-900/5 backdrop-blur-sm ${

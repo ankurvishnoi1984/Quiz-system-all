@@ -41,7 +41,7 @@ export function SessionNotLiveView({
   const showScheduledDetails = copy.tone === 'waiting' && scheduledLabel
 
   return (
-    <PageCenteredShell maxWidth="max-w-lg">
+    <PageCenteredShell maxWidth="max-w-lg" theme={session?.participant_theme}>
       <div className="space-y-5">
         <div className="text-center">
           <BrandLogoPair

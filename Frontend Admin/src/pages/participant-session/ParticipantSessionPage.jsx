@@ -43,6 +43,7 @@ import {
   unlockTimerAudio,
 } from '../../utils/timerSounds'
 import { isAdvancedBuilderSession, isSessionQuizTotalTimeEnabled, isSessionRandomQuestionOrderEnabled, isStrictLateJoinSession, sessionHasTimedQuestions } from '../../utils/sessionFlags'
+import { normalizeParticipantTheme } from '../../utils/participantTheme'
 import {
   questionSupportsLeaderboard,
   questionSupportsParticipantResults,
@@ -1169,6 +1170,10 @@ function ParticipantSessionPage({ embed = false }) {
                 data.random_question_order_enabled ?? old.random_question_order_enabled,
               allow_late_join:
                 data.allow_late_join !== undefined ? data.allow_late_join : old.allow_late_join,
+              participant_theme:
+                data.participant_theme !== undefined
+                  ? normalizeParticipantTheme(data.participant_theme)
+                  : old.participant_theme,
             }
           : old,
       )
@@ -2435,9 +2440,11 @@ function ParticipantSessionPage({ embed = false }) {
     setStep('join')
   }, [])
 
+  const participantTheme = normalizeParticipantTheme(session?.participant_theme)
+
   if (!participantHydrated) {
     return (
-      <PageCenteredShell compact={embedMode}>
+      <PageCenteredShell compact={embedMode} theme={participantTheme}>
         <p className="text-slate-600">Restoring session...</p>
       </PageCenteredShell>
     )
@@ -2445,7 +2452,7 @@ function ParticipantSessionPage({ embed = false }) {
 
   if (ipBlocked) {
     return (
-      <PageCenteredShell compact={embedMode}>
+      <PageCenteredShell compact={embedMode} theme={participantTheme}>
         <h1 className="text-2xl font-bold text-navy-900">Access blocked</h1>
         <p className="mt-2 text-slate-600">
           This IP address has been blocked by an administrator. You cannot join or stay in this
@@ -2463,7 +2470,7 @@ function ParticipantSessionPage({ embed = false }) {
 
   if (showJoinForm && (autoJoinPending || tokenIdentityLoading) && !joinError && !tokenIdentityError) {
     return (
-      <PageCenteredShell compact={embedMode}>
+      <PageCenteredShell compact={embedMode} theme={participantTheme}>
         <p className="text-sm font-semibold text-navy-900">
           {tokenIdentityLoading ? 'Checking signed join link…' : 'Joining session…'}
         </p>
@@ -2533,7 +2540,7 @@ function ParticipantSessionPage({ embed = false }) {
 
   if (effectiveSessionCode && sessionQuery.isLoading) {
     return (
-      <PageCenteredShell compact={embedMode}>
+      <PageCenteredShell compact={embedMode} theme={participantTheme}>
         <p className="text-slate-600">Loading session...</p>
       </PageCenteredShell>
     )
@@ -2541,7 +2548,7 @@ function ParticipantSessionPage({ embed = false }) {
 
   if (effectiveSessionCode && sessionLookupFailed) {
     return (
-      <PageCenteredShell compact={embedMode}>
+      <PageCenteredShell compact={embedMode} theme={participantTheme}>
         <h1 className="text-2xl font-bold text-navy-900">Session not found</h1>
         <p className="mt-2 text-slate-600">The join link is invalid or this session was removed.</p>
       </PageCenteredShell>
@@ -2550,7 +2557,7 @@ function ParticipantSessionPage({ embed = false }) {
 
   if (!session) {
     return (
-      <PageCenteredShell compact={embedMode}>
+      <PageCenteredShell compact={embedMode} theme={participantTheme}>
         <p className="text-slate-600">Loading session...</p>
       </PageCenteredShell>
     )
@@ -2582,6 +2589,7 @@ function ParticipantSessionPage({ embed = false }) {
           ? 'min-h-dvh overflow-y-auto p-3 sm:p-4'
           : 'min-h-dvh p-4 md:min-h-screen md:p-6'
       }`}
+      data-participant-theme={participantTheme}
     >
       <div className="mx-auto w-full max-w-4xl space-y-4">
         <SessionHeader session={session} joinedUser={joinedUser} />

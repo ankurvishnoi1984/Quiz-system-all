@@ -282,6 +282,7 @@ function validateUpdateSessionPayload(payload) {
     "auto_end_time",
     "logo_url",
     "present_mode_settings",
+    "participant_theme",
     "builder_mode",
     "questions_per_participant",
     "advanced_selection_mode",

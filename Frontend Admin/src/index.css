@@ -23,10 +23,13 @@
 
 @layer components {
   /*
-   * Participant join / waiting / quiz background.
-   * Brand navy wash + geometric lattice + soft orbs so the page feels designed, not flat white.
+   * Participant screen themes.
+   * Use: class="participant-session-bg" data-participant-theme="default|ocean|meadow|ember|graphite"
+   * Harbor (`default`) is the current production look.
    */
   .participant-session-bg {
+    --participant-orb-a: rgba(61, 127, 160, 0.28);
+    --participant-orb-b: rgba(27, 75, 107, 0.22);
     position: relative;
     isolation: isolate;
     overflow-x: clip;
@@ -39,6 +42,54 @@
       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72' viewBox='0 0 72 72'%3E%3Cg fill='none' stroke='%231b4b6b' stroke-opacity='0.09' stroke-width='1'%3E%3Cpath d='M36 4L68 22v28L36 68 4 50V22z'/%3E%3Cpath d='M36 16L56 28v16L36 56 16 44V28z'/%3E%3C/g%3E%3Ccircle cx='36' cy='36' r='2.2' fill='%231b4b6b' fill-opacity='0.1'/%3E%3C/svg%3E"),
       linear-gradient(160deg, #cfdfe9 0%, #e8f0f6 38%, #f3f7fa 68%, #d9e6f0 100%);
     background-attachment: fixed;
+  }
+
+  .participant-session-bg[data-participant-theme="ocean"] {
+    --participant-orb-a: rgba(14, 116, 144, 0.32);
+    --participant-orb-b: rgba(21, 94, 117, 0.24);
+    background-color: #b9d7e6;
+    background-image:
+      radial-gradient(ellipse 95% 65% at 8% -5%, rgba(14, 116, 144, 0.28), transparent 55%),
+      radial-gradient(ellipse 75% 50% at 100% 15%, rgba(8, 145, 178, 0.22), transparent 52%),
+      radial-gradient(ellipse 60% 45% at 70% 100%, rgba(21, 94, 117, 0.16), transparent 55%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='40' viewBox='0 0 80 40'%3E%3Cpath d='M0 20c10-12 20-12 30 0s20 12 30 0 20-12 30 0' fill='none' stroke='%230e7490' stroke-opacity='0.14' stroke-width='1.4'/%3E%3Cpath d='M0 32c10-10 20-10 30 0s20 10 30 0 20-10 30 0' fill='none' stroke='%23155e75' stroke-opacity='0.1' stroke-width='1'/%3E%3C/svg%3E"),
+      linear-gradient(165deg, #9fc9db 0%, #d2e8f1 40%, #e8f4f8 70%, #b5d5e4 100%);
+  }
+
+  .participant-session-bg[data-participant-theme="meadow"] {
+    --participant-orb-a: rgba(5, 150, 105, 0.26);
+    --participant-orb-b: rgba(4, 120, 87, 0.2);
+    background-color: #d5ebe0;
+    background-image:
+      radial-gradient(ellipse 90% 60% at 5% 0%, rgba(4, 120, 87, 0.2), transparent 55%),
+      radial-gradient(ellipse 70% 45% at 95% 10%, rgba(16, 185, 129, 0.18), transparent 50%),
+      radial-gradient(ellipse 55% 40% at 50% 100%, rgba(5, 150, 105, 0.12), transparent 55%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Cpath d='M28 4l20 12v24L28 52 8 40V16z' fill='none' stroke='%23047857' stroke-opacity='0.12' stroke-width='1'/%3E%3Ccircle cx='28' cy='28' r='3' fill='%23059669' fill-opacity='0.1'/%3E%3C/svg%3E"),
+      linear-gradient(160deg, #c5e6d6 0%, #e7f5ee 42%, #f3faf6 70%, #d0eadc 100%);
+  }
+
+  .participant-session-bg[data-participant-theme="ember"] {
+    --participant-orb-a: rgba(244, 63, 94, 0.2);
+    --participant-orb-b: rgba(159, 18, 57, 0.16);
+    background-color: #f0e2e5;
+    background-image:
+      radial-gradient(ellipse 90% 60% at 10% -5%, rgba(190, 18, 60, 0.16), transparent 55%),
+      radial-gradient(ellipse 70% 50% at 100% 5%, rgba(251, 113, 133, 0.18), transparent 50%),
+      radial-gradient(ellipse 55% 40% at 40% 100%, rgba(200, 35, 44, 0.1), transparent 55%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Ccircle cx='8' cy='8' r='1.4' fill='%239f1239' fill-opacity='0.12'/%3E%3Ccircle cx='32' cy='20' r='1.1' fill='%23be123c' fill-opacity='0.1'/%3E%3Cpath d='M4 40c8-14 16-14 24 0s16 14 24 0' fill='none' stroke='%23be123c' stroke-opacity='0.1' stroke-width='1'/%3E%3C/svg%3E"),
+      linear-gradient(165deg, #ebd0d5 0%, #f7ecee 40%, #fbf6f7 68%, #e8d5d9 100%);
+  }
+
+  .participant-session-bg[data-participant-theme="graphite"] {
+    --participant-orb-a: rgba(100, 116, 139, 0.28);
+    --participant-orb-b: rgba(51, 65, 85, 0.2);
+    background-color: #d8dee6;
+    background-image:
+      radial-gradient(ellipse 90% 60% at 0% 0%, rgba(51, 65, 85, 0.18), transparent 55%),
+      radial-gradient(ellipse 70% 45% at 100% 0%, rgba(100, 116, 139, 0.2), transparent 50%),
+      radial-gradient(ellipse 55% 40% at 60% 100%, rgba(71, 85, 105, 0.12), transparent 55%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Cpath d='M0 20h40M20 0v40' stroke='%23334155' stroke-opacity='0.08' stroke-width='1'/%3E%3Ccircle cx='20' cy='20' r='1.5' fill='%2364748b' fill-opacity='0.14'/%3E%3C/svg%3E"),
+      linear-gradient(160deg, #c9d1db 0%, #e8ecf1 40%, #f4f6f8 68%, #d3dae3 100%);
   }
 
   .participant-session-bg::before,
@@ -56,7 +107,7 @@
     right: -6rem;
     width: min(28rem, 70vw);
     height: min(28rem, 70vw);
-    background: radial-gradient(circle, rgba(61, 127, 160, 0.28) 0%, rgba(61, 127, 160, 0) 68%);
+    background: radial-gradient(circle, var(--participant-orb-a) 0%, transparent 68%);
   }
 
   .participant-session-bg::after {
@@ -64,12 +115,98 @@
     left: -8rem;
     width: min(32rem, 80vw);
     height: min(32rem, 80vw);
-    background: radial-gradient(circle, rgba(27, 75, 107, 0.22) 0%, rgba(27, 75, 107, 0) 70%);
+    background: radial-gradient(circle, var(--participant-orb-b) 0%, transparent 70%);
   }
 
   .participant-session-bg > * {
     position: relative;
     z-index: 1;
+  }
+
+  /* Compact theme swatches in Builder / session modal */
+  .participant-theme-preview {
+    position: relative;
+    height: 5.5rem;
+    padding: 0.75rem 0.8rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 0.4rem;
+    background-attachment: scroll !important;
+    overflow: hidden;
+  }
+
+  .participant-theme-preview--row {
+    width: 5.5rem;
+    height: 3.75rem;
+    padding: 0;
+  }
+
+  @media (min-width: 640px) {
+    .participant-theme-preview--row {
+      width: 7rem;
+      height: 4.25rem;
+    }
+  }
+
+  .participant-theme-preview::before,
+  .participant-theme-preview::after {
+    position: absolute;
+    filter: none;
+  }
+
+  .participant-theme-preview::before {
+    top: -2rem;
+    right: -1.5rem;
+    width: 5.5rem;
+    height: 5.5rem;
+  }
+
+  .participant-theme-preview::after {
+    bottom: -2.5rem;
+    left: -2rem;
+    width: 6rem;
+    height: 6rem;
+  }
+
+  .participant-theme-preview-card {
+    height: 0.75rem;
+    width: 72%;
+    border-radius: 0.4rem;
+    background: rgba(255, 255, 255, 0.88);
+    border: 1px solid rgba(27, 75, 107, 0.12);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  }
+
+  .participant-theme-preview-card--sm {
+    width: 46%;
+    height: 0.55rem;
+    opacity: 0.85;
+  }
+
+  /* Full theme preview modal stage (orbs scoped to the box, not the viewport) */
+  .participant-theme-stage {
+    background-attachment: scroll !important;
+  }
+
+  .participant-theme-stage::before,
+  .participant-theme-stage::after {
+    position: absolute;
+    filter: none;
+  }
+
+  .participant-theme-stage::before {
+    top: -4rem;
+    right: -3rem;
+    width: 14rem;
+    height: 14rem;
+  }
+
+  .participant-theme-stage::after {
+    bottom: -5rem;
+    left: -4rem;
+    width: 16rem;
+    height: 16rem;
   }
 
   .glass-card {

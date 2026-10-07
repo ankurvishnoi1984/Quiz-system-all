@@ -44,7 +44,7 @@ export function JoinFormView({
   const busy = otpBusy || joinBusy
 
   return (
-    <PageCenteredShell maxWidth="max-w-lg">
+    <PageCenteredShell maxWidth="max-w-lg" theme={session?.participant_theme}>
       <form onSubmit={onSubmit} className="quiz-enter space-y-4 text-left">
         <div className="text-center">
           <BrandLogoPair
