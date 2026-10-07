@@ -270,6 +270,7 @@ function ParticipantSessionPage({ embed = false }) {
   const allQuestionsClosedNoticeShownRef = useRef(false)
   const sessionEndedNotifiedRef = useRef(false)
   const [leaderboard, setLeaderboard] = useState([])
+  const [leaderboardMe, setLeaderboardMe] = useState(null)
   const [questionLeaderboardByQuestion, setQuestionLeaderboardByQuestion] = useState({})
   const [questionLbVisibleByQuestion, setQuestionLbVisibleByQuestion] = useState({})
   const [answerRevealByQuestion, setAnswerRevealByQuestion] = useState({})
@@ -1122,6 +1123,10 @@ function ParticipantSessionPage({ embed = false }) {
           [String(data.question_id)]: data.question_leaderboard,
         }))
       }
+      // Refetch so "me" / out-of-top-10 rank stays accurate for this participant.
+      if (dbSessionId) {
+        queryClient.invalidateQueries({ queryKey: ['participant-leaderboard', dbSessionId] })
+      }
     })
 
     const offSessionSettings = client.on(RealtimeEvent.SESSION_SETTINGS_UPDATED, (data) => {
@@ -1654,9 +1659,15 @@ function ParticipantSessionPage({ embed = false }) {
   })
 
   useEffect(() => {
-    if (leaderboardQuery.data != null) {
+    if (leaderboardQuery.data == null) return
+    if (Array.isArray(leaderboardQuery.data)) {
       setLeaderboard(leaderboardQuery.data)
+      return
     }
+    if (Array.isArray(leaderboardQuery.data.leaderboard)) {
+      setLeaderboard(leaderboardQuery.data.leaderboard)
+    }
+    setLeaderboardMe(leaderboardQuery.data.me ?? null)
   }, [leaderboardQuery.data])
 
   const currentResponse = responses[question?.id] || {}
@@ -2207,6 +2218,7 @@ function ParticipantSessionPage({ embed = false }) {
         token: result.token,
         refreshToken: result.refreshToken,
         participant: {
+          id: result.participant.participant_id ?? result.participant.id ?? null,
           name: result.participant.nickname || 'Anonymous',
           email: result.participant.email,
           mobile: result.participant.mobile,
@@ -2602,6 +2614,11 @@ function ParticipantSessionPage({ embed = false }) {
             sessionStatus={session?.status}
             isLoading={leaderboardQuery.isLoading}
             title={rankingsTitle}
+            viewerEntry={leaderboardMe}
+            highlightParticipantId={
+              joinedUser?.id ?? leaderboardMe?.participant_id ?? null
+            }
+            topN={10}
           />
         ) : showSurveyEndingScreen ? (
           <SurveySessionEndingPanel

@@ -213,7 +213,7 @@ function buildMatchAnalytics(question, responses) {
   };
 }
 
-async function buildSessionLeaderboard(sessionId, limit = 10) {
+async function buildSessionLeaderboardRanked(sessionId) {
   const rows = await Participant.findAll({
     where: { session_id: sessionId },
     attributes: ["participant_id", "nickname", "email", "is_anonymous", "score"]
@@ -266,12 +266,18 @@ async function buildSessionLeaderboard(sessionId, limit = 10) {
       if (nameCompare !== 0) return nameCompare;
       return Number(a.participant_id) - Number(b.participant_id);
     })
-    .slice(0, limit)
-    .map((row) =>
-      toLeaderboardEntry(row.participant_id, row.displayName, row.score, {
+    .map((row, index) => ({
+      ...toLeaderboardEntry(row.participant_id, row.displayName, row.score, {
         avgResponseTimeMs: row.avgResponseTimeMs
-      })
-    );
+      }),
+      rank: index + 1
+    }));
+}
+
+async function buildSessionLeaderboard(sessionId, limit = 10) {
+  const ranked = await buildSessionLeaderboardRanked(sessionId);
+  const capped = Math.max(1, Number(limit) || 10);
+  return ranked.slice(0, capped).map(({ rank: _rank, ...entry }) => entry);
 }
 
 async function buildQuestionLeaderboard(questionId, limit = 10) {
@@ -1298,9 +1304,28 @@ async function getParticipantSessionLeaderboard({ sessionId, participant }) {
     coerceSessionFlag(session.leaderboard_enabled) ||
     coerceSessionFlag(session.current_rankings_enabled);
   if (!leaderboardEnabled) {
-    return [];
+    return { leaderboard: [], me: null };
   }
-  return buildSessionLeaderboard(sessionId);
+
+  const ranked = await buildSessionLeaderboardRanked(sessionId);
+  const topN = 10;
+  const leaderboard = ranked.slice(0, topN).map(({ rank: _rank, ...entry }) => entry);
+  const viewerId = Number(participant?.participant_id);
+  const meRow = ranked.find((row) => Number(row.participant_id) === viewerId) || null;
+  return {
+    leaderboard,
+    me: meRow
+      ? {
+          participant_id: meRow.participant_id,
+          name: meRow.name,
+          nickname: meRow.nickname,
+          score: meRow.score,
+          rank: meRow.rank,
+          avg_response_time_ms: meRow.avg_response_time_ms ?? null,
+          response_time_ms: meRow.response_time_ms ?? null
+        }
+      : null
+  };
 }
 
 async function getSessionLeaderboardForStaff({ sessionId, user, limit = 10 }) {

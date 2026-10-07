@@ -156,7 +156,10 @@ export async function getQuestionResultsApi(participantToken, questionId) {
 
 export async function getSessionLeaderboardApi(participantToken, sessionId) {
   const data = await authRequest(`/sessions/${sessionId}/leaderboard`, participantToken)
-  return data?.leaderboard || []
+  return {
+    leaderboard: data?.leaderboard || [],
+    me: data?.me || null,
+  }
 }
 
 export async function getParticipantSessionSurveySummaryApi(participantToken, sessionId) {
