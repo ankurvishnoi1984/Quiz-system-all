@@ -1,5 +1,6 @@
 import { PresentSlideHeader } from './PresentShell'
 import { PresentJoinPanel } from './PresentJoinInfo'
+import { PresentSessionReadyLobby } from './PresentSessionReadyLobby'
 import { getPresentModeSettings } from '../../utils/presentModeSettings'
 
 export function ParticipantsSlide({
@@ -35,7 +36,18 @@ export function ParticipantsSlide({
         showParticipantStats={showParticipantStats}
       />
 
-      {showSessionInfo ? <PresentJoinPanel session={session} /> : null}
+      {showSessionInfo ? (
+        <PresentJoinPanel session={session} />
+      ) : (
+        <PresentSessionReadyLobby
+          session={session}
+          participantCount={participantCount}
+          liveParticipantCount={liveParticipantCount}
+          showParticipantStats={showParticipantStats}
+          readOnly={readOnly}
+          isSessionLive={isSessionLive}
+        />
+      )}
     </div>
   )
 }

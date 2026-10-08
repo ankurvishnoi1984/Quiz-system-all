@@ -46,7 +46,7 @@ function usePresentJoinInfo(session) {
   return { sessionCode, directJoinUrl, joinPageUrl, qrDataUrl }
 }
 
-function SessionMetaRow({ icon: Icon, label, value }) {
+export function SessionMetaRow({ icon: Icon, label, value }) {
   return (
     <div className="flex min-w-0 items-start gap-3 rounded-2xl border border-blue-200/70 bg-white/95 px-[clamp(0.85rem,2vw,1.25rem)] py-[clamp(0.65rem,1.5vh,0.9rem)] shadow-sm shadow-navy-900/5">
       <span className="grid size-[clamp(2.5rem,5vw,3rem)] shrink-0 place-items-center rounded-xl bg-linear-to-br from-sky-100 to-blue-100 text-sky-800">
