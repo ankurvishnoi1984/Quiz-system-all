@@ -399,6 +399,9 @@ function ParticipantSessionPage({ embed = false }) {
   const rankingsTitle = session?.current_rankings_enabled
     ? 'Current rankings'
     : 'Overall Rankings'
+  const rankingsSubtitle = session?.current_rankings_enabled
+    ? 'Based on questions attempted so far'
+    : null
   // Rankings replace the live question — participants only see the leaderboard screen.
   const showOverallLeaderboardTab =
     showOverallLeaderboard &&
@@ -2654,6 +2657,7 @@ function ParticipantSessionPage({ embed = false }) {
             sessionStatus={session?.status}
             isLoading={leaderboardQuery.isLoading}
             title={rankingsTitle}
+            subtitle={rankingsSubtitle}
             viewerEntry={leaderboardMe}
             highlightParticipantId={
               joinedUser?.id ?? leaderboardMe?.participant_id ?? null

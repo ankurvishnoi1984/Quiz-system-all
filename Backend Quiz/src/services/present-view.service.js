@@ -6,6 +6,7 @@ const {
   getQuestionResults,
   getSessionResponses,
   buildSessionLeaderboard,
+  resolveSessionLeaderboardScope,
   getSessionSurveySummaryPayload
 } = require("./response.service");
 const { Participant, Question, Session } = require("../models");
@@ -254,7 +255,10 @@ async function listPresentViewQaQuestions({ sessionId, viewer }) {
 
 async function getPresentViewLeaderboard({ sessionId, viewer, limit = 10 }) {
   assertPresenterViewerSession(viewer, sessionId);
-  return buildSessionLeaderboard(sessionId, limit);
+  const session = await getSessionOrThrow(sessionId);
+  return buildSessionLeaderboard(sessionId, limit, {
+    scope: resolveSessionLeaderboardScope(session)
+  });
 }
 
 async function getPresentViewSurveySummary({ sessionId, viewer }) {

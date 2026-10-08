@@ -335,7 +335,7 @@ export default function QuickViewModePage() {
               title={
                 session?.current_rankings_enabled
                   ? 'Hide current rankings from participants'
-                  : 'Show current rankings and close the live question'
+                  : 'Show current rankings for questions attempted so far and close the live question'
               }
               active={Boolean(session?.current_rankings_enabled)}
               tone="amber"

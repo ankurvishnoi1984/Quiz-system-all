@@ -931,7 +931,7 @@ function PresentModePage({
               ? 'Join → pool overview → rankings (not synced to participant screens)'
               : '← → arrow keys to change slides'}
           </p>
-          {!readOnly && canToggleOverallLeaderboard && showSessionControls && advancedSlotActivation ? (
+          {!readOnly && canToggleOverallLeaderboard && showSessionControls ? (
             <HostQuestionActionButton
               disabled={sessionLeaderboardMutation.isPending}
               icon={Trophy}
@@ -942,7 +942,7 @@ function PresentModePage({
               title={
                 session?.current_rankings_enabled
                   ? 'Hide current rankings from participants'
-                  : 'Show current rankings and close the live question'
+                  : 'Show current rankings for questions attempted so far and close the live question'
               }
               active={Boolean(session?.current_rankings_enabled)}
               tone="amber"

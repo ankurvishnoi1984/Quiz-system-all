@@ -171,7 +171,10 @@ async function update(req, res) {
         (req.body.leaderboard_enabled === true && session.leaderboard_enabled) ||
         (req.body.current_rankings_enabled === true && session.current_rankings_enabled)
       ) {
-        const leaderboard = await buildSessionLeaderboard(session.session_id);
+        const { resolveSessionLeaderboardScope } = require("../services/response.service");
+        const leaderboard = await buildSessionLeaderboard(session.session_id, 10, {
+          scope: resolveSessionLeaderboardScope(session)
+        });
         notifyLeaderboard(session.session_code, { leaderboard });
       }
     }
@@ -203,9 +206,12 @@ async function resetResponses(req, res) {
     const session = await Session.findByPk(result.session_id);
     if (session?.session_code) {
       notifySessionUpdate(session.session_code, session.status);
-      if (session.leaderboard_enabled) {
-        buildSessionLeaderboard(session.session_id)
-          .then((leaderboard) => notifyLeaderboard(session.session_code, leaderboard))
+      if (session.leaderboard_enabled || session.current_rankings_enabled) {
+        const { resolveSessionLeaderboardScope } = require("../services/response.service");
+        buildSessionLeaderboard(session.session_id, 10, {
+          scope: resolveSessionLeaderboardScope(session)
+        })
+          .then((leaderboard) => notifyLeaderboard(session.session_code, { leaderboard }))
           .catch(() => {});
       }
     }
