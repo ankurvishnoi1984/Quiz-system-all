@@ -551,8 +551,7 @@ function DashboardPage() {
           values.builderMode === 'advanced' && values.advancedSelectionMode === 'random_from_selected'
             ? 'random_from_selected'
             : 'random_all',
-        response_time_score_bands:
-          values.builderMode === 'advanced' ? values.responseTimeScoreBands || null : null,
+        response_time_score_bands: values.responseTimeScoreBands ?? null,
         present_mode_settings: values.presentModeSettings || null,
       },
     })
@@ -684,8 +683,7 @@ function DashboardPage() {
           values.builderMode === 'advanced' && values.advancedSelectionMode === 'random_from_selected'
             ? 'random_from_selected'
             : 'random_all',
-        response_time_score_bands:
-          values.builderMode === 'advanced' ? values.responseTimeScoreBands || null : null,
+        response_time_score_bands: values.responseTimeScoreBands ?? null,
       })
     }
 

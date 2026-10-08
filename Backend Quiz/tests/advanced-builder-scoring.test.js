@@ -5,6 +5,7 @@ const {
   scoreFromResponseTimeBands,
   normalizeScoreBands,
   isAdvancedBuilderSession,
+  sessionHasResponseTimeScoreBands,
   buildScoreBandsForTimer,
   DEFAULT_RESPONSE_TIME_SCORE_BANDS
 } = require("../src/utils/advancedBuilder");
@@ -16,6 +17,29 @@ function assert(cond, msg) {
 assert(isAdvancedBuilderSession({ builder_mode: "advanced" }), "advanced detect");
 assert(!isAdvancedBuilderSession({ builder_mode: "normal" }), "normal detect");
 assert(!isAdvancedBuilderSession({}), "default normal");
+
+assert(
+  sessionHasResponseTimeScoreBands({
+    builder_mode: "normal",
+    response_time_score_bands: DEFAULT_RESPONSE_TIME_SCORE_BANDS
+  }),
+  "normal + bands enabled"
+);
+assert(
+  !sessionHasResponseTimeScoreBands({ builder_mode: "normal", response_time_score_bands: null }),
+  "normal + null bands disabled"
+);
+assert(
+  !sessionHasResponseTimeScoreBands({ builder_mode: "advanced", response_time_score_bands: [] }),
+  "empty bands disabled"
+);
+assert(
+  sessionHasResponseTimeScoreBands({
+    builder_mode: "advanced",
+    response_time_score_bands: DEFAULT_RESPONSE_TIME_SCORE_BANDS
+  }),
+  "advanced + bands enabled"
+);
 
 const bands = normalizeScoreBands(null);
 assert(bands.length === DEFAULT_RESPONSE_TIME_SCORE_BANDS.length, "default bands");

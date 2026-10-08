@@ -237,9 +237,7 @@ async function createSession({ deptId, input, user }) {
          ? "random_from_selected"
          : "random_all",
      response_time_score_bands:
-       input.builder_mode === "advanced" && input.response_time_score_bands != null
-         ? input.response_time_score_bands
-         : null,
+       input.response_time_score_bands != null ? input.response_time_score_bands : null,
      qr_code_url: input.qr_code_url || null,
      logo_url:
        input.logo_url != null && String(input.logo_url).trim()
@@ -350,8 +348,7 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
           source.builder_mode === "advanced"
             ? source.advanced_selection_mode || "random_all"
             : "random_all",
-        response_time_score_bands:
-          source.builder_mode === "advanced" ? source.response_time_score_bands ?? null : null,
+        response_time_score_bands: source.response_time_score_bands ?? null,
         qr_code_url: null,
         logo_url: source.logo_url || null,
         participant_theme: normalizeParticipantTheme(source.participant_theme),
@@ -546,7 +543,6 @@ async function updateSession({ sessionId, input, user }) {
   if (nextBuilderMode === "normal") {
     nextQuestionsPerParticipant = null;
     nextAdvancedSelectionMode = "random_all";
-    nextResponseTimeScoreBands = null;
   } else {
     if (input.questions_per_participant !== undefined) {
       nextQuestionsPerParticipant =
@@ -560,9 +556,9 @@ async function updateSession({ sessionId, input, user }) {
           ? "random_from_selected"
           : "random_all";
     }
-    if (input.response_time_score_bands !== undefined) {
-      nextResponseTimeScoreBands = input.response_time_score_bands;
-    }
+  }
+  if (input.response_time_score_bands !== undefined) {
+    nextResponseTimeScoreBands = input.response_time_score_bands;
   }
 
   Object.assign(session, {

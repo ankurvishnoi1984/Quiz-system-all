@@ -37,6 +37,7 @@ import {
 } from '../utils/participantTheme'
 import { QuestionMediaUpload } from '../components/builder/QuestionMediaUpload'
 import { QuestionTimerSoundSettings } from '../components/builder/QuestionTimerSoundSettings'
+import { ResponseTimeScoreBandsEditor } from '../components/builder/ResponseTimeScoreBandsEditor'
 import { QuestionImportModal } from '../components/builder/QuestionImportModal'
 import { AiGenerateQuestionsModal } from '../components/builder/AiGenerateQuestionsModal'
 import { QuestionBankModal } from '../components/builder/QuestionBankModal'
@@ -79,7 +80,6 @@ import {
 } from '../components/dashboard/PlanExpiredNotice'
 import {
   buildScoreBandsForTimer,
-  formatScoreBandRange,
   resolveUniformPoolTimeLimit,
   DEFAULT_BAND_POINTS,
 } from '../utils/advancedScoreBands'
@@ -2135,10 +2135,13 @@ function BuilderPage() {
 
   const [scoreBandCount, setScoreBandCount] = useState(6)
   const [localScoreBands, setLocalScoreBands] = useState(null)
+  const [scoreBandsEnabled, setScoreBandsEnabled] = useState(false)
 
   useEffect(() => {
     const raw = sessionQuery.data?.response_time_score_bands
-    if (Array.isArray(raw) && raw.length) {
+    const enabled = Array.isArray(raw) && raw.length > 0
+    setScoreBandsEnabled(enabled)
+    if (enabled) {
       setScoreBandCount(raw.length)
       setLocalScoreBands(null)
     }
@@ -2164,7 +2167,11 @@ function BuilderPage() {
     scoreBandCount,
   ])
 
+  const responseTimeScoringEnabled =
+    scoreBandsEnabled || (Array.isArray(localScoreBands) && localScoreBands.length > 0)
+
   const persistScoreBands = (next) => {
+    setScoreBandsEnabled(true)
     setLocalScoreBands(next)
     sessionSettingsMutation.mutate({ response_time_score_bands: next })
   }
@@ -2174,6 +2181,21 @@ function BuilderPage() {
     const existingPoints = keepPoints ? scoreBands.map((b) => b.points) : DEFAULT_BAND_POINTS
     const next = buildScoreBandsForTimer(limit, count, existingPoints)
     persistScoreBands(next)
+  }
+
+  const setResponseTimeScoringEnabled = (on) => {
+    if (on) {
+      setScoreBandsEnabled(true)
+      rebuildBandsFromTimer(
+        poolTimeLimitSeconds > 0 ? poolTimeLimitSeconds : 30,
+        scoreBandCount,
+      )
+      return
+    }
+    setScoreBandsEnabled(false)
+    setLocalScoreBands(null)
+    setDirty(true)
+    sessionSettingsMutation.mutate({ response_time_score_bands: null })
   }
 
   const setQuestionCounts = useMemo(() => {
@@ -3537,7 +3559,7 @@ function BuilderPage() {
                     tone="violet"
                   />
                 ) : null}
-                {quizMode && !isAdvancedBuilder ? (
+                {quizMode && !responseTimeScoringEnabled ? (
                   <div className="flex items-center gap-2 rounded-2xl border border-blue-200/70 bg-white px-3 py-2">
                     <p className="text-sm font-semibold text-slate-700">Points</p>
                     <input
@@ -3553,7 +3575,7 @@ function BuilderPage() {
                       }`}
                     />
                   </div>
-                ) : isAdvancedBuilder && quizMode ? (
+                ) : quizMode && responseTimeScoringEnabled ? (
                   <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900">
                     Points from response-time bands
                   </span>
@@ -3903,7 +3925,7 @@ function BuilderPage() {
                         )
                         if (mode !== 'Custom') setTimeLimitMode(mode)
                         else setTimeLimitMode('Custom')
-                        if (seconds > 0) {
+                        if (seconds > 0 && responseTimeScoringEnabled) {
                           rebuildBandsFromTimer(seconds, scoreBandCount)
                         }
                       }}
@@ -3925,119 +3947,45 @@ function BuilderPage() {
                   </p>
                 </div>
 
-                <div>
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-slate-700">Response-time score bands</p>
-                    <label className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600">
-                      Ranges
-                      <select
-                        disabled={!isDraftSession}
-                        value={scoreBandCount}
-                        onChange={(e) => {
-                          const count = Number(e.target.value) || 6
-                          setScoreBandCount(count)
-                          rebuildBandsFromTimer(
-                            poolTimeLimitSeconds > 0 ? poolTimeLimitSeconds : 30,
-                            count,
-                          )
-                        }}
-                        className="h-8 rounded-lg border border-emerald-200/70 bg-white px-2 text-xs disabled:bg-slate-50"
-                      >
-                        {[3, 4, 5, 6, 7, 8].map((n) => (
-                          <option key={n} value={n}>
-                            {n}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  <p className="mt-1 text-[11px] text-slate-500">
-                    {poolTimeLimitSeconds > 0
-                      ? `Ranges divide the ${poolTimeLimitSeconds}s timer. Faster answers earn more points.`
-                      : 'Set a pool time limit first — ranges will divide that timer evenly.'}
-                  </p>
-                  <div className="mt-2 space-y-2">
-                    {scoreBands.map((band, index) => (
-                      <div key={`band-${index}`} className="flex flex-wrap items-center gap-2 text-xs">
-                        <span className="w-16 shrink-0 font-semibold text-slate-600">
-                          {formatScoreBandRange(scoreBands, index)}
-                        </span>
-                        <span className="text-slate-400">→</span>
-                        <label className="flex items-center gap-1 text-slate-500">
-                          ≤
-                          <input
-                            type="number"
-                            min={index === 0 ? 1 : Number(scoreBands[index - 1]?.max_seconds || 0) + 1}
-                            max={
-                              index === scoreBands.length - 1
-                                ? Math.max(poolTimeLimitSeconds || 30, band.max_seconds)
-                                : undefined
-                            }
-                            disabled={!isDraftSession}
-                            value={band.max_seconds}
-                            onChange={(e) => {
-                              const maxSeconds = Math.max(1, Number(e.target.value) || 1)
-                              const next = scoreBands.map((row, i) =>
-                                i === index ? { ...row, max_seconds: maxSeconds } : row,
-                              )
-                              // Keep ranges increasing
-                              for (let i = 1; i < next.length; i += 1) {
-                                if (next[i].max_seconds <= next[i - 1].max_seconds) {
-                                  next[i] = {
-                                    ...next[i],
-                                    max_seconds: next[i - 1].max_seconds + 1,
-                                  }
-                                }
-                              }
-                              if (poolTimeLimitSeconds > 0) {
-                                next[next.length - 1] = {
-                                  ...next[next.length - 1],
-                                  max_seconds: Math.max(
-                                    next[next.length - 1].max_seconds,
-                                    poolTimeLimitSeconds,
-                                  ),
-                                }
-                              }
-                              persistScoreBands(next)
-                            }}
-                            className="h-8 w-14 rounded-lg border border-emerald-200/70 bg-white px-1.5 text-sm disabled:bg-slate-50"
-                          />
-                          s
-                        </label>
-                        <input
-                          type="number"
-                          min={0}
-                          disabled={!isDraftSession}
-                          value={band.points}
-                          onChange={(e) => {
-                            const next = scoreBands.map((row, i) =>
-                              i === index
-                                ? { ...row, points: Number(e.target.value) || 0 }
-                                : row,
-                            )
-                            persistScoreBands(next)
-                          }}
-                          className="h-8 w-20 rounded-lg border border-emerald-200/70 bg-white px-2 text-sm disabled:bg-slate-50"
-                        />
-                        <span className="text-slate-500">pts</span>
-                      </div>
-                    ))}
-                  </div>
-                  {isDraftSession && poolTimeLimitSeconds > 0 ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        rebuildBandsFromTimer(poolTimeLimitSeconds, scoreBandCount, false)
-                      }
-                      className="mt-2 text-[11px] font-semibold text-emerald-800 underline-offset-2 hover:underline"
-                    >
-                      Reset ranges to even split of {poolTimeLimitSeconds}s
-                    </button>
-                  ) : null}
-                </div>
+                <ResponseTimeScoreBandsEditor
+                  enabled={responseTimeScoringEnabled}
+                  onEnabledChange={setResponseTimeScoringEnabled}
+                  scoreBands={scoreBands}
+                  scoreBandCount={scoreBandCount}
+                  onScoreBandCountChange={setScoreBandCount}
+                  poolTimeLimitSeconds={poolTimeLimitSeconds}
+                  isDraftSession={isDraftSession}
+                  onPersistBands={persistScoreBands}
+                  onRebuildFromTimer={rebuildBandsFromTimer}
+                  description="Required for time-based scoring in this pool."
+                />
               </div>
             </div>
-          ) : null}
+          ) : (
+            <div className="rounded-2xl border border-emerald-200/80 bg-white/90 p-5 shadow-sm shadow-blue-900/5 backdrop-blur">
+              <p className="text-xs font-semibold uppercase tracking-wider text-emerald-800">
+                Scoring
+              </p>
+              <h3 className="mt-1 text-lg font-bold text-navy-900">Response-time bands</h3>
+              <p className="mt-1 text-xs text-slate-600">
+                Optionally award more points for faster correct answers. Off by default in Normal
+                builder.
+              </p>
+              <div className="mt-4">
+                <ResponseTimeScoreBandsEditor
+                  enabled={responseTimeScoringEnabled}
+                  onEnabledChange={setResponseTimeScoringEnabled}
+                  scoreBands={scoreBands}
+                  scoreBandCount={scoreBandCount}
+                  onScoreBandCountChange={setScoreBandCount}
+                  poolTimeLimitSeconds={poolTimeLimitSeconds}
+                  isDraftSession={isDraftSession}
+                  onPersistBands={persistScoreBands}
+                  onRebuildFromTimer={rebuildBandsFromTimer}
+                />
+              </div>
+            </div>
+          )}
 
           <div className="rounded-2xl border border-blue-200/70 bg-white/90 p-5 shadow-sm shadow-blue-900/5 backdrop-blur">
             <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">Session settings</p>

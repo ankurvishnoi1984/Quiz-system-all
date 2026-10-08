@@ -50,6 +50,14 @@ function isAdvancedBuilderSession(session) {
   return String(session?.builder_mode || "normal").toLowerCase() === "advanced";
 }
 
+/** True when the session has configured response-time score bands (mode-agnostic). */
+function sessionHasResponseTimeScoreBands(session) {
+  return (
+    Array.isArray(session?.response_time_score_bands) &&
+    session.response_time_score_bands.length > 0
+  );
+}
+
 function normalizeScoreBands(raw, timeLimitSeconds = null) {
   if (!Array.isArray(raw) || raw.length === 0) {
     if (Number.isFinite(Number(timeLimitSeconds)) && Number(timeLimitSeconds) > 0) {
@@ -123,6 +131,7 @@ module.exports = {
   DEFAULT_BAND_POINTS,
   buildScoreBandsForTimer,
   isAdvancedBuilderSession,
+  sessionHasResponseTimeScoreBands,
   normalizeScoreBands,
   scoreFromResponseTimeBands,
   resolveQuestionsPerParticipant,

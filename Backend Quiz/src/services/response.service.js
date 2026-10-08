@@ -402,8 +402,11 @@ function isNonScoredQuestion(question) {
 }
 
 function resolveQuizPointsEarned({ session, question, isCorrect, responseTimeMs, fraction = 1 }) {
-  const { isAdvancedBuilderSession, scoreFromResponseTimeBands } = require("../utils/advancedBuilder");
-  if (isAdvancedBuilderSession(session)) {
+  const {
+    sessionHasResponseTimeScoreBands,
+    scoreFromResponseTimeBands,
+  } = require("../utils/advancedBuilder");
+  if (sessionHasResponseTimeScoreBands(session)) {
     if (!isCorrect) return 0;
     // Partial credit (e.g. match pairs): scale band points by fraction.
     const bandPoints = scoreFromResponseTimeBands(
@@ -678,9 +681,9 @@ async function submitResponse({ participant, input }) {
         responseTimeMs: responsePayload.response_time_ms,
         fraction: allCorrect ? 1 : fraction
       });
-      // Advanced: only full correct answers score (wrong / partial → 0).
-      const { isAdvancedBuilderSession } = require("../utils/advancedBuilder");
-      if (isAdvancedBuilderSession(session) && !allCorrect) {
+      // Response-time bands: only full correct answers score (wrong / partial → 0).
+      const { sessionHasResponseTimeScoreBands } = require("../utils/advancedBuilder");
+      if (sessionHasResponseTimeScoreBands(session) && !allCorrect) {
         responsePayload.points_earned = 0;
       }
     }
