@@ -27,6 +27,7 @@ import {
 import {
   PresentAnswerRevealBadge,
   PresentOptionsKey,
+  PresentOptionsPanel,
   shouldShowAnswerRevealUi,
 } from './PresentAnswerReveal'
 import { PresentLeaderboardList } from './PresentLeaderboardList'
@@ -246,11 +247,16 @@ export function QuestionSlide({
   const showGraphsPanel = showGraphs && !showTextList
   const showResponsesPanel = showResponses
   const showSessionInfoPanel = showSessionInfo
+  const showOptionsBesideResults =
+    showGraphsPanel && !showResponsesPanel && usesOptionChart
   const overviewVisibleCount =
-    Number(showGraphsPanel) + Number(showResponsesPanel) + Number(showSessionInfoPanel)
+    Number(showGraphsPanel) +
+    Number(showResponsesPanel || showOptionsBesideResults) +
+    Number(showSessionInfoPanel)
   const equalSpan = panelColSpan(overviewVisibleCount)
   const graphSpan = equalSpan ?? 5
   const responseSpan = equalSpan ?? 4
+  const optionsSpan = equalSpan ?? responseSpan
   const sessionInfoSpan = equalSpan ?? 3
   const textVisibleCount = Number(showResponsesPanel) + Number(showSessionInfoPanel)
   const textEqualSpan = panelColSpan(textVisibleCount)
@@ -394,7 +400,9 @@ export function QuestionSlide({
             answerRevealed={showRevealUi}
             compact={compact && !expanded}
           />
-          {showRevealUi ? <PresentOptionsKey question={question} chartData={optionData} /> : null}
+          {showRevealUi && !showOptionsBesideResults ? (
+            <PresentOptionsKey question={question} chartData={optionData} />
+          ) : null}
           {!hasChartResponses ? (
             <p className="mt-2 shrink-0 text-center text-[clamp(0.85rem,1.5vw,1rem)] text-slate-500">
               Waiting for participants to answer…
@@ -577,6 +585,17 @@ export function QuestionSlide({
             </div>
           ) : (
             <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12 lg:items-stretch">
+              {showOptionsBesideResults ? (
+                <div
+                  className={`flex min-h-0 min-w-0 flex-col lg:max-h-[min(56vh,560px)] ${LG_COL_SPAN[optionsSpan] || 'lg:col-span-4'}`}
+                >
+                  <PresentOptionsPanel
+                    question={question}
+                    chartData={optionData}
+                    answerRevealed={showRevealUi}
+                  />
+                </div>
+              ) : null}
               {showGraphsPanel ? (
                 <div
                   className={`flex min-h-0 min-w-0 flex-col lg:max-h-[min(56vh,560px)] ${LG_COL_SPAN[graphSpan] || 'lg:col-span-5'}`}
