@@ -455,12 +455,15 @@ function PresentModePage({
     activateAllQuestions,
   } = useHostQuestionMutations(hostAccessToken, sessionId, {
     clearEndingScreensOnActivate: clearSessionEndingScreens,
-    onQuestionLiveSuccess: (variables) => {
+    onQuestionLiveSuccess: (variables, updatedQuestion) => {
       if (!variables?.isLive || variables.questionId == null || !sessionId) return
       const activatedId = Number(variables.questionId)
       queryClient.setQueryData(['live-questions', sessionId, 'host'], (old) => {
         if (!Array.isArray(old)) return old
-        const activatedAt = new Date().toISOString()
+        const activatedAt =
+          updatedQuestion?.live_activated_at ??
+          updatedQuestion?.liveActivatedAt ??
+          null
         return old.map((q) => {
           const id = Number(q.question_id)
           if (id === activatedId) {

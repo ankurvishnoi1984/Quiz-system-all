@@ -20,6 +20,12 @@ export function getQuestionDeadlineMs(question) {
   return activated + limit * 1000
 }
 
+/** Whole seconds remaining until deadline (floor — avoids showing limit+1). */
+export function getRemainingQuestionSeconds(deadlineMs, nowMs = Date.now()) {
+  if (deadlineMs == null) return 0
+  return Math.max(0, Math.floor((deadlineMs - nowMs) / 1000))
+}
+
 export function isTimedLiveQuestionExpired(question, now = Date.now()) {
   const limit = Number(question?.timeLimit ?? question?.time_limit_seconds ?? 0)
   if (limit <= 0) return false
@@ -59,7 +65,6 @@ export function getCountdownEndsAtForQuestion({ question, strictLateJoin }) {
     return Date.now() + limit * 1000
   }
 
-  const deadline = getQuestionDeadlineMs(question)
-  if (deadline != null) return deadline
-  return Date.now() + limit * 1000
+  // Wait for host live_activated_at — do not invent a local window that desyncs Present/Live.
+  return getQuestionDeadlineMs(question)
 }

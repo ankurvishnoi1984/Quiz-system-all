@@ -780,16 +780,19 @@ function LivePage() {
     activateAllQuestions,
   } = useHostQuestionMutations(accessToken, sessionId, {
     clearEndingScreensOnActivate: clearSessionEndingScreens,
-    onQuestionLiveSuccess: (variables) => {
+    onQuestionLiveSuccess: (variables, updatedQuestion) => {
       if (!variables?.isLive || variables.questionId == null) {
         // Deactivate → pushCurrentPreviewFollow once questions cache updates.
         return
       }
       const activatedId = Number(variables.questionId)
+      const activatedAt =
+        updatedQuestion?.live_activated_at ??
+        updatedQuestion?.liveActivatedAt ??
+        null
       // Optimistic cache update so Preview follow (and Live UI) do not briefly keep the old live Q.
       queryClient.setQueryData(['live-questions', sessionId, 'host'], (old) => {
         if (!Array.isArray(old)) return old
-        const activatedAt = new Date().toISOString()
         return old.map((q) => {
           const id = Number(q.question_id)
           if (id === activatedId) {
@@ -807,7 +810,6 @@ function LivePage() {
       })
       queryClient.setQueryData(['live-questions', sessionId], (old) => {
         if (!Array.isArray(old)) return old
-        const activatedAt = new Date().toISOString()
         return old.map((q) => {
           const id = Number(q.question_id)
           if (id === activatedId) {

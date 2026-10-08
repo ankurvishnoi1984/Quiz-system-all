@@ -57,6 +57,8 @@ import {
 import {
   filterActiveQuestionsForLateJoinPolicy,
   getCountdownEndsAtForQuestion,
+  getQuestionDeadlineMs,
+  getRemainingQuestionSeconds,
 } from '../../utils/questionTimer'
 import { ActiveQuestionPanel } from './components/ActiveQuestionPanel'
 import { JoinFormView } from './components/JoinFormView'
@@ -556,7 +558,7 @@ function ParticipantSessionPage({ embed = false }) {
       return 0
     }
     if (!hasCountdown || !countdownEndsAt) return 0
-    return Math.max(0, Math.ceil((countdownEndsAt - Date.now()) / 1000))
+    return getRemainingQuestionSeconds(countdownEndsAt)
   }, [isSessionEnded, hasCountdown, countdownFrozen, countdownEndsAt, countdownTick])
 
   const sessionTimerExpired = sessionQuizTotalTimeEnabled && hasCountdown && timer === 0
@@ -1590,6 +1592,18 @@ function ParticipantSessionPage({ embed = false }) {
         setQuizCountdown({ questionId: qid, endsAt: Date.now() })
         useParticipantStore.getState().freezeCountdownAfterSubmit(qid)
       }
+      return
+    }
+    const hostDeadline = getQuestionDeadlineMs(question)
+    // Strict late join: resync sticky early/fallback endsAt to the host deadline once known.
+    if (
+      strictLateJoin &&
+      hostDeadline != null &&
+      existingCountdown?.endsAt != null &&
+      existingCountdown.frozen == null &&
+      Math.abs(existingCountdown.endsAt - hostDeadline) > 250
+    ) {
+      setQuizCountdown({ questionId: qid, endsAt: hostDeadline })
       return
     }
     if (existingCountdown?.endsAt != null && existingCountdown.endsAt > Date.now()) {

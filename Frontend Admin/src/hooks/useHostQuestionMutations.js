@@ -73,9 +73,9 @@ export function useHostQuestionMutations(
       }
       return updated
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (updatedQuestion, variables) => {
       invalidateQuestions()
-      onQuestionLiveSuccess?.(variables)
+      onQuestionLiveSuccess?.(variables, updatedQuestion)
     },
     onError: (error) =>
       onMutationError?.(error.message || 'Unable to update question live state'),

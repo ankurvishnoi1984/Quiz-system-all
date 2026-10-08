@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { pickParticipantProgressState } from '../utils/participantSessionState'
+import { getRemainingQuestionSeconds } from '../utils/questionTimer'
 
 const initialQuiz = {
   quizResponses: {},
@@ -195,7 +196,7 @@ export const useParticipantStore = create(
         const remaining =
           entry.frozen != null
             ? entry.frozen
-            : Math.max(0, Math.ceil((entry.endsAt - Date.now()) / 1000))
+            : getRemainingQuestionSeconds(entry.endsAt)
         set({ quizSessionCountdown: { ...entry, frozen: remaining } })
       },
 
@@ -211,7 +212,7 @@ export const useParticipantStore = create(
           const remaining =
             entry.frozen != null
               ? entry.frozen
-              : Math.max(0, Math.ceil((entry.endsAt - now) / 1000))
+              : getRemainingQuestionSeconds(entry.endsAt, now)
           next[qid] = { ...entry, frozen: remaining }
           changed = true
         }
@@ -221,7 +222,7 @@ export const useParticipantStore = create(
           const remaining =
             sessionEntry.frozen != null
               ? sessionEntry.frozen
-              : Math.max(0, Math.ceil((sessionEntry.endsAt - now) / 1000))
+              : getRemainingQuestionSeconds(sessionEntry.endsAt, now)
           nextSession = { ...sessionEntry, frozen: remaining }
         }
         if (changed || nextSession !== sessionEntry) {
@@ -238,7 +239,7 @@ export const useParticipantStore = create(
         const qid = String(questionId)
         const entry = s.quizCountdownByQuestion?.[qid]
         if (!entry?.endsAt) return
-        const remaining = Math.max(0, Math.ceil((entry.endsAt - Date.now()) / 1000))
+        const remaining = getRemainingQuestionSeconds(entry.endsAt)
         set((state) => ({
           quizCountdownByQuestion: {
             ...(state.quizCountdownByQuestion || {}),
