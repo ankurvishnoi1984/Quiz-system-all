@@ -164,7 +164,8 @@ async function update(req, res) {
         random_question_order_enabled: isSessionRandomQuestionOrderEnabled(session),
         allow_late_join: Boolean(session.allow_late_join),
         present_mode_settings: session.present_mode_settings ?? null,
-        participant_theme: session.participant_theme || "default"
+        participant_theme: session.participant_theme || "default",
+        participant_theme_custom: session.participant_theme_custom ?? null
       });
       if (
         (req.body.leaderboard_enabled === true && session.leaderboard_enabled) ||
@@ -328,6 +329,7 @@ async function lookupByCode(req, res) {
           advanced_active_slot: session.advanced_active_slot ?? null,
           questions_per_participant: session.questions_per_participant ?? null,
           participant_theme: session.participant_theme || "default",
+          participant_theme_custom: session.participant_theme_custom ?? null,
           allow_late_join: Boolean(session.allow_late_join),
           last_activity_at: session.last_activity_at || null,
           started_at: session.started_at || null,
@@ -686,7 +688,8 @@ async function activateAdvancedAssignmentSlotHandler(req, res) {
         "allow_late_join",
         "quiz_total_time_minutes",
         "present_mode_settings",
-        "participant_theme"
+        "participant_theme",
+        "participant_theme_custom"
       ]
     });
 

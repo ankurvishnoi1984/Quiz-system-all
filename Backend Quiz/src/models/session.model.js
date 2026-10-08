@@ -165,6 +165,11 @@ const Session = sequelize.define(
       allowNull: false,
       defaultValue: "default"
     },
+    participant_theme_custom: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: null
+    },
     qr_code_url: {
       type: DataTypes.TEXT,
       allowNull: true

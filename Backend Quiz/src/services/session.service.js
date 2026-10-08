@@ -2,7 +2,11 @@ const { sequelize } = require("../config/database");
 const {
   normalizePresentModeSettings
 } = require("../utils/presentModeSettings");
-const { normalizeParticipantTheme } = require("../utils/participantTheme");
+const {
+  normalizeParticipantTheme,
+  normalizeCustomThemeColors,
+  CUSTOM_PARTICIPANT_THEME
+} = require("../utils/participantTheme");
 const { normalizeTimerSoundFields } = require("../utils/timerSound");
 const {
   resolveJoinAllowlistFields,
@@ -244,6 +248,14 @@ async function createSession({ deptId, input, user }) {
          ? String(input.logo_url).trim()
          : null,
      participant_theme: normalizeParticipantTheme(input.participant_theme),
+     participant_theme_custom:
+       normalizeParticipantTheme(input.participant_theme) === CUSTOM_PARTICIPANT_THEME
+         ? normalizeCustomThemeColors(
+             input.participant_theme_custom ?? input.participantThemeCustom
+           )
+         : input.participant_theme_custom != null
+           ? normalizeCustomThemeColors(input.participant_theme_custom)
+           : null,
      present_mode_settings: normalizePresentModeSettings(input.present_mode_settings)
    });
 }
@@ -352,6 +364,12 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
         qr_code_url: null,
         logo_url: source.logo_url || null,
         participant_theme: normalizeParticipantTheme(source.participant_theme),
+        participant_theme_custom:
+          normalizeParticipantTheme(source.participant_theme) === CUSTOM_PARTICIPANT_THEME
+            ? normalizeCustomThemeColors(source.participant_theme_custom)
+            : source.participant_theme_custom != null
+              ? normalizeCustomThemeColors(source.participant_theme_custom)
+              : null,
         present_mode_settings: normalizePresentModeSettings(source.present_mode_settings)
       },
       { transaction }
@@ -494,7 +512,8 @@ async function updateSession({ sessionId, input, user }) {
     "title",
     "logo_url",
     "present_mode_settings",
-    "participant_theme"
+    "participant_theme",
+    "participant_theme_custom"
   ];
   const inputKeys = Object.keys(input || {});
 
@@ -676,6 +695,24 @@ async function updateSession({ sessionId, input, user }) {
       input.participant_theme !== undefined
         ? normalizeParticipantTheme(input.participant_theme)
         : normalizeParticipantTheme(session.participant_theme),
+    participant_theme_custom: (() => {
+      const nextTheme =
+        input.participant_theme !== undefined
+          ? normalizeParticipantTheme(input.participant_theme)
+          : normalizeParticipantTheme(session.participant_theme);
+      if (input.participant_theme_custom !== undefined) {
+        if (input.participant_theme_custom == null) return null;
+        return normalizeCustomThemeColors(input.participant_theme_custom);
+      }
+      if (nextTheme === CUSTOM_PARTICIPANT_THEME) {
+        return session.participant_theme_custom != null
+          ? normalizeCustomThemeColors(session.participant_theme_custom)
+          : normalizeCustomThemeColors(null);
+      }
+      return session.participant_theme_custom != null
+        ? normalizeCustomThemeColors(session.participant_theme_custom)
+        : session.participant_theme_custom;
+    })(),
     present_mode_settings:
       input.present_mode_settings !== undefined
         ? normalizePresentModeSettings(input.present_mode_settings)

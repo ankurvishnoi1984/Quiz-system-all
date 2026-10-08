@@ -10,7 +10,7 @@ export function SessionHeader({ session, joinedUser }) {
     showParticipantCount && Number.isFinite(participantCount) && participantCount >= 0
 
   return (
-    <div className="participant-surface flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200/70 bg-white/92 p-4 shadow-sm shadow-navy-900/5 backdrop-blur-sm">
+    <div className="participant-topbar flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200/70 bg-white/92 p-4 shadow-sm shadow-navy-900/5 backdrop-blur-sm">
       <div className="min-w-0 flex-1">
         <BrandLogoPair
           variant="header"
@@ -19,7 +19,7 @@ export function SessionHeader({ session, joinedUser }) {
           className="mb-2"
         />
         <h1 className="participant-heading text-xl font-bold text-navy-900">{session.title}</h1>
-        <p className="text-sm text-slate-600">
+        <p className="participant-muted text-sm text-slate-600">
           {joinedUser?.name
             ? `${joinedUser.name}${!joinedUser.anonymous && joinedUser.email ? ` • ${joinedUser.email}` : ''}`
             : joinedUser?.anonymous

@@ -24,8 +24,9 @@
 @layer components {
   /*
    * Participant screen themes.
-   * Use: class="participant-session-bg" data-participant-theme="default|ocean|meadow|ember|graphite"
+   * Use: class="participant-session-bg" data-participant-theme="default|ocean|meadow|ember|graphite|custom"
    * Harbor (`default`) is the current production look.
+   * Custom themes set CSS vars + background via inline style (buildParticipantThemeStyle).
    * CSS vars also tint surfaces, options, timer, and primary actions.
    */
   .participant-session-bg {
@@ -186,15 +187,54 @@
       linear-gradient(160deg, #c9d1db 0%, #e8ecf1 40%, #f4f6f8 68%, #d3dae3 100%);
   }
 
-  /* Themed middle UI: cards, options, timer, buttons */
+  /* Themed middle UI: top bar, cards, options, timer, buttons */
+  /* Color is the back layer; image paints on top (PNG alpha shows color through). */
+  .participant-session-bg .participant-topbar {
+    border-color: var(--pt-surface-border) !important;
+    background-color: var(--pt-topbar, var(--pt-surface)) !important;
+    background-image: var(--pt-topbar-image, none) !important;
+    background-size: cover !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    box-shadow: var(--pt-surface-shadow) !important;
+  }
+
   .participant-session-bg .participant-surface {
     border-color: var(--pt-surface-border) !important;
-    background: var(--pt-surface) !important;
+    background-color: var(--pt-surface) !important;
+    background-image: var(--pt-surface-image, none) !important;
+    background-size: cover !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
     box-shadow: var(--pt-surface-shadow) !important;
   }
 
   .participant-session-bg .participant-heading {
-    color: var(--pt-heading) !important;
+    color: var(--pt-card-text, var(--pt-heading)) !important;
+  }
+
+  .participant-session-bg .participant-topbar {
+    color: var(--pt-topbar-text, var(--pt-heading));
+  }
+
+  .participant-session-bg .participant-topbar .participant-heading {
+    color: var(--pt-topbar-text, var(--pt-heading)) !important;
+  }
+
+  .participant-session-bg .participant-topbar .participant-muted {
+    color: color-mix(
+      in srgb,
+      var(--pt-topbar-text, var(--pt-heading)) 62%,
+      transparent
+    ) !important;
+  }
+
+  .participant-session-bg .participant-surface .participant-muted {
+    color: color-mix(
+      in srgb,
+      var(--pt-card-text, var(--pt-heading)) 62%,
+      transparent
+    ) !important;
   }
 
   .participant-session-bg .participant-accent-text {
@@ -252,7 +292,8 @@
 
   .participant-session-bg .participant-timer-panel {
     border-color: var(--pt-surface-border) !important;
-    background: var(--pt-surface) !important;
+    background-color: var(--pt-surface) !important;
+    background-image: none !important;
   }
 
   .participant-session-bg .participant-timer-ring-track {

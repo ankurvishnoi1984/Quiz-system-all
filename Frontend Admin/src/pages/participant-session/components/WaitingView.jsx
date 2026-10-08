@@ -14,7 +14,11 @@ export function WaitingView({ session, transitioningLive }) {
         : 0
 
   return (
-    <PageCenteredShell maxWidth="max-w-4xl" theme={session?.participant_theme}>
+    <PageCenteredShell
+      maxWidth="max-w-4xl"
+      theme={session?.participant_theme}
+      customTheme={session?.participant_theme_custom}
+    >
       <div className="quiz-enter space-y-4">
         <BrandLogoPair
           variant="hero"

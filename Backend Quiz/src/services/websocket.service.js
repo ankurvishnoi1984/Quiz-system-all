@@ -576,7 +576,8 @@ function notifySessionSettings(sessionCode, settings) {
     allow_late_join: Boolean(settings.allow_late_join),
     quiz_total_time_minutes: settings.quiz_total_time_minutes ?? null,
     present_mode_settings: settings.present_mode_settings ?? null,
-    participant_theme: settings.participant_theme || "default"
+    participant_theme: settings.participant_theme || "default",
+    participant_theme_custom: settings.participant_theme_custom ?? null
   });
 }
 

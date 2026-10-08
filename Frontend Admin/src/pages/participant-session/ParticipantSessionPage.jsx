@@ -43,7 +43,11 @@ import {
   unlockTimerAudio,
 } from '../../utils/timerSounds'
 import { isAdvancedBuilderSession, isSessionQuizTotalTimeEnabled, isSessionRandomQuestionOrderEnabled, isStrictLateJoinSession, sessionHasTimedQuestions } from '../../utils/sessionFlags'
-import { normalizeParticipantTheme } from '../../utils/participantTheme'
+import {
+  buildParticipantThemeStyle,
+  normalizeCustomThemeColors,
+  normalizeParticipantTheme,
+} from '../../utils/participantTheme'
 import {
   questionSupportsLeaderboard,
   questionSupportsParticipantResults,
@@ -1179,6 +1183,10 @@ function ParticipantSessionPage({ embed = false }) {
                 data.participant_theme !== undefined
                   ? normalizeParticipantTheme(data.participant_theme)
                   : old.participant_theme,
+              participant_theme_custom:
+                data.participant_theme_custom !== undefined
+                  ? data.participant_theme_custom
+                  : old.participant_theme_custom,
             }
           : old,
       )
@@ -2453,10 +2461,21 @@ function ParticipantSessionPage({ embed = false }) {
   }, [])
 
   const participantTheme = normalizeParticipantTheme(session?.participant_theme)
+  const participantThemeCustom = normalizeCustomThemeColors(
+    session?.participant_theme_custom,
+  )
+  const participantThemeStyle = buildParticipantThemeStyle(
+    participantTheme,
+    participantThemeCustom,
+  )
 
   if (!participantHydrated) {
     return (
-      <PageCenteredShell compact={embedMode} theme={participantTheme}>
+      <PageCenteredShell
+        compact={embedMode}
+        theme={participantTheme}
+        customTheme={participantThemeCustom}
+      >
         <p className="text-slate-600">Restoring session...</p>
       </PageCenteredShell>
     )
@@ -2464,7 +2483,11 @@ function ParticipantSessionPage({ embed = false }) {
 
   if (ipBlocked) {
     return (
-      <PageCenteredShell compact={embedMode} theme={participantTheme}>
+      <PageCenteredShell
+        compact={embedMode}
+        theme={participantTheme}
+        customTheme={participantThemeCustom}
+      >
         <h1 className="text-2xl font-bold text-navy-900">Access blocked</h1>
         <p className="mt-2 text-slate-600">
           This IP address has been blocked by an administrator. You cannot join or stay in this
@@ -2482,7 +2505,11 @@ function ParticipantSessionPage({ embed = false }) {
 
   if (showJoinForm && (autoJoinPending || tokenIdentityLoading) && !joinError && !tokenIdentityError) {
     return (
-      <PageCenteredShell compact={embedMode} theme={participantTheme}>
+      <PageCenteredShell
+        compact={embedMode}
+        theme={participantTheme}
+        customTheme={participantThemeCustom}
+      >
         <p className="text-sm font-semibold text-navy-900">
           {tokenIdentityLoading ? 'Checking signed join link…' : 'Joining session…'}
         </p>
@@ -2552,7 +2579,11 @@ function ParticipantSessionPage({ embed = false }) {
 
   if (effectiveSessionCode && sessionQuery.isLoading) {
     return (
-      <PageCenteredShell compact={embedMode} theme={participantTheme}>
+      <PageCenteredShell
+        compact={embedMode}
+        theme={participantTheme}
+        customTheme={participantThemeCustom}
+      >
         <p className="text-slate-600">Loading session...</p>
       </PageCenteredShell>
     )
@@ -2560,7 +2591,11 @@ function ParticipantSessionPage({ embed = false }) {
 
   if (effectiveSessionCode && sessionLookupFailed) {
     return (
-      <PageCenteredShell compact={embedMode} theme={participantTheme}>
+      <PageCenteredShell
+        compact={embedMode}
+        theme={participantTheme}
+        customTheme={participantThemeCustom}
+      >
         <h1 className="text-2xl font-bold text-navy-900">Session not found</h1>
         <p className="mt-2 text-slate-600">The join link is invalid or this session was removed.</p>
       </PageCenteredShell>
@@ -2569,7 +2604,11 @@ function ParticipantSessionPage({ embed = false }) {
 
   if (!session) {
     return (
-      <PageCenteredShell compact={embedMode} theme={participantTheme}>
+      <PageCenteredShell
+        compact={embedMode}
+        theme={participantTheme}
+        customTheme={participantThemeCustom}
+      >
         <p className="text-slate-600">Loading session...</p>
       </PageCenteredShell>
     )
@@ -2602,6 +2641,7 @@ function ParticipantSessionPage({ embed = false }) {
           : 'h-dvh min-h-dvh overflow-x-hidden overflow-y-auto overscroll-y-contain p-4 pb-28 md:h-auto md:min-h-screen md:overflow-visible md:pb-6 md:p-6'
       }`}
       data-participant-theme={participantTheme}
+      style={participantThemeStyle}
     >
       <div className="mx-auto w-full max-w-6xl space-y-4 pb-4">
         <SessionHeader session={session} joinedUser={joinedUser} />

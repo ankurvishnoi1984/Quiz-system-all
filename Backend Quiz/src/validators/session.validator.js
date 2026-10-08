@@ -1,6 +1,7 @@
 const {
   validateJoinAllowlistFields
 } = require("../utils/joinAllowlist");
+const { validateCustomThemeColors } = require("../utils/participantTheme");
 
 function validateScheduledDate(value) {
   if (value == null || value === "") return null;
@@ -239,6 +240,9 @@ function validateCreateSessionPayload(payload) {
   const presentModeSettingsError = validatePresentModeSettings(payload?.present_mode_settings);
   if (presentModeSettingsError) errors.push(presentModeSettingsError);
 
+  const customThemeError = validateCustomThemeColors(payload?.participant_theme_custom);
+  if (customThemeError) errors.push(customThemeError);
+
   const quizTotalTimeError = validateQuizTotalTimeMinutes(payload);
   if (quizTotalTimeError) errors.push(quizTotalTimeError);
 
@@ -283,6 +287,7 @@ function validateUpdateSessionPayload(payload) {
     "logo_url",
     "present_mode_settings",
     "participant_theme",
+    "participant_theme_custom",
     "builder_mode",
     "questions_per_participant",
     "advanced_selection_mode",
@@ -338,6 +343,9 @@ function validateUpdateSessionPayload(payload) {
 
   const presentModeSettingsError = validatePresentModeSettings(payload?.present_mode_settings);
   if (presentModeSettingsError) errors.push(presentModeSettingsError);
+
+  const customThemeError = validateCustomThemeColors(payload?.participant_theme_custom);
+  if (customThemeError) errors.push(customThemeError);
 
   const quizTotalTimeError = validateQuizTotalTimeMinutes(payload);
   if (quizTotalTimeError) errors.push(quizTotalTimeError);

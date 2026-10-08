@@ -32,8 +32,11 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { HostQuestionActionButton } from '../components/live/HostQuestionActionButton'
 import { ParticipantThemePicker } from '../components/session/ParticipantThemePicker'
 import {
+  DEFAULT_CUSTOM_THEME_COLORS,
   DEFAULT_PARTICIPANT_THEME,
+  normalizeCustomThemeColors,
   normalizeParticipantTheme,
+  toCustomThemeColorsApi,
 } from '../utils/participantTheme'
 import { QuestionMediaUpload } from '../components/builder/QuestionMediaUpload'
 import { QuestionTimerSoundSettings } from '../components/builder/QuestionTimerSoundSettings'
@@ -1351,6 +1354,7 @@ function BuilderPage() {
     maxParticipants: 300,
     password: '',
     participantTheme: DEFAULT_PARTICIPANT_THEME,
+    participantThemeCustom: { ...DEFAULT_CUSTOM_THEME_COLORS },
   })
   const [joinRequirement, setJoinRequirement] = useState('name')
   const [joinOtpRequired, setJoinOtpRequired] = useState(true)
@@ -1603,6 +1607,9 @@ function BuilderPage() {
       maxParticipants: Number(sessionQuery.data.max_participants || 300),
       password: '',
       participantTheme: normalizeParticipantTheme(sessionQuery.data.participant_theme),
+      participantThemeCustom: normalizeCustomThemeColors(
+        sessionQuery.data.participant_theme_custom,
+      ),
     })
     const joinType =
       sessionQuery.data.join_type ||
@@ -1666,6 +1673,9 @@ function BuilderPage() {
           participantTheme: normalizeParticipantTheme(
             updated.participant_theme ?? prev.participantTheme,
           ),
+          participantThemeCustom: normalizeCustomThemeColors(
+            updated.participant_theme_custom ?? prev.participantThemeCustom,
+          ),
         }))
       }
       queryClient.invalidateQueries({ queryKey: ['builder-session', sessionId] })
@@ -1699,14 +1709,30 @@ function BuilderPage() {
       participantTheme: normalizeParticipantTheme(
         partial.participantTheme ?? settings.participantTheme,
       ),
+      participantThemeCustom: normalizeCustomThemeColors(
+        partial.participantThemeCustom ?? settings.participantThemeCustom,
+      ),
     }
-    setSettings((prev) => ({ ...prev, ...partial, participantTheme: next.participantTheme }))
+    setSettings((prev) => ({
+      ...prev,
+      ...partial,
+      participantTheme: next.participantTheme,
+      participantThemeCustom: next.participantThemeCustom,
+    }))
     const payload = {}
     if (partial.leaderboard !== undefined) {
       payload.leaderboard_enabled = next.leaderboard
     }
     if (partial.participantTheme !== undefined) {
       payload.participant_theme = next.participantTheme
+    }
+    if (
+      partial.participantThemeCustom !== undefined ||
+      partial.participantTheme === 'custom'
+    ) {
+      payload.participant_theme_custom = toCustomThemeColorsApi(
+        next.participantThemeCustom,
+      )
     }
     if (Object.keys(payload).length) {
       sessionSettingsMutation.mutate(payload)
@@ -2767,6 +2793,7 @@ function BuilderPage() {
           : {}),
         leaderboard_enabled: settings.leaderboard,
         participant_theme: normalizeParticipantTheme(settings.participantTheme),
+        participant_theme_custom: toCustomThemeColorsApi(settings.participantThemeCustom),
       })
     },
     onSuccess: async () => {
@@ -4087,15 +4114,25 @@ function BuilderPage() {
               <div className="rounded-2xl border border-blue-200/70 bg-white p-3">
                 <ParticipantThemePicker
                   value={settings.participantTheme || DEFAULT_PARTICIPANT_THEME}
-                  onChange={(themeId) => {
+                  customColors={settings.participantThemeCustom}
+                  deptId={departmentId || sessionQuery.data?.dept_id}
+                  onChange={(themeId, custom) => {
+                    const nextTheme = normalizeParticipantTheme(themeId)
+                    const nextCustom = custom
+                      ? normalizeCustomThemeColors(custom)
+                      : settings.participantThemeCustom
                     if (isDraftSession) {
                       setDirty(true)
                       setSettings((prev) => ({
                         ...prev,
-                        participantTheme: normalizeParticipantTheme(themeId),
+                        participantTheme: nextTheme,
+                        participantThemeCustom: nextCustom,
                       }))
                     } else {
-                      patchSessionSettings({ participantTheme: themeId })
+                      patchSessionSettings({
+                        participantTheme: nextTheme,
+                        participantThemeCustom: nextCustom,
+                      })
                     }
                   }}
                 />
