@@ -426,8 +426,11 @@ async function openForReattempt(req, res) {
           time_limit_seconds: question.time_limit_seconds
         }
       );
-      if (session.leaderboard_enabled) {
-        buildSessionLeaderboard(question.session_id)
+      if (session.leaderboard_enabled || session.current_rankings_enabled) {
+        const { resolveSessionLeaderboardScope } = require("../services/response.service");
+        buildSessionLeaderboard(question.session_id, 10, {
+          scope: resolveSessionLeaderboardScope(session)
+        })
           .then((leaderboard) => notifyLeaderboard(session.session_code, { leaderboard }))
           .catch(() => {});
       }

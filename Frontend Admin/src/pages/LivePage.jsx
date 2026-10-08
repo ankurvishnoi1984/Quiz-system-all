@@ -1307,7 +1307,7 @@ function LivePage() {
             ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {canToggleOverallLeaderboard && showSessionControls && advancedSlotActivation ? (
+            {canToggleOverallLeaderboard && showSessionControls ? (
               <HostQuestionActionButton
                 disabled={sessionLeaderboardMutation.isPending}
                 icon={Trophy}
@@ -1317,7 +1317,7 @@ function LivePage() {
                 title={
                   session?.current_rankings_enabled
                     ? 'Hide current rankings from participants'
-                    : 'Show current rankings and close the live question'
+                    : 'Show current rankings for questions attempted so far and close the live question'
                 }
                 active={Boolean(session?.current_rankings_enabled)}
                 tone="amber"
