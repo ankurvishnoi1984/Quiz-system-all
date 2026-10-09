@@ -1,5 +1,7 @@
 import { Check } from 'lucide-react'
+import { FitText } from '../../../../components/ui/FitText'
 import { getChoiceRevealClasses, isOptionCorrectForReveal } from '../../../../utils/answerReveal'
+import { useParticipantFit } from '../ParticipantFitContext'
 
 export function McqOptions({
   options,
@@ -10,6 +12,7 @@ export function McqOptions({
   allowMultipleSelect = false,
   onSelectOption,
 }) {
+  const fit = useParticipantFit()
   const selectedList = Array.isArray(currentResponse.selectedOptions)
     ? currentResponse.selectedOptions
     : currentResponse.selectedOption
@@ -17,7 +20,7 @@ export function McqOptions({
       : []
 
   return (
-    <div className="grid gap-2 md:grid-cols-2">
+    <div className={`grid md:grid-cols-2 ${fit.id >= 2 ? 'gap-1.5' : 'gap-2'}`}>
       {(options || []).map((o, idx) => {
         const isSelected = allowMultipleSelect
           ? selectedList.includes(o.option_text)
@@ -29,7 +32,7 @@ export function McqOptions({
             disabled={inputsLocked}
             type="button"
             onClick={() => onSelectOption(o.option_text)}
-            className={`quiz-option rounded-2xl border px-4 py-4 text-left text-sm font-semibold transition ${
+            className={`quiz-option rounded-2xl border text-left font-semibold transition ${fit.optionPadClass} ${
               isSelected ? 'quiz-option-selected' : ''
             } ${getChoiceRevealClasses({
               isSelected,
@@ -45,7 +48,15 @@ export function McqOptions({
                   String.fromCharCode(65 + idx)
                 )}
               </span>
-              <span className="min-w-0 flex-1">{o.option_text}</span>
+              <FitText
+                as="span"
+                className="min-w-0 flex-1 leading-snug"
+                minPx={fit.option.minPx}
+                maxPx={fit.option.maxPx}
+                maxLines={fit.option.maxLines}
+              >
+                {o.option_text}
+              </FitText>
             </span>
           </button>
         )

@@ -11,7 +11,9 @@ import {
 } from '@dnd-kit/core'
 import { CSS } from '@dnd-kit/utilities'
 import { CheckCircle2, GripVertical, Link2, X } from 'lucide-react'
+import { FitText } from '../../../../components/ui/FitText'
 import { useEffect, useMemo, useState } from 'react'
+import { useParticipantFit } from '../ParticipantFitContext'
 
 function shuffleIds(ids) {
   const arr = [...ids]
@@ -20,6 +22,21 @@ function shuffleIds(ids) {
     ;[arr[i], arr[j]] = [arr[j], arr[i]]
   }
   return arr
+}
+
+function MatchFitText({ children, className = '', maxLines }) {
+  const fit = useParticipantFit()
+  return (
+    <FitText
+      as="span"
+      className={`min-w-0 flex-1 leading-snug ${className}`}
+      minPx={fit.option.minPx}
+      maxPx={fit.option.maxPx}
+      maxLines={maxLines ?? fit.option.maxLines}
+    >
+      {children}
+    </FitText>
+  )
 }
 
 function AnswerChip({
@@ -53,7 +70,7 @@ function AnswerChip({
           aria-hidden
         />
       ) : null}
-      <span className="min-w-0 flex-1 leading-snug">{option.option_text}</span>
+      <MatchFitText>{option.option_text}</MatchFitText>
     </button>
   )
 }
@@ -115,8 +132,10 @@ function MatchSlot({
     <div
       className={`quiz-row-in grid gap-3 rounded-2xl border p-3 transition sm:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] sm:items-stretch ${revealBorder}`}
     >
-      <div className="flex items-center rounded-2xl border border-slate-200/80 bg-slate-50/80 px-3.5 py-3">
-        <p className="text-sm font-semibold leading-snug text-navy-900">{leftOption.option_text}</p>
+      <div className="flex min-w-0 items-center rounded-2xl border border-slate-200/80 bg-slate-50/80 px-3.5 py-3">
+        <MatchFitText className="font-semibold text-navy-900">
+          {leftOption.option_text}
+        </MatchFitText>
       </div>
 
       <div
@@ -426,15 +445,15 @@ export function MatchOptions({
                 className="quiz-row-in flex flex-wrap items-center gap-2 rounded-xl border border-emerald-200/80 bg-white px-3 py-2.5"
                 style={{ animationDelay: `${idx * 60}ms` }}
               >
-                <span className="min-w-0 flex-1 text-sm font-semibold text-navy-900">
+                <MatchFitText className="font-semibold text-navy-900" maxLines={3}>
                   {left.option_text}
-                </span>
+                </MatchFitText>
                 <span className="text-slate-400" aria-hidden>
                   →
                 </span>
-                <span className="min-w-0 flex-1 text-sm font-semibold text-emerald-800">
+                <MatchFitText className="font-semibold text-emerald-800" maxLines={3}>
                   {correctRight?.option_text || '—'}
-                </span>
+                </MatchFitText>
               </div>
             ))}
           </div>

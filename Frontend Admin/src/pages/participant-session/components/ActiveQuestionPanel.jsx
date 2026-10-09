@@ -1,5 +1,10 @@
+import { useRef } from 'react'
 import { ListChecks, Pencil } from 'lucide-react'
 import { QuestionMedia } from '../../../components/participant-session/QuestionMedia'
+import { FitText } from '../../../components/ui/FitText'
+import { useParticipantSubmitVisibleDensity } from '../../../hooks/useParticipantSubmitVisibleDensity'
+import { getParticipantDensityLevel } from '../utils/participantQuestionDensity'
+import { ParticipantFitProvider } from './ParticipantFitContext'
 import { McqOptions } from './question/McqOptions'
 import { QuestionLeaderboard } from './question/QuestionLeaderboard'
 import { QuestionSurveyResults } from './question/QuestionSurveyResults'
@@ -63,11 +68,26 @@ export function ActiveQuestionPanel({
   onGoToQa,
 }) {
   const useNextNav = navigationEnabled && !isLastDisplayedQuestion
+  const panelRef = useRef(null)
+  const actionsRef = useRef(null)
+  const hasMedia = Boolean(question?.media?.url)
+  const contentKey = `${question?.id}:${question?.text || ''}:${question?.media?.url || ''}:${(question?.options || []).length}`
+  const densityId = useParticipantSubmitVisibleDensity({
+    panelRef,
+    actionsRef,
+    contentKey,
+    hasMedia,
+  })
+  const density = getParticipantDensityLevel(densityId)
+  const pinActions = densityId >= 3
 
   return (
+    <ParticipantFitProvider densityId={densityId}>
     <section
+      ref={panelRef}
       key={question.id}
-      className="participant-surface quiz-fade-in space-y-4 rounded-2xl border border-blue-200/70 bg-white/92 p-5 shadow-sm shadow-navy-900/5 backdrop-blur-sm"
+      data-pq-density={densityId}
+      className={`participant-surface quiz-fade-in rounded-2xl border border-blue-200/70 bg-white/92 shadow-sm shadow-navy-900/5 backdrop-blur-sm ${density.panelClass}`}
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         {navigationEnabled ? (
@@ -140,13 +160,19 @@ export function ActiveQuestionPanel({
         </p>
       ) : null}
 
-      <h2 className="participant-heading text-2xl font-bold text-navy-900">
+      <FitText
+        as="h2"
+        className="participant-heading font-bold leading-snug text-navy-900"
+        minPx={density.title.minPx}
+        maxPx={density.title.maxPx}
+        maxLines={density.title.maxLines}
+      >
         {question.type === 'Emoji Reaction' && !String(question.text || '').trim()
           ? 'Share your reaction'
           : question.text || 'Untitled question'}
-      </h2>
+      </FitText>
 
-      <QuestionMedia media={question.media} maxHeightClass="max-h-72" />
+      <QuestionMedia media={question.media} maxHeightClass={density.mediaMaxHeightClass} />
 
       {hasCountdown && !question.isSurvey && (
         <QuestionTimer
@@ -267,9 +293,12 @@ export function ActiveQuestionPanel({
       )}
 
       <div
-        className={`mt-4 flex items-center gap-2 ${
-          navigationEnabled ? 'justify-between' : 'justify-center'
-        }`}
+        ref={actionsRef}
+        className={`flex items-center gap-2 ${
+          pinActions
+            ? 'sticky bottom-0 z-10 -mx-1 mt-2 border-t border-blue-100/80 bg-white/95 px-1 py-2 backdrop-blur-sm'
+            : 'mt-3'
+        } ${navigationEnabled ? 'justify-between' : 'justify-center'}`}
       >
         {navigationEnabled && canShowPreviousQuestion ? (
           <button
@@ -423,5 +452,6 @@ export function ActiveQuestionPanel({
         />
       )}
     </section>
+    </ParticipantFitProvider>
   )
 }
