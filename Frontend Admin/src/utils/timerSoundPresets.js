@@ -198,9 +198,9 @@ export function playQuestionTimerCue(kind, soundInput = {}) {
   const secondsLeft = soundInput.secondsLeft
 
   if (kind === 'endingStart') {
-    // Custom last-10s track: start once when entering the ending window.
+    // Custom ending track: loop until times-up / window exit (short clips stay audible).
     if (settings.timerEndingSoundKey === 'custom') {
-      playCustomAudio('ending', settings.timerEndingSoundUrl, { volume: 0.7 })
+      playCustomAudio('ending', settings.timerEndingSoundUrl, { volume: 0.7, loop: true })
       return
     }
     playTimerUrgentPreset(settings.timerEndingSoundKey, TIMER_ENDING_WINDOW_SECONDS)

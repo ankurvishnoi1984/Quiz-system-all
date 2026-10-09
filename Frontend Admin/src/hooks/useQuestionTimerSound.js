@@ -102,6 +102,7 @@ export function useQuestionTimerSound(
 
     if (seconds > warningSeconds) {
       endingStartedRef.current = false
+      stopCustomTimerAudio('ending')
     }
 
     if (seconds > 0 && seconds <= urgentSeconds) {
