@@ -250,36 +250,7 @@ export function shouldShowAnswerRevealUi(question) {
 }
 
 /** Green tick badge above the correct bar(s), including zero-response bars. */
-export function PresentCorrectBarLabel(props) {
-  const { x, y, width, viewBox, value, answerRevealed } = props
-  // value is the chart row from LabelList valueAccessor (Recharts 3 strips payload).
-  const entry = value && typeof value === 'object' ? value : null
-  if (!answerRevealed || !entry?.isCorrect) return null
-
-  const barX = Number(viewBox?.x ?? x)
-  const barY = Number(viewBox?.y ?? y)
-  const barWidth = Number(viewBox?.width ?? width)
-  if (!Number.isFinite(barX) || !Number.isFinite(barY)) return null
-
-  const w = Number.isFinite(barWidth) && barWidth > 0 ? barWidth : 28
-  const cx = barX + w / 2
-  const cy = barY - 14
-  const r = 11
-
-  return (
-    <g aria-hidden>
-      <circle cx={cx} cy={cy} r={r} fill="#059669" stroke="#fff" strokeWidth={2} />
-      <path
-        d={`M ${cx - 4} ${cy} L ${cx - 1} ${cy + 4} L ${cx + 5} ${cy - 4}`}
-        fill="none"
-        stroke="#fff"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </g>
-  )
-}
+export { BarCorrectTickLabel as PresentCorrectBarLabel } from '../../components/charts/BarValueLabels'
 
 /** Option label only on axis — correct mark stays on the bar top to avoid overlap. */
 export function PresentXAxisTick({ x, y, payload, chartData }) {

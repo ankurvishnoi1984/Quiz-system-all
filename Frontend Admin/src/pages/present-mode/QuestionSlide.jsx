@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { BarChart3, Maximize2, Search, Trophy, X } from 'lucide-react'
+import { ChartVisibilityToggle } from '../../components/charts/ChartVisibilityToggle'
 import { getQuestionResultsApi } from '../../services/liveApi'
 import { getPresentViewQuestionResultsApi } from '../../services/presentViewApi'
 import WordCloudChart from '../../components/charts/WordCloudChart'
@@ -54,23 +55,32 @@ const LG_COL_SPAN = {
   12: 'lg:col-span-12',
 }
 
-function ResultsPanelHeader({ title, onExpand }) {
+function ResultsPanelHeader({ title, onExpand, graphVisible, onToggleGraph }) {
   return (
     <div className="mb-2 flex shrink-0 items-center justify-between gap-2">
       <p className="text-[clamp(0.65rem,1.2vw,0.75rem)] font-semibold uppercase tracking-wider text-slate-500">
         {title}
       </p>
-      {onExpand ? (
-        <button
-          type="button"
-          onClick={onExpand}
-          className="inline-flex items-center gap-1 rounded-lg bg-slate-100/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-navy-800 transition hover:bg-slate-200/90"
-          aria-label="Expand chart"
-        >
-          <Maximize2 className="size-3" />
-          Expand
-        </button>
-      ) : null}
+      <div className="flex shrink-0 items-center gap-1.5">
+        {onToggleGraph ? (
+          <ChartVisibilityToggle
+            visible={graphVisible}
+            onToggle={onToggleGraph}
+            size="sm"
+          />
+        ) : null}
+        {onExpand && graphVisible !== false ? (
+          <button
+            type="button"
+            onClick={onExpand}
+            className="inline-flex items-center gap-1 rounded-lg bg-slate-100/90 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-navy-800 transition hover:bg-slate-200/90"
+            aria-label="Expand chart"
+          >
+            <Maximize2 className="size-3" />
+            Expand
+          </button>
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -157,12 +167,16 @@ export function QuestionSlide({
 }) {
   const [viewMode, setViewMode] = useState('overview')
   const [chartExpanded, setChartExpanded] = useState(false)
-
   const presentSettings = getPresentModeSettings(session)
   const showGraphs = presentSettings.showGraphs
+  const [graphVisible, setGraphVisible] = useState(() => showGraphs)
   const showResponses = presentSettings.showResponses
   const showSessionInfo = presentSettings.showSessionInfo
   const showParticipantStats = presentSettings.showParticipantStats
+
+  useEffect(() => {
+    setGraphVisible(showGraphs)
+  }, [showGraphs, question?.id])
 
   const currentResponses = filterResponsesForQuestion(allResponses, question.id)
 
@@ -444,8 +458,27 @@ export function QuestionSlide({
 
     return (
       <div className={`${panelClass}${showRanking || showMatch ? ' overflow-auto' : ''}`}>
-        <ResultsPanelHeader title={resultsPanelMeta.title} onExpand={expandChart} />
-        {renderChartBody({ compact })}
+        <ResultsPanelHeader
+          title={resultsPanelMeta.title}
+          onExpand={expandChart}
+          graphVisible={graphVisible}
+          onToggleGraph={() =>
+            setGraphVisible((prev) => {
+              const next = !prev
+              if (!next) setChartExpanded(false)
+              return next
+            })
+          }
+        />
+        {graphVisible ? (
+          renderChartBody({ compact })
+        ) : (
+          <div className="flex min-h-[8rem] flex-1 items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/70">
+            <p className="text-[clamp(0.85rem,1.5vw,1rem)] font-semibold text-slate-500">
+              Graph hidden — use Show graph to display results.
+            </p>
+          </div>
+        )}
       </div>
     )
   }

@@ -3,6 +3,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   Legend,
   Pie,
   PieChart,
@@ -11,6 +12,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { BarPercentLabel } from '../components/charts/BarValueLabels'
+import { ChartVisibilityToggle } from '../components/charts/ChartVisibilityToggle'
 import {
   BarChart3,
   Layers,
@@ -148,6 +151,7 @@ function LivePage() {
   const [leaderboardLimit, setLeaderboardLimit] = useState(10)
   const [shareOpen, setShareOpen] = useState(false)
   const [chartView, setChartView] = useState('bar')
+  const [liveGraphVisible, setLiveGraphVisible] = useState(true)
   const [hostAlert, setHostAlert] = useState(null)
   const [endSessionConfirmOpen, setEndSessionConfirmOpen] = useState(false)
   const [inactivityOpen, setInactivityOpen] = useState(false)
@@ -1785,23 +1789,32 @@ function LivePage() {
                   </p>
                 )}
               </div>
-              {(showOptionBreakdown ||
-                showRatingBreakdown ||
-                showRankingBreakdown ||
-                (showMatchBreakdown && hasMatchPairs)) && (
-                <LiveChartViewToggle
-                  view={chartView}
-                  onChange={setChartView}
-                  modes={
-                    showMatchBreakdown
-                      ? ['table', 'bar']
-                      : showRankingBreakdown
-                        ? ['table', 'bar', 'pie']
-                        : ['bar', 'pie']
-                  }
+              <div className="flex flex-wrap items-center gap-2">
+                <ChartVisibilityToggle
+                  visible={liveGraphVisible}
+                  onToggle={() => setLiveGraphVisible((prev) => !prev)}
+                  size="md"
                 />
-              )}
+                {liveGraphVisible &&
+                  (showOptionBreakdown ||
+                    showRatingBreakdown ||
+                    showRankingBreakdown ||
+                    (showMatchBreakdown && hasMatchPairs)) && (
+                    <LiveChartViewToggle
+                      view={chartView}
+                      onChange={setChartView}
+                      modes={
+                        showMatchBreakdown
+                          ? ['table', 'bar']
+                          : showRankingBreakdown
+                            ? ['table', 'bar', 'pie']
+                            : ['bar', 'pie']
+                      }
+                    />
+                  )}
+              </div>
             </div>
+            {liveGraphVisible ? (
             <div className="mt-3 h-[300px] rounded-2xl border border-blue-200 bg-white p-3">
               {showEmojiReaction ? (
                 <EmojiBarChart rows={emojiBarData.rows} total={emojiBarData.total} size="md" className="h-full" />
@@ -1821,14 +1834,19 @@ function LivePage() {
                   <ResponsiveContainer width="100%" height="100%">
                     {showOptionBreakdown || showRatingBreakdown ? (
                     chartView === 'bar' ? (
-                      <BarChart data={chartBreakdownData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+                      <BarChart data={chartBreakdownData} margin={{ top: 28, right: 12, left: 0, bottom: 4 }}>
                         <CartesianGrid strokeDasharray="4 4" stroke="#e2e8f0" vertical={false} />
                         <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
                         <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
                         <Tooltip
                           cursor={{ fill: 'rgba(79, 70, 229, 0.06)' }}
                           contentStyle={CHART_TOOLTIP_STYLE}
-                          formatter={(value) => [`${value} responses`, 'Count']}
+                          formatter={(value) => {
+                            const pct = optionTotal
+                              ? Math.round((Number(value) / optionTotal) * 100)
+                              : 0
+                            return [`${value} (${pct}%)`, 'Count']
+                          }}
                         />
                         <Bar dataKey="value" radius={[8, 8, 0, 0]} maxBarSize={56}>
                           {chartBreakdownData.map((entry, idx) => (
@@ -1837,6 +1855,16 @@ function LivePage() {
                               fill={getChartColor(entry.name, idx, chartRawType)}
                             />
                           ))}
+                          <LabelList
+                            valueAccessor={(entry) => entry?.payload ?? null}
+                            content={(labelProps) => (
+                              <BarPercentLabel
+                                {...labelProps}
+                                total={optionTotal}
+                                fontSize={11}
+                              />
+                            )}
+                          />
                         </Bar>
                       </BarChart>
                     ) : (
@@ -1891,7 +1919,14 @@ function LivePage() {
                   </ResponsiveContainer>
                 )}
             </div>
-            {showWordCloud && !wordCloudWords.length && (
+            ) : (
+              <div className="mt-3 flex h-[120px] items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/80">
+                <p className="text-sm font-semibold text-slate-500">
+                  Graph hidden — use Show graph to display results.
+                </p>
+              </div>
+            )}
+            {liveGraphVisible && showWordCloud && !wordCloudWords.length && (
               <p className="mt-2 text-center text-xs text-slate-500">Waiting for participants to submit words…</p>
             )}
             {(showOptionBreakdown || showRatingBreakdown) && !optionTotal && (
