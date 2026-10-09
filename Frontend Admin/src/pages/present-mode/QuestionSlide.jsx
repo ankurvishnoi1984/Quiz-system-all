@@ -538,7 +538,9 @@ export function QuestionSlide({
           }`}
         >
           <h2 className="min-w-0 flex-1 text-[clamp(1.1rem,2.4vw,1.85rem)] font-bold leading-snug text-navy-900">
-            {question.text || 'Untitled question'}
+            {questionNumber != null && Number(questionNumber) > 0
+              ? `Q${questionNumber}. ${question.text || 'Untitled question'}`
+              : question.text || 'Untitled question'}
           </h2>
           {question.media?.url ? (
             <PresentQuestionMedia
