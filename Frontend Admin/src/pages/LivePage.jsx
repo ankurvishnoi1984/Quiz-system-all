@@ -153,7 +153,7 @@ function LivePage() {
   const [leaderboardLimit, setLeaderboardLimit] = useState(10)
   const [shareOpen, setShareOpen] = useState(false)
   const [chartView, setChartView] = useState('bar')
-  const [liveGraphVisible, setLiveGraphVisible] = useState(true)
+  const [liveGraphVisible, setLiveGraphVisible] = useState(false)
   const [hostAlert, setHostAlert] = useState(null)
   const [endSessionConfirmOpen, setEndSessionConfirmOpen] = useState(false)
   const [inactivityOpen, setInactivityOpen] = useState(false)
@@ -434,6 +434,7 @@ function LivePage() {
 
   useEffect(() => {
     setChartView('bar')
+    setLiveGraphVisible(false)
   }, [activeQuestion?.id])
 
   useEffect(() => {

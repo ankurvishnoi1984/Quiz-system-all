@@ -169,14 +169,15 @@ export function QuestionSlide({
   const [chartExpanded, setChartExpanded] = useState(false)
   const presentSettings = getPresentModeSettings(session)
   const showGraphs = presentSettings.showGraphs
-  const [graphVisible, setGraphVisible] = useState(() => showGraphs)
+  // Chart body starts hidden; host uses Show graph when ready to display results.
+  const [graphVisible, setGraphVisible] = useState(false)
   const showResponses = presentSettings.showResponses
   const showSessionInfo = presentSettings.showSessionInfo
   const showParticipantStats = presentSettings.showParticipantStats
 
   useEffect(() => {
-    setGraphVisible(showGraphs)
-  }, [showGraphs, question?.id])
+    setGraphVisible(false)
+  }, [question?.id])
 
   const currentResponses = filterResponsesForQuestion(allResponses, question.id)
 
