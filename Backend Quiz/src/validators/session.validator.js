@@ -279,6 +279,7 @@ function validateUpdateSessionPayload(payload) {
     "join_otp_required",
     "join_allowlist_enabled",
     "join_allowlist",
+    "join_locked",
     "scheduled_date",
     "scheduled_time",
     "auto_end_enabled",
@@ -327,6 +328,7 @@ function validateUpdateSessionPayload(payload) {
 
   coerceOptionalBoolean(payload?.join_otp_required, "join_otp_required", errors);
   coerceOptionalBoolean(payload?.join_allowlist_enabled, "join_allowlist_enabled", errors);
+  coerceOptionalBoolean(payload?.join_locked, "join_locked", errors);
   errors.push(...validateJoinAllowlistFields(payload));
 
   const scheduledDateError = validateScheduledDate(payload?.scheduled_date);

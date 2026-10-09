@@ -215,6 +215,7 @@ async function createSession({ deptId, input, user }) {
      max_participants: input.max_participants || 500,
      show_results_to_participants: input.show_results_to_participants ?? true,
      allow_late_join: false,
+     join_locked: false,
      leaderboard_enabled: input.leaderboard_enabled ?? false,
      current_rankings_enabled: false,
      survey_results_enabled: input.survey_results_enabled ?? false,
@@ -345,6 +346,7 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
         max_participants: source.max_participants ?? 500,
         show_results_to_participants: source.show_results_to_participants ?? true,
         allow_late_join: source.allow_late_join ?? false,
+        join_locked: false,
         leaderboard_enabled: source.leaderboard_enabled ?? false,
         current_rankings_enabled: false,
         survey_results_enabled: source.survey_results_enabled ?? false,
@@ -513,7 +515,8 @@ async function updateSession({ sessionId, input, user }) {
     "logo_url",
     "present_mode_settings",
     "participant_theme",
-    "participant_theme_custom"
+    "participant_theme_custom",
+    "join_locked"
   ];
   const inputKeys = Object.keys(input || {});
 
@@ -621,6 +624,10 @@ async function updateSession({ sessionId, input, user }) {
       input.survey_results_enabled !== undefined
         ? Boolean(input.survey_results_enabled)
         : session.survey_results_enabled,
+    join_locked:
+      input.join_locked !== undefined
+        ? Boolean(input.join_locked)
+        : Boolean(session.join_locked),
     show_participant_count:
       input.show_participant_count !== undefined
         ? Boolean(input.show_participant_count)
@@ -940,6 +947,9 @@ async function listSessionParticipants({ sessionId, user }) {
   }));
 }
 
+const JOIN_LOCKED_MESSAGE =
+  "This room is locked by the host. New participants cannot join.";
+
 async function getSessionJoinBlockInfo(session, { notifyHost = false } = {}) {
   const planBlock = await getPlanJoinBlock(session);
   if (planBlock.blocked) {
@@ -950,6 +960,14 @@ async function getSessionJoinBlockInfo(session, { notifyHost = false } = {}) {
       blocked: true,
       message: planBlock.message,
       reason: "plan_limit"
+    };
+  }
+
+  if (Boolean(session.join_locked)) {
+    return {
+      blocked: true,
+      message: JOIN_LOCKED_MESSAGE,
+      reason: "join_locked"
     };
   }
 

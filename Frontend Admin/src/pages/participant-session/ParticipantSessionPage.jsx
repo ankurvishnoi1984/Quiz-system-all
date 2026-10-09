@@ -1184,6 +1184,22 @@ function ParticipantSessionPage({ embed = false }) {
                 data.random_question_order_enabled ?? old.random_question_order_enabled,
               allow_late_join:
                 data.allow_late_join !== undefined ? data.allow_late_join : old.allow_late_join,
+              join_locked:
+                data.join_locked !== undefined
+                  ? Boolean(data.join_locked)
+                  : old.join_locked,
+              join_blocked:
+                data.join_blocked !== undefined
+                  ? Boolean(data.join_blocked)
+                  : old.join_blocked,
+              join_blocked_message:
+                data.join_blocked_message !== undefined
+                  ? data.join_blocked_message
+                  : old.join_blocked_message,
+              join_blocked_reason:
+                data.join_blocked_reason !== undefined
+                  ? data.join_blocked_reason
+                  : old.join_blocked_reason,
               participant_theme:
                 data.participant_theme !== undefined
                   ? normalizeParticipantTheme(data.participant_theme)

@@ -95,6 +95,11 @@ const Session = sequelize.define(
       allowNull: true,
       defaultValue: false
     },
+    join_locked: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
     leaderboard_enabled: {
       type: DataTypes.BOOLEAN,
       allowNull: true,

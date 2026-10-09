@@ -17,6 +17,8 @@ import { ChartVisibilityToggle } from '../components/charts/ChartVisibilityToggl
 import {
   BarChart3,
   Layers,
+  Lock,
+  LockOpen,
   MonitorPlay,
   Play,
   Presentation,
@@ -769,6 +771,26 @@ function LivePage() {
       setErrorMessage(error.message || 'Unable to update survey results setting'),
   })
 
+  const sessionJoinLockMutation = useMutation({
+    mutationFn: (locked) =>
+      updateSessionApi(accessToken, sessionId, { join_locked: locked }),
+    onSuccess: (updated) => {
+      if (updated) {
+        const patch = { join_locked: Boolean(updated.join_locked) }
+        queryClient.setQueryData(['live-session', sessionId], (old) =>
+          old ? { ...old, ...updated, ...patch } : updated,
+        )
+        queryClient.setQueryData(['live-session', sessionId, 'host'], (old) =>
+          old ? { ...old, ...updated, ...patch } : old,
+        )
+      }
+      queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['live-dept-sessions'] })
+    },
+    onError: (error) =>
+      setErrorMessage(error.message || 'Unable to update room lock'),
+  })
+
 
   const {
     questionLiveMutation,
@@ -1375,6 +1397,29 @@ function LivePage() {
                 tone="sky"
                 onClick={() =>
                   sessionSurveyResultsMutation.mutate(!session?.survey_results_enabled)
+                }
+              />
+            ) : null}
+            {showSessionControls ? (
+              <HostQuestionActionButton
+                disabled={sessionJoinLockMutation.isPending}
+                icon={session?.join_locked ? Lock : LockOpen}
+                label={
+                  sessionJoinLockMutation.isPending
+                    ? 'Updating…'
+                    : session?.join_locked
+                      ? 'Room locked'
+                      : 'Lock room'
+                }
+                title={
+                  session?.join_locked
+                    ? 'Unlock room so new participants can join again'
+                    : 'Lock room — block new participants from joining (existing can still rejoin)'
+                }
+                active={Boolean(session?.join_locked)}
+                tone="slate"
+                onClick={() =>
+                  sessionJoinLockMutation.mutate(!session?.join_locked)
                 }
               />
             ) : null}

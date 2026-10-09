@@ -574,6 +574,13 @@ function notifySessionSettings(sessionCode, settings) {
     participant_navigation_enabled: settings.participant_navigation_enabled !== false,
     random_question_order_enabled: Boolean(settings.random_question_order_enabled),
     allow_late_join: Boolean(settings.allow_late_join),
+    join_locked: Boolean(settings.join_locked),
+    join_blocked:
+      settings.join_blocked !== undefined ? Boolean(settings.join_blocked) : undefined,
+    join_blocked_message:
+      settings.join_blocked_message !== undefined ? settings.join_blocked_message : undefined,
+    join_blocked_reason:
+      settings.join_blocked_reason !== undefined ? settings.join_blocked_reason : undefined,
     quiz_total_time_minutes: settings.quiz_total_time_minutes ?? null,
     present_mode_settings: settings.present_mode_settings ?? null,
     participant_theme: settings.participant_theme || "default",

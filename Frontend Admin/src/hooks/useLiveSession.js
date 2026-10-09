@@ -333,6 +333,10 @@ export function useLiveSession(accessToken, sessionId, options = {}) {
               : old.random_question_order_enabled,
           allow_late_join:
             data.allow_late_join !== undefined ? data.allow_late_join : old.allow_late_join,
+          join_locked:
+            data.join_locked !== undefined
+              ? Boolean(data.join_locked)
+              : old.join_locked,
           present_mode_settings:
             data.present_mode_settings !== undefined
               ? data.present_mode_settings

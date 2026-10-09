@@ -153,6 +153,7 @@ async function update(req, res) {
       user: req.user
     });
     if (session.session_code) {
+      const joinBlock = await getSessionJoinBlockInfo(session);
       notifySessionSettings(session.session_code, {
         leaderboard_enabled: session.leaderboard_enabled,
         current_rankings_enabled: session.current_rankings_enabled,
@@ -163,6 +164,10 @@ async function update(req, res) {
         quiz_total_time_minutes: session.quiz_total_time_minutes ?? null,
         random_question_order_enabled: isSessionRandomQuestionOrderEnabled(session),
         allow_late_join: Boolean(session.allow_late_join),
+        join_locked: Boolean(session.join_locked),
+        join_blocked: Boolean(joinBlock.blocked),
+        join_blocked_message: joinBlock.message || null,
+        join_blocked_reason: joinBlock.reason || null,
         present_mode_settings: session.present_mode_settings ?? null,
         participant_theme: session.participant_theme || "default",
         participant_theme_custom: session.participant_theme_custom ?? null
@@ -337,6 +342,7 @@ async function lookupByCode(req, res) {
           participant_theme: session.participant_theme || "default",
           participant_theme_custom: session.participant_theme_custom ?? null,
           allow_late_join: Boolean(session.allow_late_join),
+          join_locked: Boolean(session.join_locked),
           last_activity_at: session.last_activity_at || null,
           started_at: session.started_at || null,
           join_blocked: Boolean(joinBlock.blocked),
@@ -692,6 +698,7 @@ async function activateAdvancedAssignmentSlotHandler(req, res) {
         "participant_navigation_enabled",
         "random_question_order_enabled",
         "allow_late_join",
+        "join_locked",
         "quiz_total_time_minutes",
         "present_mode_settings",
         "participant_theme",

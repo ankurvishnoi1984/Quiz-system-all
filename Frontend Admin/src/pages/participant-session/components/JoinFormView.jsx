@@ -205,7 +205,9 @@ export function JoinFormView({
             {joinBlockedMessage ||
               (joinBlockedReason === 'plan_limit'
                 ? 'Participant limit exceeded for this account.'
-                : 'Session has already started')}
+                : joinBlockedReason === 'join_locked'
+                  ? 'This room is locked by the host. New participants cannot join.'
+                  : 'Session has already started')}
           </p>
         ) : null}
 
