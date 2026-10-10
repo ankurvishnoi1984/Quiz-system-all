@@ -90,6 +90,26 @@ import {
   DEFAULT_TIMER_SOUND_KEY,
   normalizeTimerSoundSettings,
 } from '../utils/timerSoundPresets'
+import {
+  OPTION_TEXT_MAX_CHARS,
+  QUESTION_TEXT_MAX_CHARS,
+  clipToMaxChars,
+  getQuestionTextLimitError,
+} from '../utils/questionTextLimits'
+
+function CharCountHint({ value, max }) {
+  const len = String(value ?? '').length
+  const nearLimit = len >= max
+  return (
+    <p
+      className={`mt-1 text-right text-[11px] tabular-nums ${
+        nearLimit ? 'font-semibold text-amber-700' : 'text-slate-500'
+      }`}
+    >
+      {len} / {max}
+    </p>
+  )
+}
 
 /** Question-set management in the builder (exam Set A / Set B). */
 const QUESTION_SETS_UI_ENABLED = true
@@ -644,20 +664,32 @@ function MatchPairsEditor({ question, onChange, structureLocked }) {
                 <input
                   value={pair.left || ''}
                   disabled={structureLocked}
-                  onChange={(event) => updatePair(pair.id, { left: event.target.value })}
+                  maxLength={OPTION_TEXT_MAX_CHARS}
+                  onChange={(event) =>
+                    updatePair(pair.id, {
+                      left: clipToMaxChars(event.target.value, OPTION_TEXT_MAX_CHARS),
+                    })
+                  }
                   className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-navy-900 outline-none transition focus:border-navy-500 focus:ring-2 focus:ring-navy-500/20 disabled:bg-slate-50"
                   placeholder="e.g. Capital of France"
                 />
+                <CharCountHint value={pair.left} max={OPTION_TEXT_MAX_CHARS} />
               </label>
               <label className="block text-xs font-semibold text-slate-600">
                 Right / answer
                 <input
                   value={pair.right || ''}
                   disabled={structureLocked}
-                  onChange={(event) => updatePair(pair.id, { right: event.target.value })}
+                  maxLength={OPTION_TEXT_MAX_CHARS}
+                  onChange={(event) =>
+                    updatePair(pair.id, {
+                      right: clipToMaxChars(event.target.value, OPTION_TEXT_MAX_CHARS),
+                    })
+                  }
                   className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-navy-900 outline-none transition focus:border-navy-500 focus:ring-2 focus:ring-navy-500/20 disabled:bg-slate-50"
                   placeholder="e.g. Paris"
                 />
+                <CharCountHint value={pair.right} max={OPTION_TEXT_MAX_CHARS} />
               </label>
               <div className="flex items-end">
                 <button
@@ -690,7 +722,9 @@ function OptionsEditor({ question, quizMode, onChange, structureLocked, hideCorr
   const setOptionText = (id, text) => {
     onChange({
       ...question,
-      options: question.options.map((o) => (o.id === id ? { ...o, text } : o)),
+      options: question.options.map((o) =>
+        o.id === id ? { ...o, text: clipToMaxChars(text, OPTION_TEXT_MAX_CHARS) } : o,
+      ),
     })
   }
 
@@ -727,7 +761,7 @@ function OptionsEditor({ question, quizMode, onChange, structureLocked, hideCorr
   }
 
   const optionRows = question.options.map((opt) => (
-    <div key={opt.id} className="flex flex-wrap items-center gap-2">
+    <div key={opt.id} className="flex flex-wrap items-start gap-2">
       {question.type === 'MCQ' && !hideCorrectToggle ? (
         <button
           type="button"
@@ -755,11 +789,15 @@ function OptionsEditor({ question, quizMode, onChange, structureLocked, hideCorr
           {structureLocked ? (opt.isCorrect ? 'Correct' : '—') : quizMode ? (opt.isCorrect ? 'Correct' : 'Mark correct') : 'Quiz mode off'}
         </button>
       ) : null}
-      <input
-        className="h-10 min-w-[220px] flex-1 rounded-xl border border-blue-200/70 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
-        value={opt.text}
-        onChange={(e) => setOptionText(opt.id, e.target.value)}
-      />
+      <div className="min-w-[220px] flex-1">
+        <input
+          className="h-10 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+          value={opt.text}
+          maxLength={OPTION_TEXT_MAX_CHARS}
+          onChange={(e) => setOptionText(opt.id, e.target.value)}
+        />
+        <CharCountHint value={opt.text} max={OPTION_TEXT_MAX_CHARS} />
+      </div>
       <button
         type="button"
         onClick={() => removeOption(opt.id)}
@@ -806,12 +844,12 @@ function OptionsEditor({ question, quizMode, onChange, structureLocked, hideCorr
             <div className="space-y-2">
               {question.options.map((opt) => (
                 <SortableRow key={opt.id} id={opt.id}>
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-start gap-2">
                     {question.type === 'MCQ' && !hideCorrectToggle ? (
                       <button
                         type="button"
                         onClick={() => toggleCorrect(opt.id)}
-                        className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                        className={`inline-flex h-10 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
                           quizMode
                             ? opt.isCorrect
                               ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
@@ -825,11 +863,15 @@ function OptionsEditor({ question, quizMode, onChange, structureLocked, hideCorr
                         {quizMode ? (opt.isCorrect ? 'Correct' : 'Mark correct') : 'Quiz mode off'}
                       </button>
                     ) : null}
-                    <input
-                      className="h-10 min-w-[220px] flex-1 rounded-xl border border-blue-200/70 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
-                      value={opt.text}
-                      onChange={(e) => setOptionText(opt.id, e.target.value)}
-                    />
+                    <div className="min-w-[220px] flex-1">
+                      <input
+                        className="h-10 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+                        value={opt.text}
+                        maxLength={OPTION_TEXT_MAX_CHARS}
+                        onChange={(e) => setOptionText(opt.id, e.target.value)}
+                      />
+                      <CharCountHint value={opt.text} max={OPTION_TEXT_MAX_CHARS} />
+                    </div>
                     <button
                       type="button"
                       onClick={() => removeOption(opt.id)}
@@ -2532,6 +2574,12 @@ function BuilderPage() {
       }
 
       for (const question of questions) {
+        const textLimitError = getQuestionTextLimitError(question)
+        if (textLimitError) {
+          throw new Error(
+            `Question "${question.text || 'Untitled'}": ${textLimitError}`,
+          )
+        }
         if (question.type === 'Poll') {
           if ((question.options || []).length < 2) {
             throw new Error(
@@ -3635,7 +3683,13 @@ function BuilderPage() {
                 <label className="text-sm font-semibold text-slate-700">Question text</label>
                 <textarea
                   value={selected.text}
-                  onChange={(e) => updateQuestion({ ...selected, text: e.target.value })}
+                  maxLength={QUESTION_TEXT_MAX_CHARS}
+                  onChange={(e) =>
+                    updateQuestion({
+                      ...selected,
+                      text: clipToMaxChars(e.target.value, QUESTION_TEXT_MAX_CHARS),
+                    })
+                  }
                   placeholder={
                     selected.type === 'Emoji Reaction'
                       ? 'How are you feeling about this topic? (optional)'
@@ -3643,6 +3697,7 @@ function BuilderPage() {
                   }
                   className="mt-1 h-24 w-full resize-none rounded-2xl border border-blue-200/70 bg-white p-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
                 />
+                <CharCountHint value={selected.text} max={QUESTION_TEXT_MAX_CHARS} />
               </div>
 
               {selected.type === 'Survey' && (
