@@ -112,12 +112,12 @@ export function QuestionTimer({
   if (compact) {
     return (
       <div
-        className={`participant-timer-panel inline-flex items-center gap-2.5 rounded-2xl border px-2.5 py-2 shadow-lg shadow-navy-900/10 backdrop-blur-md ${
+        className={`participant-timer-panel inline-flex items-center gap-2.5 rounded-2xl border px-2.5 py-2 shadow-lg shadow-navy-900/10 ${
           expired
-            ? 'quiz-timer-expired border-red-200/90 bg-red-50/95'
+            ? 'quiz-timer-expired border-red-200/90 bg-red-50'
             : urgent
-              ? 'quiz-timer-urgent border-red-200/90 bg-red-50/90'
-              : 'border-white/80 bg-white/92'
+              ? 'quiz-timer-urgent border-red-200/90 bg-red-50'
+              : 'border-blue-100 bg-white'
         } ${className}`}
         role="timer"
         aria-live="polite"

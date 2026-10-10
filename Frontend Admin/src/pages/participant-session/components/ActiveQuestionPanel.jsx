@@ -96,28 +96,21 @@ export function ActiveQuestionPanel({
       ref={panelRef}
       key={question.id}
       data-pq-density={densityId}
-      className={`participant-surface quiz-fade-in rounded-2xl border border-blue-200/70 bg-white/92 shadow-sm shadow-navy-900/5 backdrop-blur-sm ${density.panelClass}`}
+      className={`participant-surface quiz-fade-in rounded-2xl border border-blue-200/70 bg-white shadow-sm shadow-navy-900/5 ${density.panelClass}`}
     >
+      {navigationEnabled ? (
       <div className="flex flex-wrap items-center justify-between gap-3">
-        {navigationEnabled ? (
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <p className="participant-accent-text min-w-0 truncate text-xs font-semibold uppercase tracking-wider text-navy-700">
               Question {displayQuestionIndex + 1} / {activeQuestions.length}
             </p>
           </div>
-        ) : questionSerial != null ? (
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <p className="participant-accent-text min-w-0 truncate text-xs font-semibold uppercase tracking-wider text-navy-700">
-              Q{questionSerial}
-            </p>
-          </div>
-        ) : null}
-        {navigationEnabled && sessionQuizTotalTimeEnabled && !canShowPreviousQuestion && (
+        {sessionQuizTotalTimeEnabled && !canShowPreviousQuestion && (
           <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
             Submit the last question or wait for the quiz timer to use Previous.
           </p>
         )}
-        {navigationEnabled && sessionQuizTotalTimeEnabled && canShowPreviousQuestion && (
+        {sessionQuizTotalTimeEnabled && canShowPreviousQuestion && (
           <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
             {allQuestionsClosedByHost
               ? 'Questions closed by the host — use Previous and Next to review your answers.'
@@ -126,34 +119,29 @@ export function ActiveQuestionPanel({
                 : 'Quiz timer: use Previous and Next to review your answers.'}
           </p>
         )}
-        {navigationEnabled && hasCountdown && !sessionQuizTotalTimeEnabled && !canGoToNextQuestion && (
+        {hasCountdown && !sessionQuizTotalTimeEnabled && !canGoToNextQuestion && (
           <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
             Answer this question or wait for the timer to use Next.
           </p>
         )}
-        {navigationEnabled && hasCountdown && !sessionQuizTotalTimeEnabled && canGoToNextQuestion && inputsLocked && canShowPreviousQuestion && (
+        {hasCountdown && !sessionQuizTotalTimeEnabled && canGoToNextQuestion && inputsLocked && canShowPreviousQuestion && (
           <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
             Timed: use Previous and Next to browse; answers cannot be changed after submit or when
             time runs out.
           </p>
         )}
-        {navigationEnabled && hasCountdown && !sessionQuizTotalTimeEnabled && canGoToNextQuestion && inputsLocked && !canShowPreviousQuestion && (
+        {hasCountdown && !sessionQuizTotalTimeEnabled && canGoToNextQuestion && inputsLocked && !canShowPreviousQuestion && (
           <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
             Submit the latest active question before you can use Previous.
           </p>
         )}
-        {navigationEnabled && !hasCountdown && hasAnyQuestionSaved && canShowPreviousQuestion && (
+        {!hasCountdown && hasAnyQuestionSaved && canShowPreviousQuestion && (
           <p className="max-w-[min(100%,18rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
             No timer: revisit questions with Previous; use Submit on the last question to update.
           </p>
         )}
-        {!navigationEnabled && !submissionsClosed && (
-          <p className="max-w-[min(100%,22rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
-            Answer and submit; the host will show the next question{' '}
-            <span className="whitespace-nowrap">when ready.</span>
-          </p>
-        )}
       </div>
+      ) : null}
 
       {showNewQuestionAlert ? (
         <p className="quiz-pop rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">

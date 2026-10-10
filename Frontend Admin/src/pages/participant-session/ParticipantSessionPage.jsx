@@ -2701,7 +2701,7 @@ function ParticipantSessionPage({ embed = false }) {
       className={`participant-session-bg ${
         embedMode
           ? 'h-dvh min-h-dvh overflow-x-hidden overflow-y-auto overscroll-y-contain p-3 pb-8 sm:p-4'
-          : 'h-dvh min-h-dvh overflow-x-hidden overflow-y-auto overscroll-y-contain p-4 pb-28 md:h-auto md:min-h-screen md:overflow-visible md:pb-6 md:p-6'
+          : 'h-dvh min-h-dvh overflow-x-hidden overflow-y-auto overscroll-y-contain p-4 pb-[max(2rem,env(safe-area-inset-bottom))] md:h-auto md:min-h-screen md:overflow-visible md:pb-6 md:p-6'
       }`}
       data-participant-theme={participantTheme}
       style={participantThemeStyle}

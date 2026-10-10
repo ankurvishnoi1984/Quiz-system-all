@@ -2,7 +2,7 @@ import { Clock3 } from 'lucide-react'
 
 export function WaitingForQuestion() {
   return (
-    <section className="participant-surface quiz-enter space-y-4 rounded-2xl border border-blue-200/70 bg-white/92 p-8 text-center shadow-sm shadow-navy-900/5 backdrop-blur-sm">
+    <section className="participant-surface quiz-enter space-y-4 rounded-2xl border border-blue-200/70 bg-white p-8 text-center shadow-sm shadow-navy-900/5">
       <div className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-blue-700">
         <Clock3 className="size-7 animate-pulse" />
       </div>

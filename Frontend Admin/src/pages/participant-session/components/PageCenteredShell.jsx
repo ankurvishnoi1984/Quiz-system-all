@@ -25,13 +25,13 @@ export function PageCenteredShell({
       className={`participant-session-bg grid place-items-center ${
         inIframe
           ? 'h-dvh min-h-dvh overflow-x-hidden overflow-y-auto overscroll-y-contain p-3 pb-8 sm:p-4'
-          : 'h-dvh min-h-dvh overflow-x-hidden overflow-y-auto overscroll-y-contain p-6 pb-24 md:h-auto md:min-h-screen md:overflow-visible md:pb-6'
+          : 'h-dvh min-h-dvh overflow-x-hidden overflow-y-auto overscroll-y-contain p-6 pb-[max(2rem,env(safe-area-inset-bottom))] md:h-auto md:min-h-screen md:overflow-visible md:pb-6'
       }`}
       data-participant-theme={themeId}
       style={themeStyle}
     >
       <div
-        className={`participant-surface w-full ${maxWidth} rounded-2xl border border-blue-200/70 bg-white/92 text-center shadow-sm shadow-navy-900/5 backdrop-blur-sm ${
+        className={`participant-surface w-full ${maxWidth} rounded-2xl border border-blue-200/70 bg-white text-center shadow-sm shadow-navy-900/5 ${
           inIframe ? 'p-5 sm:p-6' : 'p-8'
         }`}
       >

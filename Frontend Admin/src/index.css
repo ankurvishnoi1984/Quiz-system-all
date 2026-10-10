@@ -67,6 +67,26 @@
     background-attachment: fixed;
   }
 
+  /* iOS Safari: fixed bg/orbs + dvh gaps often paint default white body behind main. */
+  @supports (-webkit-touch-callout: none) {
+    html,
+    body,
+    #root {
+      background-color: #d7e4ee;
+    }
+
+    .participant-session-bg {
+      background-attachment: scroll;
+      /* Opaque surfaces avoid Safari translucent+blur compositing slabs. */
+      --pt-surface: #ffffff;
+    }
+
+    .participant-session-bg::before,
+    .participant-session-bg::after {
+      position: absolute;
+    }
+  }
+
   .participant-session-bg[data-participant-theme="ocean"] {
     --participant-orb-a: rgba(14, 116, 144, 0.32);
     --participant-orb-b: rgba(21, 94, 117, 0.24);
