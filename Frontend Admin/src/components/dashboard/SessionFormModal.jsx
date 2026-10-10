@@ -81,6 +81,9 @@ const defaultInitial = {
   joinOtpRequired: true,
   joinAllowlistEnabled: false,
   joinAllowlist: null,
+  customerMatchEnabled: false,
+  customerMatchWcCode: '',
+  customerMatchZone: '',
   enableNavigation: false,
   randomQuestionOrder: false,
   quizTotalTimeEnabled: false,
@@ -119,6 +122,11 @@ function SessionFormModal({
   const [joinOtpRequired, setJoinOtpRequired] = useState(defaultInitial.joinOtpRequired)
   const [joinAllowlistEnabled, setJoinAllowlistEnabled] = useState(false)
   const [joinAllowlist, setJoinAllowlist] = useState(null)
+  const [customerMatchEnabled, setCustomerMatchEnabled] = useState(false)
+  const [customerMatchWcCode, setCustomerMatchWcCode] = useState('')
+  const [customerMatchZone, setCustomerMatchZone] = useState('')
+  const [customerMatchConfigError, setCustomerMatchConfigError] = useState('')
+  const CUSTOMER_MATCH_ZONES = ['East', 'West', 'North', 'South']
   const [allowlistFileName, setAllowlistFileName] = useState('')
   const [allowlistError, setAllowlistError] = useState('')
   const [allowlistSampleDownloading, setAllowlistSampleDownloading] = useState(false)
@@ -178,6 +186,10 @@ function SessionFormModal({
           }
         : null,
     )
+    setCustomerMatchEnabled(Boolean(initialValues.customerMatchEnabled))
+    setCustomerMatchWcCode(String(initialValues.customerMatchWcCode ?? '').trim())
+    setCustomerMatchZone(String(initialValues.customerMatchZone ?? '').trim())
+    setCustomerMatchConfigError('')
     setAllowlistFileName('')
     setAllowlistError('')
     setEnableNavigation(Boolean(initialValues.enableNavigation))
@@ -393,6 +405,20 @@ function SessionFormModal({
       return
     }
 
+    if (customerMatchEnabled) {
+      const wc = String(customerMatchWcCode ?? '').trim()
+      const zone = String(customerMatchZone ?? '').trim()
+      if (!/^\d+$/.test(wc) || !CUSTOMER_MATCH_ZONES.includes(zone)) {
+        setCustomerMatchConfigError(
+          'Enter a numeric WC code and select a zone when customer match is enabled.',
+        )
+        return
+      }
+      setCustomerMatchConfigError('')
+    } else {
+      setCustomerMatchConfigError('')
+    }
+
     onSubmit({
       title: String(form.get('title') ?? '').trim(),
       description: String(form.get('description') ?? '').trim(),
@@ -405,6 +431,9 @@ function SessionFormModal({
       joinOtpRequired: contactJoin ? Boolean(joinOtpRequired) : false,
       joinAllowlistEnabled: allowlistOn,
       joinAllowlist: allowlistOn ? joinAllowlist : null,
+      customerMatchEnabled: Boolean(customerMatchEnabled),
+      customerMatchWcCode: customerMatchEnabled ? String(customerMatchWcCode ?? '').trim() : '',
+      customerMatchZone: customerMatchEnabled ? String(customerMatchZone ?? '').trim() : '',
       enableNavigation: builderMode === 'advanced' ? true : enableNavigation,
       randomQuestionOrder: enableNavigation && randomQuestionOrder,
       quizTotalTimeEnabled: enableNavigation && quizTotalTimeEnabled,
@@ -676,6 +705,68 @@ function SessionFormModal({
                   </label>
                 </div>
               ) : null}
+              <div className="md:col-span-2">
+                <label className="flex items-center justify-between gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-700">
+                      Require customer match verification
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Participants must provide an email (in the join link or form). WC code and zone
+                      are set here and checked against the customer match API before join.
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={customerMatchEnabled}
+                    onChange={(event) => {
+                      setCustomerMatchEnabled(event.target.checked)
+                      setCustomerMatchConfigError('')
+                    }}
+                    className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
+                  />
+                </label>
+                {customerMatchEnabled ? (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-xs font-semibold text-slate-600">Zone</span>
+                      <select
+                        value={customerMatchZone}
+                        onChange={(event) => {
+                          setCustomerMatchZone(event.target.value)
+                          setCustomerMatchConfigError('')
+                        }}
+                        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                      >
+                        <option value="">Select zone…</option>
+                        {CUSTOMER_MATCH_ZONES.map((z) => (
+                          <option key={z} value={z}>
+                            {z}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="text-xs font-semibold text-slate-600">WC code</span>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        value={customerMatchWcCode}
+                        onChange={(event) => {
+                          setCustomerMatchWcCode(event.target.value)
+                          setCustomerMatchConfigError('')
+                        }}
+                        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        placeholder="e.g. 10020301"
+                      />
+                    </label>
+                    {customerMatchConfigError ? (
+                      <p className="sm:col-span-2 text-xs text-red-600">{customerMatchConfigError}</p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
               {CONTACT_JOIN_TYPES.has(joinRequirement) ? (
                 <div className="md:col-span-2 space-y-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
                   <label className="flex items-center justify-between gap-3">

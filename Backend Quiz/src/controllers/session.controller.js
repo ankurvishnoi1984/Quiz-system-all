@@ -324,6 +324,7 @@ async function lookupByCode(req, res) {
           department: session.department,
           join_type: session.join_type,
           join_otp_required: Boolean(session.join_otp_required),
+          customer_match_enabled: Boolean(session.customer_match_enabled),
           logo_url: session.logo_url || null,
           leaderboard_enabled: Boolean(session.leaderboard_enabled),
           current_rankings_enabled: Boolean(session.current_rankings_enabled),

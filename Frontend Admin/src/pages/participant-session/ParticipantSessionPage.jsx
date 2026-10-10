@@ -9,6 +9,7 @@ import {
   getParticipantSurveyQuestionResultsApi,
   joinSessionApi,
   sendSessionJoinOtpApi,
+  verifyCustomerMatchApi,
   verifySessionJoinOtpApi,
   // listQaQuestionsApi, // Q&A feature disabled
   listSessionQuestionsApi,
@@ -24,6 +25,7 @@ import { hasSessionCodeInJoinPath, isParticipantEmbedPath, normalizeSessionCode 
 import { isRunningInIframe } from '../../utils/iframeEmbed'
 import {
   canAutoJoinWithIdentity,
+  getCustomerMatchGate,
   mergeJoinIdentity,
   parseJoinIdentityFromSearch,
 } from '../../utils/embedJoinIdentity'
@@ -2143,6 +2145,9 @@ function ParticipantSessionPage({ embed = false }) {
     const formEmail = String(identity.email || '').trim()
     const formMobile = String(identity.mobile || '').trim()
     const skipOtpRequirement = Boolean(options.skipOtp)
+    const customerMatchGate = getCustomerMatchGate(session, {
+      email: formEmail || resolvedIdentity?.email,
+    })
 
     try {
       let nickname = null
@@ -2153,6 +2158,13 @@ function ParticipantSessionPage({ embed = false }) {
         !skipOtpRequirement &&
         sessionJoinOtpRequired &&
         contactJoinTypes.has(joinRequirement)
+
+      if (customerMatchGate.required && !customerMatchGate.ready) {
+        abortJoin(
+          'This session requires customer verification. Enter your email or use a join link that includes your email.',
+        )
+        return
+      }
 
       if (joinRequirement === 'anonymous') {
         isAnonymous = true
@@ -2238,8 +2250,24 @@ function ParticipantSessionPage({ embed = false }) {
         setJoinBusy(true)
       }
 
+      const matchEmail = checkEmail || formEmail || String(resolvedIdentity?.email || '').trim()
+      if (customerMatchGate.required) {
+        setJoinError('Verifying…')
+        const matchResult = await verifyCustomerMatchApi({
+          sessionCode: effectiveSessionCode,
+          email: matchEmail,
+        })
+        if (matchResult.match !== true) {
+          abortJoin(
+            'You are not allowed to join this session.',
+          )
+          return
+        }
+        setJoinError('')
+      }
+
       const joinPayload = {
-        email: checkEmail,
+        email: checkEmail || (customerMatchGate.required ? matchEmail : null),
         mobile: checkMobile,
         is_anonymous: isAnonymous,
       }
@@ -2296,6 +2324,8 @@ function ParticipantSessionPage({ embed = false }) {
     if (!isSessionOpenForNewJoin(session.status)) return
     if (session.join_blocked && session.join_blocked_reason !== 'plan_limit') return
     if (!canAutoJoinWithIdentity(session, resolvedIdentity)) return
+    const matchGate = getCustomerMatchGate(session, resolvedIdentity)
+    if (matchGate.required && !matchGate.ready) return
 
     autoJoinAttemptedRef.current = true
     setAutoJoinPending(true)

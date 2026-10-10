@@ -76,6 +76,21 @@ const Session = sequelize.define(
       allowNull: true,
       defaultValue: null
     },
+    customer_match_enabled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+    customer_match_wc_code: {
+      type: DataTypes.STRING(32),
+      allowNull: true,
+      defaultValue: null
+    },
+    customer_match_zone: {
+      type: DataTypes.STRING(16),
+      allowNull: true,
+      defaultValue: null
+    },
     password_hash: {
       type: DataTypes.TEXT,
       allowNull: true

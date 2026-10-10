@@ -2,6 +2,44 @@ const {
   validateJoinAllowlistFields
 } = require("../utils/joinAllowlist");
 const { validateCustomThemeColors } = require("../utils/participantTheme");
+const {
+  CUSTOMER_MATCH_ZONES,
+  normalizeCustomerMatchZone,
+  normalizeCustomerMatchWcCode
+} = require("../utils/customerMatch");
+
+function validateCustomerMatchConfigFields(payload, { previous = null } = {}) {
+  const errors = [];
+  const enabled =
+    payload?.customer_match_enabled !== undefined
+      ? Boolean(payload.customer_match_enabled)
+      : Boolean(previous?.customer_match_enabled);
+
+  if (!enabled) return errors;
+
+  const wcRaw =
+    payload?.customer_match_wc_code !== undefined
+      ? payload.customer_match_wc_code
+      : previous?.customer_match_wc_code;
+  const zoneRaw =
+    payload?.customer_match_zone !== undefined
+      ? payload.customer_match_zone
+      : previous?.customer_match_zone;
+
+  const wc = normalizeCustomerMatchWcCode(wcRaw);
+  const zone = normalizeCustomerMatchZone(zoneRaw);
+  if (!wc) {
+    errors.push(
+      "customer_match_wc_code is required when customer match is enabled (numbers only)"
+    );
+  }
+  if (!zone) {
+    errors.push(
+      `customer_match_zone is required when customer match is enabled (${CUSTOMER_MATCH_ZONES.join(", ")})`
+    );
+  }
+  return errors;
+}
 
 function validateScheduledDate(value) {
   if (value == null || value === "") return null;
@@ -209,7 +247,9 @@ function validateCreateSessionPayload(payload) {
 
   coerceOptionalBoolean(payload?.join_otp_required, "join_otp_required", errors);
   coerceOptionalBoolean(payload?.join_allowlist_enabled, "join_allowlist_enabled", errors);
+  coerceOptionalBoolean(payload?.customer_match_enabled, "customer_match_enabled", errors);
   errors.push(...validateJoinAllowlistFields(payload));
+  errors.push(...validateCustomerMatchConfigFields(payload));
 
   if (
     payload?.participant_navigation_enabled !== undefined &&
@@ -279,6 +319,9 @@ function validateUpdateSessionPayload(payload) {
     "join_otp_required",
     "join_allowlist_enabled",
     "join_allowlist",
+    "customer_match_enabled",
+    "customer_match_wc_code",
+    "customer_match_zone",
     "join_locked",
     "scheduled_date",
     "scheduled_time",
@@ -328,6 +371,28 @@ function validateUpdateSessionPayload(payload) {
 
   coerceOptionalBoolean(payload?.join_otp_required, "join_otp_required", errors);
   coerceOptionalBoolean(payload?.join_allowlist_enabled, "join_allowlist_enabled", errors);
+  coerceOptionalBoolean(payload?.customer_match_enabled, "customer_match_enabled", errors);
+  if (payload?.customer_match_enabled === true) {
+    errors.push(...validateCustomerMatchConfigFields(payload));
+  }
+  if (
+    payload?.customer_match_wc_code !== undefined &&
+    payload?.customer_match_wc_code !== null &&
+    payload?.customer_match_wc_code !== "" &&
+    !normalizeCustomerMatchWcCode(payload.customer_match_wc_code)
+  ) {
+    errors.push("customer_match_wc_code must contain digits only");
+  }
+  if (
+    payload?.customer_match_zone !== undefined &&
+    payload?.customer_match_zone !== null &&
+    payload?.customer_match_zone !== "" &&
+    !normalizeCustomerMatchZone(payload.customer_match_zone)
+  ) {
+    errors.push(
+      `customer_match_zone must be one of: ${CUSTOMER_MATCH_ZONES.join(", ")}`
+    );
+  }
   coerceOptionalBoolean(payload?.join_locked, "join_locked", errors);
   errors.push(...validateJoinAllowlistFields(payload));
 

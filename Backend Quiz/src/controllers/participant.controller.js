@@ -70,9 +70,42 @@ async function refresh(req, res) {
   }
 }
 
+async function customerMatch(req, res) {
+  try {
+    const { verifyCustomerMatch } = require("../services/customer-match.service");
+    const { getSessionByCode } = require("../services/session.service");
+    const email = String(req.query.email || "").trim();
+    const sessionCode = String(
+      req.query.session_code || req.query.code || ""
+    ).trim();
+
+    if (sessionCode) {
+      const session = await getSessionByCode(sessionCode);
+      if (!session?.customer_match_enabled) {
+        return errorResponse(res, "Customer match is not enabled for this session", 400);
+      }
+      const wcCode = session.customer_match_wc_code;
+      const zone = session.customer_match_zone;
+      if (!email) {
+        return errorResponse(res, "email is required", 400);
+      }
+      const result = await verifyCustomerMatch({ email, wcCode, zone });
+      return successResponse(res, result, "Customer match checked", 200);
+    }
+
+    const wcCode = String(req.query.wc_code || req.query.wcCode || "").trim();
+    const zone = String(req.query.zone || "").trim();
+    const result = await verifyCustomerMatch({ email, wcCode, zone });
+    return successResponse(res, result, "Customer match checked", 200);
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
 module.exports = {
   getMySessionState,
   saveMySessionState,
   pingActivity,
-  refresh
+  refresh,
+  customerMatch
 };

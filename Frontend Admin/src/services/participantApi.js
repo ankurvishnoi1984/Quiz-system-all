@@ -61,6 +61,15 @@ export async function joinSessionApi(sessionCode, payload) {
   }
 }
 
+/** Proxy to Netcast customer-match; returns { match: boolean }. */
+export async function verifyCustomerMatchApi({ sessionCode, email }) {
+  const params = new URLSearchParams()
+  params.set('session_code', String(sessionCode || '').trim())
+  params.set('email', String(email || '').trim())
+  const data = await publicRequest(`/participants/customer-match?${params.toString()}`)
+  return { match: data?.match === true }
+}
+
 export async function sendSessionJoinOtpApi(sessionCode, payload) {
   return publicRequest(`/sessions/join/${encodeURIComponent(sessionCode)}/otp/send`, {
     method: 'POST',

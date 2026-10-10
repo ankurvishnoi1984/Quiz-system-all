@@ -538,6 +538,13 @@ function DashboardPage() {
             values.joinRequirement === 'name_email_mobile')
             ? values.joinAllowlist || null
             : null,
+        customer_match_enabled: Boolean(values.customerMatchEnabled),
+        customer_match_wc_code: values.customerMatchEnabled
+          ? String(values.customerMatchWcCode || '').trim() || null
+          : null,
+        customer_match_zone: values.customerMatchEnabled
+          ? values.customerMatchZone || null
+          : null,
         show_participant_count: Boolean(values.showParticipantCount),
         auto_end_enabled: Boolean(values.autoEndEnabled),
         auto_end_date: values.autoEndEnabled ? values.autoEndDate || null : null,
@@ -576,6 +583,11 @@ function DashboardPage() {
           : false,
       joinAllowlistEnabled: Boolean(editSession.join_allowlist_enabled),
       joinAllowlist: editSession.join_allowlist || null,
+      customerMatchEnabled: Boolean(editSession.customer_match_enabled),
+      customerMatchWcCode: editSession.customer_match_wc_code
+        ? String(editSession.customer_match_wc_code)
+        : '',
+      customerMatchZone: editSession.customer_match_zone || '',
       enableNavigation: Boolean(editSession.participant_navigation_enabled),
       randomQuestionOrder: Boolean(editSession.random_question_order_enabled),
       quizTotalTimeEnabled:
@@ -675,6 +687,13 @@ function DashboardPage() {
             values.joinRequirement === 'name_email_mobile')
             ? values.joinAllowlist || null
             : null,
+        customer_match_enabled: Boolean(values.customerMatchEnabled),
+        customer_match_wc_code: values.customerMatchEnabled
+          ? String(values.customerMatchWcCode || '').trim() || null
+          : null,
+        customer_match_zone: values.customerMatchEnabled
+          ? values.customerMatchZone || null
+          : null,
         show_participant_count: Boolean(values.showParticipantCount),
         auto_end_enabled: Boolean(values.autoEndEnabled),
         auto_end_date: values.autoEndEnabled ? values.autoEndDate || null : null,

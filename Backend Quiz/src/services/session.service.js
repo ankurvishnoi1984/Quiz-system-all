@@ -12,6 +12,7 @@ const {
   resolveJoinAllowlistFields,
   assertJoinAllowlist
 } = require("../utils/joinAllowlist");
+const { resolveCustomerMatchFields } = require("../utils/customerMatch");
 const {
   Session,
   Department,
@@ -212,6 +213,7 @@ async function createSession({ deptId, input, user }) {
      ...resolveJoinAllowlistFields(input, {
        joinType: input.join_type ?? "name"
      }),
+     ...resolveCustomerMatchFields(input),
      max_participants: input.max_participants || 500,
      show_results_to_participants: input.show_results_to_participants ?? true,
      allow_late_join: false,
@@ -343,6 +345,11 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
           },
           { joinType: source.join_type || "name" }
         ),
+        ...resolveCustomerMatchFields({
+          customer_match_enabled: source.customer_match_enabled,
+          customer_match_wc_code: source.customer_match_wc_code,
+          customer_match_zone: source.customer_match_zone
+        }),
         max_participants: source.max_participants ?? 500,
         show_results_to_participants: source.show_results_to_participants ?? true,
         allow_late_join: source.allow_late_join ?? false,
@@ -671,6 +678,16 @@ async function updateSession({ sessionId, input, user }) {
         joinType: nextJoinType,
         previous: session
       });
+    })(),
+    ...(() => {
+      if (
+        input.customer_match_enabled === undefined &&
+        input.customer_match_wc_code === undefined &&
+        input.customer_match_zone === undefined
+      ) {
+        return {};
+      }
+      return resolveCustomerMatchFields(input, { previous: session });
     })(),
     scheduled_date:
       input.scheduled_date !== undefined ? input.scheduled_date || null : session.scheduled_date,
@@ -1047,6 +1064,13 @@ async function joinSession({ code, payload }) {
       error.statusCode = 400;
       throw error;
     }
+  }
+
+  if (session.customer_match_enabled) {
+    const { assertCustomerMatchForJoin } = require("./customer-match.service");
+    await assertCustomerMatchForJoin(session, {
+      email: identity.email || joinPayload.email
+    });
   }
 
   const existingByIdentity = await findParticipantByJoinIdentity(session, {
