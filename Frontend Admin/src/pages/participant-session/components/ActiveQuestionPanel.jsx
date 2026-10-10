@@ -80,6 +80,16 @@ export function ActiveQuestionPanel({
   })
   const density = getParticipantDensityLevel(densityId)
   const pinActions = densityId >= 3
+  const questionSerial =
+    Number.isFinite(Number(displayQuestionIndex)) && Number(displayQuestionIndex) >= 0
+      ? Number(displayQuestionIndex) + 1
+      : null
+  const questionTitleBase =
+    question.type === 'Emoji Reaction' && !String(question.text || '').trim()
+      ? 'Share your reaction'
+      : question.text || 'Untitled question'
+  const questionTitle =
+    questionSerial != null ? `Q${questionSerial}. ${questionTitleBase}` : questionTitleBase
 
   return (
     <ParticipantFitProvider densityId={densityId}>
@@ -94,6 +104,12 @@ export function ActiveQuestionPanel({
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <p className="participant-accent-text min-w-0 truncate text-xs font-semibold uppercase tracking-wider text-navy-700">
               Question {displayQuestionIndex + 1} / {activeQuestions.length}
+            </p>
+          </div>
+        ) : questionSerial != null ? (
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <p className="participant-accent-text min-w-0 truncate text-xs font-semibold uppercase tracking-wider text-navy-700">
+              Q{questionSerial}
             </p>
           </div>
         ) : null}
@@ -167,9 +183,7 @@ export function ActiveQuestionPanel({
         maxPx={density.title.maxPx}
         maxLines={density.title.maxLines}
       >
-        {question.type === 'Emoji Reaction' && !String(question.text || '').trim()
-          ? 'Share your reaction'
-          : question.text || 'Untitled question'}
+        {questionTitle}
       </FitText>
 
       <QuestionMedia media={question.media} maxHeightClass={density.mediaMaxHeightClass} />
