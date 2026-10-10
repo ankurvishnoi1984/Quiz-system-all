@@ -79,7 +79,6 @@ export function ActiveQuestionPanel({
     hasMedia,
   })
   const density = getParticipantDensityLevel(densityId)
-  const pinActions = densityId >= 3
   const questionSerial =
     Number.isFinite(Number(displayQuestionIndex)) && Number(displayQuestionIndex) >= 0
       ? Number(displayQuestionIndex) + 1
@@ -308,11 +307,9 @@ export function ActiveQuestionPanel({
 
       <div
         ref={actionsRef}
-        className={`flex items-center gap-2 ${
-          pinActions
-            ? 'sticky bottom-0 z-10 -mx-1 mt-2 border-t border-blue-100/80 bg-white/95 px-1 py-2 backdrop-blur-sm'
-            : 'mt-3'
-        } ${navigationEnabled ? 'justify-between' : 'justify-center'}`}
+        className={`mt-3 flex items-center gap-2 ${
+          navigationEnabled ? 'justify-between' : 'justify-center'
+        }`}
       >
         {navigationEnabled && canShowPreviousQuestion ? (
           <button
