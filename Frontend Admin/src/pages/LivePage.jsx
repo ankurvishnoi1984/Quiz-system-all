@@ -63,10 +63,12 @@ import { PoolEligibleBadge } from '../components/live/PoolEligibleBadge'
 import { useHostQuestionMutations } from '../hooks/useHostQuestionMutations'
 // Q&A feature disabled — re-enable when bringing Q&A back
 // import { LiveQaPanel } from '../components/leaderboard/LiveQaPanel'
+import { LeaderboardLimitSelect } from '../components/leaderboard/LeaderboardLimitSelect'
 import { QuestionLeaderboardModal } from '../components/leaderboard/QuestionLeaderboardModal'
 import { QuestionLeaderboardPanel } from '../components/leaderboard/QuestionLeaderboardPanel'
 import { QuestionMedia } from '../components/participant-session/QuestionMedia'
 import { SessionLeaderboardModal } from '../components/leaderboard/SessionLeaderboardModal'
+import { normalizeLeaderboardTopN, SESSION_LEADERBOARD_TOP_N } from '../utils/leaderboard'
 import {
   buildQuestionLeaderboardForQuestion,
 } from '../utils/leaderboard'
@@ -150,7 +152,7 @@ function LivePage() {
   const [socketStatus, setSocketStatus] = useState('disconnected')
   const [leaderboardOpen, setLeaderboardOpen] = useState(false)
   const [questionLeaderboardOpen, setQuestionLeaderboardOpen] = useState(false)
-  const [leaderboardLimit, setLeaderboardLimit] = useState(10)
+  const [leaderboardLimit, setLeaderboardLimit] = useState(SESSION_LEADERBOARD_TOP_N)
   const [shareOpen, setShareOpen] = useState(false)
   const [chartView, setChartView] = useState('bar')
   const [liveGraphVisible, setLiveGraphVisible] = useState(false)
@@ -255,6 +257,40 @@ function LivePage() {
     setTourPaused(Boolean(endSessionConfirmOpen || hostAlert || inactivityOpen))
     return () => setTourPaused(false)
   }, [endSessionConfirmOpen, hostAlert, inactivityOpen, setTourPaused])
+
+  useEffect(() => {
+    if (sessionQuery.data?.leaderboard_top_n == null) return
+    setLeaderboardLimit(normalizeLeaderboardTopN(sessionQuery.data.leaderboard_top_n))
+  }, [sessionQuery.data?.leaderboard_top_n])
+
+  const persistLeaderboardTopN = useCallback(
+    async (nextLimit) => {
+      const normalized = normalizeLeaderboardTopN(nextLimit)
+      setLeaderboardLimit(normalized)
+      if (!accessToken || !sessionId) return
+      try {
+        const updated = await updateSessionApi(accessToken, sessionId, {
+          leaderboard_top_n: normalized,
+        })
+        if (updated) {
+          queryClient.setQueryData(['live-session', sessionId], (old) =>
+            old
+              ? {
+                  ...old,
+                  ...updated,
+                  leaderboard_top_n: normalizeLeaderboardTopN(
+                    updated.leaderboard_top_n ?? normalized,
+                  ),
+                }
+              : updated,
+          )
+        }
+      } catch (error) {
+        setErrorMessage(error.message || 'Unable to update rankings Top N')
+      }
+    },
+    [accessToken, sessionId, queryClient],
+  )
 
   const mappedQuestions = useMemo(
     () => mapLiveQuestions(questionsQuery.data),
@@ -1337,6 +1373,13 @@ function LivePage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {canToggleOverallLeaderboard && showSessionControls ? (
+              <LeaderboardLimitSelect
+                id="live-rankings-top-n"
+                value={leaderboardLimit}
+                onChange={persistLeaderboardTopN}
+              />
+            ) : null}
+            {canToggleOverallLeaderboard && showSessionControls ? (
               <HostQuestionActionButton
                 disabled={sessionLeaderboardMutation.isPending}
                 icon={Trophy}
@@ -2088,7 +2131,7 @@ function LivePage() {
         onClose={() => setLeaderboardOpen(false)}
         entries={leaderboard}
         limit={leaderboardLimit}
-        onLimitChange={setLeaderboardLimit}
+        onLimitChange={persistLeaderboardTopN}
       />
 
       <QuestionLeaderboardModal
@@ -2099,7 +2142,7 @@ function LivePage() {
         entries={activeQuestionLeaderboard}
         isQuizQuestion={Boolean(activeQuestion?.isQuizMode)}
         limit={leaderboardLimit}
-        onLimitChange={setLeaderboardLimit}
+        onLimitChange={persistLeaderboardTopN}
       />
 
       <HostSessionInactivityModal

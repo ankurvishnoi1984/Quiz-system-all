@@ -7,6 +7,7 @@ import { HostAlertModal } from '../../components/live/HostAlertModal'
 import { HostSessionInactivityModal } from '../../components/session/HostSessionInactivityModal'
 import { HostQuestionActionButton } from '../../components/live/HostQuestionActionButton'
 import { HostQuestionControls } from '../../components/live/HostQuestionControls'
+import { LeaderboardLimitSelect } from '../../components/leaderboard/LeaderboardLimitSelect'
 import { SessionLeaderboardModal } from '../../components/leaderboard/SessionLeaderboardModal'
 import { useAuthStore } from '../../store/authStore'
 import { useHostQuestionMutations } from '../../hooks/useHostQuestionMutations'
@@ -41,7 +42,7 @@ import {
   sessionSupportsSurveyEndingScreen,
   sessionUsesQuestionSets,
 } from '../../utils/livePresentation'
-import { SESSION_LEADERBOARD_TOP_N } from '../../utils/leaderboard'
+import { normalizeLeaderboardTopN, SESSION_LEADERBOARD_TOP_N } from '../../utils/leaderboard'
 import { isAdvancedBuilderSession, isSessionQuizTotalTimeEnabled } from '../../utils/sessionFlags'
 import { getPresentModeSettings } from '../../utils/presentModeSettings'
 import {
@@ -106,6 +107,40 @@ function PresentModePage({
   const openParticipantsModal = useCallback(() => setParticipantsModalOpen(true), [])
   const openHostLeaderboardModal = useCallback(() => setHostLeaderboardOpen(true), [])
   // const openQaModal = useCallback(() => setQaModalOpen(true), [])
+
+  useEffect(() => {
+    if (session?.leaderboard_top_n == null) return
+    setHostLeaderboardLimit(normalizeLeaderboardTopN(session.leaderboard_top_n))
+  }, [session?.leaderboard_top_n])
+
+  const persistLeaderboardTopN = useCallback(
+    async (nextLimit) => {
+      const normalized = normalizeLeaderboardTopN(nextLimit)
+      setHostLeaderboardLimit(normalized)
+      if (readOnly || !hostAccessToken || !sessionId) return
+      try {
+        const updated = await updateSessionApi(hostAccessToken, sessionId, {
+          leaderboard_top_n: normalized,
+        })
+        if (updated) {
+          const patch = {
+            leaderboard_top_n: normalizeLeaderboardTopN(
+              updated.leaderboard_top_n ?? normalized,
+            ),
+          }
+          queryClient.setQueryData(['live-session', sessionId, 'host'], (old) =>
+            old ? { ...old, ...updated, ...patch } : updated,
+          )
+          queryClient.setQueryData(['live-session', sessionId], (old) =>
+            old ? { ...old, ...updated, ...patch } : old,
+          )
+        }
+      } catch {
+        // Keep local selection; next session refetch will correct if save failed.
+      }
+    },
+    [readOnly, hostAccessToken, sessionId, queryClient],
+  )
 
   // const qaQuery = useQuery({
   //   queryKey: ['live-qa', sessionId, readOnly ? 'viewer' : 'host'],
@@ -935,6 +970,13 @@ function PresentModePage({
               : '← → arrow keys to change slides'}
           </p>
           {!readOnly && canToggleOverallLeaderboard && showSessionControls ? (
+            <LeaderboardLimitSelect
+              id="present-rankings-top-n"
+              value={hostLeaderboardLimit}
+              onChange={persistLeaderboardTopN}
+            />
+          ) : null}
+          {!readOnly && canToggleOverallLeaderboard && showSessionControls ? (
             <HostQuestionActionButton
               disabled={sessionLeaderboardMutation.isPending}
               icon={Trophy}
@@ -1269,6 +1311,7 @@ function PresentModePage({
             sessionTitle={sessionTitle}
             sessionLogoUrl={sessionLogoUrl}
             leaderboard={leaderboard}
+            topN={normalizeLeaderboardTopN(session?.leaderboard_top_n)}
             participantCount={participantCount}
             liveParticipantCount={liveParticipantCount}
             // qaCount={qaCount} // Q&A feature disabled
@@ -1313,7 +1356,7 @@ function PresentModePage({
           onClose={() => setHostLeaderboardOpen(false)}
           entries={hostLeaderboardQuery.data || []}
           limit={hostLeaderboardLimit}
-          onLimitChange={setHostLeaderboardLimit}
+          onLimitChange={persistLeaderboardTopN}
         />
       ) : null}
 

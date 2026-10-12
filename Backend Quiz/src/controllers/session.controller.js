@@ -31,7 +31,11 @@ const {
   countLiveUniqueParticipantsForSessionCode,
   getLiveUniqueParticipantIdsForSessionCode
 } = require("../services/websocket.service");
-const { buildSessionLeaderboard } = require("../services/response.service");
+const {
+  buildSessionLeaderboard,
+  resolveSessionLeaderboardScope
+} = require("../services/response.service");
+const { resolveLeaderboardTopN } = require("../utils/leaderboardTopN");
 const {
   activateAllQuestionsForSession,
   activateAdvancedAssignmentSlot,
@@ -157,6 +161,7 @@ async function update(req, res) {
       notifySessionSettings(session.session_code, {
         leaderboard_enabled: session.leaderboard_enabled,
         current_rankings_enabled: session.current_rankings_enabled,
+        leaderboard_top_n: resolveLeaderboardTopN(session),
         survey_results_enabled: session.survey_results_enabled,
         show_participant_count: session.show_participant_count,
         show_question_leaderboard: session.show_question_leaderboard,
@@ -172,14 +177,21 @@ async function update(req, res) {
         participant_theme: session.participant_theme || "default",
         participant_theme_custom: session.participant_theme_custom ?? null
       });
-      if (
-        (req.body.leaderboard_enabled === true && session.leaderboard_enabled) ||
-        (req.body.current_rankings_enabled === true && session.current_rankings_enabled)
-      ) {
-        const { resolveSessionLeaderboardScope } = require("../services/response.service");
-        const leaderboard = await buildSessionLeaderboard(session.session_id, 10, {
-          scope: resolveSessionLeaderboardScope(session)
-        });
+      const rankingsVisible =
+        Boolean(session.leaderboard_enabled) || Boolean(session.current_rankings_enabled);
+      const shouldRefreshLeaderboard =
+        rankingsVisible &&
+        (req.body.leaderboard_enabled === true ||
+          req.body.current_rankings_enabled === true ||
+          req.body.leaderboard_top_n !== undefined);
+      if (shouldRefreshLeaderboard) {
+        const leaderboard = await buildSessionLeaderboard(
+          session.session_id,
+          resolveLeaderboardTopN(session),
+          {
+            scope: resolveSessionLeaderboardScope(session)
+          }
+        );
         notifyLeaderboard(session.session_code, { leaderboard });
       }
     }
@@ -213,7 +225,7 @@ async function resetResponses(req, res) {
       notifySessionUpdate(session.session_code, session.status);
       if (session.leaderboard_enabled || session.current_rankings_enabled) {
         const { resolveSessionLeaderboardScope } = require("../services/response.service");
-        buildSessionLeaderboard(session.session_id, 10, {
+        buildSessionLeaderboard(session.session_id, resolveLeaderboardTopN(session), {
           scope: resolveSessionLeaderboardScope(session)
         })
           .then((leaderboard) => notifyLeaderboard(session.session_code, { leaderboard }))
@@ -255,6 +267,7 @@ function lifecycleAction(action) {
             notifySessionSettings(session.session_code, {
               leaderboard_enabled: session.leaderboard_enabled,
               current_rankings_enabled: session.current_rankings_enabled,
+              leaderboard_top_n: resolveLeaderboardTopN(session),
               survey_results_enabled: session.survey_results_enabled,
               show_participant_count: session.show_participant_count,
               show_question_leaderboard: session.show_question_leaderboard,
@@ -328,6 +341,7 @@ async function lookupByCode(req, res) {
           logo_url: session.logo_url || null,
           leaderboard_enabled: Boolean(session.leaderboard_enabled),
           current_rankings_enabled: Boolean(session.current_rankings_enabled),
+          leaderboard_top_n: resolveLeaderboardTopN(session),
           survey_results_enabled: Boolean(session.survey_results_enabled),
           show_participant_count: showParticipantCount,
           // Participant join page shows currently connected people only (not join history).
@@ -693,6 +707,7 @@ async function activateAdvancedAssignmentSlotHandler(req, res) {
         "advanced_active_slot",
         "leaderboard_enabled",
         "current_rankings_enabled",
+        "leaderboard_top_n",
         "survey_results_enabled",
         "show_participant_count",
         "show_question_leaderboard",
@@ -727,7 +742,10 @@ async function activateAdvancedAssignmentSlotHandler(req, res) {
         advanced_active_slot: result.advanced_active_slot
       });
       if (result.rankingsCleared) {
-        notifySessionSettings(session.session_code, session);
+        notifySessionSettings(session.session_code, {
+          ...session.toJSON?.() ? session.toJSON() : session,
+          leaderboard_top_n: resolveLeaderboardTopN(session)
+        });
       }
     }
 

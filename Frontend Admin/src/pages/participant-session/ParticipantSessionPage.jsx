@@ -56,6 +56,7 @@ import {
   sessionSupportsOverallLeaderboard,
   sessionSupportsSurveyEndingScreen,
 } from '../../utils/livePresentation'
+import { normalizeLeaderboardTopN } from '../../utils/leaderboard'
 import {
   filterActiveQuestionsForLateJoinPolicy,
   getCountdownEndsAtForQuestion,
@@ -1172,6 +1173,10 @@ function ParticipantSessionPage({ embed = false }) {
                 data.current_rankings_enabled !== undefined
                   ? Boolean(data.current_rankings_enabled)
                   : old.current_rankings_enabled,
+              leaderboard_top_n:
+                data.leaderboard_top_n !== undefined
+                  ? Number(data.leaderboard_top_n) || old.leaderboard_top_n
+                  : old.leaderboard_top_n,
               survey_results_enabled: isSurveyResultsEnabled,
               show_participant_count: isParticipantCountVisible,
               participants_count: isParticipantCountVisible
@@ -1226,6 +1231,14 @@ function ParticipantSessionPage({ embed = false }) {
         })
         queryClient.invalidateQueries({ queryKey: ['participant-leaderboard', dbSessionId] })
         queryClient.invalidateQueries({ queryKey: ['participant-session', effectiveSessionCode] })
+      }
+
+      if (
+        isLeaderboardEnabled &&
+        data.leaderboard_top_n !== undefined &&
+        Number(data.leaderboard_top_n) !== Number(previousSession?.leaderboard_top_n)
+      ) {
+        queryClient.invalidateQueries({ queryKey: ['participant-leaderboard', dbSessionId] })
       }
 
       if (wasLeaderboardEnabled && !isLeaderboardEnabled) {
@@ -2722,7 +2735,7 @@ function ParticipantSessionPage({ embed = false }) {
             highlightParticipantId={
               joinedUser?.id ?? leaderboardMe?.participant_id ?? null
             }
-            topN={10}
+            topN={normalizeLeaderboardTopN(session?.leaderboard_top_n)}
           />
         ) : showSurveyEndingScreen ? (
           <SurveySessionEndingPanel

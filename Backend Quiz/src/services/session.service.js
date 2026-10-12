@@ -9,6 +9,10 @@ const {
 } = require("../utils/participantTheme");
 const { normalizeTimerSoundFields } = require("../utils/timerSound");
 const {
+  DEFAULT_LEADERBOARD_TOP_N,
+  normalizeLeaderboardTopN
+} = require("../utils/leaderboardTopN");
+const {
   resolveJoinAllowlistFields,
   assertJoinAllowlist
 } = require("../utils/joinAllowlist");
@@ -220,6 +224,10 @@ async function createSession({ deptId, input, user }) {
      join_locked: false,
      leaderboard_enabled: input.leaderboard_enabled ?? false,
      current_rankings_enabled: false,
+     leaderboard_top_n:
+       input.leaderboard_top_n !== undefined
+         ? normalizeLeaderboardTopN(input.leaderboard_top_n)
+         : DEFAULT_LEADERBOARD_TOP_N,
      survey_results_enabled: input.survey_results_enabled ?? false,
      show_participant_count: input.show_participant_count ?? false,
      show_question_leaderboard: input.show_question_leaderboard ?? false,
@@ -356,6 +364,9 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
         join_locked: false,
         leaderboard_enabled: source.leaderboard_enabled ?? false,
         current_rankings_enabled: false,
+        leaderboard_top_n: normalizeLeaderboardTopN(
+          source.leaderboard_top_n ?? DEFAULT_LEADERBOARD_TOP_N
+        ),
         survey_results_enabled: source.survey_results_enabled ?? false,
         show_participant_count: source.show_participant_count ?? false,
         show_question_leaderboard: source.show_question_leaderboard ?? false,
@@ -516,6 +527,7 @@ async function updateSession({ sessionId, input, user }) {
   const liveSettingsOnly = [
     "leaderboard_enabled",
     "current_rankings_enabled",
+    "leaderboard_top_n",
     "survey_results_enabled",
     "show_participant_count",
     "title",
@@ -627,6 +639,10 @@ async function updateSession({ sessionId, input, user }) {
         current_rankings_enabled: nextCurrent
       };
     })(),
+    leaderboard_top_n:
+      input.leaderboard_top_n !== undefined
+        ? normalizeLeaderboardTopN(input.leaderboard_top_n)
+        : normalizeLeaderboardTopN(session.leaderboard_top_n),
     survey_results_enabled:
       input.survey_results_enabled !== undefined
         ? Boolean(input.survey_results_enabled)

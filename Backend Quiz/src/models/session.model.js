@@ -125,6 +125,11 @@ const Session = sequelize.define(
       allowNull: false,
       defaultValue: false
     },
+    leaderboard_top_n: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 10
+    },
     survey_results_enabled: {
       type: DataTypes.BOOLEAN,
       allowNull: false,

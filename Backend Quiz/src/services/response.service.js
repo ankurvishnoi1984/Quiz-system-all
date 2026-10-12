@@ -15,6 +15,7 @@ const {
   assignRandomQuestionOrderToParticipant,
   sortQuestionsByOrder
 } = require("../utils/participantQuestionOrder");
+const { resolveLeaderboardTopN } = require("../utils/leaderboardTopN");
 
 function participantDisplayName(participant, participantId) {
   const p = participant?.participant ?? participant?.Participant ?? participant;
@@ -773,9 +774,13 @@ async function submitResponse({ participant, input }) {
     };
 
     if (session.leaderboard_enabled || session.current_rankings_enabled) {
-      payload.leaderboard = await buildSessionLeaderboard(question.session_id, 10, {
-        scope: resolveSessionLeaderboardScope(session)
-      });
+      payload.leaderboard = await buildSessionLeaderboard(
+        question.session_id,
+        resolveLeaderboardTopN(session),
+        {
+          scope: resolveSessionLeaderboardScope(session)
+        }
+      );
     }
 
     if (question.show_leaderboard && question.is_quiz_mode) {
@@ -1319,7 +1324,12 @@ async function listParticipantQuestionsService({ sessionId, participant }) {
 
 async function getParticipantSessionLeaderboard({ sessionId, participant }) {
   const session = await Session.findByPk(sessionId, {
-    attributes: ["session_id", "leaderboard_enabled", "current_rankings_enabled"]
+    attributes: [
+      "session_id",
+      "leaderboard_enabled",
+      "current_rankings_enabled",
+      "leaderboard_top_n"
+    ]
   });
   if (!session) {
     const error = new Error("Session not found");
@@ -1341,7 +1351,7 @@ async function getParticipantSessionLeaderboard({ sessionId, participant }) {
   const ranked = await buildSessionLeaderboardRanked(sessionId, {
     scope: resolveSessionLeaderboardScope(session)
   });
-  const topN = 10;
+  const topN = resolveLeaderboardTopN(session);
   const leaderboard = ranked.slice(0, topN).map(({ rank: _rank, ...entry }) => entry);
   const viewerId = Number(participant?.participant_id);
   const meRow = ranked.find((row) => Number(row.participant_id) === viewerId) || null;
@@ -1361,11 +1371,15 @@ async function getParticipantSessionLeaderboard({ sessionId, participant }) {
   };
 }
 
-async function getSessionLeaderboardForStaff({ sessionId, user, limit = 10 }) {
+async function getSessionLeaderboardForStaff({ sessionId, user, limit = null }) {
   const session = await getSessionForAccess(sessionId);
   assertStaffAccess(user, session);
+  const topN =
+    Number.isFinite(Number(limit)) && Number(limit) > 0
+      ? Math.floor(Number(limit))
+      : resolveLeaderboardTopN(session);
   // Host Rankings modal stays overall; participant-facing Current uses the flag-aware APIs.
-  return buildSessionLeaderboard(sessionId, limit, { scope: "overall" });
+  return buildSessionLeaderboard(sessionId, topN, { scope: "overall" });
 }
 
 module.exports = {
@@ -1383,6 +1397,7 @@ module.exports = {
   buildQuestionLeaderboard,
   buildSessionLeaderboard,
   resolveSessionLeaderboardScope,
+  resolveLeaderboardTopN,
   buildRankingAnalytics,
   buildMatchAnalytics,
   aggregateWordCloudCounts,

@@ -64,7 +64,7 @@ export function ResponseTimeScoreBandsEditor({
                 }}
                 className="h-8 rounded-lg border border-emerald-200/70 bg-white px-2 text-xs disabled:bg-slate-50"
               >
-                {[3, 4, 5, 6, 7, 8].map((n) => (
+                {[2, 3, 4, 5, 6, 7, 8].map((n) => (
                   <option key={n} value={n}>
                     {n}
                   </option>

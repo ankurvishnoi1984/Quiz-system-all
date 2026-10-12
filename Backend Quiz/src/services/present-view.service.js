@@ -253,10 +253,15 @@ async function listPresentViewQaQuestions({ sessionId, viewer }) {
   return listQaQuestionsForPresenterViewer({ sessionId, viewer });
 }
 
-async function getPresentViewLeaderboard({ sessionId, viewer, limit = 10 }) {
+async function getPresentViewLeaderboard({ sessionId, viewer, limit = null }) {
   assertPresenterViewerSession(viewer, sessionId);
   const session = await getSessionOrThrow(sessionId);
-  return buildSessionLeaderboard(sessionId, limit, {
+  const { resolveLeaderboardTopN } = require("../utils/leaderboardTopN");
+  const topN =
+    Number.isFinite(Number(limit)) && Number(limit) > 0
+      ? Math.floor(Number(limit))
+      : resolveLeaderboardTopN(session);
+  return buildSessionLeaderboard(sessionId, topN, {
     scope: resolveSessionLeaderboardScope(session)
   });
 }

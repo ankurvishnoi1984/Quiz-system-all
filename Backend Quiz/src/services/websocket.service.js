@@ -542,6 +542,7 @@ function notifyMatchResponseSubmitted(sessionCode, payload) {
 }
 
 function notifySessionSettings(sessionCode, settings) {
+  const { resolveLeaderboardTopN } = require("../utils/leaderboardTopN");
   broadcastToSession(sessionCode, {
     type: "session_settings_updated",
     leaderboard_enabled: Boolean(
@@ -554,6 +555,7 @@ function notifySessionSettings(sessionCode, settings) {
         settings.current_rankings_enabled === 1 ||
         settings.current_rankings_enabled === "1"
     ),
+    leaderboard_top_n: resolveLeaderboardTopN(settings),
     survey_results_enabled: Boolean(
       settings.survey_results_enabled === true ||
         settings.survey_results_enabled === 1 ||

@@ -7,6 +7,22 @@ const {
   normalizeCustomerMatchZone,
   normalizeCustomerMatchWcCode
 } = require("../utils/customerMatch");
+const {
+  LEADERBOARD_TOP_N_OPTIONS,
+  normalizeLeaderboardTopN
+} = require("../utils/leaderboardTopN");
+
+function validateLeaderboardTopNField(payload, errors) {
+  if (payload?.leaderboard_top_n === undefined) return;
+  const n = Number(payload.leaderboard_top_n);
+  if (!Number.isFinite(n) || !LEADERBOARD_TOP_N_OPTIONS.includes(Math.floor(n))) {
+    errors.push(
+      `leaderboard_top_n must be one of: ${LEADERBOARD_TOP_N_OPTIONS.join(", ")}`
+    );
+  } else {
+    payload.leaderboard_top_n = normalizeLeaderboardTopN(n);
+  }
+}
 
 function validateCustomerMatchConfigFields(payload, { previous = null } = {}) {
   const errors = [];
@@ -295,6 +311,7 @@ function validateCreateSessionPayload(payload) {
       requireKWhenAdvanced: payload?.builder_mode === "advanced"
     })
   );
+  validateLeaderboardTopNField(payload, errors);
 
   return errors;
 }
@@ -309,6 +326,7 @@ function validateUpdateSessionPayload(payload) {
     "show_results_to_participants",
     "leaderboard_enabled",
     "current_rankings_enabled",
+    "leaderboard_top_n",
     "survey_results_enabled",
     "show_participant_count",
     "show_question_leaderboard",
@@ -425,6 +443,7 @@ function validateUpdateSessionPayload(payload) {
   }
 
   errors.push(...validateAdvancedBuilderFields(payload));
+  validateLeaderboardTopNField(payload, errors);
 
   return errors;
 }

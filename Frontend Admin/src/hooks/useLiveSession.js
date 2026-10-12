@@ -21,7 +21,7 @@ import {
   mapSessionParticipants,
   mergeParticipantLists,
 } from '../utils/livePresentation'
-import { SESSION_LEADERBOARD_TOP_N } from '../utils/leaderboard'
+import { normalizeLeaderboardTopN, SESSION_LEADERBOARD_TOP_N } from '../utils/leaderboard'
 import {
   playAnswerReveal,
   playHostParticipantJoined,
@@ -49,6 +49,7 @@ export function useLiveSession(accessToken, sessionId, options = {}) {
   }, [options.onPresentSlideChanged])
 
   const livePollMs = wsConnected ? POLL_MS_WHEN_WS : POLL_MS_WITHOUT_WS
+  const leaderboardTopNRef = useRef(SESSION_LEADERBOARD_TOP_N)
 
   const sessionQuery = useQuery({
     queryKey: ['live-session', sessionId, mode],
@@ -66,6 +67,10 @@ export function useLiveSession(accessToken, sessionId, options = {}) {
 
   const sessionReady = Boolean(sessionQuery.data)
   const viewerSessionActive = !isViewer || sessionQuery.data?.status !== 'draft'
+  const leaderboardTopN = normalizeLeaderboardTopN(sessionQuery.data?.leaderboard_top_n)
+  useEffect(() => {
+    leaderboardTopNRef.current = leaderboardTopN
+  }, [leaderboardTopN])
 
   const questionsQuery = useQuery({
     queryKey: ['live-questions', sessionId, mode],
@@ -88,11 +93,11 @@ export function useLiveSession(accessToken, sessionId, options = {}) {
   })
 
   const leaderboardQuery = useQuery({
-    queryKey: ['live-leaderboard', sessionId, mode, SESSION_LEADERBOARD_TOP_N],
+    queryKey: ['live-leaderboard', sessionId, mode, leaderboardTopN],
     queryFn: () =>
       isViewer
-        ? getPresentViewLeaderboardApi(accessToken, sessionId, { limit: SESSION_LEADERBOARD_TOP_N })
-        : getSessionLeaderboardApi(accessToken, sessionId, { limit: SESSION_LEADERBOARD_TOP_N }),
+        ? getPresentViewLeaderboardApi(accessToken, sessionId, { limit: leaderboardTopN })
+        : getSessionLeaderboardApi(accessToken, sessionId, { limit: leaderboardTopN }),
     enabled: Boolean(accessToken && sessionId && sessionReady && viewerSessionActive),
     refetchInterval: livePollMs,
   })
@@ -217,7 +222,7 @@ export function useLiveSession(accessToken, sessionId, options = {}) {
     const offLeaderboard = client.on(RealtimeEvent.LEADERBOARD_UPDATE, (data) => {
       if (Array.isArray(data?.leaderboard)) {
         queryClient.setQueryData(
-          ['live-leaderboard', sessionId, mode, SESSION_LEADERBOARD_TOP_N],
+          ['live-leaderboard', sessionId, mode, leaderboardTopNRef.current],
           data.leaderboard,
         )
       } else {
@@ -315,6 +320,14 @@ export function useLiveSession(accessToken, sessionId, options = {}) {
             data.leaderboard_enabled !== undefined
               ? Boolean(data.leaderboard_enabled)
               : old.leaderboard_enabled,
+          current_rankings_enabled:
+            data.current_rankings_enabled !== undefined
+              ? Boolean(data.current_rankings_enabled)
+              : old.current_rankings_enabled,
+          leaderboard_top_n:
+            data.leaderboard_top_n !== undefined
+              ? normalizeLeaderboardTopN(data.leaderboard_top_n)
+              : old.leaderboard_top_n,
           survey_results_enabled:
             data.survey_results_enabled !== undefined
               ? Boolean(data.survey_results_enabled)
@@ -343,7 +356,11 @@ export function useLiveSession(accessToken, sessionId, options = {}) {
               : old.present_mode_settings,
         }
       })
-      if (data.leaderboard_enabled) {
+      if (
+        data.leaderboard_enabled ||
+        data.current_rankings_enabled ||
+        data.leaderboard_top_n !== undefined
+      ) {
         queryClient.invalidateQueries({ queryKey: ['live-leaderboard', sessionId] })
       }
       if (data.survey_results_enabled) {

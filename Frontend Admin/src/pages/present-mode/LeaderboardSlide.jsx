@@ -6,6 +6,7 @@ export function LeaderboardSlide({
   sessionTitle,
   sessionLogoUrl,
   leaderboard,
+  topN = 10,
   participantCount,
   liveParticipantCount = 0,
   qaCount,
@@ -39,7 +40,7 @@ export function LeaderboardSlide({
           <Trophy className="size-[clamp(2rem,5vw,3rem)] text-amber-500" aria-hidden />
           <h2 className="text-[clamp(2rem,6vw,3.5rem)] font-bold text-navy-900">Session rankings</h2>
         </div>
-        <p className="text-[clamp(0.85rem,1.8vw,1rem)] font-medium text-slate-500">Top 10</p>
+        <p className="text-[clamp(0.85rem,1.8vw,1rem)] font-medium text-slate-500">Top {topN}</p>
       </div>
 
       <PresentLeaderboardList

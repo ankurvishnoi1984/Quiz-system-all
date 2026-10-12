@@ -157,7 +157,7 @@ async function sessionLeaderboard(req, res) {
     const leaderboard = await getPresentViewLeaderboard({
       sessionId,
       viewer: req.presenterViewer,
-      limit: Number.isFinite(limit) && limit > 0 ? limit : 10
+      limit: Number.isFinite(limit) && limit > 0 ? limit : null
     });
     return successResponse(res, { leaderboard }, "Leaderboard fetched", 200);
   } catch (err) {

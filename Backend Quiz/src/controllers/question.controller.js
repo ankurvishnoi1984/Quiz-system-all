@@ -406,7 +406,12 @@ async function openForReattempt(req, res) {
       user: req.user
     });
     const session = await Session.findByPk(question.session_id, {
-      attributes: ["session_code", "leaderboard_enabled"]
+      attributes: [
+        "session_code",
+        "leaderboard_enabled",
+        "current_rankings_enabled",
+        "leaderboard_top_n"
+      ]
     });
     if (session?.session_code) {
       for (const otherId of deactivatedQuestionIds) {
@@ -427,8 +432,11 @@ async function openForReattempt(req, res) {
         }
       );
       if (session.leaderboard_enabled || session.current_rankings_enabled) {
-        const { resolveSessionLeaderboardScope } = require("../services/response.service");
-        buildSessionLeaderboard(question.session_id, 10, {
+        const {
+          resolveSessionLeaderboardScope
+        } = require("../services/response.service");
+        const { resolveLeaderboardTopN } = require("../utils/leaderboardTopN");
+        buildSessionLeaderboard(question.session_id, resolveLeaderboardTopN(session), {
           scope: resolveSessionLeaderboardScope(session)
         })
           .then((leaderboard) => notifyLeaderboard(session.session_code, { leaderboard }))
