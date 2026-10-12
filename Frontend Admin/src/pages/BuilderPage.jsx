@@ -1904,8 +1904,13 @@ function BuilderPage() {
 
   const applyQuestionTimeLimit = (seconds) => {
     if (!selected || selected.type === 'Survey') return
-    const normalized = normalizeTimeLimitSeconds(seconds)
-    const applyToAll = areAllQuestionsUntimed(questions)
+    let normalized = normalizeTimeLimitSeconds(seconds)
+    // Score bands need one shared timer; Off is not allowed while bands are on.
+    if (responseTimeScoringEnabled && normalized <= 0) {
+      normalized = 30
+      setTimeLimitMode('30s')
+    }
+    const applyToAll = areAllQuestionsUntimed(questions) || responseTimeScoringEnabled
     const soundPatch =
       normalized > 0
         ? normalizeTimerSoundSettings({
@@ -1940,6 +1945,9 @@ function BuilderPage() {
               },
         ),
       )
+      if (responseTimeScoringEnabled && normalized > 0) {
+        rebuildBandsFromTimer(normalized)
+      }
       return
     }
     setQuestions((prev) =>
@@ -1964,6 +1972,11 @@ function BuilderPage() {
   }
 
   const handleTimeLimitModeChange = (mode) => {
+    if (responseTimeScoringEnabled && mode === 'Off') {
+      setTimeLimitMode('30s')
+      applyQuestionTimeLimit(30)
+      return
+    }
     setTimeLimitMode(mode)
     applyQuestionTimeLimit(timeLimitModeToSeconds(mode, customTime))
   }
@@ -1991,14 +2004,23 @@ function BuilderPage() {
     }
     setSaveError('')
     setDirty(true)
-    const defaultTimeLimit = sessionQuizTotalTimeEnabled
+    let defaultTimeLimit = sessionQuizTotalTimeEnabled
       ? 0
       : resolveDefaultTimeLimitForNewQuestion(questions, {
           advancedBuilder: isAdvancedBuilder,
         })
-    const defaultSounds = normalizeTimerSoundSettings({
+    let defaultSounds = normalizeTimerSoundSettings({
       timeLimitSeconds: defaultTimeLimit,
     })
+    if (responseTimeScoringEnabled && type !== 'Survey') {
+      const ref = questions.find((q) => q.type !== 'Survey')
+      defaultTimeLimit =
+        (ref && normalizeTimeLimitSeconds(ref.timeLimitSeconds)) || 30
+      defaultSounds = normalizeTimerSoundSettings({
+        ...(ref || {}),
+        timeLimitSeconds: defaultTimeLimit,
+      })
+    }
     const q = {
       id: uid('q'),
       questionId: null,
@@ -2074,11 +2096,23 @@ function BuilderPage() {
       return
     }
 
-    const defaultTime = sessionQuizTotalTimeEnabled
+    let defaultTime = sessionQuizTotalTimeEnabled
       ? 0
       : resolveDefaultTimeLimitForNewQuestion(questions, {
           advancedBuilder: isAdvancedBuilder,
         })
+    let defaultSoundsForGenerated = normalizeTimerSoundSettings({
+      timeLimitSeconds: defaultTime,
+    })
+    if (responseTimeScoringEnabled) {
+      const ref = questions.find((q) => q.type !== 'Survey')
+      defaultTime =
+        (ref && normalizeTimeLimitSeconds(ref.timeLimitSeconds)) || 30
+      defaultSoundsForGenerated = normalizeTimerSoundSettings({
+        ...(ref || {}),
+        timeLimitSeconds: defaultTime,
+      })
+    }
 
     const accepted = generatedList.slice(0, remaining)
     const mapped = accepted.map((item) => {
@@ -2141,7 +2175,7 @@ function BuilderPage() {
         media: null,
         points: type === 'Poll' ? 0 : 10,
         timeLimitSeconds: defaultTime,
-        ...normalizeTimerSoundSettings({ timeLimitSeconds: defaultTime }),
+        ...defaultSoundsForGenerated,
         ...(type === 'Rating'
           ? {
               ...createRatingQuestionDefaults(),
@@ -2253,11 +2287,41 @@ function BuilderPage() {
 
   const setResponseTimeScoringEnabled = (on) => {
     if (on) {
-      setScoreBandsEnabled(true)
-      rebuildBandsFromTimer(
-        poolTimeLimitSeconds > 0 ? poolTimeLimitSeconds : 30,
-        scoreBandCount,
+      const refQuestion =
+        selected && selected.type !== 'Survey'
+          ? selected
+          : questions.find((q) => q.type !== 'Survey') || null
+      const sharedSeconds =
+        poolTimeLimitSeconds > 0
+          ? poolTimeLimitSeconds
+          : refQuestion && normalizeTimeLimitSeconds(refQuestion.timeLimitSeconds) > 0
+            ? normalizeTimeLimitSeconds(refQuestion.timeLimitSeconds)
+            : 30
+      const soundPatch = normalizeTimerSoundSettings({
+        ...(refQuestion || {}),
+        timeLimitSeconds: sharedSeconds,
+      })
+      setDirty(true)
+      setQuestions((prev) =>
+        prev.map((q) =>
+          q.type === 'Survey'
+            ? q
+            : {
+                ...q,
+                timeLimitSeconds: sharedSeconds,
+                timerSoundKey: soundPatch.timerSoundKey,
+                timerSoundUrl: soundPatch.timerSoundUrl,
+                timerEndingSoundKey: soundPatch.timerEndingSoundKey,
+                timerEndingSoundUrl: soundPatch.timerEndingSoundUrl,
+                timerSoundStartSeconds: soundPatch.timerSoundStartSeconds,
+              },
+        ),
       )
+      const mode = timeLimitSecondsToMode(sharedSeconds)
+      setTimeLimitMode(mode)
+      if (mode === 'Custom') setCustomTime(sharedSeconds)
+      setScoreBandsEnabled(true)
+      rebuildBandsFromTimer(sharedSeconds, scoreBandCount)
       return
     }
     setScoreBandsEnabled(false)
@@ -2571,6 +2635,36 @@ function BuilderPage() {
       const isDraft = session.rawStatus === 'draft'
       if (hasMixedQuestionTypes) {
         throw new Error('Only one question type is allowed per session. Please keep all questions the same type before saving.')
+      }
+
+      if (responseTimeScoringEnabled) {
+        const timed = questions.filter((q) => q.type !== 'Survey')
+        if (timed.length) {
+          const firstLimit = normalizeTimeLimitSeconds(timed[0].timeLimitSeconds)
+          if (firstLimit <= 0) {
+            throw new Error(
+              'Response-time score bands require a shared time limit on all questions.',
+            )
+          }
+          const firstSounds = normalizeTimerSoundSettings(timed[0])
+          const mixed = timed.some((q) => {
+            const limit = normalizeTimeLimitSeconds(q.timeLimitSeconds)
+            const sounds = normalizeTimerSoundSettings(q)
+            return (
+              limit !== firstLimit ||
+              sounds.timerSoundKey !== firstSounds.timerSoundKey ||
+              sounds.timerSoundUrl !== firstSounds.timerSoundUrl ||
+              sounds.timerEndingSoundKey !== firstSounds.timerEndingSoundKey ||
+              sounds.timerEndingSoundUrl !== firstSounds.timerEndingSoundUrl ||
+              sounds.timerSoundStartSeconds !== firstSounds.timerSoundStartSeconds
+            )
+          })
+          if (mixed) {
+            throw new Error(
+              'While response-time score bands are on, all questions must share the same time limit and timer audio. Change the timer on any question to sync them.',
+            )
+          }
+        }
       }
 
       for (const question of questions) {
@@ -3782,11 +3876,13 @@ function BuilderPage() {
                   <div>
                     <p className="text-sm font-semibold text-navy-900">Time limit</p>
                     <p className="text-xs text-slate-600">
-                      {sessionAllUntimed
-                        ? 'All questions are untimed — changing this applies to every question.'
-                        : isAdvancedBuilder
-                          ? 'Per-question timing — adjust individually or turn off for specific questions. Use the sidebar to set the whole pool at once.'
-                          : 'Per-question timing — adjust individually or turn off for specific questions.'}
+                      {responseTimeScoringEnabled
+                        ? 'Response-time score bands are on — timer and timer audio stay the same on every question. Changing either updates all questions and the score ranges.'
+                        : sessionAllUntimed
+                          ? 'All questions are untimed — changing this applies to every question.'
+                          : isAdvancedBuilder
+                            ? 'Per-question timing — adjust individually or turn off for specific questions. Use the sidebar to set the whole pool at once.'
+                            : 'Per-question timing — adjust individually or turn off for specific questions.'}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -3797,7 +3893,11 @@ function BuilderPage() {
                       className="h-10 rounded-xl border border-blue-200/70 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
                     >
                       {['Off', '15s', '30s', '60s', '120s', 'Custom'].map((x) => (
-                        <option key={x} value={x}>
+                        <option
+                          key={x}
+                          value={x}
+                          disabled={responseTimeScoringEnabled && x === 'Off'}
+                        >
                           {x}
                         </option>
                       ))}
@@ -3815,11 +3915,16 @@ function BuilderPage() {
                   </div>
                 </div>
                 <p className="mt-3 text-sm text-slate-600">
-                  This question:{' '}
+                  {responseTimeScoringEnabled ? 'All questions: ' : 'This question: '}
                   <span className="font-semibold text-navy-900">
                     {selectedTimeLimitSeconds === 0 ? 'Off' : `${selectedTimeLimitSeconds}s`}
                   </span>
                 </p>
+                {responseTimeScoringEnabled ? (
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Timer cannot be turned off while score bands are on (defaults to 30s).
+                  </p>
+                ) : null}
                 {selectedTimeLimitSeconds > 0 ? (
                   <QuestionTimerSoundSettings
                     timerSoundKey={selected.timerSoundKey}
@@ -3846,9 +3951,22 @@ function BuilderPage() {
                         if (q.type === 'Survey') return q
                         const limit = normalizeTimeLimitSeconds(q.timeLimitSeconds)
                         const isSelected = q.id === selected.id
+
+                        if (responseTimeScoringEnabled) {
+                          if (limit <= 0) return q
+                          return {
+                            ...q,
+                            timerSoundKey: selectedSounds.timerSoundKey,
+                            timerSoundUrl: selectedSounds.timerSoundUrl,
+                            timerEndingSoundKey: selectedSounds.timerEndingSoundKey,
+                            timerEndingSoundUrl: selectedSounds.timerEndingSoundUrl,
+                            timerSoundStartSeconds: selectedSounds.timerSoundStartSeconds,
+                          }
+                        }
+
                         if (!isSelected && (!soundKeysChanged || limit <= 0)) return q
 
-                        const patched = {
+                        return {
                           ...q,
                           ...(isSelected || soundKeysChanged
                             ? {
@@ -3862,7 +3980,6 @@ function BuilderPage() {
                             ? { timerSoundStartSeconds: selectedSounds.timerSoundStartSeconds }
                             : {}),
                         }
-                        return patched
                       })
                       setQuestions(nextQuestions)
 
@@ -3871,7 +3988,11 @@ function BuilderPage() {
                         if (!q.questionId || q.type === 'Survey') return
                         const limit = normalizeTimeLimitSeconds(q.timeLimitSeconds)
                         const isSelected = q.id === selected.id
-                        if (!isSelected && (!soundKeysChanged || limit <= 0)) return
+                        if (responseTimeScoringEnabled) {
+                          if (limit <= 0) return
+                        } else if (!isSelected && (!soundKeysChanged || limit <= 0)) {
+                          return
+                        }
                         void updateQuestionApi(accessToken, q.questionId, {
                           question_type: uiToApiType(q.type),
                           question_text: q.text || 'Untitled question',
@@ -3952,7 +4073,9 @@ function BuilderPage() {
                 <div>
                   <p className="text-sm font-semibold text-slate-700">Time limit (all pool questions)</p>
                   <p className="mt-0.5 text-[11px] text-slate-500">
-                    Participants see a countdown per question. Required for time-band scoring to matter.
+                    {responseTimeScoringEnabled
+                      ? 'Shared with every question while score bands are on (timer audio stays in sync too).'
+                      : 'Participants see a countdown per question. Required for time-band scoring to matter.'}
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <select
@@ -3971,12 +4094,17 @@ function BuilderPage() {
                       onChange={(e) => {
                         const mode = e.target.value
                         if (mode === 'Mixed') return
-                        const seconds =
+                        let seconds =
                           mode === 'Off'
                             ? 0
                             : mode === 'Custom'
                               ? Number(customTime) || 30
                               : Number(String(mode).replace('s', '')) || 30
+                        let nextMode = mode
+                        if (responseTimeScoringEnabled && seconds <= 0) {
+                          seconds = 30
+                          nextMode = '30s'
+                        }
                         setDirty(true)
                         const soundPatch =
                           seconds > 0 && selected
@@ -4005,7 +4133,7 @@ function BuilderPage() {
                                 },
                           ),
                         )
-                        if (mode !== 'Custom') setTimeLimitMode(mode)
+                        if (nextMode !== 'Custom') setTimeLimitMode(nextMode)
                         else setTimeLimitMode('Custom')
                         if (seconds > 0 && responseTimeScoringEnabled) {
                           rebuildBandsFromTimer(seconds, scoreBandCount)
@@ -4014,7 +4142,11 @@ function BuilderPage() {
                       className="h-10 rounded-xl border border-emerald-200/70 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-emerald-400 disabled:bg-slate-50"
                     >
                       {['Off', '15s', '30s', '60s', '120s', 'Custom'].map((x) => (
-                        <option key={x} value={x}>
+                        <option
+                          key={x}
+                          value={x}
+                          disabled={responseTimeScoringEnabled && x === 'Off'}
+                        >
                           {x}
                         </option>
                       ))}
@@ -4024,8 +4156,9 @@ function BuilderPage() {
                     </select>
                   </div>
                   <p className="mt-2 text-[11px] text-slate-500">
-                    Or set a timer on each question in the editor (Time limit panel). Changing the
-                    pool timer rebuilds score ranges to cover the full time.
+                    {responseTimeScoringEnabled
+                      ? 'Changing this timer updates every question and rebuilds score ranges.'
+                      : 'Or set a timer on each question in the editor (Time limit panel). Changing the pool timer rebuilds score ranges to cover the full time.'}
                   </p>
                 </div>
 
