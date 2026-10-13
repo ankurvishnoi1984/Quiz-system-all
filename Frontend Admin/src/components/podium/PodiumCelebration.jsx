@@ -7,7 +7,7 @@ const PODIUM_ORDER = [
   { rank: 3, place: 'bronze' },
 ]
 
-const CONFETTI_PIECES = Array.from({ length: 42 }, (_, i) => i)
+const CONFETTI_PIECES = Array.from({ length: 64 }, (_, i) => i)
 
 function PodiumMascot() {
   return (
@@ -270,13 +270,13 @@ export function PodiumCelebration({ leaderboard, showTitle = true, className = '
           {CONFETTI_PIECES.map((i) => (
             <span
               key={i}
-              className={`present-podium-confetti-piece present-podium-confetti-piece--${(i % 8) + 1} ${
+              className={`present-podium-confetti-piece present-podium-confetti-piece--${(i % 12) + 1} ${
                 i % 5 === 0 ? 'present-podium-confetti-piece--round' : ''
               } ${i % 7 === 0 ? 'present-podium-confetti-piece--ribbon' : ''}`}
               style={{
-                left: `${3 + ((i * 13) % 94)}%`,
-                animationDelay: `${(i % 12) * 0.07}s`,
-                animationDuration: `${1.6 + (i % 6) * 0.28}s`,
+                left: `${2 + ((i * 11) % 96)}%`,
+                animationDelay: `${(i % 16) * 0.12}s`,
+                animationDuration: `${2.1 + (i % 7) * 0.35}s`,
               }}
             />
           ))}
