@@ -71,6 +71,7 @@ import { ParticipantAlertModal } from './components/ParticipantAlertModal'
 import { ParticipantSessionInactivityModal } from '../../components/session/ParticipantSessionInactivityModal'
 // import { QaPanel } from './components/QaPanel' // Q&A feature disabled
 import { OverallLeaderboardPanel } from './components/OverallLeaderboardPanel'
+import { ParticipantPodiumPanel } from './components/ParticipantPodiumPanel'
 import { SurveySessionEndingPanel } from './components/SurveySessionEndingPanel'
 import { SessionHeader } from './components/SessionHeader'
 import { SessionEndedBanner, SessionEndedPanel } from './components/SessionEndedBanner'
@@ -204,6 +205,9 @@ function ParticipantSessionPage({ embed = false }) {
   )
   const [countdownTick, setCountdownTick] = useState(0)
   const [step, setStep] = useState('join')
+  /** Present Mode ending sub-screen: podium | leaderboard | null */
+  const [presentEndingSlideType, setPresentEndingSlideType] = useState(null)
+  const presentEndingSlideTypeRef = useRef(null)
   const [name, setName] = useState(() => queryIdentity.name || '')
   const [email, setEmail] = useState(() => queryIdentity.email || '')
   const [mobile, setMobile] = useState(() => queryIdentity.mobile || '')
@@ -823,6 +827,10 @@ function ParticipantSessionPage({ embed = false }) {
   }, [effectiveSessionCode, participantToken])
 
   useEffect(() => {
+    presentEndingSlideTypeRef.current = presentEndingSlideType
+  }, [presentEndingSlideType])
+
+  useEffect(() => {
     const unsub = useParticipantStore.persist.onFinishHydration(() => {
       setParticipantHydrated(true)
     })
@@ -1240,7 +1248,7 @@ function ParticipantSessionPage({ embed = false }) {
         playLeaderboardShown()
         setStep((current) => {
           if (current === 'join' || current === 'waiting') return current
-          return 'leaderboard'
+          return presentEndingSlideTypeRef.current === 'podium' ? 'podium' : 'leaderboard'
         })
         queryClient.invalidateQueries({ queryKey: ['participant-leaderboard', dbSessionId] })
         queryClient.invalidateQueries({ queryKey: ['participant-session', effectiveSessionCode] })
@@ -1255,7 +1263,10 @@ function ParticipantSessionPage({ embed = false }) {
       }
 
       if (wasLeaderboardEnabled && !isLeaderboardEnabled) {
-        setStep((current) => (current === 'leaderboard' ? 'active' : current))
+        setPresentEndingSlideType(null)
+        setStep((current) =>
+          current === 'leaderboard' || current === 'podium' ? 'active' : current,
+        )
       }
 
       if (!wasSurveyResultsEnabled && isSurveyResultsEnabled) {
@@ -1318,6 +1329,32 @@ function ParticipantSessionPage({ embed = false }) {
       },
     )
 
+    const offPresentSlide = client.on(RealtimeEvent.PRESENT_SLIDE_CHANGED, (data) => {
+      const slideType = data?.slide_type != null ? String(data.slide_type) : null
+      if (slideType === 'podium') {
+        setPresentEndingSlideType('podium')
+        setStep((current) => {
+          if (current === 'join' || current === 'waiting') return current
+          return 'podium'
+        })
+        queryClient.invalidateQueries({ queryKey: ['participant-leaderboard', dbSessionId] })
+        return
+      }
+      if (slideType === 'leaderboard') {
+        setPresentEndingSlideType('leaderboard')
+        setStep((current) => {
+          if (current === 'join' || current === 'waiting') return current
+          return 'leaderboard'
+        })
+        queryClient.invalidateQueries({ queryKey: ['participant-leaderboard', dbSessionId] })
+        return
+      }
+      // Host left ending slides — clear podium/rankings ending sub-screen hint.
+      if (slideType === 'question' || slideType === 'participants' || slideType === 'distributedQuiz') {
+        setPresentEndingSlideType(null)
+      }
+    })
+
     client.connect()
 
     return () => {
@@ -1335,6 +1372,7 @@ function ParticipantSessionPage({ embed = false }) {
       offSessionSettings()
       offParticipantPresence()
       offQuestionLbVisibility()
+      offPresentSlide()
       client.disconnect()
     }
   }, [
@@ -1366,20 +1404,22 @@ function ParticipantSessionPage({ embed = false }) {
 
   useEffect(() => {
     if (step === 'join' || step === 'waiting') return
-    if (showOverallLeaderboardTab && step !== 'leaderboard') {
-      setStep('leaderboard')
+    if (showOverallLeaderboardTab) {
+      const target =
+        presentEndingSlideType === 'podium' ? 'podium' : 'leaderboard'
+      if (step !== target) setStep(target)
       return
     }
-    if (!showOverallLeaderboardTab && showSurveyEndingScreen && step !== 'surveyEnding') {
+    if (showSurveyEndingScreen && step !== 'surveyEnding') {
       setStep('surveyEnding')
       return
     }
     if (!showOverallLeaderboardTab && !showSurveyEndingScreen) {
-      if (step === 'leaderboard' || step === 'surveyEnding') {
+      if (step === 'leaderboard' || step === 'podium' || step === 'surveyEnding') {
         setStep('active')
       }
     }
-  }, [showOverallLeaderboardTab, showSurveyEndingScreen, step])
+  }, [showOverallLeaderboardTab, showSurveyEndingScreen, presentEndingSlideType, step])
 
   // Q&A feature disabled — leave any stale 'qa' step
   useEffect(() => {
@@ -2772,34 +2812,56 @@ function ParticipantSessionPage({ embed = false }) {
     )
   }
 
+  const showParticipantPodium =
+    showOverallLeaderboardTab &&
+    (presentEndingSlideType === 'podium' || step === 'podium')
+
   return (
     <main
       className={`participant-session-bg ${
-        embedMode
-          ? 'h-dvh min-h-dvh overflow-x-hidden overflow-y-auto overscroll-y-contain p-3 pb-8 sm:p-4'
-          : 'h-dvh min-h-dvh overflow-x-hidden overflow-y-auto overscroll-y-contain p-4 pb-[max(2rem,env(safe-area-inset-bottom))] md:h-auto md:min-h-screen md:overflow-visible md:pb-6 md:p-6'
+        showParticipantPodium
+          ? embedMode
+            ? 'flex h-dvh min-h-dvh flex-col overflow-hidden p-2 sm:p-3'
+            : 'flex h-dvh min-h-dvh flex-col overflow-hidden p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:p-4'
+          : embedMode
+            ? 'h-dvh min-h-dvh overflow-x-hidden overflow-y-auto overscroll-y-contain p-3 pb-8 sm:p-4'
+            : 'h-dvh min-h-dvh overflow-x-hidden overflow-y-auto overscroll-y-contain p-4 pb-[max(2rem,env(safe-area-inset-bottom))] md:h-auto md:min-h-screen md:overflow-visible md:pb-6 md:p-6'
       }`}
       data-participant-theme={participantTheme}
       style={participantThemeStyle}
     >
-      <div className="mx-auto w-full max-w-6xl space-y-4 pb-4">
-        <SessionHeader session={session} joinedUser={joinedUser} />
+      <div
+        className={`mx-auto flex w-full flex-col ${
+          showParticipantPodium
+            ? 'h-full max-w-none min-h-0 flex-1'
+            : 'max-w-6xl space-y-4 pb-4'
+        }`}
+      >
+        {!showParticipantPodium ? (
+          <SessionHeader session={session} joinedUser={joinedUser} />
+        ) : null}
 
-        {isSessionEnded && endingScreenOnlyMode ? <SessionEndedBanner /> : null}
+        {!showParticipantPodium && isSessionEnded && endingScreenOnlyMode ? (
+          <SessionEndedBanner />
+        ) : null}
 
         {showOverallLeaderboardTab ? (
-          <OverallLeaderboardPanel
-            leaderboard={leaderboard}
-            sessionStatus={session?.status}
-            isLoading={leaderboardQuery.isLoading}
-            title={rankingsTitle}
-            subtitle={rankingsSubtitle}
-            viewerEntry={leaderboardMe}
-            highlightParticipantId={
-              joinedUser?.id ?? leaderboardMe?.participant_id ?? null
-            }
-            topN={normalizeLeaderboardTopN(session?.leaderboard_top_n)}
-          />
+          showParticipantPodium ? (
+            <ParticipantPodiumPanel leaderboard={leaderboard} />
+          ) : (
+            <OverallLeaderboardPanel
+              leaderboard={leaderboard}
+              sessionStatus={session?.status}
+              isLoading={leaderboardQuery.isLoading}
+              title={rankingsTitle}
+              subtitle={rankingsSubtitle}
+              viewerEntry={leaderboardMe}
+              highlightParticipantId={
+                joinedUser?.id ?? leaderboardMe?.participant_id ?? null
+              }
+              topN={normalizeLeaderboardTopN(session?.leaderboard_top_n)}
+            />
+          )
         ) : showSurveyEndingScreen ? (
           <SurveySessionEndingPanel
             sessionTitle={session.title}

@@ -79,6 +79,7 @@ function PresentModePage({
   const slideTotalRef = useRef(1)
   const didBootstrapSlideRef = useRef(false)
   const prevLeaderboardEnabledRef = useRef(undefined)
+  const prevEndingSlideRef = useRef(false)
   const [slideIndex, setSlideIndex] = useState(0)
   const [inspectQuestionId, setInspectQuestionId] = useState(null)
 
@@ -611,8 +612,8 @@ function PresentModePage({
       )
     }
     if (sessionSupportsOverallLeaderboard(mappedQuestions)) {
-      list.push({ type: 'podium' })
       list.push({ type: 'leaderboard' })
+      list.push({ type: 'podium' })
     } else if (sessionSupportsSurveyEndingScreen(mappedQuestions)) {
       list.push({ type: 'surveyEnding' })
     }
@@ -683,6 +684,7 @@ function PresentModePage({
   useEffect(() => {
     didBootstrapSlideRef.current = false
     prevLeaderboardEnabledRef.current = undefined
+    prevEndingSlideRef.current = false
     setSlideIndex(0)
     setInspectQuestionId(null)
     setHostLeaderboardOpen(false)
@@ -754,7 +756,11 @@ function PresentModePage({
 
     if (enabled) {
       if (HOST_EXTRA_SOUNDS_ENABLED) playLeaderboardShown()
-      setHostLeaderboardOpen(true)
+      // Ending slides (podium / session rankings) are full-deck screens for participants —
+      // do not cover them with the host rankings modal.
+      const onEndingSlide =
+        currentSlide?.type === 'podium' || currentSlide?.type === 'leaderboard'
+      if (!onEndingSlide) setHostLeaderboardOpen(true)
       broadcastPreviewFollow(sessionId, { screen: 'leaderboard' })
       return
     }
@@ -811,6 +817,7 @@ function PresentModePage({
     mappedQuestions,
     slides,
     distributedPresentEnabled,
+    currentSlide?.type,
   ])
 
   useEffect(() => {
@@ -827,8 +834,55 @@ function PresentModePage({
     setPresentSlideApi(hostAccessToken, sessionId, {
       slideIndex,
       slideTotal,
+      slideType: currentSlide?.type || null,
     }).catch(() => {})
-  }, [readOnly, hostAccessToken, sessionId, slideIndex, slideTotal, isViewWaiting])
+  }, [
+    readOnly,
+    hostAccessToken,
+    sessionId,
+    slideIndex,
+    slideTotal,
+    isViewWaiting,
+    currentSlide?.type,
+  ])
+
+  // After last question: podium / session rankings slides unlock participant ending screens.
+  useEffect(() => {
+    if (readOnly || isViewWaiting || isLoading || !session || !hostAccessToken) return
+    if (!didBootstrapSlideRef.current) return
+    if (sessionLeaderboardMutation.isPending) return
+
+    const onEndingSlide =
+      currentSlide?.type === 'podium' || currentSlide?.type === 'leaderboard'
+    const rankingsOn = Boolean(
+      session.leaderboard_enabled || session.current_rankings_enabled,
+    )
+    const wasOnEndingSlide = prevEndingSlideRef.current
+    prevEndingSlideRef.current = onEndingSlide
+
+    if (onEndingSlide && !rankingsOn) {
+      sessionLeaderboardMutation.mutate({ enabled: true, mode: 'overall' })
+      return
+    }
+
+    if (wasOnEndingSlide && !onEndingSlide && rankingsOn) {
+      sessionLeaderboardMutation.mutate({
+        enabled: false,
+        mode: session.current_rankings_enabled ? 'current' : 'overall',
+      })
+    }
+  }, [
+    readOnly,
+    isViewWaiting,
+    isLoading,
+    session,
+    hostAccessToken,
+    currentSlide?.type,
+    session?.leaderboard_enabled,
+    session?.current_rankings_enabled,
+    sessionLeaderboardMutation.isPending,
+    sessionLeaderboardMutation.mutate,
+  ])
 
   useEffect(() => {
     if (isViewWaiting || readOnly) return undefined
