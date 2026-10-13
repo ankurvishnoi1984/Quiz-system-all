@@ -1,7 +1,14 @@
 import { LeaderboardModalShell } from './LeaderboardModalShell'
 import { LeaderboardTable } from './LeaderboardTable'
 
-export function SessionLeaderboardModal({ open, onClose, entries, limit, onLimitChange }) {
+export function SessionLeaderboardModal({
+  open,
+  onClose,
+  entries,
+  limit,
+  onLimitChange,
+  fullscreen = false,
+}) {
   return (
     <LeaderboardModalShell
       open={open}
@@ -11,6 +18,7 @@ export function SessionLeaderboardModal({ open, onClose, entries, limit, onLimit
       limit={limit}
       onLimitChange={onLimitChange}
       limitSelectId="session-leaderboard-limit"
+      fullscreen={fullscreen}
     >
       <LeaderboardTable
         entries={entries}

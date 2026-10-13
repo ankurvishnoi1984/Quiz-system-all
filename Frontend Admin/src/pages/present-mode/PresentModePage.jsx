@@ -689,7 +689,7 @@ function PresentModePage({
   }, [sessionId])
 
   // Host open: prefer survey ending if enabled, else latest live question.
-  // Overall rankings for the host uses a modal, not the rankings slide.
+  // Rankings for the host uses a fullscreen modal, not the podium/leaderboard slides.
   useEffect(() => {
     if (readOnly || isViewWaiting || isLoading || !session || !sessionId) return
     if (didBootstrapSlideRef.current) return
@@ -736,8 +736,8 @@ function PresentModePage({
     distributedPresentEnabled,
   ])
 
-  // When rankings is toggled on: open host modal + sync Preview for participants.
-  // Do not jump Present to the rankings slide.
+  // When rankings is toggled on: open fullscreen host modal + sync Preview for participants.
+  // Do not jump Present to the podium/leaderboard slides.
   useEffect(() => {
     if (readOnly || isViewWaiting || isLoading || !session || !sessionId) return
     if (!didBootstrapSlideRef.current) return
@@ -750,6 +750,8 @@ function PresentModePage({
     }
     prevLeaderboardEnabledRef.current = enabled
 
+    const isRankingsSlide = (type) => type === 'leaderboard' || type === 'podium'
+
     if (enabled) {
       if (HOST_EXTRA_SOUNDS_ENABLED) playLeaderboardShown()
       setHostLeaderboardOpen(true)
@@ -758,8 +760,6 @@ function PresentModePage({
     }
 
     setHostLeaderboardOpen(false)
-
-    const isRankingsSlide = (type) => type === 'leaderboard' || type === 'podium'
 
     if (distributedPresentEnabled) {
       const overviewIndex = slides.findIndex((slide) => slide.type === 'distributedQuiz')
@@ -1342,6 +1342,13 @@ function PresentModePage({
             sessionTitle={sessionTitle}
             sessionLogoUrl={sessionLogoUrl}
             leaderboard={leaderboard}
+            title={
+              session?.current_rankings_enabled
+                ? 'Current rankings'
+                : session?.leaderboard_enabled
+                  ? 'Overall rankings'
+                  : 'Session rankings'
+            }
             topN={normalizeLeaderboardTopN(session?.leaderboard_top_n)}
             participantCount={participantCount}
             liveParticipantCount={liveParticipantCount}
@@ -1388,6 +1395,7 @@ function PresentModePage({
           entries={hostLeaderboardQuery.data || []}
           limit={hostLeaderboardLimit}
           onLimitChange={persistLeaderboardTopN}
+          fullscreen
         />
       ) : null}
 
