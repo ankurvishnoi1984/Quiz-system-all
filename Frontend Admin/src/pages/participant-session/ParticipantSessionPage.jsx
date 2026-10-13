@@ -597,7 +597,7 @@ function ParticipantSessionPage({ embed = false }) {
     (sessionQuizTotalTimeEnabled
       ? lastQuestionFinalized
       : questionLockedBySubmission)
-      ? countdownFrozen
+      ? Math.max(0, Number(displayTimeLimit) - Number(countdownFrozen))
       : null
 
   const submissionsClosed = Boolean(question?.submissionsClosed)

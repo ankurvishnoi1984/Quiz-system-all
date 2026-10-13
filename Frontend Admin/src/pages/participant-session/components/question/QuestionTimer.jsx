@@ -43,7 +43,7 @@ export function QuestionTimer({
   const dashOffset = circumference * (1 - remaining)
   const submittedMarkerOffset =
     submitted && timeLimit > 0
-      ? circumference * (1 - Math.max(0, Math.min(1, submittedAtSeconds / limit)))
+      ? circumference * Math.max(0, Math.min(1, submittedAtSeconds / limit))
       : null
   const statusLabel = expired ? "Time's up" : 'Time left'
   const statusTone = expired || urgent
