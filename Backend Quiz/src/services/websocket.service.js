@@ -657,7 +657,9 @@ function notifyPresentSlideChanged(sessionCode, payload) {
   broadcastToSession(sessionCode, {
     type: "present_slide_changed",
     session_id: payload?.session_id ?? null,
-    slide_index: payload?.slide_index ?? 0
+    slide_index: payload?.slide_index ?? 0,
+    slide_type: payload?.slide_type ?? null,
+    slide_total: payload?.slide_total ?? null
   });
 }
 

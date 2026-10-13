@@ -751,7 +751,7 @@ function getCorrectMatchingPairs(question) {
   return pairs;
 }
 
-function formatQuestionForParticipant(question, { participantSubmitted = false } = {}) {
+function formatQuestionForParticipant(question) {
   const plain = question.toJSON ? question.toJSON() : { ...question };
   const revealed = Boolean(plain.answer_revealed);
   const rawOptions = plain.QuestionOptions || plain.question_options || [];
@@ -764,15 +764,14 @@ function formatQuestionForParticipant(question, { participantSubmitted = false }
     match_side: option.match_side || null
   }));
 
-  const correct_option_ids =
-    revealed && participantSubmitted
-      ? getQuestionOptions(plain)
-          .filter((option) => Boolean(option.is_correct))
-          .map((option) => Number(option.option_id))
-      : [];
+  const correct_option_ids = revealed
+    ? getQuestionOptions(plain)
+        .filter((option) => Boolean(option.is_correct))
+        .map((option) => Number(option.option_id))
+    : [];
 
   let correct_matching_pairs = null;
-  if (revealed && participantSubmitted && plain.question_type === "match") {
+  if (revealed && plain.question_type === "match") {
     correct_matching_pairs = getCorrectMatchingPairs(plain);
   }
 

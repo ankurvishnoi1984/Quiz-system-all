@@ -569,11 +569,14 @@ async function presentSlide(req, res) {
   try {
     const slideIndex = Number(req.body?.slide_index)
     const slideTotal = Number(req.body?.slide_total)
+    const slideType =
+      req.body?.slide_type != null ? String(req.body.slide_type) : undefined
     const data = await setPresentSlideIndex({
       sessionId: Number(req.params.sessionId),
       user: req.user,
       slideIndex,
-      slideTotal: Number.isFinite(slideTotal) && slideTotal > 0 ? slideTotal : undefined
+      slideTotal: Number.isFinite(slideTotal) && slideTotal > 0 ? slideTotal : undefined,
+      slideType
     });
     return successResponse(res, data, "Present slide updated", 200);
   } catch (err) {

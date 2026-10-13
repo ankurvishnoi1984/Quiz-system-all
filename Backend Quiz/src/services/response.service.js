@@ -1303,23 +1303,7 @@ async function listParticipantQuestionsService({ sessionId, participant }) {
     questions = sortQuestionsByOrder(questions, questionOrder);
   }
 
-  let submittedQuestionIds = new Set();
-  if (participant?.participant_id && questions.length) {
-    const rows = await Response.findAll({
-      where: {
-        participant_id: participant.participant_id,
-        question_id: questions.map((q) => q.question_id)
-      },
-      attributes: ["question_id"]
-    });
-    submittedQuestionIds = new Set(rows.map((row) => Number(row.question_id)));
-  }
-
-  return questions.map((q) =>
-    formatQuestionForParticipant(q, {
-      participantSubmitted: submittedQuestionIds.has(Number(q.question_id))
-    })
-  );
+  return questions.map((q) => formatQuestionForParticipant(q));
 }
 
 async function getParticipantSessionLeaderboard({ sessionId, participant }) {

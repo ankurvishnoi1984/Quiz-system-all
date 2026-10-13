@@ -40,8 +40,20 @@ function clampSlideIndex(slideIndex, slideTotal) {
   return Math.min(Math.max(0, index), slideTotal - 1);
 }
 
+function normalizeSlideType(slideType) {
+  if (slideType == null || slideType === "") return null;
+  const value = String(slideType).trim();
+  return value || null;
+}
+
 function memorySlideState(sessionId) {
-  return presentSlideBySessionId.get(Number(sessionId)) || { slide_index: 0, updated_at: null };
+  return (
+    presentSlideBySessionId.get(Number(sessionId)) || {
+      slide_index: 0,
+      slide_type: null,
+      updated_at: null
+    }
+  );
 }
 
 function toSlideState(row) {
@@ -49,6 +61,7 @@ function toSlideState(row) {
   const updatedAt = row?.present_slide_updated_at;
   return {
     slide_index: Number.isFinite(index) ? index : 0,
+    slide_type: normalizeSlideType(row?.present_slide_type ?? row?.slide_type),
     updated_at: updatedAt ? new Date(updatedAt).toISOString() : null
   };
 }
@@ -93,21 +106,29 @@ async function persistSlideState(sessionId, state) {
 }
 
 async function readPresentSlideState(sessionId) {
+  const memory = memorySlideState(sessionId);
   const persisted = await readPersistedSlideState(sessionId);
   if (persisted) {
-    presentSlideBySessionId.set(Number(sessionId), persisted);
-    return persisted;
+    const merged = {
+      ...persisted,
+      // slide_type is memory/WS-only (not persisted on sessions row).
+      slide_type: memory.slide_type ?? persisted.slide_type ?? null
+    };
+    presentSlideBySessionId.set(Number(sessionId), merged);
+    return merged;
   }
-  return memorySlideState(sessionId);
+  return memory;
 }
 
-async function setPresentSlideIndex({ sessionId, user, slideIndex, slideTotal }) {
+async function setPresentSlideIndex({ sessionId, user, slideIndex, slideTotal, slideType }) {
   const session = await getSessionOrThrow(sessionId);
   assertSessionWriteAccess(user, session);
 
   const nextIndex = clampSlideIndex(slideIndex, slideTotal);
+  const nextType = normalizeSlideType(slideType);
   const state = {
     slide_index: nextIndex,
+    slide_type: nextType,
     updated_at: new Date().toISOString()
   };
   presentSlideBySessionId.set(Number(session.session_id), state);
@@ -115,7 +136,9 @@ async function setPresentSlideIndex({ sessionId, user, slideIndex, slideTotal })
 
   notifyPresentSlideChanged(session.session_code, {
     session_id: session.session_id,
-    slide_index: nextIndex
+    slide_index: nextIndex,
+    slide_type: nextType,
+    slide_total: Number.isFinite(Number(slideTotal)) ? Number(slideTotal) : null
   });
   return state;
 }

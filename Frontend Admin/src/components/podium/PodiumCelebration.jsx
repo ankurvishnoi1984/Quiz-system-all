@@ -247,18 +247,23 @@ export function PodiumCelebration({ leaderboard, showTitle = true, className = '
   return (
     <div className={`present-podium flex min-h-0 flex-1 flex-col ${className}`.trim()}>
       {showTitle ? (
-        <div className="mb-[clamp(0.5rem,1.5vh,1rem)] flex shrink-0 flex-col items-center justify-center gap-1">
-          <div className="flex items-center justify-center gap-3">
+        <div className="present-podium-heading mb-[clamp(0.35rem,1.2vh,0.85rem)] flex shrink-0 flex-col items-center justify-center gap-0.5 px-2 text-center">
+          <div className="flex items-center justify-center gap-2 sm:gap-3">
             <Trophy
-              className="size-[clamp(2rem,5vw,3rem)] text-amber-500 present-podium-title-icon"
+              className="size-[clamp(1.75rem,4vw,2.75rem)] text-amber-500 present-podium-title-icon"
               aria-hidden
             />
-            <h2 className="present-podium-title text-[clamp(2rem,6vw,3.5rem)] font-bold">Top 3</h2>
+            <h2 className="present-podium-title text-[clamp(1.75rem,5.5vw,3.25rem)] font-extrabold leading-tight tracking-tight">
+              Congratulations
+            </h2>
           </div>
+          <p className="present-podium-subtitle text-[clamp(0.95rem,2.2vw,1.35rem)] font-bold uppercase tracking-[0.18em]">
+            Top 3
+          </p>
         </div>
       ) : null}
 
-      <div className="present-podium-stage relative flex min-h-0 flex-1 flex-col items-center justify-end overflow-visible px-[clamp(0.5rem,2vw,1.5rem)] pb-[clamp(0.5rem,2vh,1.25rem)]">
+      <div className="present-podium-stage relative flex min-h-0 flex-1 flex-col items-center justify-end overflow-visible px-[clamp(0.35rem,1.5vw,1.25rem)] pb-[clamp(0.35rem,1.5vh,1rem)] pt-[clamp(0.25rem,1vh,0.75rem)]">
         <div className="present-podium-glow" aria-hidden />
 
         <div className="present-podium-confetti" aria-hidden>
@@ -277,11 +282,11 @@ export function PodiumCelebration({ leaderboard, showTitle = true, className = '
           ))}
         </div>
 
-        <div className="present-podium-mascot-wrap mb-[clamp(-0.25rem,1vh,0.5rem)]">
+        <div className="present-podium-mascot-wrap mb-[clamp(-0.5rem,0.5vh,0.25rem)]">
           <PodiumMascot />
         </div>
 
-        <div className="present-podium-row flex w-full max-w-4xl items-end justify-center gap-[clamp(0.5rem,2vw,1.5rem)]">
+        <div className="present-podium-row flex w-full max-w-6xl items-end justify-center gap-[clamp(0.35rem,2.5vw,2rem)]">
           {PODIUM_ORDER.map(({ rank, place }) => {
             const entry = byRank[rank]
             return (
