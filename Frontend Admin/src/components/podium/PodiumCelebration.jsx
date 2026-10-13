@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Trophy } from 'lucide-react'
 import { normalizeLeaderboardEntries } from '../../utils/leaderboard'
 
@@ -8,6 +9,24 @@ const PODIUM_ORDER = [
 ]
 
 const CONFETTI_PIECES = Array.from({ length: 64 }, (_, i) => i)
+
+/** Fixed burst positions; density class toggles how many are active. */
+const FIREWORK_BURSTS = [
+  { top: '10%', left: '12%', color: 1, delay: '0s' },
+  { top: '18%', left: '78%', color: 2, delay: '0.4s' },
+  { top: '8%', left: '48%', color: 3, delay: '0.8s' },
+  { top: '28%', left: '28%', color: 4, delay: '1.1s' },
+  { top: '22%', left: '62%', color: 5, delay: '1.5s' },
+  { top: '14%', left: '88%', color: 6, delay: '0.2s' },
+  { top: '32%', left: '8%', color: 1, delay: '1.8s' },
+  { top: '6%', left: '32%', color: 2, delay: '0.6s' },
+  { top: '26%', left: '92%', color: 3, delay: '1.3s' },
+  { top: '12%', left: '58%', color: 4, delay: '2s' },
+  { top: '36%', left: '42%', color: 5, delay: '0.9s' },
+  { top: '16%', left: '18%', color: 6, delay: '1.6s' },
+]
+
+const FIREWORK_SPARKS = Array.from({ length: 12 }, (_, i) => i)
 
 function PodiumMascot() {
   return (
@@ -237,6 +256,7 @@ function RankBadge({ rank }) {
  * Shared Top 3 celebration stage used by Present Mode and participant ending screens.
  */
 export function PodiumCelebration({ leaderboard, showTitle = true, className = '' }) {
+  const [fireworksHigh, setFireworksHigh] = useState(true)
   const top3 = normalizeLeaderboardEntries(leaderboard).slice(0, 3)
   const byRank = {
     1: top3[0] || null,
@@ -244,8 +264,19 @@ export function PodiumCelebration({ leaderboard, showTitle = true, className = '
     3: top3[2] || null,
   }
 
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setFireworksHigh((prev) => !prev)
+    }, 3500)
+    return () => window.clearInterval(id)
+  }, [])
+
   return (
-    <div className={`present-podium flex min-h-0 flex-1 flex-col ${className}`.trim()}>
+    <div
+      className={`present-podium flex min-h-0 flex-1 flex-col ${
+        fireworksHigh ? 'present-podium--fireworks-high' : 'present-podium--fireworks-low'
+      } ${className}`.trim()}
+    >
       {showTitle ? (
         <div className="present-podium-heading mb-[clamp(0.35rem,1.2vh,0.85rem)] flex shrink-0 flex-col items-center justify-center gap-0.5 px-2 text-center">
           <div className="flex items-center justify-center gap-2 sm:gap-3">
@@ -265,6 +296,34 @@ export function PodiumCelebration({ leaderboard, showTitle = true, className = '
 
       <div className="present-podium-stage relative flex min-h-0 flex-1 flex-col items-center justify-end overflow-visible px-[clamp(0.35rem,1.5vw,1.25rem)] pb-[clamp(0.35rem,1.5vh,1rem)] pt-[clamp(0.25rem,1vh,0.75rem)]">
         <div className="present-podium-glow" aria-hidden />
+
+        <div className="present-podium-fireworks" aria-hidden>
+          {FIREWORK_BURSTS.map((burst, idx) => (
+            <span
+              key={idx}
+              className={`present-podium-firework present-podium-firework--${burst.color} ${
+                idx >= 6 ? 'present-podium-firework--extra' : ''
+              }`}
+              style={{
+                top: burst.top,
+                left: burst.left,
+                animationDelay: burst.delay,
+              }}
+            >
+              <span className="present-podium-firework-core" />
+              {FIREWORK_SPARKS.map((spark) => (
+                <span
+                  key={spark}
+                  className="present-podium-firework-spark"
+                  style={{
+                    '--spark-angle': `${spark * 30}deg`,
+                    animationDelay: burst.delay,
+                  }}
+                />
+              ))}
+            </span>
+          ))}
+        </div>
 
         <div className="present-podium-confetti" aria-hidden>
           {CONFETTI_PIECES.map((i) => (

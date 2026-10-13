@@ -659,10 +659,92 @@
     background: linear-gradient(135deg, #fdba74, #9a3412);
   }
 
+  .present-podium-fireworks {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    overflow: hidden;
+  }
+
+  .present-podium-firework {
+    position: absolute;
+    width: 0;
+    height: 0;
+    opacity: 0.85;
+    animation: present-podium-firework-burst 2.4s ease-out infinite;
+  }
+
+  .present-podium-firework--extra {
+    opacity: 0;
+    visibility: hidden;
+  }
+
+  .present-podium--fireworks-high .present-podium-firework--extra {
+    opacity: 0.95;
+    visibility: visible;
+  }
+
+  .present-podium--fireworks-low .present-podium-firework:not(.present-podium-firework--extra) {
+    opacity: 0.55;
+    animation-duration: 3s;
+  }
+
+  .present-podium--fireworks-high .present-podium-firework {
+    animation-duration: 1.85s;
+  }
+
+  .present-podium-firework-core {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 999px;
+    transform: translate(-50%, -50%);
+    background: #fff;
+    box-shadow: 0 0 14px 4px currentColor;
+    animation: present-podium-firework-core 2.4s ease-out infinite;
+  }
+
+  .present-podium-firework-spark {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 0.28rem;
+    height: 0.85rem;
+    border-radius: 999px;
+    background: currentColor;
+    box-shadow: 0 0 8px 1px currentColor;
+    transform-origin: center bottom;
+    transform: rotate(var(--spark-angle, 0deg)) translateY(0) scaleY(0.35);
+    animation: present-podium-firework-spark 2.4s ease-out infinite;
+  }
+
+  .present-podium-firework--1 {
+    color: #fbbf24;
+  }
+  .present-podium-firework--2 {
+    color: #f472b6;
+  }
+  .present-podium-firework--3 {
+    color: #22d3ee;
+  }
+  .present-podium-firework--4 {
+    color: #a3e635;
+  }
+  .present-podium-firework--5 {
+    color: #c084fc;
+  }
+  .present-podium-firework--6 {
+    color: #fb923c;
+  }
+
   .present-podium-confetti {
     pointer-events: none;
     position: absolute;
     inset: 0;
+    z-index: 2;
     overflow: hidden;
   }
 
@@ -953,6 +1035,62 @@
   }
 }
 
+@keyframes present-podium-firework-burst {
+  0%,
+  12% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  18% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  55% {
+    opacity: 0.85;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.15);
+  }
+}
+
+@keyframes present-podium-firework-core {
+  0%,
+  12% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.3);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.4);
+  }
+  45% {
+    opacity: 0.7;
+    transform: translate(-50%, -50%) scale(0.9);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2);
+  }
+}
+
+@keyframes present-podium-firework-spark {
+  0%,
+  12% {
+    opacity: 0;
+    transform: rotate(var(--spark-angle, 0deg)) translateY(0) scaleY(0.2);
+  }
+  22% {
+    opacity: 1;
+    transform: rotate(var(--spark-angle, 0deg)) translateY(-0.4rem) scaleY(1);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--spark-angle, 0deg)) translateY(-2.8rem) scaleY(0.35);
+  }
+}
+
 @keyframes present-podium-mascot-bounce {
   0%,
   100% {
@@ -1178,8 +1316,15 @@
   .present-podium-mascot-arm--right,
   .present-podium-streamer--left,
   .present-podium-streamer--right,
-  .present-podium-title-icon {
+  .present-podium-title-icon,
+  .present-podium-firework,
+  .present-podium-firework-core,
+  .present-podium-firework-spark {
     animation: none !important;
+  }
+
+  .present-podium-fireworks {
+    display: none !important;
   }
 }
 
