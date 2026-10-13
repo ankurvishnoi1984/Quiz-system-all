@@ -21,6 +21,8 @@ export function ActiveQuestionPanel({
   question,
   activeQuestions,
   displayQuestionIndex,
+  questionSerialNumber = null,
+  questionSerialTotal = null,
   hasCountdown,
   canGoToNextQuestion,
   inputsLocked,
@@ -80,15 +82,24 @@ export function ActiveQuestionPanel({
   })
   const density = getParticipantDensityLevel(densityId)
   const questionSerial =
-    Number.isFinite(Number(displayQuestionIndex)) && Number(displayQuestionIndex) >= 0
-      ? Number(displayQuestionIndex) + 1
-      : null
+    Number.isFinite(Number(questionSerialNumber)) && Number(questionSerialNumber) > 0
+      ? Number(questionSerialNumber)
+      : Number.isFinite(Number(displayQuestionIndex)) && Number(displayQuestionIndex) >= 0
+        ? Number(displayQuestionIndex) + 1
+        : null
+  const serialTotal =
+    questionSerialTotal == null
+      ? null
+      : Number.isFinite(Number(questionSerialTotal)) && Number(questionSerialTotal) > 0
+        ? Number(questionSerialTotal)
+        : null
   const questionTitleBase =
     question.type === 'Emoji Reaction' && !String(question.text || '').trim()
       ? 'Share your reaction'
       : question.text || 'Untitled question'
   const questionTitle =
     questionSerial != null ? `Q${questionSerial}. ${questionTitleBase}` : questionTitleBase
+  const serialLabel = questionSerial ?? displayQuestionIndex + 1
 
   return (
     <ParticipantFitProvider densityId={densityId}>
@@ -102,7 +113,9 @@ export function ActiveQuestionPanel({
       <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <p className="participant-accent-text min-w-0 truncate text-xs font-semibold uppercase tracking-wider text-navy-700">
-              Question {displayQuestionIndex + 1} / {activeQuestions.length}
+              {serialTotal != null
+                ? `Question ${serialLabel} / ${serialTotal}`
+                : `Question ${serialLabel}`}
             </p>
           </div>
         {sessionQuizTotalTimeEnabled && !canShowPreviousQuestion && (

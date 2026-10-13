@@ -1444,6 +1444,54 @@ function ParticipantSessionPage({ embed = false }) {
     return idx !== -1 ? idx : clamp(questionIndex, 0, activeQuestions.length - 1)
   }, [question?.id, activeQuestions, questionIndex])
 
+  // Serial for "Q#" labels. participantQuestions is live-only, so list findIndex is often 0
+  // under one-at-a-time activation — prefer API display_order / Advanced slot first.
+  const questionSerialNumber = useMemo(() => {
+    if (!question?.id) return null
+    if (randomQuestionOrderEnabled && activeQuestions.length > 1) {
+      const navIdx = activeQuestions.findIndex((q) => Number(q.id) === Number(question.id))
+      if (navIdx !== -1) return navIdx + 1
+    }
+    if (isAdvancedBuilderSession(session)) {
+      const slot = Number(session?.advanced_active_slot)
+      if (Number.isFinite(slot) && slot > 0) return slot
+    }
+    const order = Number(question.display_order)
+    if (Number.isFinite(order) && order > 0) return order
+    if (mappedQuestions.length > 1) {
+      const overallIdx = mappedQuestions.findIndex((q) => Number(q.id) === Number(question.id))
+      if (overallIdx !== -1) return overallIdx + 1
+    }
+    return displayQuestionIndex + 1
+  }, [
+    question?.id,
+    question?.display_order,
+    randomQuestionOrderEnabled,
+    activeQuestions,
+    mappedQuestions,
+    displayQuestionIndex,
+    session,
+  ])
+
+  // null total when live-only list would show a fake "/ 1" beside a higher serial.
+  const questionSerialTotal = useMemo(() => {
+    if (randomQuestionOrderEnabled && activeQuestions.length > 1) return activeQuestions.length
+    if (mappedQuestions.length > 1) return mappedQuestions.length
+    if (isAdvancedBuilderSession(session)) {
+      const perParticipant = Number(session?.questions_per_participant)
+      if (Number.isFinite(perParticipant) && perParticipant > 0) return perParticipant
+    }
+    const order = Number(question?.display_order)
+    if (mappedQuestions.length <= 1 && Number.isFinite(order) && order > 1) return null
+    return mappedQuestions.length || activeQuestions.length || null
+  }, [
+    randomQuestionOrderEnabled,
+    activeQuestions.length,
+    mappedQuestions.length,
+    session,
+    question?.display_order,
+  ])
+
   const isLastDisplayedQuestion = useMemo(() => {
     if (!navigationEnabled) return true
     return activeQuestions.length > 0 && displayQuestionIndex === activeQuestions.length - 1
@@ -2761,6 +2809,8 @@ function ParticipantSessionPage({ embed = false }) {
             question={question}
             activeQuestions={activeQuestions}
             displayQuestionIndex={displayQuestionIndex}
+            questionSerialNumber={questionSerialNumber}
+            questionSerialTotal={questionSerialTotal}
             hasCountdown={hasCountdown}
             canGoToNextQuestion={canGoToNextQuestion}
             inputsLocked={inputsLocked}

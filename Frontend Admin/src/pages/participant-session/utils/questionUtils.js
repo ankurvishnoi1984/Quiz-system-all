@@ -53,6 +53,7 @@ export function mapParticipantQuestion(q) {
     rawType,
     isSurvey,
     surveySubType: isSurvey ? q.survey_subtype : null,
+    display_order: Number(q.display_order ?? 0),
     isQuizMode:
       rawType === 'poll' || rawType === 'emoji_reaction' || isSurvey
         ? false
