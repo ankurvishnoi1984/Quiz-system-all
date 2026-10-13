@@ -14,9 +14,10 @@ function PodiumMascot() {
   return (
     <svg
       className="present-podium-mascot"
-      viewBox="0 0 160 170"
-      width="160"
+      viewBox="-24 0 208 170"
+      width="208"
       height="170"
+      overflow="visible"
       aria-hidden
     >
       {/* Soft glow aura */}
@@ -111,31 +112,80 @@ function PodiumMascot() {
       <rect x="76" y="116" width="8" height="3" rx="1" fill="#f59e0b" />
       <rect x="73" y="119" width="14" height="3" rx="1.5" fill="#d97706" />
 
-      {/* Arms waving */}
+      {/* Arms — mittens with thumbs; rotate from shoulders in CSS */}
       <g className="present-podium-mascot-arm present-podium-mascot-arm--left">
+        <animateTransform
+          attributeName="transform"
+          type="rotate"
+          values="0 54 104; -20 54 104; 0 54 104"
+          keyTimes="0; 0.5; 1"
+          dur="1.2s"
+          repeatCount="indefinite"
+          calcMode="spline"
+          keySplines="0.42 0 0.58 1; 0.42 0 0.58 1"
+        />
         <path
-          d="M54 104 Q28 88 22 58"
+          d="M54 104 Q34 88 28 64"
           fill="none"
           stroke="#fcd34d"
           strokeWidth="11"
           strokeLinecap="round"
         />
-        <circle cx="22" cy="54" r="10" fill="#fbbf24" />
-        <circle cx="18" cy="50" r="2.5" fill="#fde68a" />
-        {/* Sparkle in hand */}
-        <path d="M10 42 L12 48 L18 50 L12 52 L10 58 L8 52 L2 50 L8 48 Z" fill="#f472b6" />
+        {/* Palm */}
+        <ellipse cx="24" cy="54" rx="12" ry="14" transform="rotate(-28 24 54)" fill="#fbbf24" />
+        <ellipse
+          cx="24"
+          cy="54"
+          rx="12"
+          ry="14"
+          transform="rotate(-28 24 54)"
+          fill="none"
+          stroke="#f59e0b"
+          strokeWidth="1.1"
+        />
+        {/* Thumb (inward / up) */}
+        <ellipse cx="34" cy="48" rx="5.5" ry="8" transform="rotate(18 34 48)" fill="#fcd34d" />
+        <ellipse cx="34" cy="48" rx="5.5" ry="8" transform="rotate(18 34 48)" fill="none" stroke="#f59e0b" strokeWidth="0.9" />
+        <ellipse cx="21" cy="48" rx="4.5" ry="3" transform="rotate(-28 21 48)" fill="#fde68a" opacity="0.55" />
+        {/* Sparkle beside palm */}
+        <path d="M4 36 L5.6 40.4 L10 42 L5.6 43.6 L4 48 L2.4 43.6 L-2 42 L2.4 40.4 Z" fill="#f472b6" />
       </g>
       <g className="present-podium-mascot-arm present-podium-mascot-arm--right">
+        <animateTransform
+          attributeName="transform"
+          type="rotate"
+          values="0 106 104; 20 106 104; 0 106 104"
+          keyTimes="0; 0.5; 1"
+          dur="1.2s"
+          repeatCount="indefinite"
+          calcMode="spline"
+          keySplines="0.42 0 0.58 1; 0.42 0 0.58 1"
+        />
         <path
-          d="M106 104 Q132 88 138 58"
+          d="M106 104 Q126 88 132 64"
           fill="none"
           stroke="#fcd34d"
           strokeWidth="11"
           strokeLinecap="round"
         />
-        <circle cx="138" cy="54" r="10" fill="#fbbf24" />
-        <circle cx="142" cy="50" r="2.5" fill="#fde68a" />
-        <path d="M150 42 L152 48 L158 50 L152 52 L150 58 L148 52 L142 50 L148 48 Z" fill="#38bdf8" />
+        {/* Palm */}
+        <ellipse cx="136" cy="54" rx="12" ry="14" transform="rotate(28 136 54)" fill="#fbbf24" />
+        <ellipse
+          cx="136"
+          cy="54"
+          rx="12"
+          ry="14"
+          transform="rotate(28 136 54)"
+          fill="none"
+          stroke="#f59e0b"
+          strokeWidth="1.1"
+        />
+        {/* Thumb (inward / up) */}
+        <ellipse cx="126" cy="48" rx="5.5" ry="8" transform="rotate(-18 126 48)" fill="#fcd34d" />
+        <ellipse cx="126" cy="48" rx="5.5" ry="8" transform="rotate(-18 126 48)" fill="none" stroke="#f59e0b" strokeWidth="0.9" />
+        <ellipse cx="139" cy="48" rx="4.5" ry="3" transform="rotate(28 139 48)" fill="#fde68a" opacity="0.55" />
+        {/* Sparkle beside palm */}
+        <path d="M156 36 L157.6 40.4 L162 42 L157.6 43.6 L156 48 L154.4 43.6 L150 42 L154.4 40.4 Z" fill="#38bdf8" />
       </g>
 
       {/* Legs */}
@@ -215,7 +265,7 @@ export function Top3PodiumSlide({
         </p> */}
       </div>
 
-      <div className="present-podium-stage relative flex min-h-0 flex-1 flex-col items-center justify-end overflow-hidden px-[clamp(0.5rem,2vw,1.5rem)] pb-[clamp(0.5rem,2vh,1.25rem)]">
+      <div className="present-podium-stage relative flex min-h-0 flex-1 flex-col items-center justify-end overflow-visible px-[clamp(0.5rem,2vw,1.5rem)] pb-[clamp(0.5rem,2vh,1.25rem)]">
         <div className="present-podium-glow" aria-hidden />
 
         <div className="present-podium-confetti" aria-hidden>

@@ -248,16 +248,34 @@ export function playLeaderboardShown() {
   })
 }
 
-/** Short ascending fanfare when the Top 3 podium slide opens. Always on (not gated by host-extra). */
+/**
+ * Energetic celebration fanfare when the Top 3 podium slide opens.
+ * Always on (not gated by host-extra). ~1s layered phrase via playTone.
+ */
 export function playPodiumCelebration() {
   unlockTimerAudio()
-  throttled('podium-celebration', 1500, () => {
-    playTone({ frequency: 523, duration: 0.11, type: 'triangle', volume: 0.11 })
-    playTone({ frequency: 659, duration: 0.11, type: 'triangle', volume: 0.11, delay: 0.1 })
-    playTone({ frequency: 784, duration: 0.13, type: 'triangle', volume: 0.12, delay: 0.2 })
-    playTone({ frequency: 1047, duration: 0.32, type: 'sine', volume: 0.13, delay: 0.32 })
-    playTone({ frequency: 784, duration: 0.2, type: 'sine', volume: 0.07, delay: 0.36 })
-    playTone({ frequency: 1319, duration: 0.28, type: 'sine', volume: 0.1, delay: 0.5 })
+  throttled('podium-celebration', 2000, () => {
+    playTone({ frequency: 392, duration: 0.06, type: 'square', volume: 0.06, delay: 0 })
+    playTone({ frequency: 494, duration: 0.06, type: 'square', volume: 0.07, delay: 0.06 })
+    playTone({ frequency: 587, duration: 0.06, type: 'triangle', volume: 0.08, delay: 0.12 })
+    playTone({ frequency: 698, duration: 0.06, type: 'triangle', volume: 0.09, delay: 0.18 })
+    playTone({ frequency: 784, duration: 0.07, type: 'triangle', volume: 0.1, delay: 0.24 })
+    playTone({ frequency: 988, duration: 0.08, type: 'triangle', volume: 0.11, delay: 0.3 })
+
+    playTone({ frequency: 523, duration: 0.18, type: 'sine', volume: 0.12, delay: 0.38 })
+    playTone({ frequency: 659, duration: 0.18, type: 'sine', volume: 0.11, delay: 0.38 })
+    playTone({ frequency: 784, duration: 0.18, type: 'triangle', volume: 0.1, delay: 0.38 })
+
+    playTone({ frequency: 659, duration: 0.08, type: 'square', volume: 0.07, delay: 0.56 })
+    playTone({ frequency: 659, duration: 0.22, type: 'sine', volume: 0.13, delay: 0.62 })
+    playTone({ frequency: 784, duration: 0.22, type: 'sine', volume: 0.12, delay: 0.62 })
+    playTone({ frequency: 1047, duration: 0.24, type: 'triangle', volume: 0.14, delay: 0.62 })
+
+    playTone({ frequency: 1319, duration: 0.28, type: 'sine', volume: 0.15, delay: 0.78 })
+    playTone({ frequency: 1047, duration: 0.2, type: 'triangle', volume: 0.08, delay: 0.8 })
+    playTone({ frequency: 1568, duration: 0.12, type: 'sine', volume: 0.09, delay: 0.88 })
+    playTone({ frequency: 2093, duration: 0.1, type: 'sine', volume: 0.07, delay: 0.96 })
+    playTone({ frequency: 1760, duration: 0.14, type: 'triangle', volume: 0.06, delay: 1.02 })
   })
 }
 
