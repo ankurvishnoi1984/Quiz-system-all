@@ -48,11 +48,13 @@ import { getPresentModeSettings } from '../../utils/presentModeSettings'
 import {
   HOST_EXTRA_SOUNDS_ENABLED,
   playLeaderboardShown,
+  playPodiumCelebration,
   playSlideChanged,
 } from '../../utils/timerSounds'
 import { getLastActivatedLiveQuestion } from '../participant-session/utils/questionUtils'
 import { formatScheduledSessionForDisplay } from '../../utils/sessionSchedule'
 import { LeaderboardSlide } from './LeaderboardSlide'
+import { Top3PodiumSlide } from './Top3PodiumSlide'
 import { PresentSurveyEndingSlide } from './PresentSurveyEndingSlide'
 import { ParticipantsSlide } from './ParticipantsSlide'
 import { PresentNavButton, PresentShell, PresentSlideHeader } from './PresentShell'
@@ -609,6 +611,7 @@ function PresentModePage({
       )
     }
     if (sessionSupportsOverallLeaderboard(mappedQuestions)) {
+      list.push({ type: 'podium' })
       list.push({ type: 'leaderboard' })
     } else if (sessionSupportsSurveyEndingScreen(mappedQuestions)) {
       list.push({ type: 'surveyEnding' })
@@ -652,6 +655,11 @@ function PresentModePage({
     if (next === slideIndex) return
     setInspectQuestionId(null)
     setSlideIndex(next)
+    // Podium fanfare always plays; other present cues stay behind the host-extra flag.
+    if (slides[next]?.type === 'podium') {
+      playPodiumCelebration()
+      return
+    }
     if (!HOST_EXTRA_SOUNDS_ENABLED) return
     if (slides[next]?.type === 'leaderboard') playLeaderboardShown()
     else playSlideChanged()
@@ -662,6 +670,11 @@ function PresentModePage({
     if (next === slideIndex) return
     setInspectQuestionId(null)
     setSlideIndex(next)
+    // Podium fanfare always plays; other present cues stay behind the host-extra flag.
+    if (slides[next]?.type === 'podium') {
+      playPodiumCelebration()
+      return
+    }
     if (!HOST_EXTRA_SOUNDS_ENABLED) return
     if (slides[next]?.type === 'leaderboard') playLeaderboardShown()
     else playSlideChanged()
@@ -746,11 +759,13 @@ function PresentModePage({
 
     setHostLeaderboardOpen(false)
 
+    const isRankingsSlide = (type) => type === 'leaderboard' || type === 'podium'
+
     if (distributedPresentEnabled) {
       const overviewIndex = slides.findIndex((slide) => slide.type === 'distributedQuiz')
       if (overviewIndex >= 0) {
         setSlideIndex((current) =>
-          slides[current]?.type === 'leaderboard' ? overviewIndex : current,
+          isRankingsSlide(slides[current]?.type) ? overviewIndex : current,
         )
       }
       broadcastPreviewFollow(sessionId, { screen: 'join' })
@@ -773,7 +788,7 @@ function PresentModePage({
     if (questionIndex >= 0) {
       const question = slides[questionIndex].question
       setSlideIndex((current) =>
-        slides[current]?.type === 'leaderboard' ? questionIndex : current,
+        isRankingsSlide(slides[current]?.type) ? questionIndex : current,
       )
       broadcastPreviewFollow(sessionId, {
         screen: 'question',
@@ -783,7 +798,7 @@ function PresentModePage({
       return
     }
 
-    setSlideIndex((current) => (slides[current]?.type === 'leaderboard' ? 0 : current))
+    setSlideIndex((current) => (isRankingsSlide(slides[current]?.type) ? 0 : current))
     broadcastPreviewFollow(sessionId, { screen: 'join' })
   }, [
     readOnly,
@@ -1304,6 +1319,22 @@ function PresentModePage({
               singleActiveQuestionMode={singleActiveQuestionMode}
             />
           </div>
+        ) : null}
+
+        {!isViewWaiting && currentSlide?.type === 'podium' ? (
+          <Top3PodiumSlide
+            sessionTitle={sessionTitle}
+            sessionLogoUrl={sessionLogoUrl}
+            leaderboard={leaderboard}
+            participantCount={participantCount}
+            liveParticipantCount={liveParticipantCount}
+            // qaCount={qaCount} // Q&A feature disabled
+            isSessionLive={isSessionLive}
+            {...headerParticipantProps}
+            {...headerRankingsProps}
+            // onQaClick={openQaModal} // Q&A feature disabled
+            readOnly={readOnly}
+          />
         ) : null}
 
         {!isViewWaiting && currentSlide?.type === 'leaderboard' ? (

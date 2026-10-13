@@ -248,6 +248,19 @@ export function playLeaderboardShown() {
   })
 }
 
+/** Short ascending fanfare when the Top 3 podium slide opens. Always on (not gated by host-extra). */
+export function playPodiumCelebration() {
+  unlockTimerAudio()
+  throttled('podium-celebration', 1500, () => {
+    playTone({ frequency: 523, duration: 0.11, type: 'triangle', volume: 0.11 })
+    playTone({ frequency: 659, duration: 0.11, type: 'triangle', volume: 0.11, delay: 0.1 })
+    playTone({ frequency: 784, duration: 0.13, type: 'triangle', volume: 0.12, delay: 0.2 })
+    playTone({ frequency: 1047, duration: 0.32, type: 'sine', volume: 0.13, delay: 0.32 })
+    playTone({ frequency: 784, duration: 0.2, type: 'sine', volume: 0.07, delay: 0.36 })
+    playTone({ frequency: 1319, duration: 0.28, type: 'sine', volume: 0.1, delay: 0.5 })
+  })
+}
+
 export function playLeaderboardUpdate() {
   throttled('leaderboard-update', 2500, () => {
     playTone({ frequency: 880, duration: 0.08, type: 'triangle', volume: 0.05 })
