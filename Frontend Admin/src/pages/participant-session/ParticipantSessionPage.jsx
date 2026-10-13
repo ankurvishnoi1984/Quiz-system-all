@@ -378,10 +378,23 @@ function ParticipantSessionPage({ embed = false }) {
       mappedQuestions.forEach((q) => {
         const key = String(q.id)
         if (q.answerRevealed) {
+          const apiIds = q.correctOptionIds || []
+          const apiPairs = q.correctMatchingPairs || null
+          const prevEntry = prev[key]
+          const keepLocalIds =
+            !apiIds.length && prevEntry?.correctOptionIds?.length
+          const keepLocalPairs =
+            !apiPairs &&
+            prevEntry?.correctMatchingPairs &&
+            typeof prevEntry.correctMatchingPairs === 'object'
           merged[key] = {
             revealed: true,
-            correctOptionIds: q.correctOptionIds || [],
-            correctMatchingPairs: q.correctMatchingPairs || null,
+            correctOptionIds: keepLocalIds
+              ? prevEntry.correctOptionIds
+              : apiIds,
+            correctMatchingPairs: keepLocalPairs
+              ? prevEntry.correctMatchingPairs
+              : apiPairs,
           }
         } else if (merged[key]) {
           merged[key] = {
@@ -1783,8 +1796,7 @@ function ParticipantSessionPage({ embed = false }) {
     !question?.isSurvey &&
     question?.type !== 'Poll' &&
     question?.isQuizMode !== false &&
-    isAnswerRevealedByHost &&
-    hasSubmittedQuestion
+    isAnswerRevealedByHost
   const answerRevealMeta = canSeeAnswerReveal
     ? {
         revealed: true,
@@ -1797,14 +1809,17 @@ function ParticipantSessionPage({ embed = false }) {
           question?.correctMatchingPairs ??
           null,
       }
-    : isAnswerRevealedByHost
-      ? { revealed: true, correctOptionIds: [], correctMatchingPairs: null }
-      : null
-  const isAnswerRevealed = isAnswerRevealedByHost
+    : null
   const participantAnswerIsCorrect = useMemo(() => {
-    if (!canSeeAnswerReveal || !question) return null
+    if (!canSeeAnswerReveal || !hasSubmittedQuestion || !question) return null
     return isParticipantChoiceCorrect(question, currentResponse, answerRevealMeta)
-  }, [canSeeAnswerReveal, question, currentResponse, answerRevealMeta])
+  }, [
+    canSeeAnswerReveal,
+    hasSubmittedQuestion,
+    question,
+    currentResponse,
+    answerRevealMeta,
+  ])
   const currentQuestionLeaderboard = question?.id
     ? questionLeaderboardByQuestion[String(question.id)] || []
     : []
@@ -2825,7 +2840,6 @@ function ParticipantSessionPage({ embed = false }) {
             lastQuestionFinalized={lastQuestionFinalized}
             currentResponse={currentResponse}
             answerRevealMeta={answerRevealMeta}
-            isAnswerRevealed={isAnswerRevealed}
             hasSubmittedQuestion={hasSubmittedQuestion}
             canSeeAnswerReveal={canSeeAnswerReveal}
             participantAnswerIsCorrect={participantAnswerIsCorrect}

@@ -371,10 +371,10 @@ export function MatchOptions({
             const placedId = Number(matchingPairs[String(left.option_id)] || 0)
             const placedOption = placedId ? rightById.get(placedId) : null
             let revealState = null
-            if (canSeeAnswerReveal && resolvedCorrectPairs) {
+            if (canSeeAnswerReveal && resolvedCorrectPairs && placedId) {
               const correctId = Number(resolvedCorrectPairs[String(left.option_id)])
               revealState =
-                placedId && correctId && placedId === correctId ? 'correct' : 'incorrect'
+                correctId && placedId === correctId ? 'correct' : 'incorrect'
             }
             return (
               <MatchSlot

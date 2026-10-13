@@ -35,7 +35,6 @@ export function ActiveQuestionPanel({
   submittedAtSeconds,
   currentResponse,
   answerRevealMeta,
-  isAnswerRevealed,
   hasSubmittedQuestion,
   canSeeAnswerReveal,
   participantAnswerIsCorrect,
@@ -200,18 +199,6 @@ export function ActiveQuestionPanel({
           timerSoundStartSeconds={question.timerSoundStartSeconds}
         />
       )}
-
-      {isAnswerRevealed &&
-        !hasSubmittedQuestion &&
-        !question.isSurvey &&
-        question.type !== 'Poll' &&
-        (question.type === 'MCQ' || question.type === 'True/False') && (
-          <p className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-slate-600">
-            {hasCountdown && timer === 0
-              ? 'Time is up. The correct answer is shown only to participants who submitted a response.'
-              : 'The correct answer will be shown here only after you submit a response.'}
-          </p>
-        )}
 
       {(question.type === 'MCQ' || question.type === 'Poll') && question.allowMultipleSelect && (
         <div className="flex gap-3 rounded-xl border border-indigo-200 bg-indigo-50/90 px-3 py-2.5">
@@ -426,6 +413,7 @@ export function ActiveQuestionPanel({
       )}
 
       {canSeeAnswerReveal &&
+        hasSubmittedQuestion &&
         !question.isSurvey &&
         (question.type === 'MCQ' || question.type === 'True/False' || question.type === 'Match') &&
         participantAnswerIsCorrect !== null && (
