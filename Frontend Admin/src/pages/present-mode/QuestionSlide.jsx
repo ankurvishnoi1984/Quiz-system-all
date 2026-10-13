@@ -629,6 +629,7 @@ export function QuestionSlide({
                     question={question}
                     chartData={optionData}
                     answerRevealed={showRevealUi}
+                    showResponseCounts={graphVisible}
                   />
                 </div>
               ) : null}

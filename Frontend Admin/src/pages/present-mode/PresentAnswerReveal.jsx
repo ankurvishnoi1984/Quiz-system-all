@@ -118,6 +118,7 @@ function PresentOptionRows({
   chartData = [],
   answerRevealed = false,
   stacked = false,
+  showResponseCounts = true,
 }) {
   const rows = buildPresentOptionRows(question, chartData)
   if (!rows.length) return null
@@ -151,7 +152,7 @@ function PresentOptionRows({
               >
                 {row.text}
               </p>
-              {row.count > 0 ? (
+              {showResponseCounts && row.count > 0 ? (
                 <p className="mt-0.5 text-[clamp(0.75rem,1.2vw,0.85rem)] text-slate-500">
                   {row.count} response{row.count === 1 ? '' : 's'}
                 </p>
@@ -176,6 +177,7 @@ export function PresentOptionsPanel({
   question,
   chartData = [],
   answerRevealed = false,
+  showResponseCounts = true,
 }) {
   if (
     question?.rawType === 'match' ||
@@ -203,6 +205,7 @@ export function PresentOptionsPanel({
           question={question}
           chartData={chartData}
           answerRevealed={answerRevealed}
+          showResponseCounts={showResponseCounts}
           stacked
         />
       </div>
