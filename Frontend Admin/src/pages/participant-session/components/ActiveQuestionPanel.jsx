@@ -381,7 +381,10 @@ export function ActiveQuestionPanel({
         </div>
       </div>
 
-      {navigationEnabled && lastQuestionFinalized && !sessionEnded && (
+      {navigationEnabled &&
+        lastQuestionFinalized &&
+        !sessionEnded &&
+        !sessionQuizTotalTimeEnabled && (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
           <p className="text-sm font-semibold text-emerald-900">
             {question?.isSurvey ? 'Survey submitted' : 'Quiz submitted'}

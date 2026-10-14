@@ -82,6 +82,7 @@ import { ParticipantPodiumPanel } from './components/ParticipantPodiumPanel'
 import { SurveySessionEndingPanel } from './components/SurveySessionEndingPanel'
 import { SessionHeader } from './components/SessionHeader'
 import { SessionEndedBanner, SessionEndedPanel } from './components/SessionEndedBanner'
+import { QuizCompletedThanksPanel } from './components/QuizCompletedThanksPanel'
 import { WaitingForQuestion } from './components/WaitingForQuestion'
 import { WaitingView } from './components/WaitingView'
 import { isParticipantChoiceCorrect } from '../../utils/answerReveal'
@@ -289,6 +290,7 @@ function ParticipantSessionPage({ embed = false }) {
   const closedNoticeShownRef = useRef(new Set())
   const allQuestionsClosedNoticeShownRef = useRef(false)
   const sessionEndedNotifiedRef = useRef(false)
+  const quizExpiryFinalizeStartedRef = useRef(false)
   const [leaderboard, setLeaderboard] = useState([])
   const [leaderboardMe, setLeaderboardMe] = useState(null)
   const [questionLeaderboardByQuestion, setQuestionLeaderboardByQuestion] = useState({})
@@ -1750,6 +1752,12 @@ function ParticipantSessionPage({ embed = false }) {
   }, [sessionQuizTotalTimeEnabled, sessionTimerExpired, freezeQuizSessionCountdown])
 
   useEffect(() => {
+    if (!sessionTimerExpired) {
+      quizExpiryFinalizeStartedRef.current = false
+    }
+  }, [sessionTimerExpired])
+
+  useEffect(() => {
     if (isSessionEnded) return
     if (step !== 'active' || !question?.id) return
     if (!hasQuestionCountdown) {
@@ -2069,6 +2077,53 @@ function ParticipantSessionPage({ embed = false }) {
       setIsSubmitting(false)
     }
   }
+
+  // Quiz total expired: silently save any answered-but-unsubmitted questions once, then finish.
+  useEffect(() => {
+    if (!sessionQuizTotalTimeEnabled || !sessionTimerExpired || isSessionEnded) return
+    if (step !== 'active') return
+    if (quizExpiryFinalizeStartedRef.current) return
+    quizExpiryFinalizeStartedRef.current = true
+
+    ;(async () => {
+      try {
+        if (participantToken) {
+          const payloads = buildFinalPayload()
+          if (payloads.length) {
+            await Promise.all(payloads.map((p) => submitResponseApi(participantToken, p)))
+            markQuestionsSubmitted(payloads.map((p) => p.question_id))
+          }
+        }
+        if (sessionLastQuestionId != null) {
+          markQuestionsExplicitlySubmitted([sessionLastQuestionId])
+        }
+        freezeQuizSessionCountdown()
+        if (dbSessionId) {
+          queryClient.invalidateQueries({ queryKey: ['participant-leaderboard', dbSessionId] })
+        }
+      } catch (err) {
+        console.error(err)
+        // Still mark finished so the participant leaves the question UI.
+        if (sessionLastQuestionId != null) {
+          markQuestionsExplicitlySubmitted([sessionLastQuestionId])
+        }
+        freezeQuizSessionCountdown()
+      }
+    })()
+  }, [
+    sessionQuizTotalTimeEnabled,
+    sessionTimerExpired,
+    isSessionEnded,
+    step,
+    participantToken,
+    buildFinalPayload,
+    markQuestionsSubmitted,
+    markQuestionsExplicitlySubmitted,
+    sessionLastQuestionId,
+    freezeQuizSessionCountdown,
+    dbSessionId,
+    queryClient,
+  ])
 
   const handleSubmitCurrentQuestion = async () => {
     if (isSessionEnded || !question?.id) return
@@ -2926,10 +2981,35 @@ function ParticipantSessionPage({ embed = false }) {
           <>
             {step === 'active' && isSessionEnded ? <SessionEndedPanel /> : null}
 
-            {step === 'active' && !question && !isSessionEnded && <WaitingForQuestion />}
+            {step === 'active' &&
+              !question &&
+              !isSessionEnded &&
+              !(
+                sessionQuizTotalTimeEnabled &&
+                (lastQuestionFinalized || sessionTimerExpired)
+              ) && (
+                <WaitingForQuestion />
+              )}
 
 
-            {step === 'active' && question && !isSessionEnded && (
+            {step === 'active' &&
+              !isSessionEnded &&
+              sessionQuizTotalTimeEnabled &&
+              (lastQuestionFinalized || sessionTimerExpired) && (
+                <QuizCompletedThanksPanel
+                  sessionTitle={session?.title}
+                  onPrevious={handlePrevious}
+                  canGoPrevious={canShowPreviousQuestion && displayQuestionIndex > 0}
+                />
+              )}
+
+            {step === 'active' &&
+              question &&
+              !isSessionEnded &&
+              !(
+                sessionQuizTotalTimeEnabled &&
+                (lastQuestionFinalized || sessionTimerExpired)
+              ) && (
               <ActiveQuestionPanel
             question={question}
             activeQuestions={activeQuestions}
