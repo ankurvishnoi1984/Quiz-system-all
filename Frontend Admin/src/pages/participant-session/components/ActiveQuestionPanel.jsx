@@ -25,7 +25,6 @@ export function ActiveQuestionPanel({
   questionSerialTotal = null,
   hasCountdown,
   hasQuestionCountdown = false,
-  hasQuizCountdown = false,
   canGoToNextQuestion,
   inputsLocked,
   wordCloudInputsLocked = false,
@@ -36,8 +35,6 @@ export function ActiveQuestionPanel({
   timer,
   questionTimer = null,
   questionTimeLimit = 0,
-  quizTimer = null,
-  quizTimeLimit = 0,
   submittedAtSeconds,
   questionSubmittedAtSeconds = null,
   currentResponse,
@@ -202,42 +199,19 @@ export function ActiveQuestionPanel({
 
       <QuestionMedia media={question.media} maxHeightClass={density.mediaMaxHeightClass} />
 
-      {(hasQuizCountdown || (hasQuestionCountdown && !question.isSurvey)) && (
-        <div
-          className={
-            hasQuizCountdown && hasQuestionCountdown && !question.isSurvey
-              ? 'grid gap-2 sm:grid-cols-2'
-              : undefined
-          }
-        >
-          {hasQuizCountdown ? (
-            <QuestionTimer
-              label="Quiz time"
-              timer={quizTimer ?? timer}
-              timeLimit={quizTimeLimit || timeLimit}
-              submittedAtSeconds={
-                hasQuestionCountdown && !question.isSurvey ? null : submittedAtSeconds
-              }
-              soundEnabled={false}
-              variant={hasQuestionCountdown && !question.isSurvey ? 'compact' : 'default'}
-            />
-          ) : null}
-          {hasQuestionCountdown && !question.isSurvey ? (
-            <QuestionTimer
-              label={hasQuizCountdown ? 'Question time' : null}
-              timer={questionTimer ?? timer}
-              timeLimit={questionTimeLimit || timeLimit}
-              submittedAtSeconds={questionSubmittedAtSeconds ?? submittedAtSeconds}
-              timerSoundKey={question.timerSoundKey}
-              timerSoundUrl={question.timerSoundUrl}
-              timerEndingSoundKey={question.timerEndingSoundKey}
-              timerEndingSoundUrl={question.timerEndingSoundUrl}
-              timerSoundStartSeconds={question.timerSoundStartSeconds}
-              variant={hasQuizCountdown ? 'compact' : 'default'}
-            />
-          ) : null}
-        </div>
-      )}
+      {hasQuestionCountdown && !question.isSurvey ? (
+        <QuestionTimer
+          label="Question time"
+          timer={questionTimer ?? timer}
+          timeLimit={questionTimeLimit || timeLimit}
+          submittedAtSeconds={questionSubmittedAtSeconds ?? submittedAtSeconds}
+          timerSoundKey={question.timerSoundKey}
+          timerSoundUrl={question.timerSoundUrl}
+          timerEndingSoundKey={question.timerEndingSoundKey}
+          timerEndingSoundUrl={question.timerEndingSoundUrl}
+          timerSoundStartSeconds={question.timerSoundStartSeconds}
+        />
+      ) : null}
 
       {(question.type === 'MCQ' || question.type === 'Poll') && question.allowMultipleSelect && (
         <div className="flex gap-3 rounded-xl border border-indigo-200 bg-indigo-50/90 px-3 py-2.5">

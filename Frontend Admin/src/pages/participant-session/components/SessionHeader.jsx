@@ -1,13 +1,21 @@
 import { Users } from 'lucide-react'
 import { BrandLogoPair } from '../../../components/branding/BrandLogoPair'
+import { HeaderQuizTimer } from './HeaderQuizTimer'
 
-export function SessionHeader({ session, joinedUser }) {
+export function SessionHeader({
+  session,
+  joinedUser,
+  hasQuizCountdown = false,
+  quizTimer = 0,
+  quizTimeLimit = 0,
+}) {
   const showParticipantCount = Boolean(session?.show_participant_count)
   const liveCount = Number(session?.live_participants_count)
   const fallbackCount = Number(session?.participants_count)
   const participantCount = Number.isFinite(liveCount) && liveCount >= 0 ? liveCount : fallbackCount
   const hasParticipantCount =
     showParticipantCount && Number.isFinite(participantCount) && participantCount >= 0
+  const showRightCluster = hasParticipantCount || hasQuizCountdown
 
   return (
     <div className="participant-topbar flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200/70 bg-white p-4 shadow-sm shadow-navy-900/5">
@@ -28,16 +36,23 @@ export function SessionHeader({ session, joinedUser }) {
         </p>
       </div>
 
-      {hasParticipantCount ? (
-        <div
-          className="inline-flex items-center gap-2 rounded-xl border border-indigo-200/80 bg-indigo-50/80 px-3 py-2 text-sm font-semibold text-indigo-950"
-          title="Participants currently connected"
-        >
-          <Users className="size-4 shrink-0 text-indigo-700" aria-hidden />
-          <span className="tabular-nums">{participantCount}</span>
-          <span className="text-xs font-medium text-indigo-800/80">
-            participant{participantCount === 1 ? '' : 's'}
-          </span>
+      {showRightCluster ? (
+        <div className="flex flex-wrap items-stretch justify-end gap-2">
+          {hasQuizCountdown ? (
+            <HeaderQuizTimer timer={quizTimer} timeLimit={quizTimeLimit} />
+          ) : null}
+          {hasParticipantCount ? (
+            <div
+              className="inline-flex items-center gap-2 rounded-xl border border-indigo-200/80 bg-indigo-50/80 px-3 py-2 text-sm font-semibold text-indigo-950"
+              title="Participants currently connected"
+            >
+              <Users className="size-4 shrink-0 text-indigo-700" aria-hidden />
+              <span className="tabular-nums">{participantCount}</span>
+              <span className="text-xs font-medium text-indigo-800/80">
+                participant{participantCount === 1 ? '' : 's'}
+              </span>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

@@ -2880,7 +2880,13 @@ function ParticipantSessionPage({ embed = false }) {
         }`}
       >
         {!showParticipantPodium ? (
-          <SessionHeader session={session} joinedUser={joinedUser} />
+          <SessionHeader
+            session={session}
+            joinedUser={joinedUser}
+            hasQuizCountdown={hasQuizCountdown && step === 'active'}
+            quizTimer={quizTimer}
+            quizTimeLimit={sessionQuizTotalTimeSeconds}
+          />
         ) : null}
 
         {!showParticipantPodium && isSessionEnded && endingScreenOnlyMode ? (
@@ -2932,7 +2938,6 @@ function ParticipantSessionPage({ embed = false }) {
             questionSerialTotal={questionSerialTotal}
             hasCountdown={hasCountdown}
             hasQuestionCountdown={hasQuestionCountdown}
-            hasQuizCountdown={hasQuizCountdown}
             canGoToNextQuestion={canGoToNextQuestion}
             inputsLocked={inputsLocked}
             wordCloudInputsLocked={wordCloudInputsLocked}
@@ -2943,8 +2948,6 @@ function ParticipantSessionPage({ embed = false }) {
             timer={timer}
             questionTimer={questionTimer}
             questionTimeLimit={timeLimit}
-            quizTimer={quizTimer}
-            quizTimeLimit={sessionQuizTotalTimeSeconds}
             submittedAtSeconds={submittedAtSeconds}
             questionSubmittedAtSeconds={questionSubmittedAtSeconds}
             sessionQuizTotalTimeEnabled={sessionQuizTotalTimeEnabled}
