@@ -1,8 +1,6 @@
-import { useState } from 'react'
 import { PresentSlideHeader } from './PresentShell'
 import { PresentJoinPanel } from './PresentJoinInfo'
 import { PresentSessionReadyLobby } from './PresentSessionReadyLobby'
-import { PresentInstructionsModal } from './PresentInstructionsModal'
 import { getPresentModeSettings } from '../../utils/presentModeSettings'
 
 export function ParticipantsSlide({
@@ -22,18 +20,8 @@ export function ParticipantsSlide({
   const presentSettings = getPresentModeSettings(session)
   const showSessionInfo = presentSettings.showSessionInfo
   const customInstructions = presentSettings.customInstructions || []
-  const showInstructionsTile =
+  const showInstructions =
     presentSettings.showCustomInstructions && customInstructions.length > 0
-
-  const [instructionsOpen, setInstructionsOpen] = useState(false)
-
-  const instructionsProps = showInstructionsTile
-    ? {
-        showInstructions: true,
-        instructionsActive: instructionsOpen,
-        onInstructionsClick: () => setInstructionsOpen(true),
-      }
-    : { showInstructions: false }
 
   return (
     <div className="quiz-slide-in flex min-h-0 flex-1 flex-col">
@@ -53,24 +41,23 @@ export function ParticipantsSlide({
       />
 
       {showSessionInfo ? (
-        <PresentJoinPanel session={session} {...instructionsProps} />
+        <PresentJoinPanel
+          session={session}
+          showInstructions={showInstructions}
+          instructions={customInstructions}
+        />
       ) : (
         <PresentSessionReadyLobby
           session={session}
           participantCount={participantCount}
           liveParticipantCount={liveParticipantCount}
           showParticipantStats={showParticipantStats}
+          showInstructions={showInstructions}
+          instructions={customInstructions}
           readOnly={readOnly}
           isSessionLive={isSessionLive}
-          {...instructionsProps}
         />
       )}
-
-      <PresentInstructionsModal
-        open={instructionsOpen}
-        onClose={() => setInstructionsOpen(false)}
-        instructions={customInstructions}
-      />
     </div>
   )
 }

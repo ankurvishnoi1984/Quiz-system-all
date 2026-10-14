@@ -5,7 +5,7 @@ import {
   formatScheduledTimeForDisplay,
 } from '../../utils/sessionSchedule'
 import { SessionMetaRow } from './PresentJoinInfo'
-import { PresentInstructionsTile } from './PresentInstructionsTile'
+import { PresentInstructionsPanel } from './PresentInstructionsPanel'
 
 function resolveStatusLabel(session, isSessionLive) {
   const status = String(session?.status || '').toLowerCase()
@@ -15,15 +15,9 @@ function resolveStatusLabel(session, isSessionLive) {
   return 'Not started'
 }
 
-function AudienceCard({ joined, live, compact = false }) {
+function AudienceCard({ joined, live }) {
   return (
-    <div
-      className={`rounded-[2rem] border border-blue-200/70 bg-white/95 shadow-xl shadow-navy-900/10 ${
-        compact
-          ? 'px-[clamp(1rem,2.5vw,1.5rem)] py-[clamp(1rem,2.5vh,1.5rem)]'
-          : 'px-[clamp(1.25rem,3vw,2rem)] py-[clamp(1.25rem,3vh,2rem)]'
-      }`}
-    >
+    <div className="rounded-[2rem] border border-blue-200/70 bg-white/95 px-[clamp(1.25rem,3vw,2rem)] py-[clamp(1.25rem,3vh,2rem)] shadow-xl shadow-navy-900/10">
       <div className="flex items-center justify-center gap-2 text-slate-500">
         <Users className="size-[clamp(1rem,2vw,1.25rem)]" aria-hidden />
         <p className="text-[clamp(0.7rem,1.3vw,0.85rem)] font-semibold uppercase tracking-wider">
@@ -59,6 +53,7 @@ function AudienceCard({ joined, live, compact = false }) {
 /**
  * Lobby body for the first Present slide when join/session info is hidden.
  * Branding + status + optional schedule + audience counts — no QR/code/links.
+ * When instructions are on: left = schedule/audience, right = instructions panel.
  */
 export function PresentSessionReadyLobby({
   session,
@@ -66,8 +61,7 @@ export function PresentSessionReadyLobby({
   liveParticipantCount = 0,
   showParticipantStats = true,
   showInstructions = false,
-  onInstructionsClick,
-  instructionsActive = false,
+  instructions = [],
   readOnly = false,
   isSessionLive = false,
   className = '',
@@ -84,13 +78,35 @@ export function PresentSessionReadyLobby({
   const timeLabel = formatScheduledTimeForDisplay(session?.scheduled_time) || '—'
   const joined = Number(participantCount) || 0
   const live = Number(liveParticipantCount) || 0
-  const showBoth = showInstructions && showParticipantStats
+
+  const hasLeftContent = hasSchedule || showParticipantStats
+  const useSplit = showInstructions && hasLeftContent
+
+  const scheduleBlock = hasSchedule ? (
+    <div className="grid min-w-0 gap-[clamp(0.65rem,1.5vh,0.85rem)] sm:grid-cols-2">
+      <SessionMetaRow icon={Calendar} label="Date" value={dateLabel} />
+      <SessionMetaRow icon={Clock3} label="Time" value={timeLabel} />
+    </div>
+  ) : null
+
+  const audienceBlock = showParticipantStats ? (
+    <AudienceCard joined={joined} live={live} />
+  ) : null
+
+  const leftStack = (
+    <div className="flex min-w-0 flex-col gap-[clamp(0.75rem,2vh,1.25rem)]">
+      {scheduleBlock}
+      {audienceBlock}
+    </div>
+  )
 
   return (
     <div
       className={`flex min-h-0 w-full min-w-0 flex-1 flex-col items-center justify-center overflow-x-hidden px-[clamp(0.5rem,2vw,1.5rem)] ${className}`}
     >
-      <div className="quiz-enter w-full min-w-0 max-w-4xl">
+      <div
+        className={`quiz-enter w-full min-w-0 ${showInstructions ? 'max-w-6xl' : 'max-w-4xl'}`}
+      >
         <div className="mb-[clamp(1rem,3vh,1.75rem)] text-center">
           {session?.logo_url ? (
             <BrandLogoPair
@@ -114,37 +130,23 @@ export function PresentSessionReadyLobby({
           </p>
         </div>
 
-        {hasSchedule ? (
-          <div className="mb-[clamp(0.75rem,2vh,1.25rem)] grid min-w-0 gap-[clamp(0.65rem,1.5vh,0.85rem)] sm:grid-cols-2">
-            <SessionMetaRow icon={Calendar} label="Date" value={dateLabel} />
-            <SessionMetaRow icon={Clock3} label="Time" value={timeLabel} />
+        {useSplit ? (
+          <div className="mb-[clamp(1rem,2.5vh,1.5rem)] grid min-w-0 items-stretch gap-[clamp(0.75rem,2vw,1.25rem)] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+            {leftStack}
+            <PresentInstructionsPanel instructions={instructions} className="h-full" />
           </div>
         ) : null}
 
-        {showBoth ? (
-          <div className="mb-[clamp(1rem,2.5vh,1.5rem)] grid min-w-0 items-stretch gap-[clamp(0.65rem,1.5vh,0.85rem)] sm:grid-cols-[minmax(10rem,14rem)_minmax(0,1fr)]">
-            <PresentInstructionsTile
-              onClick={onInstructionsClick}
-              active={instructionsActive}
-            />
-            <AudienceCard joined={joined} live={live} compact />
+        {!useSplit && hasLeftContent ? (
+          <div className="mb-[clamp(1rem,2.5vh,1.5rem)] space-y-[clamp(0.75rem,2vh,1.25rem)]">
+            {scheduleBlock}
+            {audienceBlock}
           </div>
         ) : null}
 
-        {!showBoth && showInstructions ? (
-          <div className="mb-[clamp(1rem,2.5vh,1.5rem)] flex justify-center">
-            <div className="w-full max-w-xs">
-              <PresentInstructionsTile
-                onClick={onInstructionsClick}
-                active={instructionsActive}
-              />
-            </div>
-          </div>
-        ) : null}
-
-        {!showBoth && showParticipantStats ? (
-          <div className="mb-[clamp(1rem,2.5vh,1.5rem)]">
-            <AudienceCard joined={joined} live={live} />
+        {!useSplit && showInstructions ? (
+          <div className="mb-[clamp(1rem,2.5vh,1.5rem)] mx-auto w-full max-w-xl">
+            <PresentInstructionsPanel instructions={instructions} />
           </div>
         ) : null}
 
