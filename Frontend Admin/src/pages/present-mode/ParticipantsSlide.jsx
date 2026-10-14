@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { PresentSlideHeader } from './PresentShell'
 import { PresentJoinPanel } from './PresentJoinInfo'
 import { PresentSessionReadyLobby } from './PresentSessionReadyLobby'
+import { PresentInstructionsModal } from './PresentInstructionsModal'
 import { getPresentModeSettings } from '../../utils/presentModeSettings'
 
 export function ParticipantsSlide({
@@ -17,7 +19,21 @@ export function ParticipantsSlide({
   showParticipantStats = true,
 }) {
   const sessionTitle = session?.title || 'Live session'
-  const showSessionInfo = getPresentModeSettings(session).showSessionInfo
+  const presentSettings = getPresentModeSettings(session)
+  const showSessionInfo = presentSettings.showSessionInfo
+  const customInstructions = presentSettings.customInstructions || []
+  const showInstructionsTile =
+    presentSettings.showCustomInstructions && customInstructions.length > 0
+
+  const [instructionsOpen, setInstructionsOpen] = useState(false)
+
+  const instructionsProps = showInstructionsTile
+    ? {
+        showInstructions: true,
+        instructionsActive: instructionsOpen,
+        onInstructionsClick: () => setInstructionsOpen(true),
+      }
+    : { showInstructions: false }
 
   return (
     <div className="quiz-slide-in flex min-h-0 flex-1 flex-col">
@@ -37,7 +53,7 @@ export function ParticipantsSlide({
       />
 
       {showSessionInfo ? (
-        <PresentJoinPanel session={session} />
+        <PresentJoinPanel session={session} {...instructionsProps} />
       ) : (
         <PresentSessionReadyLobby
           session={session}
@@ -46,8 +62,15 @@ export function ParticipantsSlide({
           showParticipantStats={showParticipantStats}
           readOnly={readOnly}
           isSessionLive={isSessionLive}
+          {...instructionsProps}
         />
       )}
+
+      <PresentInstructionsModal
+        open={instructionsOpen}
+        onClose={() => setInstructionsOpen(false)}
+        instructions={customInstructions}
+      />
     </div>
   )
 }

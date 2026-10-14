@@ -10,6 +10,7 @@ import {
   formatScheduledDateForDisplay,
   formatScheduledTimeForDisplay,
 } from '../../utils/sessionSchedule'
+import { PresentInstructionsTile } from './PresentInstructionsTile'
 
 function usePresentJoinInfo(session) {
   const sessionCode = normalizeSessionCode(session?.session_code)
@@ -199,7 +200,13 @@ export function PresentJoinBar({ session, placement = 'banner' }) {
 /**
  * Full join panel for the opening Present Mode slide.
  */
-export function PresentJoinPanel({ session, className = '' }) {
+export function PresentJoinPanel({
+  session,
+  className = '',
+  showInstructions = false,
+  onInstructionsClick,
+  instructionsActive = false,
+}) {
   const { sessionCode, directJoinUrl, joinPageUrl, qrDataUrl } = usePresentJoinInfo(session)
   const sessionTitle = session?.title || 'Live session'
   const dateLabel =
@@ -239,6 +246,16 @@ export function PresentJoinPanel({ session, className = '' }) {
           <SessionMetaRow icon={Calendar} label="Date" value={dateLabel} />
           <SessionMetaRow icon={Clock3} label="Time" value={timeLabel} />
         </div>
+
+        {showInstructions ? (
+          <div className="mb-[clamp(0.75rem,2vh,1.25rem)]">
+            <PresentInstructionsTile
+              layout="wide"
+              onClick={onInstructionsClick}
+              active={instructionsActive}
+            />
+          </div>
+        ) : null}
 
         <div className="grid min-w-0 items-stretch gap-[clamp(1rem,3vw,2rem)] lg:grid-cols-[minmax(14rem,20rem)_minmax(0,1fr)]">
           <div className="flex flex-col items-center justify-center rounded-[2rem] border border-blue-200/70 bg-white/95 p-[clamp(1rem,2.5vw,1.75rem)] shadow-xl shadow-navy-900/10">

@@ -5,6 +5,7 @@ import {
   formatScheduledTimeForDisplay,
 } from '../../utils/sessionSchedule'
 import { SessionMetaRow } from './PresentJoinInfo'
+import { PresentInstructionsTile } from './PresentInstructionsTile'
 
 function resolveStatusLabel(session, isSessionLive) {
   const status = String(session?.status || '').toLowerCase()
@@ -12,6 +13,47 @@ function resolveStatusLabel(session, isSessionLive) {
   if (status === 'paused') return 'Paused'
   if (status === 'completed' || status === 'archived') return 'Ended'
   return 'Not started'
+}
+
+function AudienceCard({ joined, live, compact = false }) {
+  return (
+    <div
+      className={`rounded-[2rem] border border-blue-200/70 bg-white/95 shadow-xl shadow-navy-900/10 ${
+        compact
+          ? 'px-[clamp(1rem,2.5vw,1.5rem)] py-[clamp(1rem,2.5vh,1.5rem)]'
+          : 'px-[clamp(1.25rem,3vw,2rem)] py-[clamp(1.25rem,3vh,2rem)]'
+      }`}
+    >
+      <div className="flex items-center justify-center gap-2 text-slate-500">
+        <Users className="size-[clamp(1rem,2vw,1.25rem)]" aria-hidden />
+        <p className="text-[clamp(0.7rem,1.3vw,0.85rem)] font-semibold uppercase tracking-wider">
+          Audience
+        </p>
+      </div>
+      <div className="mt-[clamp(0.75rem,2vh,1.25rem)] grid gap-4 sm:grid-cols-2">
+        <div className="rounded-2xl border border-blue-100 bg-slate-50/80 px-4 py-4 text-center">
+          <p className="text-[clamp(0.65rem,1.2vw,0.75rem)] font-semibold uppercase tracking-wider text-slate-500">
+            Joined
+          </p>
+          <p className="mt-1 text-[clamp(2rem,6vw,3.5rem)] font-bold tabular-nums leading-none text-navy-900">
+            {joined}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-4 text-center">
+          <p className="text-[clamp(0.65rem,1.2vw,0.75rem)] font-semibold uppercase tracking-wider text-emerald-800/80">
+            Live
+          </p>
+          <p className="mt-1 inline-flex items-center justify-center gap-2 text-[clamp(2rem,6vw,3.5rem)] font-bold tabular-nums leading-none text-emerald-800">
+            <span className="relative flex size-3 shrink-0" aria-hidden>
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex size-3 rounded-full bg-emerald-500" />
+            </span>
+            {live}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 /**
@@ -23,6 +65,9 @@ export function PresentSessionReadyLobby({
   participantCount = 0,
   liveParticipantCount = 0,
   showParticipantStats = true,
+  showInstructions = false,
+  onInstructionsClick,
+  instructionsActive = false,
   readOnly = false,
   isSessionLive = false,
   className = '',
@@ -39,6 +84,7 @@ export function PresentSessionReadyLobby({
   const timeLabel = formatScheduledTimeForDisplay(session?.scheduled_time) || '—'
   const joined = Number(participantCount) || 0
   const live = Number(liveParticipantCount) || 0
+  const showBoth = showInstructions && showParticipantStats
 
   return (
     <div
@@ -57,9 +103,6 @@ export function PresentSessionReadyLobby({
           <p className="text-[clamp(0.75rem,1.4vw,0.95rem)] font-semibold uppercase tracking-[0.3em] text-navy-600/80">
             Session ready
           </p>
-          {/* <h2 className="mt-2 text-[clamp(1.75rem,5vw,3.25rem)] font-bold leading-tight text-navy-900">
-            {sessionTitle}
-          </h2> */}
           <p className="mt-3 inline-flex items-center gap-2 text-[clamp(0.95rem,1.8vw,1.2rem)] font-semibold text-slate-700">
             {statusLabel === 'Live' ? (
               <span className="relative flex size-2.5 shrink-0" aria-hidden>
@@ -78,36 +121,30 @@ export function PresentSessionReadyLobby({
           </div>
         ) : null}
 
-        {showParticipantStats ? (
-          <div className="mb-[clamp(1rem,2.5vh,1.5rem)] rounded-[2rem] border border-blue-200/70 bg-white/95 px-[clamp(1.25rem,3vw,2rem)] py-[clamp(1.25rem,3vh,2rem)] shadow-xl shadow-navy-900/10">
-            <div className="flex items-center justify-center gap-2 text-slate-500">
-              <Users className="size-[clamp(1rem,2vw,1.25rem)]" aria-hidden />
-              <p className="text-[clamp(0.7rem,1.3vw,0.85rem)] font-semibold uppercase tracking-wider">
-                Audience
-              </p>
+        {showBoth ? (
+          <div className="mb-[clamp(1rem,2.5vh,1.5rem)] grid min-w-0 items-stretch gap-[clamp(0.65rem,1.5vh,0.85rem)] sm:grid-cols-[minmax(10rem,14rem)_minmax(0,1fr)]">
+            <PresentInstructionsTile
+              onClick={onInstructionsClick}
+              active={instructionsActive}
+            />
+            <AudienceCard joined={joined} live={live} compact />
+          </div>
+        ) : null}
+
+        {!showBoth && showInstructions ? (
+          <div className="mb-[clamp(1rem,2.5vh,1.5rem)] flex justify-center">
+            <div className="w-full max-w-xs">
+              <PresentInstructionsTile
+                onClick={onInstructionsClick}
+                active={instructionsActive}
+              />
             </div>
-            <div className="mt-[clamp(0.75rem,2vh,1.25rem)] grid gap-4 sm:grid-cols-2">
-              <div className="rounded-2xl border border-blue-100 bg-slate-50/80 px-4 py-4 text-center">
-                <p className="text-[clamp(0.65rem,1.2vw,0.75rem)] font-semibold uppercase tracking-wider text-slate-500">
-                  Joined
-                </p>
-                <p className="mt-1 text-[clamp(2rem,6vw,3.5rem)] font-bold tabular-nums leading-none text-navy-900">
-                  {joined}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-4 text-center">
-                <p className="text-[clamp(0.65rem,1.2vw,0.75rem)] font-semibold uppercase tracking-wider text-emerald-800/80">
-                  Live
-                </p>
-                <p className="mt-1 inline-flex items-center justify-center gap-2 text-[clamp(2rem,6vw,3.5rem)] font-bold tabular-nums leading-none text-emerald-800">
-                  <span className="relative flex size-3 shrink-0" aria-hidden>
-                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex size-3 rounded-full bg-emerald-500" />
-                  </span>
-                  {live}
-                </p>
-              </div>
-            </div>
+          </div>
+        ) : null}
+
+        {!showBoth && showParticipantStats ? (
+          <div className="mb-[clamp(1rem,2.5vh,1.5rem)]">
+            <AudienceCard joined={joined} live={live} />
           </div>
         ) : null}
 

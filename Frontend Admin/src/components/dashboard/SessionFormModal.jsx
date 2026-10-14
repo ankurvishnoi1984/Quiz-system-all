@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChevronDown, Download, FileUp, Loader2, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Download, FileUp, Loader2, Plus, Trash2, X } from 'lucide-react'
 import Modal from '../ui/Modal'
 import { uploadQuestionMediaApi } from '../../services/mediaApi'
 import { compressQuestionImage } from '../../utils/compressQuestionImage'
@@ -14,6 +14,8 @@ import {
 } from '../../utils/advancedScoreBands'
 import {
   DEFAULT_PRESENT_MODE_SETTINGS,
+  MAX_CUSTOM_INSTRUCTION_LENGTH,
+  MAX_CUSTOM_INSTRUCTIONS,
   normalizePresentModeSettings,
   toPresentModeSettingsApi,
 } from '../../utils/presentModeSettings'
@@ -66,6 +68,11 @@ const PRESENT_MODE_SETTING_OPTIONS = [
     label: 'Show participant counts',
     description: 'Joined / live participant stats in the present header.',
   },
+  {
+    key: 'showCustomInstructions',
+    label: 'Show custom instructions',
+    description: 'Numbered host instructions on the lobby slide.',
+  },
 ]
 
 const defaultInitial = {
@@ -96,7 +103,10 @@ const defaultInitial = {
   builderMode: 'normal',
   questionsPerParticipant: 10,
   advancedSelectionMode: 'random_all',
-  presentModeSettings: { ...DEFAULT_PRESENT_MODE_SETTINGS },
+  presentModeSettings: {
+    ...DEFAULT_PRESENT_MODE_SETTINGS,
+    customInstructions: [],
+  },
 }
 
 function SessionFormModal({
@@ -163,6 +173,7 @@ function SessionFormModal({
   )
   const [presentModeSettings, setPresentModeSettings] = useState(() => ({
     ...DEFAULT_PRESENT_MODE_SETTINGS,
+    customInstructions: [],
   }))
   const [presentSettingsOpen, setPresentSettingsOpen] = useState(false)
 
@@ -1116,26 +1127,130 @@ function SessionFormModal({
             {presentSettingsOpen ? (
               <div className="space-y-2 border-t border-slate-100 px-3 py-3">
                 {PRESENT_MODE_SETTING_OPTIONS.map((option) => (
-                  <label
-                    key={option.key}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-blue-100 bg-slate-50/80 px-3 py-2.5"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold text-slate-700">{option.label}</p>
-                      <p className="text-xs text-slate-500">{option.description}</p>
-                    </div>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(presentModeSettings[option.key])}
-                      onChange={(event) =>
-                        setPresentModeSettings((prev) => ({
-                          ...prev,
-                          [option.key]: event.target.checked,
-                        }))
-                      }
-                      className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
-                    />
-                  </label>
+                  <div key={option.key} className="space-y-2">
+                    <label className="flex items-center justify-between gap-3 rounded-xl border border-blue-100 bg-slate-50/80 px-3 py-2.5">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-700">{option.label}</p>
+                        <p className="text-xs text-slate-500">{option.description}</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(presentModeSettings[option.key])}
+                        onChange={(event) =>
+                          setPresentModeSettings((prev) => ({
+                            ...prev,
+                            [option.key]: event.target.checked,
+                          }))
+                        }
+                        className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
+                      />
+                    </label>
+                    {option.key === 'showCustomInstructions' &&
+                    presentModeSettings.showCustomInstructions ? (
+                      <div className="space-y-2 rounded-xl border border-blue-100 bg-white px-3 py-3">
+                        <p className="text-xs font-medium text-slate-500">
+                          Add numbered instructions for the lobby (max {MAX_CUSTOM_INSTRUCTIONS}).
+                        </p>
+                        {(presentModeSettings.customInstructions || []).map((text, index) => (
+                          <div key={`instruction-${index}`} className="flex items-start gap-2">
+                            <span className="mt-2 w-6 shrink-0 text-center text-sm font-semibold tabular-nums text-slate-500">
+                              {index + 1}.
+                            </span>
+                            <textarea
+                              value={text}
+                              rows={2}
+                              maxLength={MAX_CUSTOM_INSTRUCTION_LENGTH}
+                              onChange={(event) => {
+                                const value = event.target.value.slice(
+                                  0,
+                                  MAX_CUSTOM_INSTRUCTION_LENGTH,
+                                )
+                                setPresentModeSettings((prev) => {
+                                  const next = [...(prev.customInstructions || [])]
+                                  next[index] = value
+                                  return { ...prev, customInstructions: next }
+                                })
+                              }}
+                              placeholder="Instruction text"
+                              className="min-h-[2.5rem] flex-1 rounded-lg border border-blue-200/70 bg-slate-50/80 px-3 py-2 text-sm text-slate-800 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20"
+                            />
+                            <div className="flex shrink-0 flex-col gap-1 pt-0.5">
+                              <button
+                                type="button"
+                                disabled={index === 0}
+                                onClick={() =>
+                                  setPresentModeSettings((prev) => {
+                                    const next = [...(prev.customInstructions || [])]
+                                    if (index <= 0) return prev
+                                    ;[next[index - 1], next[index]] = [next[index], next[index - 1]]
+                                    return { ...prev, customInstructions: next }
+                                  })
+                                }
+                                className="rounded-lg border border-blue-200/70 p-1.5 text-slate-500 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                aria-label={`Move instruction ${index + 1} up`}
+                              >
+                                <ChevronUp className="size-3.5" aria-hidden />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={
+                                  index >= (presentModeSettings.customInstructions || []).length - 1
+                                }
+                                onClick={() =>
+                                  setPresentModeSettings((prev) => {
+                                    const next = [...(prev.customInstructions || [])]
+                                    if (index >= next.length - 1) return prev
+                                    ;[next[index], next[index + 1]] = [next[index + 1], next[index]]
+                                    return { ...prev, customInstructions: next }
+                                  })
+                                }
+                                className="rounded-lg border border-blue-200/70 p-1.5 text-slate-500 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                aria-label={`Move instruction ${index + 1} down`}
+                              >
+                                <ChevronDown className="size-3.5" aria-hidden />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setPresentModeSettings((prev) => ({
+                                    ...prev,
+                                    customInstructions: (prev.customInstructions || []).filter(
+                                      (_item, i) => i !== index,
+                                    ),
+                                  }))
+                                }
+                                className="rounded-lg border border-red-200/80 p-1.5 text-red-600 transition hover:bg-red-50"
+                                aria-label={`Remove instruction ${index + 1}`}
+                              >
+                                <Trash2 className="size-3.5" aria-hidden />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          disabled={
+                            (presentModeSettings.customInstructions || []).length >=
+                            MAX_CUSTOM_INSTRUCTIONS
+                          }
+                          onClick={() =>
+                            setPresentModeSettings((prev) => {
+                              const list = prev.customInstructions || []
+                              if (list.length >= MAX_CUSTOM_INSTRUCTIONS) return prev
+                              return {
+                                ...prev,
+                                customInstructions: [...list, ''],
+                              }
+                            })
+                          }
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200/70 bg-slate-50/80 px-3 py-2 text-sm font-semibold text-navy-800 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Plus className="size-4" aria-hidden />
+                          Add instruction
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
                 ))}
               </div>
             ) : null}
