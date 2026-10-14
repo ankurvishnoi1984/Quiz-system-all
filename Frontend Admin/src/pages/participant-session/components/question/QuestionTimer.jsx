@@ -14,6 +14,7 @@ export function QuestionTimer({
   variant = 'default',
   className = '',
   soundEnabled = true,
+  label = null,
   timerSoundKey,
   timerSoundUrl,
   timerEndingSoundKey,
@@ -45,7 +46,13 @@ export function QuestionTimer({
     submitted && timeLimit > 0
       ? circumference * Math.max(0, Math.min(1, submittedAtSeconds / limit))
       : null
-  const statusLabel = expired ? "Time's up" : 'Time left'
+  const statusLabel = label
+    ? expired
+      ? `${label} — time's up`
+      : label
+    : expired
+      ? "Time's up"
+      : 'Time left'
   const statusTone = expired || urgent
 
   const ring = (

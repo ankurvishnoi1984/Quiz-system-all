@@ -239,6 +239,12 @@ async function createSession({ deptId, input, user }) {
        input.participant_navigation_enabled && input.quiz_total_time_minutes != null
          ? Number(input.quiz_total_time_minutes)
          : null,
+     quiz_total_question_timers_enabled: Boolean(
+       input.participant_navigation_enabled &&
+         input.quiz_total_time_minutes != null &&
+         Number(input.quiz_total_time_minutes) > 0 &&
+         input.quiz_total_question_timers_enabled
+     ),
      random_question_order_enabled:
        input.participant_navigation_enabled && Boolean(input.random_question_order_enabled),
      builder_mode: input.builder_mode === "advanced" ? "advanced" : "normal",
@@ -372,6 +378,11 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
         show_question_leaderboard: source.show_question_leaderboard ?? false,
         participant_navigation_enabled: source.participant_navigation_enabled ?? true,
         quiz_total_time_minutes: source.quiz_total_time_minutes ?? null,
+        quiz_total_question_timers_enabled: Boolean(
+          source.quiz_total_time_minutes != null &&
+            Number(source.quiz_total_time_minutes) > 0 &&
+            source.quiz_total_question_timers_enabled
+        ),
         random_question_order_enabled: Boolean(source.random_question_order_enabled),
         builder_mode: source.builder_mode === "advanced" ? "advanced" : "normal",
         questions_per_participant:
@@ -565,6 +576,17 @@ async function updateSession({ sessionId, input, user }) {
         : Number(input.quiz_total_time_minutes);
   }
 
+  let nextQuizTotalQuestionTimersEnabled = Boolean(session.quiz_total_question_timers_enabled);
+  if (
+    !nextParticipantNavigationEnabled ||
+    nextQuizTotalTimeMinutes == null ||
+    !(Number(nextQuizTotalTimeMinutes) > 0)
+  ) {
+    nextQuizTotalQuestionTimersEnabled = false;
+  } else if (input.quiz_total_question_timers_enabled !== undefined) {
+    nextQuizTotalQuestionTimersEnabled = Boolean(input.quiz_total_question_timers_enabled);
+  }
+
   const nextRandomQuestionOrderEnabled = !nextParticipantNavigationEnabled
     ? false
     : input.random_question_order_enabled !== undefined
@@ -664,6 +686,7 @@ async function updateSession({ sessionId, input, user }) {
         ? Boolean(input.participant_navigation_enabled)
         : session.participant_navigation_enabled,
     quiz_total_time_minutes: nextQuizTotalTimeMinutes,
+    quiz_total_question_timers_enabled: nextQuizTotalQuestionTimersEnabled,
     random_question_order_enabled: nextRandomQuestionOrderEnabled,
     builder_mode: nextBuilderMode,
     questions_per_participant: nextQuestionsPerParticipant,

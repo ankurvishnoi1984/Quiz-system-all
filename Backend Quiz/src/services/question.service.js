@@ -14,6 +14,7 @@ const {
 } = require("../models");
 const {
   isSessionQuizTotalTimeEnabled,
+  isQuizTotalWithQuestionTimersEnabled,
   isSessionRandomQuestionOrderEnabled
 } = require("../utils/sessionFlags");
 const { validateCreateQuestionPayload } = require("../validators/question.validator");
@@ -354,32 +355,46 @@ async function importQuestions({ sessionId, questions, mode = "append", user }) 
           is_quiz_mode: isNonScored ? false : input.is_quiz_mode ?? false,
           points_value: isNonScored ? 0 : input.points_value || 10,
           time_limit_seconds:
-            isSurvey || isSessionQuizTotalTimeEnabled(validation.session)
+            isSurvey ||
+            (isSessionQuizTotalTimeEnabled(validation.session) &&
+              !isQuizTotalWithQuestionTimersEnabled(validation.session))
               ? null
               : input.time_limit_seconds || null,
           ...normalizeTimerSoundFields({
             time_limit_seconds:
-              isSurvey || isSessionQuizTotalTimeEnabled(validation.session)
+              isSurvey ||
+              (isSessionQuizTotalTimeEnabled(validation.session) &&
+                !isQuizTotalWithQuestionTimersEnabled(validation.session))
                 ? null
                 : input.time_limit_seconds || null,
             timer_sound_key:
-              isSurvey || isSessionQuizTotalTimeEnabled(validation.session)
+              isSurvey ||
+              (isSessionQuizTotalTimeEnabled(validation.session) &&
+                !isQuizTotalWithQuestionTimersEnabled(validation.session))
                 ? "classic"
                 : input.timer_sound_key,
             timer_sound_url:
-              isSurvey || isSessionQuizTotalTimeEnabled(validation.session)
+              isSurvey ||
+              (isSessionQuizTotalTimeEnabled(validation.session) &&
+                !isQuizTotalWithQuestionTimersEnabled(validation.session))
                 ? null
                 : input.timer_sound_url,
             timer_ending_sound_key:
-              isSurvey || isSessionQuizTotalTimeEnabled(validation.session)
+              isSurvey ||
+              (isSessionQuizTotalTimeEnabled(validation.session) &&
+                !isQuizTotalWithQuestionTimersEnabled(validation.session))
                 ? "classic"
                 : input.timer_ending_sound_key,
             timer_ending_sound_url:
-              isSurvey || isSessionQuizTotalTimeEnabled(validation.session)
+              isSurvey ||
+              (isSessionQuizTotalTimeEnabled(validation.session) &&
+                !isQuizTotalWithQuestionTimersEnabled(validation.session))
                 ? null
                 : input.timer_ending_sound_url,
             timer_sound_start_seconds:
-              isSurvey || isSessionQuizTotalTimeEnabled(validation.session)
+              isSurvey ||
+              (isSessionQuizTotalTimeEnabled(validation.session) &&
+                !isQuizTotalWithQuestionTimersEnabled(validation.session))
                 ? null
                 : input.timer_sound_start_seconds
           }),

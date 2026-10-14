@@ -155,7 +155,8 @@ function validateAutoEndFields(payload, { requireFuture = true } = {}) {
   return errors;
 }
 
-const QUIZ_TOTAL_TIME_MINUTES = [15, 30, 45, 60];
+const QUIZ_TOTAL_TIME_MIN_MINUTES = 1;
+const QUIZ_TOTAL_TIME_MAX_MINUTES = 180;
 
 function validateRandomQuestionOrder(payload) {
   if (
@@ -179,11 +180,41 @@ function validateQuizTotalTimeMinutes(payload) {
     return null;
   }
   const minutes = Number(payload.quiz_total_time_minutes);
-  if (!QUIZ_TOTAL_TIME_MINUTES.includes(minutes)) {
-    return "quiz_total_time_minutes must be 15, 30, 45, or 60";
+  if (
+    !Number.isFinite(minutes) ||
+    !Number.isInteger(minutes) ||
+    minutes < QUIZ_TOTAL_TIME_MIN_MINUTES ||
+    minutes > QUIZ_TOTAL_TIME_MAX_MINUTES
+  ) {
+    return `quiz_total_time_minutes must be an integer between ${QUIZ_TOTAL_TIME_MIN_MINUTES} and ${QUIZ_TOTAL_TIME_MAX_MINUTES}`;
   }
   if (payload.participant_navigation_enabled === false) {
     return "quiz_total_time_minutes requires multiple active questions";
+  }
+  return null;
+}
+
+function validateQuizTotalQuestionTimersEnabled(payload, { requireQuizTotalInPayload = false } = {}) {
+  if (
+    payload?.quiz_total_question_timers_enabled === undefined ||
+    payload?.quiz_total_question_timers_enabled === null
+  ) {
+    return null;
+  }
+  if (typeof payload.quiz_total_question_timers_enabled !== "boolean") {
+    return "quiz_total_question_timers_enabled must be a boolean";
+  }
+  if (!payload.quiz_total_question_timers_enabled) return null;
+  if (payload.participant_navigation_enabled === false) {
+    return "quiz_total_question_timers_enabled requires multiple active questions";
+  }
+  if (
+    requireQuizTotalInPayload ||
+    Object.prototype.hasOwnProperty.call(payload, "quiz_total_time_minutes")
+  ) {
+    if (payload?.quiz_total_time_minutes == null || payload?.quiz_total_time_minutes === "") {
+      return "quiz_total_question_timers_enabled requires quiz total time";
+    }
   }
   return null;
 }
@@ -337,6 +368,11 @@ function validateCreateSessionPayload(payload) {
   const quizTotalTimeError = validateQuizTotalTimeMinutes(payload);
   if (quizTotalTimeError) errors.push(quizTotalTimeError);
 
+  const quizTotalQuestionTimersError = validateQuizTotalQuestionTimersEnabled(payload, {
+    requireQuizTotalInPayload: true
+  });
+  if (quizTotalQuestionTimersError) errors.push(quizTotalQuestionTimersError);
+
   const randomOrderError = validateRandomQuestionOrder(payload);
   if (randomOrderError) errors.push(randomOrderError);
 
@@ -367,6 +403,7 @@ function validateUpdateSessionPayload(payload) {
     "show_question_leaderboard",
     "participant_navigation_enabled",
     "quiz_total_time_minutes",
+    "quiz_total_question_timers_enabled",
     "random_question_order_enabled",
     "join_type",
     "join_otp_required",
@@ -469,6 +506,9 @@ function validateUpdateSessionPayload(payload) {
 
   const quizTotalTimeError = validateQuizTotalTimeMinutes(payload);
   if (quizTotalTimeError) errors.push(quizTotalTimeError);
+
+  const quizTotalQuestionTimersError = validateQuizTotalQuestionTimersEnabled(payload);
+  if (quizTotalQuestionTimersError) errors.push(quizTotalQuestionTimersError);
 
   const randomOrderError = validateRandomQuestionOrder(payload);
   if (randomOrderError) errors.push(randomOrderError);

@@ -361,6 +361,12 @@ function isSessionQuizTotalTimeEnabled(sessionData) {
   )
 }
 
+function isQuizTotalWithQuestionTimersEnabled(sessionData) {
+  if (!isSessionQuizTotalTimeEnabled(sessionData)) return false
+  const value = sessionData?.quiz_total_question_timers_enabled
+  return value === true || value === 1 || value === '1'
+}
+
 function createTrueFalseOptions(correctIsTrue = true) {
   return [
     { id: uid('opt'), optionId: null, text: 'True', isCorrect: correctIsTrue },
@@ -1855,6 +1861,8 @@ function BuilderPage() {
   const isDraftSession = session?.rawStatus === 'draft'
   const isAdvancedBuilder = sessionQuery.data?.builder_mode === 'advanced'
   const sessionQuizTotalTimeEnabled = isSessionQuizTotalTimeEnabled(sessionQuery.data)
+  const quizTotalWithQuestionTimers = isQuizTotalWithQuestionTimersEnabled(sessionQuery.data)
+  const quizTotalOnlyMode = sessionQuizTotalTimeEnabled && !quizTotalWithQuestionTimers
   const sessionQuizTotalTimeMinutes = sessionQuizTotalTimeEnabled
     ? Number(sessionQuery.data?.quiz_total_time_minutes)
     : null
@@ -2004,7 +2012,7 @@ function BuilderPage() {
     }
     setSaveError('')
     setDirty(true)
-    let defaultTimeLimit = sessionQuizTotalTimeEnabled
+    let defaultTimeLimit = quizTotalOnlyMode
       ? 0
       : resolveDefaultTimeLimitForNewQuestion(questions, {
           advancedBuilder: isAdvancedBuilder,
@@ -2012,7 +2020,7 @@ function BuilderPage() {
     let defaultSounds = normalizeTimerSoundSettings({
       timeLimitSeconds: defaultTimeLimit,
     })
-    if (responseTimeScoringEnabled && type !== 'Survey') {
+    if (responseTimeScoringEnabled && type !== 'Survey' && !quizTotalOnlyMode) {
       const ref = questions.find((q) => q.type !== 'Survey')
       defaultTimeLimit =
         (ref && normalizeTimeLimitSeconds(ref.timeLimitSeconds)) || 30
@@ -2096,7 +2104,7 @@ function BuilderPage() {
       return
     }
 
-    let defaultTime = sessionQuizTotalTimeEnabled
+    let defaultTime = quizTotalOnlyMode
       ? 0
       : resolveDefaultTimeLimitForNewQuestion(questions, {
           advancedBuilder: isAdvancedBuilder,
@@ -2104,7 +2112,7 @@ function BuilderPage() {
     let defaultSoundsForGenerated = normalizeTimerSoundSettings({
       timeLimitSeconds: defaultTime,
     })
-    if (responseTimeScoringEnabled) {
+    if (responseTimeScoringEnabled && !quizTotalOnlyMode) {
       const ref = questions.find((q) => q.type !== 'Survey')
       defaultTime =
         (ref && normalizeTimeLimitSeconds(ref.timeLimitSeconds)) || 30
@@ -2864,26 +2872,29 @@ function BuilderPage() {
           ...buildQuestionMediaPayload(question.media),
           is_quiz_mode: isPoll || isSurvey || isEmojiReaction ? false : true,
           points_value: isPoll || isSurvey || isEmojiReaction ? 0 : Number(question.points || 0),
-          time_limit_seconds: isSurvey
+          time_limit_seconds: isSurvey || quizTotalOnlyMode
             ? null
-            : sessionQuizTotalTimeEnabled
+            : normalizeTimeLimitSeconds(question.timeLimitSeconds) || null,
+          timer_sound_key:
+            isSurvey || quizTotalOnlyMode
+              ? DEFAULT_TIMER_SOUND_KEY
+              : normalizeTimerSoundSettings(question).timerSoundKey,
+          timer_sound_url:
+            isSurvey || quizTotalOnlyMode
               ? null
-              : normalizeTimeLimitSeconds(question.timeLimitSeconds) || null,
-          timer_sound_key: isSurvey
-            ? DEFAULT_TIMER_SOUND_KEY
-            : normalizeTimerSoundSettings(question).timerSoundKey,
-          timer_sound_url: isSurvey
-            ? null
-            : normalizeTimerSoundSettings(question).timerSoundUrl,
-          timer_ending_sound_key: isSurvey
-            ? DEFAULT_TIMER_SOUND_KEY
-            : normalizeTimerSoundSettings(question).timerEndingSoundKey,
-          timer_ending_sound_url: isSurvey
-            ? null
-            : normalizeTimerSoundSettings(question).timerEndingSoundUrl,
-          timer_sound_start_seconds: isSurvey
-            ? null
-            : normalizeTimerSoundSettings(question).timerSoundStartSeconds,
+              : normalizeTimerSoundSettings(question).timerSoundUrl,
+          timer_ending_sound_key:
+            isSurvey || quizTotalOnlyMode
+              ? DEFAULT_TIMER_SOUND_KEY
+              : normalizeTimerSoundSettings(question).timerEndingSoundKey,
+          timer_ending_sound_url:
+            isSurvey || quizTotalOnlyMode
+              ? null
+              : normalizeTimerSoundSettings(question).timerEndingSoundUrl,
+          timer_sound_start_seconds:
+            isSurvey || quizTotalOnlyMode
+              ? null
+              : normalizeTimerSoundSettings(question).timerSoundStartSeconds,
           allow_multiple_select:
             isSurvey && (surveySubType === 'MCQ' || surveySubType === 'Poll')
               ? Boolean(question.allowMultipleSelect)
@@ -3860,17 +3871,29 @@ function BuilderPage() {
                 disabled={!isDraftSession}
               />
 
-              {selected.type !== 'Survey' && sessionQuizTotalTimeEnabled ? (
+              {selected.type !== 'Survey' && quizTotalOnlyMode ? (
                 <div className="rounded-2xl border border-sky-200/70 bg-sky-50/80 p-4">
                   <p className="text-sm font-semibold text-sky-950">Session quiz total time</p>
                   <p className="mt-1 text-xs text-sky-900/80">
                     This session uses a {sessionQuizTotalTimeMinutes}-minute quiz window. Per-question
-                    time limits are disabled while quiz total time is enabled.
+                    time limits are off. Turn on “Apply both quiz total time and question timer” in
+                    session settings to set question timers too.
                   </p>
                 </div>
               ) : null}
 
-              {selected.type !== 'Survey' && !sessionQuizTotalTimeEnabled ? (
+              {selected.type !== 'Survey' && quizTotalWithQuestionTimers ? (
+                <div className="rounded-2xl border border-sky-200/70 bg-sky-50/80 p-4">
+                  <p className="text-sm font-semibold text-sky-950">Quiz total + question timers</p>
+                  <p className="mt-1 text-xs text-sky-900/80">
+                    This session has a {sessionQuizTotalTimeMinutes}-minute quiz window. You can set a
+                    per-question time limit — participants see both timers. Question audio follows each
+                    question&apos;s timer config.
+                  </p>
+                </div>
+              ) : null}
+
+              {selected.type !== 'Survey' && !quizTotalOnlyMode ? (
               <div className="rounded-2xl border border-blue-200/70 bg-white/70 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
@@ -3882,6 +3905,8 @@ function BuilderPage() {
                           ? 'All questions are untimed — changing this applies to every question.'
                           : isAdvancedBuilder
                             ? 'Per-question timing — adjust individually or turn off for specific questions. Use the sidebar to set the whole pool at once.'
+                            : quizTotalWithQuestionTimers
+                              ? 'Per-question timing runs alongside the quiz total timer. Leave Off to use only the quiz window for this question.'
                             : 'Per-question timing — adjust individually or turn off for specific questions.'}
                     </p>
                   </div>
@@ -4073,13 +4098,15 @@ function BuilderPage() {
                 <div>
                   <p className="text-sm font-semibold text-slate-700">Time limit (all pool questions)</p>
                   <p className="mt-0.5 text-[11px] text-slate-500">
-                    {responseTimeScoringEnabled
+                    {quizTotalOnlyMode
+                      ? 'Disabled while quiz total time is on without the “both timers” session setting.'
+                      : responseTimeScoringEnabled
                       ? 'Shared with every question while score bands are on (timer audio stays in sync too).'
                       : 'Participants see a countdown per question. Required for time-band scoring to matter.'}
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <select
-                      disabled={!isDraftSession || sessionQuizTotalTimeEnabled}
+                      disabled={!isDraftSession || quizTotalOnlyMode}
                       value={
                         questions.length &&
                         questions.every(

@@ -13,6 +13,12 @@ function isSessionQuizTotalTimeEnabled(session) {
   );
 }
 
+/** Quiz total time on AND host opted into per-question timers alongside it. */
+function isQuizTotalWithQuestionTimersEnabled(session) {
+  if (!isSessionQuizTotalTimeEnabled(session)) return false;
+  return flagEnabled(session?.quiz_total_question_timers_enabled);
+}
+
 /** DB/Sequelize may return 0/1 or a Buffer; never treat a Buffer as automatically true. */
 function flagEnabled(value) {
   if (value === true || value === 1 || value === "1") return true;
@@ -60,8 +66,10 @@ function isTimedQuestionExpired(question, now = Date.now()) {
 /**
  * Multi-question navigation + timed: block new joins once the first timed question's
  * host window has expired (participant missed the session start).
+ * Quiz-total sessions use personal clocks — never block late joins on host windows.
  */
 function isMultiNavTimedJoinClosed(session, questions = []) {
+  if (isSessionQuizTotalTimeEnabled(session)) return false;
   if (!participantNavigationEnabled(session?.participant_navigation_enabled)) return false;
   if (!sessionHasTimedQuestions(questions)) return false;
 
@@ -115,6 +123,7 @@ module.exports = {
   participantNavigationEnabled,
   sessionFlagEnabled: flagEnabled,
   isSessionQuizTotalTimeEnabled,
+  isQuizTotalWithQuestionTimersEnabled,
   isSessionRandomQuestionOrderEnabled,
   sessionHasTimedQuestions,
   isStrictLateJoinSession,

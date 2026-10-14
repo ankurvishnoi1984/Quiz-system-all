@@ -37,7 +37,26 @@ import {
 } from '../../utils/joinAllowlist'
 import { downloadJoinAllowlistSample } from '../../utils/joinAllowlistSample'
 
-const QUIZ_TOTAL_TIME_MINUTES = [15, 30, 45, 60]
+const QUIZ_TOTAL_TIME_PRESETS = [15, 30, 45, 60]
+const QUIZ_TOTAL_TIME_MIN_MINUTES = 1
+const QUIZ_TOTAL_TIME_MAX_MINUTES = 180
+
+function normalizeQuizTotalTimeMinutes(value, fallback = 30) {
+  const n = Number(value)
+  if (
+    Number.isFinite(n) &&
+    Number.isInteger(n) &&
+    n >= QUIZ_TOTAL_TIME_MIN_MINUTES &&
+    n <= QUIZ_TOTAL_TIME_MAX_MINUTES
+  ) {
+    return n
+  }
+  return fallback
+}
+
+function quizTotalTimeModeFromMinutes(minutes) {
+  return QUIZ_TOTAL_TIME_PRESETS.includes(Number(minutes)) ? String(minutes) : 'custom'
+}
 const LOGO_ACCEPT = QUESTION_MEDIA_SUPPORTED_IMAGE_TYPES.join(',')
 const LOGO_MAX_BYTES = 5 * 1024 * 1024
 const ALLOWLIST_FILE_ACCEPT =
@@ -95,6 +114,7 @@ const defaultInitial = {
   randomQuestionOrder: false,
   quizTotalTimeEnabled: false,
   quizTotalTimeMinutes: 30,
+  quizTotalQuestionTimersEnabled: false,
   overallLeaderboard: false,
   showParticipantCount: false,
   logoUrl: '',
@@ -151,7 +171,18 @@ function SessionFormModal({
   const [enableNavigation, setEnableNavigation] = useState(defaultInitial.enableNavigation)
   const [randomQuestionOrder, setRandomQuestionOrder] = useState(defaultInitial.randomQuestionOrder)
   const [quizTotalTimeEnabled, setQuizTotalTimeEnabled] = useState(defaultInitial.quizTotalTimeEnabled)
-  const [quizTotalTimeMinutes, setQuizTotalTimeMinutes] = useState(defaultInitial.quizTotalTimeMinutes)
+  const [quizTotalTimeMinutes, setQuizTotalTimeMinutes] = useState(() =>
+    normalizeQuizTotalTimeMinutes(defaultInitial.quizTotalTimeMinutes),
+  )
+  const [quizTotalTimeMode, setQuizTotalTimeMode] = useState(() =>
+    quizTotalTimeModeFromMinutes(defaultInitial.quizTotalTimeMinutes),
+  )
+  const [customQuizTotalTimeMinutes, setCustomQuizTotalTimeMinutes] = useState(() =>
+    normalizeQuizTotalTimeMinutes(defaultInitial.quizTotalTimeMinutes, 20),
+  )
+  const [quizTotalQuestionTimersEnabled, setQuizTotalQuestionTimersEnabled] = useState(
+    Boolean(defaultInitial.quizTotalQuestionTimersEnabled),
+  )
   const [overallLeaderboard, setOverallLeaderboard] = useState(defaultInitial.overallLeaderboard)
   const [showParticipantCount, setShowParticipantCount] = useState(
     defaultInitial.showParticipantCount,
@@ -225,10 +256,17 @@ function SessionFormModal({
     setEnableNavigation(Boolean(initialValues.enableNavigation))
     setRandomQuestionOrder(Boolean(initialValues.randomQuestionOrder))
     setQuizTotalTimeEnabled(Boolean(initialValues.quizTotalTimeEnabled))
-    setQuizTotalTimeMinutes(
-      QUIZ_TOTAL_TIME_MINUTES.includes(Number(initialValues.quizTotalTimeMinutes))
-        ? Number(initialValues.quizTotalTimeMinutes)
-        : 30,
+    {
+      const minutes = normalizeQuizTotalTimeMinutes(initialValues.quizTotalTimeMinutes)
+      setQuizTotalTimeMinutes(minutes)
+      setQuizTotalTimeMode(quizTotalTimeModeFromMinutes(minutes))
+      setCustomQuizTotalTimeMinutes(
+        QUIZ_TOTAL_TIME_PRESETS.includes(minutes) ? 20 : minutes,
+      )
+    }
+    setQuizTotalQuestionTimersEnabled(
+      Boolean(initialValues.quizTotalTimeEnabled) &&
+        Boolean(initialValues.quizTotalQuestionTimersEnabled),
     )
     setOverallLeaderboard(initialValues.overallLeaderboard === true)
     setShowParticipantCount(initialValues.showParticipantCount === true)
@@ -271,6 +309,7 @@ function SessionFormModal({
     setEnableNavigation(enabled)
     if (!enabled) {
       setQuizTotalTimeEnabled(false)
+      setQuizTotalQuestionTimersEnabled(false)
       setRandomQuestionOrder(false)
     }
   }
@@ -469,7 +508,12 @@ function SessionFormModal({
       enableNavigation: builderMode === 'advanced' ? true : enableNavigation,
       randomQuestionOrder: enableNavigation && randomQuestionOrder,
       quizTotalTimeEnabled: enableNavigation && quizTotalTimeEnabled,
-      quizTotalTimeMinutes: enableNavigation && quizTotalTimeEnabled ? quizTotalTimeMinutes : null,
+      quizTotalTimeMinutes:
+        enableNavigation && quizTotalTimeEnabled
+          ? normalizeQuizTotalTimeMinutes(quizTotalTimeMinutes)
+          : null,
+      quizTotalQuestionTimersEnabled:
+        enableNavigation && quizTotalTimeEnabled && quizTotalQuestionTimersEnabled,
       overallLeaderboard,
       showParticipantCount,
       autoEndEnabled: !liveSettingsOnly && autoEndEnabled,
@@ -957,7 +1001,11 @@ function SessionFormModal({
                     <select
                       id="quiz-total-time"
                       value={quizTotalTimeEnabled ? 'yes' : 'no'}
-                      onChange={(e) => setQuizTotalTimeEnabled(e.target.value === 'yes')}
+                      onChange={(e) => {
+                        const enabled = e.target.value === 'yes'
+                        setQuizTotalTimeEnabled(enabled)
+                        if (!enabled) setQuizTotalQuestionTimersEnabled(false)
+                      }}
                       className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
                     >
                       <option value="no">No</option>
@@ -965,29 +1013,109 @@ function SessionFormModal({
                     </select>
                     <p className="mt-1 text-xs text-slate-500">
                       Limit how long participants have to complete the full quiz in multiple-question
-                      mode.
+                      mode. Question timers stay off unless you enable both below.
                     </p>
                   </div>
                   {quizTotalTimeEnabled ? (
-                    <div className="md:col-span-2">
-                      <label
-                        className="text-sm font-semibold text-slate-700"
-                        htmlFor="quiz-total-duration"
-                      >
-                        Total quiz duration
+                    <div className="md:col-span-2 space-y-3">
+                      <label className="flex items-start justify-between gap-3 rounded-xl border border-blue-100 bg-slate-50/80 px-3 py-2.5">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-700">
+                            Apply both quiz total time and question timer
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            When on, the question builder can set per-question time limits and
+                            participants see both the quiz clock and each question clock.
+                          </p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={quizTotalQuestionTimersEnabled}
+                          onChange={(e) => setQuizTotalQuestionTimersEnabled(e.target.checked)}
+                          className="mt-0.5 h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
+                        />
                       </label>
-                      <select
-                        id="quiz-total-duration"
-                        value={String(quizTotalTimeMinutes)}
-                        onChange={(e) => setQuizTotalTimeMinutes(Number(e.target.value))}
-                        className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
-                      >
-                        {QUIZ_TOTAL_TIME_MINUTES.map((minutes) => (
-                          <option key={minutes} value={minutes}>
-                            {minutes} minutes
-                          </option>
-                        ))}
-                      </select>
+                      <div>
+                        <label
+                          className="text-sm font-semibold text-slate-700"
+                          htmlFor="quiz-total-duration"
+                        >
+                          Total quiz duration
+                        </label>
+                        <select
+                          id="quiz-total-duration"
+                          value={quizTotalTimeMode}
+                          onChange={(e) => {
+                            const mode = e.target.value
+                            setQuizTotalTimeMode(mode)
+                            if (mode === 'custom') {
+                              const custom = normalizeQuizTotalTimeMinutes(
+                                customQuizTotalTimeMinutes,
+                                20,
+                              )
+                              setCustomQuizTotalTimeMinutes(custom)
+                              setQuizTotalTimeMinutes(custom)
+                              return
+                            }
+                            setQuizTotalTimeMinutes(Number(mode))
+                          }}
+                          className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+                        >
+                          {QUIZ_TOTAL_TIME_PRESETS.map((minutes) => (
+                            <option key={minutes} value={minutes}>
+                              {minutes} minutes
+                            </option>
+                          ))}
+                          <option value="custom">Custom</option>
+                        </select>
+                      </div>
+                      {quizTotalTimeMode === 'custom' ? (
+                        <div>
+                          <label
+                            className="text-sm font-semibold text-slate-700"
+                            htmlFor="quiz-total-duration-custom"
+                          >
+                            Custom duration (minutes)
+                          </label>
+                          <input
+                            id="quiz-total-duration-custom"
+                            type="number"
+                            min={QUIZ_TOTAL_TIME_MIN_MINUTES}
+                            max={QUIZ_TOTAL_TIME_MAX_MINUTES}
+                            step={1}
+                            value={customQuizTotalTimeMinutes}
+                            onChange={(e) => {
+                              const raw = e.target.value
+                              if (raw === '') {
+                                setCustomQuizTotalTimeMinutes('')
+                                return
+                              }
+                              const next = Math.floor(Number(raw))
+                              if (!Number.isFinite(next)) return
+                              setCustomQuizTotalTimeMinutes(next)
+                              if (
+                                next >= QUIZ_TOTAL_TIME_MIN_MINUTES &&
+                                next <= QUIZ_TOTAL_TIME_MAX_MINUTES
+                              ) {
+                                setQuizTotalTimeMinutes(next)
+                              }
+                            }}
+                            onBlur={() => {
+                              const next = normalizeQuizTotalTimeMinutes(
+                                customQuizTotalTimeMinutes,
+                                20,
+                              )
+                              setCustomQuizTotalTimeMinutes(next)
+                              setQuizTotalTimeMinutes(next)
+                            }}
+                            className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+                          />
+                          <p className="mt-1 text-xs text-slate-500">
+                            Enter a whole number from {QUIZ_TOTAL_TIME_MIN_MINUTES} to{' '}
+                            {QUIZ_TOTAL_TIME_MAX_MINUTES} minutes.
+                          </p>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                   <div className="md:col-span-2">

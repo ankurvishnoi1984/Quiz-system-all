@@ -518,6 +518,10 @@ function DashboardPage() {
           values.enableNavigation && values.quizTotalTimeEnabled
             ? Number(values.quizTotalTimeMinutes)
             : null,
+        quiz_total_question_timers_enabled:
+          values.enableNavigation &&
+          values.quizTotalTimeEnabled &&
+          Boolean(values.quizTotalQuestionTimersEnabled),
         join_type: values.joinRequirement || 'name',
         join_otp_required:
           values.joinRequirement === 'name_email' ||
@@ -600,6 +604,9 @@ function DashboardPage() {
         editSession.quiz_total_time_minutes != null &&
         Number(editSession.quiz_total_time_minutes) > 0,
       quizTotalTimeMinutes: Number(editSession.quiz_total_time_minutes) || 30,
+      quizTotalQuestionTimersEnabled: Boolean(
+        editSession.quiz_total_question_timers_enabled,
+      ),
       overallLeaderboard: Boolean(editSession.leaderboard_enabled),
       showParticipantCount: Boolean(editSession.show_participant_count),
       autoEndEnabled: Boolean(editSession.auto_end_enabled),
@@ -673,6 +680,10 @@ function DashboardPage() {
           values.enableNavigation && values.quizTotalTimeEnabled
             ? Number(values.quizTotalTimeMinutes)
             : null,
+        quiz_total_question_timers_enabled:
+          values.enableNavigation &&
+          values.quizTotalTimeEnabled &&
+          Boolean(values.quizTotalQuestionTimersEnabled),
         join_type: values.joinRequirement || 'name',
         join_otp_required:
           values.joinRequirement === 'name_email' ||

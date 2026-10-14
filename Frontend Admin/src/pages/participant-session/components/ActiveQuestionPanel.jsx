@@ -24,6 +24,8 @@ export function ActiveQuestionPanel({
   questionSerialNumber = null,
   questionSerialTotal = null,
   hasCountdown,
+  hasQuestionCountdown = false,
+  hasQuizCountdown = false,
   canGoToNextQuestion,
   inputsLocked,
   wordCloudInputsLocked = false,
@@ -32,7 +34,12 @@ export function ActiveQuestionPanel({
   hasAnyQuestionSaved,
   timeLimit,
   timer,
+  questionTimer = null,
+  questionTimeLimit = 0,
+  quizTimer = null,
+  quizTimeLimit = 0,
   submittedAtSeconds,
+  questionSubmittedAtSeconds = null,
   currentResponse,
   answerRevealMeta,
   hasSubmittedQuestion,
@@ -131,18 +138,26 @@ export function ActiveQuestionPanel({
                 : 'Quiz timer: use Previous and Next to review your answers.'}
           </p>
         )}
-        {hasCountdown && !sessionQuizTotalTimeEnabled && !canGoToNextQuestion && (
+        {hasQuestionCountdown && !canGoToNextQuestion && (
           <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
-            Answer this question or wait for the timer to use Next.
+            Answer this question or wait for the question timer to use Next.
           </p>
         )}
-        {hasCountdown && !sessionQuizTotalTimeEnabled && canGoToNextQuestion && inputsLocked && canShowPreviousQuestion && (
+        {hasQuestionCountdown &&
+          canGoToNextQuestion &&
+          inputsLocked &&
+          canShowPreviousQuestion &&
+          !sessionQuizTotalTimeEnabled && (
           <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
             Timed: use Previous and Next to browse; answers cannot be changed after submit or when
             time runs out.
           </p>
         )}
-        {hasCountdown && !sessionQuizTotalTimeEnabled && canGoToNextQuestion && inputsLocked && !canShowPreviousQuestion && (
+        {hasQuestionCountdown &&
+          canGoToNextQuestion &&
+          inputsLocked &&
+          !canShowPreviousQuestion &&
+          !sessionQuizTotalTimeEnabled && (
           <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
             Submit the latest active question before you can use Previous.
           </p>
@@ -187,17 +202,41 @@ export function ActiveQuestionPanel({
 
       <QuestionMedia media={question.media} maxHeightClass={density.mediaMaxHeightClass} />
 
-      {hasCountdown && !question.isSurvey && (
-        <QuestionTimer
-          timer={timer}
-          timeLimit={timeLimit}
-          submittedAtSeconds={submittedAtSeconds}
-          timerSoundKey={question.timerSoundKey}
-          timerSoundUrl={question.timerSoundUrl}
-          timerEndingSoundKey={question.timerEndingSoundKey}
-          timerEndingSoundUrl={question.timerEndingSoundUrl}
-          timerSoundStartSeconds={question.timerSoundStartSeconds}
-        />
+      {(hasQuizCountdown || (hasQuestionCountdown && !question.isSurvey)) && (
+        <div
+          className={
+            hasQuizCountdown && hasQuestionCountdown && !question.isSurvey
+              ? 'grid gap-2 sm:grid-cols-2'
+              : undefined
+          }
+        >
+          {hasQuizCountdown ? (
+            <QuestionTimer
+              label="Quiz time"
+              timer={quizTimer ?? timer}
+              timeLimit={quizTimeLimit || timeLimit}
+              submittedAtSeconds={
+                hasQuestionCountdown && !question.isSurvey ? null : submittedAtSeconds
+              }
+              soundEnabled={false}
+              variant={hasQuestionCountdown && !question.isSurvey ? 'compact' : 'default'}
+            />
+          ) : null}
+          {hasQuestionCountdown && !question.isSurvey ? (
+            <QuestionTimer
+              label={hasQuizCountdown ? 'Question time' : null}
+              timer={questionTimer ?? timer}
+              timeLimit={questionTimeLimit || timeLimit}
+              submittedAtSeconds={questionSubmittedAtSeconds ?? submittedAtSeconds}
+              timerSoundKey={question.timerSoundKey}
+              timerSoundUrl={question.timerSoundUrl}
+              timerEndingSoundKey={question.timerEndingSoundKey}
+              timerEndingSoundUrl={question.timerEndingSoundUrl}
+              timerSoundStartSeconds={question.timerSoundStartSeconds}
+              variant={hasQuizCountdown ? 'compact' : 'default'}
+            />
+          ) : null}
+        </div>
       )}
 
       {(question.type === 'MCQ' || question.type === 'Poll') && question.allowMultipleSelect && (
@@ -333,26 +372,26 @@ export function ActiveQuestionPanel({
               sessionEnded ||
               isSubmitting ||
               (useNextNav
-                ? hasCountdown && !canGoToNextQuestion
+                ? hasQuestionCountdown && !canGoToNextQuestion
                 : (submissionsClosed && !question?.openForReattempt) ||
                   (allQuestionsClosedByHost && !question?.openForReattempt) ||
                   inputsLocked ||
                   !hasFinalizePayload ||
-                  (hasCountdown && !canGoToNextQuestion))
+                  (hasQuestionCountdown && !canGoToNextQuestion))
             }
             title={
               sessionEnded
                 ? 'Session has ended'
                 : useNextNav
-                  ? hasCountdown && !canGoToNextQuestion
-                    ? 'Answer this question or wait for the timer'
+                  ? hasQuestionCountdown && !canGoToNextQuestion
+                    ? 'Answer this question or wait for the question timer'
                     : undefined
                   : allQuestionsClosedByHost && !question?.openForReattempt
                     ? 'All questions are closed by the host'
                     : submissionsClosed && !question?.openForReattempt
                       ? 'This question was closed by the host'
-                      : hasCountdown && !canGoToNextQuestion
-                        ? 'Answer this question or wait for the timer'
+                      : hasQuestionCountdown && !canGoToNextQuestion
+                        ? 'Answer this question or wait for the question timer'
                         : !hasFinalizePayload
                           ? 'Answer this question before submitting'
                           : undefined

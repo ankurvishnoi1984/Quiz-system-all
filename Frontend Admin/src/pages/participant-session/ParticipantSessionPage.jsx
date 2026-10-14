@@ -44,7 +44,14 @@ import {
   playSubmitSuccess,
   unlockTimerAudio,
 } from '../../utils/timerSounds'
-import { isAdvancedBuilderSession, isSessionQuizTotalTimeEnabled, isSessionRandomQuestionOrderEnabled, isStrictLateJoinSession, sessionHasTimedQuestions } from '../../utils/sessionFlags'
+import {
+  isAdvancedBuilderSession,
+  isQuizTotalWithQuestionTimersEnabled,
+  isSessionQuizTotalTimeEnabled,
+  isSessionRandomQuestionOrderEnabled,
+  isStrictLateJoinSession,
+  sessionHasTimedQuestions,
+} from '../../utils/sessionFlags'
 import {
   buildParticipantThemeStyle,
   normalizeCustomThemeColors,
@@ -449,6 +456,10 @@ function ParticipantSessionPage({ embed = false }) {
     () => isSessionQuizTotalTimeEnabled(session),
     [session],
   )
+  const quizTotalWithQuestionTimers = useMemo(
+    () => isQuizTotalWithQuestionTimersEnabled(session),
+    [session],
+  )
   const sessionQuizTotalTimeSeconds = sessionQuizTotalTimeEnabled
     ? Math.max(0, Number(session?.quiz_total_time_minutes) || 0) * 60
     : 0
@@ -557,31 +568,63 @@ function ParticipantSessionPage({ embed = false }) {
     participantToken,
   })
   const timeLimit = question?.timeLimit ?? 0
-  const hasCountdown = sessionQuizTotalTimeEnabled || Number(timeLimit) > 0
-  const displayTimeLimit = sessionQuizTotalTimeEnabled ? sessionQuizTotalTimeSeconds : timeLimit
+  // Quiz-total-only sessions ignore per-question limits even if left in the DB.
+  const hasQuestionCountdown =
+    Number(timeLimit) > 0 &&
+    question?.type !== 'Survey' &&
+    (!sessionQuizTotalTimeEnabled || quizTotalWithQuestionTimers)
+  const hasQuizCountdown = sessionQuizTotalTimeEnabled
+  const hasCountdown = hasQuestionCountdown || hasQuizCountdown
   const questionLockedBySubmission = Boolean((quizSubmittedQuestionIds || {})[String(question?.id)])
   const dbSessionId = session?.session_id
 
   const questionCountdown = question?.id
     ? (quizCountdownByQuestion || {})[String(question.id)]
     : null
-  const countdownEndsAt = sessionQuizTotalTimeEnabled
-    ? quizSessionCountdown?.endsAt ?? null
-    : questionCountdown?.endsAt ?? null
-  const countdownFrozen = sessionQuizTotalTimeEnabled
-    ? quizSessionCountdown?.frozen ?? null
-    : questionCountdown?.frozen ?? null
+  const questionCountdownEndsAt = questionCountdown?.endsAt ?? null
+  const questionCountdownFrozen = questionCountdown?.frozen ?? null
+  const quizCountdownEndsAt = quizSessionCountdown?.endsAt ?? null
+  const quizCountdownFrozen = quizSessionCountdown?.frozen ?? null
 
-  const timer = useMemo(() => {
-    if (isSessionEnded && hasCountdown) {
-      if (countdownFrozen != null) return countdownFrozen
+  const questionTimer = useMemo(() => {
+    if (!hasQuestionCountdown) return 0
+    if (isSessionEnded) {
+      if (questionCountdownFrozen != null) return questionCountdownFrozen
       return 0
     }
-    if (!hasCountdown || !countdownEndsAt) return 0
-    return getRemainingQuestionSeconds(countdownEndsAt)
-  }, [isSessionEnded, hasCountdown, countdownFrozen, countdownEndsAt, countdownTick])
+    if (!questionCountdownEndsAt) return 0
+    return getRemainingQuestionSeconds(questionCountdownEndsAt)
+  }, [
+    isSessionEnded,
+    hasQuestionCountdown,
+    questionCountdownFrozen,
+    questionCountdownEndsAt,
+    countdownTick,
+  ])
 
-  const sessionTimerExpired = sessionQuizTotalTimeEnabled && hasCountdown && timer === 0
+  const quizTimer = useMemo(() => {
+    if (!hasQuizCountdown) return 0
+    if (isSessionEnded) {
+      if (quizCountdownFrozen != null) return quizCountdownFrozen
+      return 0
+    }
+    if (!quizCountdownEndsAt) return 0
+    return getRemainingQuestionSeconds(quizCountdownEndsAt)
+  }, [
+    isSessionEnded,
+    hasQuizCountdown,
+    quizCountdownFrozen,
+    quizCountdownEndsAt,
+    countdownTick,
+  ])
+
+  // Backward-compatible single timer for callers that still expect one clock.
+  const timer = hasQuizCountdown && !hasQuestionCountdown ? quizTimer : questionTimer
+  const displayTimeLimit = hasQuizCountdown && !hasQuestionCountdown
+    ? sessionQuizTotalTimeSeconds
+    : timeLimit
+
+  const sessionTimerExpired = hasQuizCountdown && quizTimer === 0
 
   const canEditResponses = useMemo(
     () =>
@@ -596,13 +639,16 @@ function ParticipantSessionPage({ embed = false }) {
     ],
   )
 
-  const submittedAtSeconds =
-    countdownFrozen != null &&
-    (sessionQuizTotalTimeEnabled
-      ? lastQuestionFinalized
-      : questionLockedBySubmission)
-      ? Math.max(0, Number(displayTimeLimit) - Number(countdownFrozen))
+  const questionSubmittedAtSeconds =
+    questionCountdownFrozen != null && questionLockedBySubmission
+      ? Math.max(0, Number(timeLimit) - Number(questionCountdownFrozen))
       : null
+  const submittedAtSeconds =
+    hasQuizCountdown && !hasQuestionCountdown
+      ? quizCountdownFrozen != null && lastQuestionFinalized
+        ? Math.max(0, Number(sessionQuizTotalTimeSeconds) - Number(quizCountdownFrozen))
+        : null
+      : questionSubmittedAtSeconds
 
   const submissionsClosed = Boolean(question?.submissionsClosed)
   const openForReattempt = Boolean(question?.openForReattempt)
@@ -614,9 +660,7 @@ function ParticipantSessionPage({ embed = false }) {
     lastQuestionFinalized ||
     (sessionQuizTotalTimeEnabled && sessionTimerExpired) ||
     (question?.type === 'Emoji Reaction' && questionLockedBySubmission) ||
-    (!sessionQuizTotalTimeEnabled &&
-      hasCountdown &&
-      (questionLockedBySubmission || timer === 0))
+    (hasQuestionCountdown && (questionLockedBySubmission || questionTimer === 0))
 
   const wordCloudInputsLocked = useMemo(
     () =>
@@ -1637,16 +1681,16 @@ function ParticipantSessionPage({ embed = false }) {
   )
 
   const canGoToNextQuestion = useMemo(() => {
-    if (sessionQuizTotalTimeEnabled) return true
-    if (!hasCountdown) return true
+    if (sessionTimerExpired) return true
+    if (!hasQuestionCountdown) return true
     if (questionLockedBySubmission) return true
-    if (timer === 0) return true
+    if (questionTimer === 0) return true
     return currentQuestionAnswered
   }, [
-    sessionQuizTotalTimeEnabled,
-    hasCountdown,
+    sessionTimerExpired,
+    hasQuestionCountdown,
     questionLockedBySubmission,
-    timer,
+    questionTimer,
     currentQuestionAnswered,
   ])
 
@@ -1655,8 +1699,8 @@ function ParticipantSessionPage({ embed = false }) {
       if (!navigationEnabled || !activeQuestions.length) return
       const n = clamp(nextIndex, 0, activeQuestions.length - 1)
       if (
-        !sessionQuizTotalTimeEnabled &&
-        hasCountdown &&
+        hasQuestionCountdown &&
+        !sessionTimerExpired &&
         n > displayQuestionIndex &&
         !canGoToNextQuestion
       ) {
@@ -1667,8 +1711,8 @@ function ParticipantSessionPage({ embed = false }) {
     },
     [
       activeQuestions.length,
-      sessionQuizTotalTimeEnabled,
-      hasCountdown,
+      hasQuestionCountdown,
+      sessionTimerExpired,
       displayQuestionIndex,
       canGoToNextQuestion,
       navigationEnabled,
@@ -1708,9 +1752,7 @@ function ParticipantSessionPage({ embed = false }) {
   useEffect(() => {
     if (isSessionEnded) return
     if (step !== 'active' || !question?.id) return
-    if (sessionQuizTotalTimeEnabled) return
-    if (!hasCountdown) {
-      setQuizCountdown({ questionId: null, endsAt: null })
+    if (!hasQuestionCountdown) {
       return
     }
     const qid = question.id
@@ -1728,6 +1770,7 @@ function ParticipantSessionPage({ embed = false }) {
     }
     const hostDeadline = getQuestionDeadlineMs(question)
     // Strict late join: resync sticky early/fallback endsAt to the host deadline once known.
+    // Quiz-total dual mode uses personal question clocks (strictLateJoin is already false).
     if (
       strictLateJoin &&
       hostDeadline != null &&
@@ -1751,7 +1794,7 @@ function ParticipantSessionPage({ embed = false }) {
     isSessionEnded,
     step,
     question,
-    hasCountdown,
+    hasQuestionCountdown,
     timeLimit,
     strictLateJoin,
     setQuizCountdown,
@@ -1990,7 +2033,6 @@ function ParticipantSessionPage({ embed = false }) {
     if (!payloads.length || !participantToken) return false
 
     setIsSubmitting(true)
-    const hadCountdown = hasCountdown
     try {
       await Promise.all(payloads.map((p) => submitResponseApi(participantToken, p)))
       const submittedIds = payloads.map((p) => p.question_id)
@@ -2003,12 +2045,11 @@ function ParticipantSessionPage({ embed = false }) {
       ) {
         markQuestionsExplicitlySubmitted([sessionLastQuestionId])
       }
-      if (hadCountdown && !sessionQuizTotalTimeEnabled && question?.id) {
+      if (hasQuestionCountdown && question?.id) {
         freezeCountdownAfterSubmit(question.id)
       }
       if (
-        hadCountdown &&
-        sessionQuizTotalTimeEnabled &&
+        hasQuizCountdown &&
         navigationEnabled &&
         sessionLastQuestionId != null &&
         question?.id != null &&
@@ -2159,9 +2200,10 @@ function ParticipantSessionPage({ embed = false }) {
   useEffect(() => {
     if (isSessionEnded) return
     if (step !== 'active') return
-    if (!hasCountdown) return
-    if (timer > 0) return
-    if (sessionQuizTotalTimeEnabled) return
+    if (!hasQuestionCountdown) return
+    // Quiz total expiry wins: lock all, no auto-advance / auto-submit.
+    if (sessionTimerExpired) return
+    if (questionTimer > 0) return
     if (questionLockedBySubmission) return
 
     const qid = question?.id
@@ -2204,15 +2246,15 @@ function ParticipantSessionPage({ embed = false }) {
   }, [
     isSessionEnded,
     navigationEnabled,
-    timer,
+    questionTimer,
     step,
     displayQuestionIndex,
     activeQuestions.length,
     questionLockedBySubmission,
-    hasCountdown,
+    hasQuestionCountdown,
     question?.id,
     isLastDisplayedQuestion,
-    sessionQuizTotalTimeEnabled,
+    sessionTimerExpired,
     submitQuestionById,
     tryApplyPendingActivatedQuestion,
     advanceToNextUnsubmittedActiveQuestion,
@@ -2889,6 +2931,8 @@ function ParticipantSessionPage({ embed = false }) {
             questionSerialNumber={questionSerialNumber}
             questionSerialTotal={questionSerialTotal}
             hasCountdown={hasCountdown}
+            hasQuestionCountdown={hasQuestionCountdown}
+            hasQuizCountdown={hasQuizCountdown}
             canGoToNextQuestion={canGoToNextQuestion}
             inputsLocked={inputsLocked}
             wordCloudInputsLocked={wordCloudInputsLocked}
@@ -2897,7 +2941,12 @@ function ParticipantSessionPage({ embed = false }) {
             hasAnyQuestionSaved={hasAnyQuestionSaved}
             timeLimit={displayTimeLimit}
             timer={timer}
+            questionTimer={questionTimer}
+            questionTimeLimit={timeLimit}
+            quizTimer={quizTimer}
+            quizTimeLimit={sessionQuizTotalTimeSeconds}
             submittedAtSeconds={submittedAtSeconds}
+            questionSubmittedAtSeconds={questionSubmittedAtSeconds}
             sessionQuizTotalTimeEnabled={sessionQuizTotalTimeEnabled}
             lastQuestionFinalized={lastQuestionFinalized}
             currentResponse={currentResponse}

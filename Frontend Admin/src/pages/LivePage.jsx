@@ -49,7 +49,13 @@ import {
   buildAdvancedSlotStats,
 } from '../components/live/AdvancedSlotActivationPanel'
 import { canHostActivateAllQuestions, canHostCloseAllQuestions, sessionRequiresActivateAllQuestions, sessionUsesAdvancedSlotActivation } from '../utils/hostQuestionControls'
-import { isAdvancedBuilderSession, isSessionQuizTotalTimeEnabled, isSessionRandomQuestionOrderEnabled, sessionUsesMarkedEligiblePool } from '../utils/sessionFlags'
+import {
+  isAdvancedBuilderSession,
+  isQuizTotalWithQuestionTimersEnabled,
+  isSessionQuizTotalTimeEnabled,
+  isSessionRandomQuestionOrderEnabled,
+  sessionUsesMarkedEligiblePool,
+} from '../utils/sessionFlags'
 import { partitionQuestionsByPoolEligibility } from '../utils/poolEligibleUi'
 import { HostNoSessionsEmpty } from '../components/layout/HostNoSessionsEmpty'
 import { useHostNavSessions, getLivePresenterSessionId } from '../hooks/useHostNavSessions'
@@ -1104,6 +1110,7 @@ function LivePage() {
     Boolean(session) && session.status !== 'completed' && session.status !== 'archived'
   const singleActiveQuestionMode = session?.participant_navigation_enabled === false
   const sessionQuizTotalTimeEnabled = isSessionQuizTotalTimeEnabled(session)
+  const quizTotalWithQuestionTimers = isQuizTotalWithQuestionTimersEnabled(session)
   const disableSingleActivation = useMemo(
     () => sessionRequiresActivateAllQuestions(session, mappedQuestions, sessionUsesQuestionSets),
     [session, mappedQuestions],
@@ -1367,7 +1374,11 @@ function LivePage() {
             {sessionQuizTotalTimeEnabled ? (
               <p className="mt-1 text-xs font-medium text-violet-800">
                 Quiz total time ({session?.quiz_total_time_minutes} min): all questions become
-                available when you launch the session. Participants use a personal timer.
+                available when you launch the session. Participants use a personal quiz timer
+                {quizTotalWithQuestionTimers
+                  ? ', plus each question’s own timer when a time limit is set (with that question’s audio)'
+                  : ' only (question timers are off for this session)'}
+                .
               </p>
             ) : null}
           </div>
@@ -1759,8 +1770,9 @@ function LivePage() {
               ) : null}
               {canEditLive && sessionQuizTotalTimeEnabled ? (
                 <p className="mb-3 rounded-xl border border-violet-200/80 bg-violet-50 px-3 py-2 text-xs font-medium text-violet-900">
-                  Quiz total time: all questions are available to participants. Use reveal,
-                  results, and close controls per question as needed.
+                  {quizTotalWithQuestionTimers
+                    ? 'Quiz total + question timers: all questions are available. Participants run a quiz clock and any per-question timers together. Use reveal, results, and close controls per question as needed (Close all still requires untimed questions).'
+                    : 'Quiz total time: all questions are available to participants. Use reveal, results, and close controls per question as needed.'}
                 </p>
               ) : null}
               <HostQuestionControls

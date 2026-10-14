@@ -167,6 +167,9 @@ async function update(req, res) {
         show_question_leaderboard: session.show_question_leaderboard,
         participant_navigation_enabled: session.participant_navigation_enabled !== false,
         quiz_total_time_minutes: session.quiz_total_time_minutes ?? null,
+        quiz_total_question_timers_enabled: Boolean(
+          session.quiz_total_question_timers_enabled
+        ),
         random_question_order_enabled: isSessionRandomQuestionOrderEnabled(session),
         allow_late_join: Boolean(session.allow_late_join),
         join_locked: Boolean(session.join_locked),
@@ -273,6 +276,9 @@ function lifecycleAction(action) {
               show_question_leaderboard: session.show_question_leaderboard,
               participant_navigation_enabled: session.participant_navigation_enabled !== false,
               quiz_total_time_minutes: session.quiz_total_time_minutes ?? null,
+              quiz_total_question_timers_enabled: Boolean(
+                session.quiz_total_question_timers_enabled
+              ),
               random_question_order_enabled: isSessionRandomQuestionOrderEnabled(session),
               allow_late_join: Boolean(session.allow_late_join)
             });
@@ -350,6 +356,9 @@ async function lookupByCode(req, res) {
           show_question_leaderboard: Boolean(session.show_question_leaderboard),
           participant_navigation_enabled: session.participant_navigation_enabled !== false,
           quiz_total_time_minutes: session.quiz_total_time_minutes ?? null,
+          quiz_total_question_timers_enabled: Boolean(
+            session.quiz_total_question_timers_enabled
+          ),
           random_question_order_enabled: isSessionRandomQuestionOrderEnabled(session),
           builder_mode: session.builder_mode || "normal",
           advanced_active_slot: session.advanced_active_slot ?? null,
@@ -719,6 +728,7 @@ async function activateAdvancedAssignmentSlotHandler(req, res) {
         "allow_late_join",
         "join_locked",
         "quiz_total_time_minutes",
+        "quiz_total_question_timers_enabled",
         "present_mode_settings",
         "participant_theme",
         "participant_theme_custom"

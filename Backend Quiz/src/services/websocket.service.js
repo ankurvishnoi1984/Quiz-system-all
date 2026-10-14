@@ -584,6 +584,9 @@ function notifySessionSettings(sessionCode, settings) {
     join_blocked_reason:
       settings.join_blocked_reason !== undefined ? settings.join_blocked_reason : undefined,
     quiz_total_time_minutes: settings.quiz_total_time_minutes ?? null,
+    quiz_total_question_timers_enabled: Boolean(
+      settings.quiz_total_question_timers_enabled
+    ),
     present_mode_settings: settings.present_mode_settings ?? null,
     participant_theme: settings.participant_theme || "default",
     participant_theme_custom: settings.participant_theme_custom ?? null

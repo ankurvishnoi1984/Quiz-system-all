@@ -155,6 +155,11 @@ const Session = sequelize.define(
       allowNull: true,
       defaultValue: null
     },
+    quiz_total_question_timers_enabled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
     random_question_order_enabled: {
       type: DataTypes.BOOLEAN,
       allowNull: false,

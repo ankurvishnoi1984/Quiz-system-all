@@ -16,6 +16,13 @@ export function isSessionQuizTotalTimeEnabled(session) {
   )
 }
 
+/** Quiz total time on AND host opted into per-question timers alongside it. */
+export function isQuizTotalWithQuestionTimersEnabled(session) {
+  if (!isSessionQuizTotalTimeEnabled(session)) return false
+  const value = session?.quiz_total_question_timers_enabled
+  return value === true || value === 1 || value === '1'
+}
+
 /** Each participant sees questions in a shuffled order; host must activate all at once. */
 export function isSessionRandomQuestionOrderEnabled(session) {
   if (!session) return false
