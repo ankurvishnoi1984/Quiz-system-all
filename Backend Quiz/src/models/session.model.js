@@ -86,8 +86,8 @@ const Session = sequelize.define(
       allowNull: true,
       defaultValue: null
     },
-    customer_match_zone: {
-      type: DataTypes.STRING(16),
+    customer_match_zones: {
+      type: DataTypes.JSON,
       allowNull: true,
       defaultValue: null
     },

@@ -1,4 +1,7 @@
-const { getSessionCustomerMatchConfig } = require("../utils/customerMatch");
+const {
+  getSessionCustomerMatchConfig,
+  normalizeCustomerMatchZones,
+} = require("../utils/customerMatch");
 
 const CUSTOMER_MATCH_TIMEOUT_MS = 8000;
 
@@ -18,10 +21,21 @@ function normalizeMatchBody(body) {
 }
 
 /**
- * Call Netcast (or local) customer-match API.
+ * Normalize verify input into a non-empty zones array.
+ * Accepts `zones` (array/string) or legacy singular `zone`.
+ */
+function resolveVerifyZones({ zones, zone } = {}) {
+  return normalizeCustomerMatchZones(
+    zones !== undefined ? zones : zone
+  );
+}
+
+/**
+ * Call Netcast (or local) customer-match API once with all zones.
+ * Sends zone as comma-separated values, e.g. zone=East,North
  * @returns {Promise<{ match: boolean }>}
  */
-async function verifyCustomerMatch({ email, wcCode, zone }) {
+async function verifyCustomerMatch({ email, wcCode, zones, zone } = {}) {
   const base = getCustomerMatchBaseUrl();
   if (!base) {
     const error = new Error(
@@ -33,9 +47,11 @@ async function verifyCustomerMatch({ email, wcCode, zone }) {
 
   const emailNorm = String(email || "").trim();
   const wc = String(wcCode || "").trim();
-  const zoneNorm = String(zone || "").trim();
-  if (!emailNorm || !wc || !zoneNorm) {
-    const error = new Error("email, wc_code, and zone are required for customer match.");
+  const zonesNorm = resolveVerifyZones({ zones, zone });
+  if (!emailNorm || !wc || !zonesNorm) {
+    const error = new Error(
+      "email, wc_code, and at least one zone are required for customer match."
+    );
     error.statusCode = 400;
     throw error;
   }
@@ -43,7 +59,7 @@ async function verifyCustomerMatch({ email, wcCode, zone }) {
   const url = new URL(`${base}/customer/match`);
   url.searchParams.set("email", emailNorm);
   url.searchParams.set("wc_code", wc);
-  url.searchParams.set("zone", zoneNorm);
+  url.searchParams.set("zone", zonesNorm.join(","));
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CUSTOMER_MATCH_TIMEOUT_MS);
@@ -87,7 +103,7 @@ async function verifyCustomerMatch({ email, wcCode, zone }) {
 
 /**
  * Enforce customer match when the session flag is on.
- * WC code and zone come from session configuration, not the join payload.
+ * WC code and zones come from session configuration, not the join payload.
  */
 async function assertCustomerMatchForJoin(session, { email } = {}) {
   if (!session?.customer_match_enabled) return;
@@ -95,7 +111,7 @@ async function assertCustomerMatchForJoin(session, { email } = {}) {
   const config = getSessionCustomerMatchConfig(session);
   if (!config) {
     const error = new Error(
-      "Customer match is enabled for this session but WC code and zone are not configured. Contact the host."
+      "Customer match is enabled for this session but WC code and zones are not configured. Contact the host."
     );
     error.statusCode = 503;
     throw error;
@@ -113,7 +129,7 @@ async function assertCustomerMatchForJoin(session, { email } = {}) {
   const result = await verifyCustomerMatch({
     email: emailNorm,
     wcCode: config.wcCode,
-    zone: config.zone,
+    zones: config.zones,
   });
   if (!result.match) {
     const error = new Error(

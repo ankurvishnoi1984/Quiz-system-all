@@ -356,7 +356,7 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
         ...resolveCustomerMatchFields({
           customer_match_enabled: source.customer_match_enabled,
           customer_match_wc_code: source.customer_match_wc_code,
-          customer_match_zone: source.customer_match_zone
+          customer_match_zones: source.customer_match_zones
         }),
         max_participants: source.max_participants ?? 500,
         show_results_to_participants: source.show_results_to_participants ?? true,
@@ -699,6 +699,7 @@ async function updateSession({ sessionId, input, user }) {
       if (
         input.customer_match_enabled === undefined &&
         input.customer_match_wc_code === undefined &&
+        input.customer_match_zones === undefined &&
         input.customer_match_zone === undefined
       ) {
         return {};

@@ -542,8 +542,10 @@ function DashboardPage() {
         customer_match_wc_code: values.customerMatchEnabled
           ? String(values.customerMatchWcCode || '').trim() || null
           : null,
-        customer_match_zone: values.customerMatchEnabled
-          ? values.customerMatchZone || null
+        customer_match_zones: values.customerMatchEnabled
+          ? Array.isArray(values.customerMatchZones) && values.customerMatchZones.length
+            ? values.customerMatchZones
+            : null
           : null,
         show_participant_count: Boolean(values.showParticipantCount),
         auto_end_enabled: Boolean(values.autoEndEnabled),
@@ -587,7 +589,11 @@ function DashboardPage() {
       customerMatchWcCode: editSession.customer_match_wc_code
         ? String(editSession.customer_match_wc_code)
         : '',
-      customerMatchZone: editSession.customer_match_zone || '',
+      customerMatchZones: Array.isArray(editSession.customer_match_zones)
+        ? editSession.customer_match_zones
+        : editSession.customer_match_zone
+          ? [editSession.customer_match_zone]
+          : [],
       enableNavigation: Boolean(editSession.participant_navigation_enabled),
       randomQuestionOrder: Boolean(editSession.random_question_order_enabled),
       quizTotalTimeEnabled:
@@ -691,8 +697,10 @@ function DashboardPage() {
         customer_match_wc_code: values.customerMatchEnabled
           ? String(values.customerMatchWcCode || '').trim() || null
           : null,
-        customer_match_zone: values.customerMatchEnabled
-          ? values.customerMatchZone || null
+        customer_match_zones: values.customerMatchEnabled
+          ? Array.isArray(values.customerMatchZones) && values.customerMatchZones.length
+            ? values.customerMatchZones
+            : null
           : null,
         show_participant_count: Boolean(values.showParticipantCount),
         auto_end_enabled: Boolean(values.autoEndEnabled),

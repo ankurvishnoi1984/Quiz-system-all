@@ -4,7 +4,7 @@ const {
 const { validateCustomThemeColors } = require("../utils/participantTheme");
 const {
   CUSTOMER_MATCH_ZONES,
-  normalizeCustomerMatchZone,
+  normalizeCustomerMatchZones,
   normalizeCustomerMatchWcCode
 } = require("../utils/customerMatch");
 const {
@@ -24,6 +24,44 @@ function validateLeaderboardTopNField(payload, errors) {
   }
 }
 
+function pickCustomerMatchZonesRaw(payload, previous = null) {
+  if (payload?.customer_match_zones !== undefined) {
+    return payload.customer_match_zones;
+  }
+  if (payload?.customer_match_zone !== undefined) {
+    return payload.customer_match_zone;
+  }
+  if (previous?.customer_match_zones !== undefined) {
+    return previous.customer_match_zones;
+  }
+  if (previous?.customer_match_zone !== undefined) {
+    return previous.customer_match_zone;
+  }
+  return undefined;
+}
+
+function validateCustomerMatchZonesShape(raw, errors) {
+  if (raw === undefined || raw === null || raw === "") return;
+  if (typeof raw === "string") {
+    if (!normalizeCustomerMatchZones(raw)) {
+      errors.push(
+        `customer_match_zones must use only: ${CUSTOMER_MATCH_ZONES.join(", ")}`
+      );
+    }
+    return;
+  }
+  if (!Array.isArray(raw)) {
+    errors.push("customer_match_zones must be an array of zone strings");
+    return;
+  }
+  if (raw.length === 0) return;
+  if (!normalizeCustomerMatchZones(raw)) {
+    errors.push(
+      `customer_match_zones must include at least one of: ${CUSTOMER_MATCH_ZONES.join(", ")}`
+    );
+  }
+}
+
 function validateCustomerMatchConfigFields(payload, { previous = null } = {}) {
   const errors = [];
   const enabled =
@@ -37,21 +75,18 @@ function validateCustomerMatchConfigFields(payload, { previous = null } = {}) {
     payload?.customer_match_wc_code !== undefined
       ? payload.customer_match_wc_code
       : previous?.customer_match_wc_code;
-  const zoneRaw =
-    payload?.customer_match_zone !== undefined
-      ? payload.customer_match_zone
-      : previous?.customer_match_zone;
+  const zonesRaw = pickCustomerMatchZonesRaw(payload, previous);
 
   const wc = normalizeCustomerMatchWcCode(wcRaw);
-  const zone = normalizeCustomerMatchZone(zoneRaw);
+  const zones = normalizeCustomerMatchZones(zonesRaw);
   if (!wc) {
     errors.push(
       "customer_match_wc_code is required when customer match is enabled (numbers only)"
     );
   }
-  if (!zone) {
+  if (!zones) {
     errors.push(
-      `customer_match_zone is required when customer match is enabled (${CUSTOMER_MATCH_ZONES.join(", ")})`
+      `customer_match_zones is required when customer match is enabled (one or more of: ${CUSTOMER_MATCH_ZONES.join(", ")})`
     );
   }
   return errors;
@@ -339,7 +374,8 @@ function validateUpdateSessionPayload(payload) {
     "join_allowlist",
     "customer_match_enabled",
     "customer_match_wc_code",
-    "customer_match_zone",
+    "customer_match_zones",
+    "customer_match_zone", // legacy singular alias during rollout
     "join_locked",
     "scheduled_date",
     "scheduled_time",
@@ -401,15 +437,14 @@ function validateUpdateSessionPayload(payload) {
   ) {
     errors.push("customer_match_wc_code must contain digits only");
   }
-  if (
+  if (payload?.customer_match_zones !== undefined) {
+    validateCustomerMatchZonesShape(payload.customer_match_zones, errors);
+  } else if (
     payload?.customer_match_zone !== undefined &&
     payload?.customer_match_zone !== null &&
-    payload?.customer_match_zone !== "" &&
-    !normalizeCustomerMatchZone(payload.customer_match_zone)
+    payload?.customer_match_zone !== ""
   ) {
-    errors.push(
-      `customer_match_zone must be one of: ${CUSTOMER_MATCH_ZONES.join(", ")}`
-    );
+    validateCustomerMatchZonesShape(payload.customer_match_zone, errors);
   }
   coerceOptionalBoolean(payload?.join_locked, "join_locked", errors);
   errors.push(...validateJoinAllowlistFields(payload));

@@ -83,7 +83,7 @@ const defaultInitial = {
   joinAllowlist: null,
   customerMatchEnabled: false,
   customerMatchWcCode: '',
-  customerMatchZone: '',
+  customerMatchZones: [],
   enableNavigation: false,
   randomQuestionOrder: false,
   quizTotalTimeEnabled: false,
@@ -124,9 +124,17 @@ function SessionFormModal({
   const [joinAllowlist, setJoinAllowlist] = useState(null)
   const [customerMatchEnabled, setCustomerMatchEnabled] = useState(false)
   const [customerMatchWcCode, setCustomerMatchWcCode] = useState('')
-  const [customerMatchZone, setCustomerMatchZone] = useState('')
+  const [customerMatchZones, setCustomerMatchZones] = useState([])
   const [customerMatchConfigError, setCustomerMatchConfigError] = useState('')
   const CUSTOMER_MATCH_ZONES = ['East', 'West', 'North', 'South']
+
+  const toggleCustomerMatchZone = (zone) => {
+    setCustomerMatchZones((prev) => {
+      const next = prev.includes(zone) ? prev.filter((z) => z !== zone) : [...prev, zone]
+      return CUSTOMER_MATCH_ZONES.filter((z) => next.includes(z))
+    })
+    setCustomerMatchConfigError('')
+  }
   const [allowlistFileName, setAllowlistFileName] = useState('')
   const [allowlistError, setAllowlistError] = useState('')
   const [allowlistSampleDownloading, setAllowlistSampleDownloading] = useState(false)
@@ -188,7 +196,18 @@ function SessionFormModal({
     )
     setCustomerMatchEnabled(Boolean(initialValues.customerMatchEnabled))
     setCustomerMatchWcCode(String(initialValues.customerMatchWcCode ?? '').trim())
-    setCustomerMatchZone(String(initialValues.customerMatchZone ?? '').trim())
+    {
+      const zonesRaw = Array.isArray(initialValues.customerMatchZones)
+        ? initialValues.customerMatchZones
+        : initialValues.customerMatchZone
+          ? [initialValues.customerMatchZone]
+          : []
+      setCustomerMatchZones(
+        CUSTOMER_MATCH_ZONES.filter((z) =>
+          zonesRaw.some((raw) => String(raw).toLowerCase() === z.toLowerCase()),
+        ),
+      )
+    }
     setCustomerMatchConfigError('')
     setAllowlistFileName('')
     setAllowlistError('')
@@ -407,10 +426,10 @@ function SessionFormModal({
 
     if (customerMatchEnabled) {
       const wc = String(customerMatchWcCode ?? '').trim()
-      const zone = String(customerMatchZone ?? '').trim()
-      if (!/^\d+$/.test(wc) || !CUSTOMER_MATCH_ZONES.includes(zone)) {
+      const zones = CUSTOMER_MATCH_ZONES.filter((z) => customerMatchZones.includes(z))
+      if (!/^\d+$/.test(wc) || zones.length < 1) {
         setCustomerMatchConfigError(
-          'Enter a numeric WC code and select a zone when customer match is enabled.',
+          'Enter a numeric WC code and select at least one zone when customer match is enabled.',
         )
         return
       }
@@ -433,7 +452,9 @@ function SessionFormModal({
       joinAllowlist: allowlistOn ? joinAllowlist : null,
       customerMatchEnabled: Boolean(customerMatchEnabled),
       customerMatchWcCode: customerMatchEnabled ? String(customerMatchWcCode ?? '').trim() : '',
-      customerMatchZone: customerMatchEnabled ? String(customerMatchZone ?? '').trim() : '',
+      customerMatchZones: customerMatchEnabled
+        ? CUSTOMER_MATCH_ZONES.filter((z) => customerMatchZones.includes(z))
+        : [],
       enableNavigation: builderMode === 'advanced' ? true : enableNavigation,
       randomQuestionOrder: enableNavigation && randomQuestionOrder,
       quizTotalTimeEnabled: enableNavigation && quizTotalTimeEnabled,
@@ -712,8 +733,9 @@ function SessionFormModal({
                       Require customer match verification
                     </p>
                     <p className="text-xs text-slate-500">
-                      Participants must provide an email (in the join link or form). WC code and zone
-                      are set here and checked against the customer match API before join.
+                      Participants must provide an email (in the join link or form). WC code and
+                      zones are set here and checked against the customer match API before join.
+                      Participants may join if they match the WC code in any selected zone.
                     </p>
                   </div>
                   <input
@@ -727,26 +749,36 @@ function SessionFormModal({
                   />
                 </label>
                 {customerMatchEnabled ? (
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <label className="block">
-                      <span className="text-xs font-semibold text-slate-600">Zone</span>
-                      <select
-                        value={customerMatchZone}
-                        onChange={(event) => {
-                          setCustomerMatchZone(event.target.value)
-                          setCustomerMatchConfigError('')
-                        }}
-                        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                      >
-                        <option value="">Select zone…</option>
-                        {CUSTOMER_MATCH_ZONES.map((z) => (
-                          <option key={z} value={z}>
-                            {z}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="block">
+                  <div className="mt-3 space-y-3">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-600">
+                        Zone (select one or more)
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {CUSTOMER_MATCH_ZONES.map((z) => {
+                          const checked = customerMatchZones.includes(z)
+                          return (
+                            <label
+                              key={z}
+                              className={`inline-flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                                checked
+                                  ? 'border-navy-600 bg-navy-50 text-navy-900'
+                                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleCustomerMatchZone(z)}
+                                className="h-4 w-4 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
+                              />
+                              {z}
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </div>
+                    <label className="block max-w-sm">
                       <span className="text-xs font-semibold text-slate-600">WC code</span>
                       <input
                         type="number"
@@ -762,7 +794,7 @@ function SessionFormModal({
                       />
                     </label>
                     {customerMatchConfigError ? (
-                      <p className="sm:col-span-2 text-xs text-red-600">{customerMatchConfigError}</p>
+                      <p className="text-xs text-red-600">{customerMatchConfigError}</p>
                     ) : null}
                   </div>
                 ) : null}
