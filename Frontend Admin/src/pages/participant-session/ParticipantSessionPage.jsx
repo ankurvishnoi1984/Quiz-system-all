@@ -65,6 +65,7 @@ import {
   sessionSupportsSurveyEndingScreen,
 } from '../../utils/livePresentation'
 import { normalizeLeaderboardTopN } from '../../utils/leaderboard'
+import { getPresentModeSettings } from '../../utils/presentModeSettings'
 import {
   filterActiveQuestionsForLateJoinPolicy,
   getCountdownEndsAtForQuestion,
@@ -85,6 +86,7 @@ import { SurveySessionEndingPanel } from './components/SurveySessionEndingPanel'
 import { SessionHeader } from './components/SessionHeader'
 import { SessionEndedBanner, SessionEndedPanel } from './components/SessionEndedBanner'
 import { QuizCompletedThanksPanel } from './components/QuizCompletedThanksPanel'
+import { ParticipantInstructionsRail } from './components/ParticipantInstructionsRail'
 import { WaitingForQuestion } from './components/WaitingForQuestion'
 import { WaitingView } from './components/WaitingView'
 import { isParticipantChoiceCorrect } from '../../utils/answerReveal'
@@ -467,6 +469,7 @@ function ParticipantSessionPage({ embed = false }) {
     [session],
   )
   const quizTotalTimeSynced = useMemo(() => isQuizTotalTimeSynced(session), [session])
+  const presentModeSettings = useMemo(() => getPresentModeSettings(session), [session])
   const sessionQuizTotalTimeSeconds = sessionQuizTotalTimeEnabled
     ? Math.max(0, Number(session?.quiz_total_time_minutes) || 0) * 60
     : 0
@@ -1300,6 +1303,10 @@ function ParticipantSessionPage({ embed = false }) {
                 data.participant_theme_custom !== undefined
                   ? data.participant_theme_custom
                   : old.participant_theme_custom,
+              present_mode_settings:
+                data.present_mode_settings !== undefined
+                  ? data.present_mode_settings
+                  : old.present_mode_settings,
             }
           : old,
       )
@@ -2941,6 +2948,12 @@ function ParticipantSessionPage({ embed = false }) {
     showOverallLeaderboardTab &&
     (presentEndingSlideType === 'podium' || step === 'podium')
 
+  const participantInstructionNotes = presentModeSettings.customInstructions || []
+  const showParticipantInstructions =
+    step === 'active' &&
+    Boolean(presentModeSettings.showCustomInstructions) &&
+    participantInstructionNotes.length > 0
+
   return (
     <main
       className={`participant-session-bg ${
@@ -2955,6 +2968,9 @@ function ParticipantSessionPage({ embed = false }) {
       data-participant-theme={participantTheme}
       style={participantThemeStyle}
     >
+      {showParticipantInstructions ? (
+        <ParticipantInstructionsRail instructions={participantInstructionNotes} />
+      ) : null}
       <div
         className={`mx-auto flex w-full flex-col ${
           showParticipantPodium
