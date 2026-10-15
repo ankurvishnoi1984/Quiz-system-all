@@ -1321,9 +1321,6 @@ function PresentModePage({
             {...headerQuizTimerProps}
             // onQaClick={openQaModal} // Q&A feature disabled
             readOnly={readOnly}
-            showActivateAll={Boolean(showActivateAllQuestionsButton && isSessionLive)}
-            activateAllPending={activateAllQuestionsMutation.isPending}
-            onActivateAll={activateAllQuestions}
           />
         ) : null}
 

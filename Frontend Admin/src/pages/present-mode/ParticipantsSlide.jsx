@@ -18,16 +18,12 @@ export function ParticipantsSlide({
   hasQuizCountdown = false,
   quizTimer = 0,
   quizTimeLimit = 0,
-  showActivateAll = false,
-  activateAllPending = false,
-  onActivateAll,
 }) {
   const sessionTitle = session?.title || 'Live session'
   const presentSettings = getPresentModeSettings(session)
   const showSessionInfo = presentSettings.showSessionInfo
-  const customInstructions = presentSettings.customInstructions || []
-  const showInstructions =
-    presentSettings.showCustomInstructions && customInstructions.length > 0
+  // Present Mode lobby: hide custom instructions for now (still used on participant rail / settings).
+  const showInstructions = false
 
   return (
     <div className="quiz-slide-in flex min-h-0 flex-1 flex-col">
@@ -53,10 +49,7 @@ export function ParticipantsSlide({
         <PresentJoinPanel
           session={session}
           showInstructions={showInstructions}
-          instructions={customInstructions}
-          showActivateAll={showActivateAll}
-          activateAllPending={activateAllPending}
-          onActivateAll={onActivateAll}
+          instructions={[]}
         />
       ) : (
         <PresentSessionReadyLobby
@@ -65,12 +58,9 @@ export function ParticipantsSlide({
           liveParticipantCount={liveParticipantCount}
           showParticipantStats={showParticipantStats}
           showInstructions={showInstructions}
-          instructions={customInstructions}
+          instructions={[]}
           readOnly={readOnly}
           isSessionLive={isSessionLive}
-          showActivateAll={showActivateAll}
-          activateAllPending={activateAllPending}
-          onActivateAll={onActivateAll}
         />
       )}
     </div>
