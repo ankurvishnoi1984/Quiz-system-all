@@ -160,6 +160,11 @@ const Session = sequelize.define(
       allowNull: false,
       defaultValue: false
     },
+    quiz_total_time_synced: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
     random_question_order_enabled: {
       type: DataTypes.BOOLEAN,
       allowNull: false,

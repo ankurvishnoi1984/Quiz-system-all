@@ -44,6 +44,7 @@ import {
 } from '../../utils/livePresentation'
 import { normalizeLeaderboardTopN, SESSION_LEADERBOARD_TOP_N } from '../../utils/leaderboard'
 import { isAdvancedBuilderSession, isSessionQuizTotalTimeEnabled } from '../../utils/sessionFlags'
+import { getQuizTotalRemainingSeconds } from '../../utils/questionTimer'
 import { getPresentModeSettings } from '../../utils/presentModeSettings'
 import {
   HOST_EXTRA_SOUNDS_ENABLED,
@@ -164,6 +165,33 @@ function PresentModePage({
   const canToggleSurveyResults = sessionSupportsSurveyEndingScreen(mappedQuestions)
   const singleActiveQuestionMode = session?.participant_navigation_enabled === false
   const sessionQuizTotalTimeEnabled = isSessionQuizTotalTimeEnabled(session)
+  const sessionQuizTotalTimeSeconds = sessionQuizTotalTimeEnabled
+    ? Math.max(0, Number(session?.quiz_total_time_minutes) || 0) * 60
+    : 0
+  const [quizCountdownTick, setQuizCountdownTick] = useState(0)
+  useEffect(() => {
+    if (!sessionQuizTotalTimeEnabled) return undefined
+    const id = setInterval(() => setQuizCountdownTick((t) => t + 1), 1000)
+    return () => clearInterval(id)
+  }, [sessionQuizTotalTimeEnabled, session?.started_at, session?.quiz_total_time_minutes])
+  const presentQuizTimer = useMemo(() => {
+    if (!sessionQuizTotalTimeEnabled) return 0
+    void quizCountdownTick
+    return getQuizTotalRemainingSeconds(session)
+  }, [
+    sessionQuizTotalTimeEnabled,
+    session,
+    session?.started_at,
+    session?.quiz_total_time_minutes,
+    quizCountdownTick,
+  ])
+  const headerQuizTimerProps = sessionQuizTotalTimeEnabled
+    ? {
+        hasQuizCountdown: true,
+        quizTimer: presentQuizTimer,
+        quizTimeLimit: sessionQuizTotalTimeSeconds,
+      }
+    : {}
   const advancedBuilderEnabled = isAdvancedBuilderSession(session)
   const advancedSlotActivation = sessionUsesAdvancedSlotActivation(session)
   const distributedPresentMode = getDistributedPresentMode(session, mappedQuestions)
@@ -1254,6 +1282,7 @@ function PresentModePage({
               isSessionLive={false}
               {...headerParticipantProps}
               {...headerRankingsProps}
+              {...headerQuizTimerProps}
               // onQaClick={openQaModal} // Q&A feature disabled
               readOnly
             />
@@ -1288,6 +1317,7 @@ function PresentModePage({
             isSessionLive={isSessionLive}
             {...headerParticipantProps}
             {...headerRankingsProps}
+            {...headerQuizTimerProps}
             // onQaClick={openQaModal} // Q&A feature disabled
             readOnly={readOnly}
           />
@@ -1308,6 +1338,7 @@ function PresentModePage({
             isSessionLive={isSessionLive}
             {...headerParticipantProps}
             {...headerRankingsProps}
+            {...headerQuizTimerProps}
             // onQaClick={openQaModal} // Q&A feature disabled
             readOnly={readOnly}
             singleActiveQuestionMode={singleActiveQuestionMode}
@@ -1342,6 +1373,7 @@ function PresentModePage({
             onInspectQuestion={(q) => setInspectQuestionId(q?.id ?? null)}
             {...headerParticipantProps}
             {...headerRankingsProps}
+            {...headerQuizTimerProps}
           />
         ) : null}
 
@@ -1369,6 +1401,7 @@ function PresentModePage({
               isSessionLive={isSessionLive}
               {...headerParticipantProps}
               {...headerRankingsProps}
+              {...headerQuizTimerProps}
               readOnly={readOnly}
               singleActiveQuestionMode={singleActiveQuestionMode}
             />
@@ -1386,6 +1419,7 @@ function PresentModePage({
             isSessionLive={isSessionLive}
             {...headerParticipantProps}
             {...headerRankingsProps}
+            {...headerQuizTimerProps}
             // onQaClick={openQaModal} // Q&A feature disabled
             readOnly={readOnly}
           />
@@ -1410,6 +1444,7 @@ function PresentModePage({
             isSessionLive={isSessionLive}
             {...headerParticipantProps}
             {...headerRankingsProps}
+            {...headerQuizTimerProps}
             // onQaClick={openQaModal} // Q&A feature disabled
             readOnly={readOnly}
           />
@@ -1427,6 +1462,7 @@ function PresentModePage({
             isSessionLive={isSessionLive}
             {...headerParticipantProps}
             {...headerRankingsProps}
+            {...headerQuizTimerProps}
             // onQaClick={openQaModal} // Q&A feature disabled
             readOnly={readOnly}
           />

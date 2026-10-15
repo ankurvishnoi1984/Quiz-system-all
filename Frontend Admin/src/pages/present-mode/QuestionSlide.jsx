@@ -164,6 +164,9 @@ export function QuestionSlide({
   onQaClick,
   readOnly = false,
   singleActiveQuestionMode = false,
+  hasQuizCountdown = false,
+  quizTimer = 0,
+  quizTimeLimit = 0,
 }) {
   const [viewMode, setViewMode] = useState('overview')
   const [chartExpanded, setChartExpanded] = useState(false)
@@ -534,6 +537,9 @@ export function QuestionSlide({
         onQaClick={onQaClick}
         readOnly={readOnly}
         showParticipantStats={showParticipantStats}
+        hasQuizCountdown={hasQuizCountdown}
+        quizTimer={quizTimer}
+        quizTimeLimit={quizTimeLimit}
       />
 
       <div className="mb-[clamp(0.75rem,2vh,1.25rem)] shrink-0">

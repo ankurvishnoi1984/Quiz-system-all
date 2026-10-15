@@ -62,6 +62,9 @@ export function DistributedQuizSlide({
   onParticipantsClick,
   onOverallRankingsClick,
   overallRankingsActive,
+  hasQuizCountdown = false,
+  quizTimer = 0,
+  quizTimeLimit = 0,
 }) {
   const hostAdvancedSlotMode = distributedMode === 'advanced' && !readOnly
   const [tab, setTab] = useState(hostAdvancedSlotMode ? 'activate' : 'pool')
@@ -196,6 +199,9 @@ export function DistributedQuizSlide({
         overallRankingsActive={overallRankingsActive}
         readOnly={readOnly}
         showParticipantStats={presentSettings.showParticipantStats}
+        hasQuizCountdown={hasQuizCountdown}
+        quizTimer={quizTimer}
+        quizTimeLimit={quizTimeLimit}
       />
 
       <div className="mt-[clamp(0.5rem,1.5vh,1rem)] flex min-h-0 flex-1 flex-col gap-[clamp(0.75rem,2vh,1.25rem)] px-[clamp(0.5rem,2vw,1rem)] pb-2">

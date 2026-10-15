@@ -18,6 +18,9 @@ export function LeaderboardSlide({
   onQaClick,
   readOnly = false,
   showParticipantStats = true,
+  hasQuizCountdown = false,
+  quizTimer = 0,
+  quizTimeLimit = 0,
 }) {
   return (
     <div className="quiz-slide-in flex min-h-0 flex-1 flex-col">
@@ -34,6 +37,9 @@ export function LeaderboardSlide({
         onQaClick={onQaClick}
         readOnly={readOnly}
         showParticipantStats={showParticipantStats}
+        hasQuizCountdown={hasQuizCountdown}
+        quizTimer={quizTimer}
+        quizTimeLimit={quizTimeLimit}
       />
 
       <div className="mb-[clamp(0.75rem,2vh,1.25rem)] flex shrink-0 flex-col items-center justify-center gap-1">

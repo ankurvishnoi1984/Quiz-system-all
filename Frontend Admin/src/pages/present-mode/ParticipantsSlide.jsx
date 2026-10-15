@@ -15,6 +15,9 @@ export function ParticipantsSlide({
   onQaClick,
   readOnly = false,
   showParticipantStats = true,
+  hasQuizCountdown = false,
+  quizTimer = 0,
+  quizTimeLimit = 0,
 }) {
   const sessionTitle = session?.title || 'Live session'
   const presentSettings = getPresentModeSettings(session)
@@ -38,6 +41,9 @@ export function ParticipantsSlide({
         onQaClick={onQaClick}
         readOnly={readOnly}
         showParticipantStats={showParticipantStats}
+        hasQuizCountdown={hasQuizCountdown}
+        quizTimer={quizTimer}
+        quizTimeLimit={quizTimeLimit}
       />
 
       {showSessionInfo ? (

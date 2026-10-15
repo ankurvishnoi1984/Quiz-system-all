@@ -1,5 +1,6 @@
 import { Info, Trophy } from 'lucide-react'
 // import { Info, MessageSquare, Trophy } from 'lucide-react' // MessageSquare was for Q&A tile
+import { HeaderQuizTimer } from '../participant-session/components/HeaderQuizTimer'
 
 export function PresentShell({ children, footer, embed = false }) {
   return (
@@ -146,6 +147,9 @@ export function PresentSlideHeader({
   // onQaClick, // Q&A feature disabled
   readOnly = false,
   showParticipantStats = true,
+  hasQuizCountdown = false,
+  quizTimer = 0,
+  quizTimeLimit = 0,
 }) {
   const modeLabel = readOnly ? 'View display' : 'Present mode'
   const showParticipantsTile = showParticipantStats && Boolean(onParticipantsClick)
@@ -155,6 +159,7 @@ export function PresentSlideHeader({
   // const showStatTiles = showParticipantsTile || showQaTile
   const joined = Number(participantCount) || 0
   const live = Number(liveParticipantCount) || 0
+  const showQuizTimer = Boolean(hasQuizCountdown)
 
   return (
     <header className="mb-[clamp(1rem,3vh,2rem)] flex shrink-0 flex-wrap items-end justify-between gap-4">
@@ -174,8 +179,15 @@ export function PresentSlideHeader({
         <h1 className="mt-1 text-[clamp(1.1rem,2.5vw,1.75rem)] font-bold text-navy-900">{sessionTitle}</h1>
       </div>
 
-      {showStatTiles ? (
+      {showStatTiles || showQuizTimer ? (
         <div className="flex flex-wrap items-stretch justify-end gap-2">
+          {showQuizTimer ? (
+            <HeaderQuizTimer
+              timer={quizTimer}
+              timeLimit={quizTimeLimit}
+              className="self-center"
+            />
+          ) : null}
           {/* Q&A feature disabled — re-enable when bringing Q&A back
           {showQaTile ? (
             <PresentHeaderStatButton
@@ -209,15 +221,22 @@ export function PresentSlideHeader({
           ) : null}
         </div>
       ) : showParticipantStats ? (
-        <div className="text-right">
-          <div className="flex items-center justify-end gap-2">
-            <PresentLiveIndicator isSessionLive={isSessionLive} />
-            <p className="text-[clamp(0.7rem,1.3vw,0.85rem)] font-semibold uppercase tracking-wider text-slate-500">
-              Participants
-            </p>
+        <div className="flex flex-wrap items-end justify-end gap-2">
+          {showQuizTimer ? (
+            <HeaderQuizTimer timer={quizTimer} timeLimit={quizTimeLimit} />
+          ) : null}
+          <div className="text-right">
+            <div className="flex items-center justify-end gap-2">
+              <PresentLiveIndicator isSessionLive={isSessionLive} />
+              <p className="text-[clamp(0.7rem,1.3vw,0.85rem)] font-semibold uppercase tracking-wider text-slate-500">
+                Participants
+              </p>
+            </div>
+            <PresentParticipantCounts joinedCount={joined} liveCount={live} />
           </div>
-          <PresentParticipantCounts joinedCount={joined} liveCount={live} />
         </div>
+      ) : showQuizTimer ? (
+        <HeaderQuizTimer timer={quizTimer} timeLimit={quizTimeLimit} />
       ) : null}
     </header>
   )

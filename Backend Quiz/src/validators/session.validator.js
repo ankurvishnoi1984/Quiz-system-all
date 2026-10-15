@@ -219,6 +219,28 @@ function validateQuizTotalQuestionTimersEnabled(payload, { requireQuizTotalInPay
   return null;
 }
 
+function validateQuizTotalTimeSynced(payload, { requireQuizTotalInPayload = false } = {}) {
+  if (payload?.quiz_total_time_synced === undefined || payload?.quiz_total_time_synced === null) {
+    return null;
+  }
+  if (typeof payload.quiz_total_time_synced !== "boolean") {
+    return "quiz_total_time_synced must be a boolean";
+  }
+  if (!payload.quiz_total_time_synced) return null;
+  if (payload.participant_navigation_enabled === false) {
+    return "quiz_total_time_synced requires multiple active questions";
+  }
+  if (
+    requireQuizTotalInPayload ||
+    Object.prototype.hasOwnProperty.call(payload, "quiz_total_time_minutes")
+  ) {
+    if (payload?.quiz_total_time_minutes == null || payload?.quiz_total_time_minutes === "") {
+      return "quiz_total_time_synced requires quiz total time";
+    }
+  }
+  return null;
+}
+
 const CONTACT_JOIN_TYPES = new Set([
   "name_email",
   "name_mobile",
@@ -373,6 +395,11 @@ function validateCreateSessionPayload(payload) {
   });
   if (quizTotalQuestionTimersError) errors.push(quizTotalQuestionTimersError);
 
+  const quizTotalTimeSyncedError = validateQuizTotalTimeSynced(payload, {
+    requireQuizTotalInPayload: true
+  });
+  if (quizTotalTimeSyncedError) errors.push(quizTotalTimeSyncedError);
+
   const randomOrderError = validateRandomQuestionOrder(payload);
   if (randomOrderError) errors.push(randomOrderError);
 
@@ -404,6 +431,7 @@ function validateUpdateSessionPayload(payload) {
     "participant_navigation_enabled",
     "quiz_total_time_minutes",
     "quiz_total_question_timers_enabled",
+    "quiz_total_time_synced",
     "random_question_order_enabled",
     "join_type",
     "join_otp_required",
@@ -509,6 +537,9 @@ function validateUpdateSessionPayload(payload) {
 
   const quizTotalQuestionTimersError = validateQuizTotalQuestionTimersEnabled(payload);
   if (quizTotalQuestionTimersError) errors.push(quizTotalQuestionTimersError);
+
+  const quizTotalTimeSyncedError = validateQuizTotalTimeSynced(payload);
+  if (quizTotalTimeSyncedError) errors.push(quizTotalTimeSyncedError);
 
   const randomOrderError = validateRandomQuestionOrder(payload);
   if (randomOrderError) errors.push(randomOrderError);

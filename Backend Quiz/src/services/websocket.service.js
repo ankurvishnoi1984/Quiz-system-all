@@ -587,6 +587,7 @@ function notifySessionSettings(sessionCode, settings) {
     quiz_total_question_timers_enabled: Boolean(
       settings.quiz_total_question_timers_enabled
     ),
+    quiz_total_time_synced: Boolean(settings.quiz_total_time_synced),
     present_mode_settings: settings.present_mode_settings ?? null,
     participant_theme: settings.participant_theme || "default",
     participant_theme_custom: settings.participant_theme_custom ?? null

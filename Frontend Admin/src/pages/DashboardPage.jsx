@@ -522,6 +522,10 @@ function DashboardPage() {
           values.enableNavigation &&
           values.quizTotalTimeEnabled &&
           Boolean(values.quizTotalQuestionTimersEnabled),
+        quiz_total_time_synced:
+          values.enableNavigation &&
+          values.quizTotalTimeEnabled &&
+          Boolean(values.quizTotalTimeSynced),
         join_type: values.joinRequirement || 'name',
         join_otp_required:
           values.joinRequirement === 'name_email' ||
@@ -607,6 +611,7 @@ function DashboardPage() {
       quizTotalQuestionTimersEnabled: Boolean(
         editSession.quiz_total_question_timers_enabled,
       ),
+      quizTotalTimeSynced: Boolean(editSession.quiz_total_time_synced),
       overallLeaderboard: Boolean(editSession.leaderboard_enabled),
       showParticipantCount: Boolean(editSession.show_participant_count),
       autoEndEnabled: Boolean(editSession.auto_end_enabled),
@@ -684,6 +689,10 @@ function DashboardPage() {
           values.enableNavigation &&
           values.quizTotalTimeEnabled &&
           Boolean(values.quizTotalQuestionTimersEnabled),
+        quiz_total_time_synced:
+          values.enableNavigation &&
+          values.quizTotalTimeEnabled &&
+          Boolean(values.quizTotalTimeSynced),
         join_type: values.joinRequirement || 'name',
         join_otp_required:
           values.joinRequirement === 'name_email' ||

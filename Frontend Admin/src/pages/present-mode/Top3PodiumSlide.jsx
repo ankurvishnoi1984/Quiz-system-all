@@ -15,6 +15,9 @@ export function Top3PodiumSlide({
   onQaClick,
   readOnly = false,
   showParticipantStats = true,
+  hasQuizCountdown = false,
+  quizTimer = 0,
+  quizTimeLimit = 0,
 }) {
   return (
     <div className="quiz-slide-in present-podium flex min-h-0 flex-1 flex-col">
@@ -31,6 +34,9 @@ export function Top3PodiumSlide({
         onQaClick={onQaClick}
         readOnly={readOnly}
         showParticipantStats={showParticipantStats}
+        hasQuizCountdown={hasQuizCountdown}
+        quizTimer={quizTimer}
+        quizTimeLimit={quizTimeLimit}
       />
 
       <PodiumCelebration leaderboard={leaderboard} />

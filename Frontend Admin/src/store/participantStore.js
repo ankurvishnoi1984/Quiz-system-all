@@ -190,6 +190,21 @@ export const useParticipantStore = create(
         })
       },
 
+      /** Host-synced quiz total: always align endsAt to the shared session deadline. */
+      syncQuizSessionCountdownEndsAt: (endsAt) => {
+        const deadline = Number(endsAt)
+        if (!Number.isFinite(deadline)) return
+        const existing = get().quizSessionCountdown
+        if (existing?.frozen != null) return
+        if (existing?.endsAt === deadline) return
+        set({
+          quizSessionCountdown: {
+            endsAt: deadline,
+            frozen: null,
+          },
+        })
+      },
+
       freezeQuizSessionCountdown: () => {
         const entry = get().quizSessionCountdown
         if (!entry?.endsAt) return

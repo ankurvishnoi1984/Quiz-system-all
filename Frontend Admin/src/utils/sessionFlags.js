@@ -23,6 +23,13 @@ export function isQuizTotalWithQuestionTimersEnabled(session) {
   return value === true || value === 1 || value === '1'
 }
 
+/** Shared quiz clock from session started_at for all participants. */
+export function isQuizTotalTimeSynced(session) {
+  if (!isSessionQuizTotalTimeEnabled(session)) return false
+  const value = session?.quiz_total_time_synced
+  return value === true || value === 1 || value === '1'
+}
+
 /** Each participant sees questions in a shuffled order; host must activate all at once. */
 export function isSessionRandomQuestionOrderEnabled(session) {
   if (!session) return false

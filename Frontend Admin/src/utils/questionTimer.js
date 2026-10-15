@@ -44,6 +44,29 @@ export function filterActiveQuestionsForLateJoinPolicy(questions) {
 }
 
 /**
+ * Shared quiz-total deadline from host session launch (epoch ms).
+ * @param {{ started_at?: unknown, quiz_total_time_minutes?: unknown }} session
+ */
+export function getQuizTotalEndsAt(session) {
+  const minutes = Number(session?.quiz_total_time_minutes)
+  if (!Number.isFinite(minutes) || minutes <= 0) return null
+  const started = parseActivationTime(session?.started_at)
+  if (started == null) return null
+  return started + minutes * 60 * 1000
+}
+
+/** Whole seconds remaining on the shared quiz-total clock. */
+export function getQuizTotalRemainingSeconds(session, nowMs = Date.now()) {
+  const endsAt = getQuizTotalEndsAt(session)
+  if (endsAt == null) {
+    const minutes = Number(session?.quiz_total_time_minutes)
+    if (!Number.isFinite(minutes) || minutes <= 0) return 0
+    return Math.max(0, Math.floor(minutes * 60))
+  }
+  return getRemainingQuestionSeconds(endsAt, nowMs)
+}
+
+/**
  * Countdown end timestamp for the participant UI.
  * Strict late join: shared host deadline (remaining time only).
  * Reattempt always gets a fresh window (host resets live_activated_at).

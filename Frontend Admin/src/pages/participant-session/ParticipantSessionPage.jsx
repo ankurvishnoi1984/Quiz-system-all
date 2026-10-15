@@ -46,6 +46,7 @@ import {
 } from '../../utils/timerSounds'
 import {
   isAdvancedBuilderSession,
+  isQuizTotalTimeSynced,
   isQuizTotalWithQuestionTimersEnabled,
   isSessionQuizTotalTimeEnabled,
   isSessionRandomQuestionOrderEnabled,
@@ -68,6 +69,7 @@ import {
   filterActiveQuestionsForLateJoinPolicy,
   getCountdownEndsAtForQuestion,
   getQuestionDeadlineMs,
+  getQuizTotalEndsAt,
   getRemainingQuestionSeconds,
 } from '../../utils/questionTimer'
 import { ActiveQuestionPanel } from './components/ActiveQuestionPanel'
@@ -167,6 +169,7 @@ function ParticipantSessionPage({ embed = false }) {
     setSubmitted,
     setQuizCountdown,
     startQuizSessionCountdown,
+    syncQuizSessionCountdownEndsAt,
     freezeQuizSessionCountdown,
     resetQuizProgress,
     hydrateQuizProgress,
@@ -195,6 +198,7 @@ function ParticipantSessionPage({ embed = false }) {
       setSubmitted: s.setQuizSubmitted,
       setQuizCountdown: s.setQuizCountdown,
       startQuizSessionCountdown: s.startQuizSessionCountdown,
+      syncQuizSessionCountdownEndsAt: s.syncQuizSessionCountdownEndsAt,
       freezeQuizSessionCountdown: s.freezeQuizSessionCountdown,
       resetQuizProgress: s.resetQuizProgress,
       hydrateQuizProgress: s.hydrateQuizProgress,
@@ -462,6 +466,7 @@ function ParticipantSessionPage({ embed = false }) {
     () => isQuizTotalWithQuestionTimersEnabled(session),
     [session],
   )
+  const quizTotalTimeSynced = useMemo(() => isQuizTotalTimeSynced(session), [session])
   const sessionQuizTotalTimeSeconds = sessionQuizTotalTimeEnabled
     ? Math.max(0, Number(session?.quiz_total_time_minutes) || 0) * 60
     : 0
@@ -626,7 +631,8 @@ function ParticipantSessionPage({ embed = false }) {
     ? sessionQuizTotalTimeSeconds
     : timeLimit
 
-  const sessionTimerExpired = hasQuizCountdown && quizTimer === 0
+  const sessionTimerExpired =
+    hasQuizCountdown && quizCountdownEndsAt != null && quizTimer === 0
 
   const canEditResponses = useMemo(
     () =>
@@ -1254,6 +1260,18 @@ function ParticipantSessionPage({ embed = false }) {
                 : null,
               participant_navigation_enabled:
                 data.participant_navigation_enabled ?? old.participant_navigation_enabled,
+              quiz_total_time_minutes:
+                data.quiz_total_time_minutes !== undefined
+                  ? data.quiz_total_time_minutes
+                  : old.quiz_total_time_minutes,
+              quiz_total_question_timers_enabled:
+                data.quiz_total_question_timers_enabled !== undefined
+                  ? Boolean(data.quiz_total_question_timers_enabled)
+                  : old.quiz_total_question_timers_enabled,
+              quiz_total_time_synced:
+                data.quiz_total_time_synced !== undefined
+                  ? Boolean(data.quiz_total_time_synced)
+                  : old.quiz_total_time_synced,
               random_question_order_enabled:
                 data.random_question_order_enabled ?? old.random_question_order_enabled,
               allow_late_join:
@@ -1736,14 +1754,24 @@ function ParticipantSessionPage({ embed = false }) {
     if (step !== 'active') return
     if (!sessionQuizTotalTimeEnabled) return
     if (!activeQuestions.length) return
+    if (quizTotalTimeSynced) {
+      const sharedEndsAt = getQuizTotalEndsAt(session)
+      if (sharedEndsAt == null) return
+      syncQuizSessionCountdownEndsAt(sharedEndsAt)
+      return
+    }
     startQuizSessionCountdown(Number(session?.quiz_total_time_minutes))
   }, [
     isSessionEnded,
     step,
     sessionQuizTotalTimeEnabled,
+    quizTotalTimeSynced,
     activeQuestions.length,
     session?.quiz_total_time_minutes,
+    session?.started_at,
     startQuizSessionCountdown,
+    syncQuizSessionCountdownEndsAt,
+    session,
   ])
 
   useEffect(() => {

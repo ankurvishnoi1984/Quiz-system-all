@@ -19,6 +19,12 @@ function isQuizTotalWithQuestionTimersEnabled(session) {
   return flagEnabled(session?.quiz_total_question_timers_enabled);
 }
 
+/** Shared quiz clock from session started_at for all participants. */
+function isQuizTotalTimeSynced(session) {
+  if (!isSessionQuizTotalTimeEnabled(session)) return false;
+  return flagEnabled(session?.quiz_total_time_synced);
+}
+
 /** DB/Sequelize may return 0/1 or a Buffer; never treat a Buffer as automatically true. */
 function flagEnabled(value) {
   if (value === true || value === 1 || value === "1") return true;
@@ -124,6 +130,7 @@ module.exports = {
   sessionFlagEnabled: flagEnabled,
   isSessionQuizTotalTimeEnabled,
   isQuizTotalWithQuestionTimersEnabled,
+  isQuizTotalTimeSynced,
   isSessionRandomQuestionOrderEnabled,
   sessionHasTimedQuestions,
   isStrictLateJoinSession,

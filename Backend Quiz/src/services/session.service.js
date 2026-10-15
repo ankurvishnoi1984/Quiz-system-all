@@ -245,6 +245,12 @@ async function createSession({ deptId, input, user }) {
          Number(input.quiz_total_time_minutes) > 0 &&
          input.quiz_total_question_timers_enabled
      ),
+     quiz_total_time_synced: Boolean(
+       input.participant_navigation_enabled &&
+         input.quiz_total_time_minutes != null &&
+         Number(input.quiz_total_time_minutes) > 0 &&
+         input.quiz_total_time_synced
+     ),
      random_question_order_enabled:
        input.participant_navigation_enabled && Boolean(input.random_question_order_enabled),
      builder_mode: input.builder_mode === "advanced" ? "advanced" : "normal",
@@ -382,6 +388,11 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
           source.quiz_total_time_minutes != null &&
             Number(source.quiz_total_time_minutes) > 0 &&
             source.quiz_total_question_timers_enabled
+        ),
+        quiz_total_time_synced: Boolean(
+          source.quiz_total_time_minutes != null &&
+            Number(source.quiz_total_time_minutes) > 0 &&
+            source.quiz_total_time_synced
         ),
         random_question_order_enabled: Boolean(source.random_question_order_enabled),
         builder_mode: source.builder_mode === "advanced" ? "advanced" : "normal",
@@ -587,6 +598,17 @@ async function updateSession({ sessionId, input, user }) {
     nextQuizTotalQuestionTimersEnabled = Boolean(input.quiz_total_question_timers_enabled);
   }
 
+  let nextQuizTotalTimeSynced = Boolean(session.quiz_total_time_synced);
+  if (
+    !nextParticipantNavigationEnabled ||
+    nextQuizTotalTimeMinutes == null ||
+    !(Number(nextQuizTotalTimeMinutes) > 0)
+  ) {
+    nextQuizTotalTimeSynced = false;
+  } else if (input.quiz_total_time_synced !== undefined) {
+    nextQuizTotalTimeSynced = Boolean(input.quiz_total_time_synced);
+  }
+
   const nextRandomQuestionOrderEnabled = !nextParticipantNavigationEnabled
     ? false
     : input.random_question_order_enabled !== undefined
@@ -687,6 +709,7 @@ async function updateSession({ sessionId, input, user }) {
         : session.participant_navigation_enabled,
     quiz_total_time_minutes: nextQuizTotalTimeMinutes,
     quiz_total_question_timers_enabled: nextQuizTotalQuestionTimersEnabled,
+    quiz_total_time_synced: nextQuizTotalTimeSynced,
     random_question_order_enabled: nextRandomQuestionOrderEnabled,
     builder_mode: nextBuilderMode,
     questions_per_participant: nextQuestionsPerParticipant,

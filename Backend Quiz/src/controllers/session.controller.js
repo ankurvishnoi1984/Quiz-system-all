@@ -170,6 +170,7 @@ async function update(req, res) {
         quiz_total_question_timers_enabled: Boolean(
           session.quiz_total_question_timers_enabled
         ),
+        quiz_total_time_synced: Boolean(session.quiz_total_time_synced),
         random_question_order_enabled: isSessionRandomQuestionOrderEnabled(session),
         allow_late_join: Boolean(session.allow_late_join),
         join_locked: Boolean(session.join_locked),
@@ -279,6 +280,7 @@ function lifecycleAction(action) {
               quiz_total_question_timers_enabled: Boolean(
                 session.quiz_total_question_timers_enabled
               ),
+              quiz_total_time_synced: Boolean(session.quiz_total_time_synced),
               random_question_order_enabled: isSessionRandomQuestionOrderEnabled(session),
               allow_late_join: Boolean(session.allow_late_join)
             });
@@ -359,6 +361,7 @@ async function lookupByCode(req, res) {
           quiz_total_question_timers_enabled: Boolean(
             session.quiz_total_question_timers_enabled
           ),
+          quiz_total_time_synced: Boolean(session.quiz_total_time_synced),
           random_question_order_enabled: isSessionRandomQuestionOrderEnabled(session),
           builder_mode: session.builder_mode || "normal",
           advanced_active_slot: session.advanced_active_slot ?? null,
@@ -729,6 +732,7 @@ async function activateAdvancedAssignmentSlotHandler(req, res) {
         "join_locked",
         "quiz_total_time_minutes",
         "quiz_total_question_timers_enabled",
+        "quiz_total_time_synced",
         "present_mode_settings",
         "participant_theme",
         "participant_theme_custom"
