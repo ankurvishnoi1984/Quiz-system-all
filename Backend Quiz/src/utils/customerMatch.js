@@ -1,4 +1,13 @@
-const CUSTOMER_MATCH_ZONES = Object.freeze(["East", "West", "North", "South"]);
+const CUSTOMER_MATCH_REGION_ZONES = Object.freeze([
+  "East",
+  "West",
+  "North",
+  "South",
+]);
+const CUSTOMER_MATCH_ZONES = Object.freeze([
+  "All",
+  ...CUSTOMER_MATCH_REGION_ZONES,
+]);
 
 function normalizeCustomerMatchZone(raw) {
   const zone = String(raw || "").trim();
@@ -10,8 +19,9 @@ function normalizeCustomerMatchZone(raw) {
 }
 
 /**
- * Normalize one or more zones into a deduped array in canonical CUSTOMER_MATCH_ZONES order.
+ * Normalize one or more zones into a deduped array in canonical order.
  * Accepts null/undefined, a single string (legacy), a comma-separated string, or an array.
+ * If All is present, returns ["All"] only (regions are dropped).
  * @returns {string[]|null}
  */
 function normalizeCustomerMatchZones(raw) {
@@ -34,7 +44,9 @@ function normalizeCustomerMatchZones(raw) {
     if (zone) seen.add(zone);
   }
 
-  const zones = CUSTOMER_MATCH_ZONES.filter((z) => seen.has(z));
+  if (seen.has("All")) return ["All"];
+
+  const zones = CUSTOMER_MATCH_REGION_ZONES.filter((z) => seen.has(z));
   return zones.length > 0 ? zones : null;
 }
 
@@ -91,7 +103,7 @@ function resolveCustomerMatchFields(input = {}, { previous = null } = {}) {
 
   if (!wc || !zones) {
     const error = new Error(
-      "Customer match requires a valid WC code (numbers only) and at least one zone (East, West, North, or South)."
+      "Customer match requires a valid WC code (numbers only) and at least one zone (All, East, West, North, or South)."
     );
     error.statusCode = 400;
     throw error;
@@ -115,6 +127,7 @@ function getSessionCustomerMatchConfig(session) {
 }
 
 module.exports = {
+  CUSTOMER_MATCH_REGION_ZONES,
   CUSTOMER_MATCH_ZONES,
   normalizeCustomerMatchZone,
   normalizeCustomerMatchZones,

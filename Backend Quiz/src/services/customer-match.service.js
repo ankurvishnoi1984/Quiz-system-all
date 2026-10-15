@@ -31,8 +31,8 @@ function resolveVerifyZones({ zones, zone } = {}) {
 }
 
 /**
- * Call Netcast (or local) customer-match API once with all zones.
- * Sends zone as comma-separated values, e.g. zone=East,North
+ * Call Netcast (or local) customer-match API once with session zones.
+ * Sends zone as a single token (zone=All) or comma-separated regions (zone=East,North).
  * @returns {Promise<{ match: boolean }>}
  */
 async function verifyCustomerMatch({ email, wcCode, zones, zone } = {}) {
