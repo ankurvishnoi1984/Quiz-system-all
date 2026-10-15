@@ -47,6 +47,7 @@ function mapApiSessionToLocal(session) {
     id: session.session_id,
     session_id: session.session_id,
     title: session.title,
+    description: session.description || '',
     session_code: session.session_code || '',
     date: session.created_at ? session.created_at.split('T')[0] : '',
     status: session.status === 'live' ? 'Live' : session.status === 'completed' ? 'Completed' : session.status === 'draft' ? 'Draft' : session.status === 'paused' ? 'Paused' : session.status,

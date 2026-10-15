@@ -44,10 +44,16 @@ function SessionCard({
   canPresent = true,
   canAnalytics = true,
 }) {
+  const description = String(session.description || '').trim()
+
   const preview = useMemo(() => {
     const labels = session.tags?.join(', ') || 'Quiz'
-    return `${labels} • ${session.participants} participants • Status: ${session.status}`
-  }, [session.participants, session.status, session.tags])
+    const base = `${labels} • ${session.participants} participants • Status: ${session.status}`
+    if (!description) return base
+    const snippet =
+      description.length > 80 ? `${description.slice(0, 80).trim()}…` : description
+    return `${base} • ${snippet}`
+  }, [description, session.participants, session.status, session.tags])
 
   const isLive = session.status === 'Live'
   const isCompleted = session.status === 'Completed'
@@ -157,6 +163,11 @@ function SessionCard({
             )}
           </div>
           <p className="mt-1 text-sm text-slate-600">Created: {session.date}</p>
+          {description ? (
+            <p className="mt-1.5 line-clamp-2 text-sm text-slate-600" title={description}>
+              {description}
+            </p>
+          ) : null}
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {(session.tags ?? []).map((tag) => (
               <Tag key={tag}>{tag}</Tag>
