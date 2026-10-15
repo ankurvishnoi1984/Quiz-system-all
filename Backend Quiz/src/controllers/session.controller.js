@@ -368,6 +368,7 @@ async function lookupByCode(req, res) {
           questions_per_participant: session.questions_per_participant ?? null,
           participant_theme: session.participant_theme || "default",
           participant_theme_custom: session.participant_theme_custom ?? null,
+          present_mode_settings: session.present_mode_settings ?? null,
           allow_late_join: Boolean(session.allow_late_join),
           join_locked: Boolean(session.join_locked),
           last_activity_at: session.last_activity_at || null,
