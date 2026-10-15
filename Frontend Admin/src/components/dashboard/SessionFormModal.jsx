@@ -166,27 +166,15 @@ function SessionFormModal({
 
   const normalizeCustomerMatchZonesSelection = (zonesRaw) => {
     const raw = Array.isArray(zonesRaw) ? zonesRaw : []
-    if (raw.some((z) => String(z).toLowerCase() === 'all')) return ['All']
-    return CUSTOMER_MATCH_REGIONS.filter((z) =>
+    return CUSTOMER_MATCH_ZONE_OPTIONS.filter((z) =>
       raw.some((item) => String(item).toLowerCase() === z.toLowerCase()),
     )
   }
 
-  const allZonesSelected = customerMatchZones.includes('All')
-
   const toggleCustomerMatchZone = (zone) => {
-    if (zone === 'All') {
-      setCustomerMatchZones((prev) => (prev.includes('All') ? [] : ['All']))
-      setCustomerMatchConfigError('')
-      return
-    }
-    if (allZonesSelected) return
     setCustomerMatchZones((prev) => {
-      const withoutAll = prev.filter((z) => z !== 'All')
-      const next = withoutAll.includes(zone)
-        ? withoutAll.filter((z) => z !== zone)
-        : [...withoutAll, zone]
-      return CUSTOMER_MATCH_REGIONS.filter((z) => next.includes(z))
+      const next = prev.includes(zone) ? prev.filter((z) => z !== zone) : [...prev, zone]
+      return CUSTOMER_MATCH_ZONE_OPTIONS.filter((z) => next.includes(z))
     })
     setCustomerMatchConfigError('')
   }
@@ -904,32 +892,25 @@ function SessionFormModal({
                   <div className="mt-3 space-y-3">
                     <div>
                       <p className="text-xs font-semibold text-slate-600">
-                        Zone (select All, or one or more regions)
+                        Zone (select one or more)
                       </p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {CUSTOMER_MATCH_ZONE_OPTIONS.map((z) => {
-                          const isAll = z === 'All'
-                          const checked = isAll
-                            ? allZonesSelected
-                            : !allZonesSelected && customerMatchZones.includes(z)
-                          const disabled = !isAll && allZonesSelected
+                          const checked = customerMatchZones.includes(z)
                           return (
                             <label
                               key={z}
-                              className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
-                                disabled
-                                  ? 'cursor-not-allowed border-slate-100 bg-slate-50 text-slate-400'
-                                  : checked
-                                    ? 'cursor-pointer border-navy-600 bg-navy-50 text-navy-900'
-                                    : 'cursor-pointer border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                              className={`inline-flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                                checked
+                                  ? 'border-navy-600 bg-navy-50 text-navy-900'
+                                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                               }`}
                             >
                               <input
                                 type="checkbox"
                                 checked={checked}
-                                disabled={disabled}
                                 onChange={() => toggleCustomerMatchZone(z)}
-                                className="h-4 w-4 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40 disabled:cursor-not-allowed"
+                                className="h-4 w-4 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
                               />
                               {z}
                             </label>
