@@ -123,7 +123,7 @@ export function ActiveQuestionPanel({
           </div>
         {sessionQuizTotalTimeEnabled && !canShowPreviousQuestion && (
           <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
-            Submit the last question or wait for the quiz timer to use Previous.
+            Submit the last question or wait for the quiz timer to end.
           </p>
         )}
         {sessionQuizTotalTimeEnabled && canShowPreviousQuestion && (
