@@ -49,15 +49,15 @@ function usePresentJoinInfo(session) {
 
 export function SessionMetaRow({ icon: Icon, label, value }) {
   return (
-    <div className="flex min-w-0 items-start gap-3 rounded-2xl border border-blue-200/70 bg-white/95 px-[clamp(0.85rem,2vw,1.25rem)] py-[clamp(0.65rem,1.5vh,0.9rem)] shadow-sm shadow-navy-900/5">
-      <span className="grid size-[clamp(2.5rem,5vw,3rem)] shrink-0 place-items-center rounded-xl bg-linear-to-br from-sky-100 to-blue-100 text-sky-800">
-        <Icon className="size-[clamp(1.1rem,2.2vw,1.35rem)]" strokeWidth={2} />
+    <div className="flex min-w-0 items-start gap-2.5 rounded-2xl border border-blue-200/70 bg-white/95 px-[clamp(0.75rem,1.8vw,1.1rem)] py-[clamp(0.55rem,1.3vh,0.75rem)] shadow-sm shadow-navy-900/5">
+      <span className="grid size-[clamp(2.15rem,4.2vw,2.6rem)] shrink-0 place-items-center rounded-xl bg-linear-to-br from-sky-100 to-blue-100 text-sky-800">
+        <Icon className="size-[clamp(1rem,2vw,1.2rem)]" strokeWidth={2} />
       </span>
       <div className="min-w-0 pt-0.5">
-        <p className="text-[clamp(0.65rem,1.2vw,0.75rem)] font-semibold uppercase tracking-wider text-slate-500">
+        <p className="text-[clamp(0.6rem,1.1vw,0.7rem)] font-semibold uppercase tracking-wider text-slate-500">
           {label}
         </p>
-        <p className="mt-0.5 break-words text-[clamp(1rem,2.2vw,1.35rem)] font-bold leading-snug text-navy-900">
+        <p className="mt-0.5 break-normal text-[clamp(0.9rem,1.9vw,1.2rem)] font-bold leading-snug text-navy-900">
           {value}
         </p>
       </div>
@@ -286,9 +286,11 @@ export function PresentJoinPanel({
       className={`flex min-h-0 w-full min-w-0 flex-1 flex-col items-center justify-center overflow-x-hidden px-[clamp(0.5rem,2vw,1.5rem)] ${className}`}
     >
       <div
-        className={`quiz-enter w-full min-w-0 ${showInstructions ? 'max-w-7xl' : 'max-w-6xl'}`}
+        className={`quiz-enter flex w-full min-w-0 flex-1 flex-col ${
+          showInstructions ? 'max-w-[min(100%,96rem)]' : 'max-w-6xl'
+        }`}
       >
-        <div className="mb-[clamp(1rem,3vh,1.75rem)] text-center">
+        <div className="mb-[clamp(1rem,3vh,1.75rem)] shrink-0 text-center">
           {session?.logo_url ? (
             <BrandLogoPair
               variant="present"
@@ -309,12 +311,15 @@ export function PresentJoinPanel({
         </div>
 
         {showInstructions ? (
-          <div className="grid min-w-0 items-stretch gap-[clamp(0.75rem,2vw,1.25rem)] lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-            <div className="flex min-w-0 flex-col gap-[clamp(0.75rem,2vh,1.25rem)]">
+          <div className="grid min-h-0 min-w-0 flex-1 items-stretch gap-[clamp(1rem,2.5vw,1.75rem)] lg:grid-cols-[minmax(26rem,32rem)_minmax(0,1fr)]">
+            <div className="flex h-full min-w-0 flex-col gap-[clamp(0.75rem,2vh,1.25rem)]">
               {scheduleBlock}
               {joinGrid}
             </div>
-            <PresentInstructionsPanel instructions={instructions} className="h-full" />
+            <PresentInstructionsPanel
+              instructions={instructions}
+              className="h-full min-h-0"
+            />
           </div>
         ) : (
           <>

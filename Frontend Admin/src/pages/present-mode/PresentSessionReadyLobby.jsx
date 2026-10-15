@@ -94,7 +94,7 @@ export function PresentSessionReadyLobby({
   ) : null
 
   const leftStack = (
-    <div className="flex min-w-0 flex-col gap-[clamp(0.75rem,2vh,1.25rem)]">
+    <div className="flex h-full min-w-0 flex-col gap-[clamp(0.75rem,2vh,1.25rem)]">
       {scheduleBlock}
       {audienceBlock}
     </div>
@@ -105,9 +105,11 @@ export function PresentSessionReadyLobby({
       className={`flex min-h-0 w-full min-w-0 flex-1 flex-col items-center justify-center overflow-x-hidden px-[clamp(0.5rem,2vw,1.5rem)] ${className}`}
     >
       <div
-        className={`quiz-enter w-full min-w-0 ${showInstructions ? 'max-w-6xl' : 'max-w-4xl'}`}
+        className={`quiz-enter flex w-full min-w-0 flex-1 flex-col ${
+          showInstructions ? 'max-w-[min(100%,96rem)]' : 'max-w-5xl'
+        }`}
       >
-        <div className="mb-[clamp(1rem,3vh,1.75rem)] text-center">
+        <div className="mb-[clamp(1rem,3vh,1.75rem)] shrink-0 text-center">
           {session?.logo_url ? (
             <BrandLogoPair
               variant="present"
@@ -131,9 +133,12 @@ export function PresentSessionReadyLobby({
         </div>
 
         {useSplit ? (
-          <div className="mb-[clamp(1rem,2.5vh,1.5rem)] grid min-w-0 items-stretch gap-[clamp(0.75rem,2vw,1.25rem)] lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+          <div className="mb-[clamp(1rem,2.5vh,1.5rem)] grid min-h-0 min-w-0 flex-1 items-stretch gap-[clamp(1rem,2.5vw,1.75rem)] lg:grid-cols-[minmax(26rem,32rem)_minmax(0,1fr)]">
             {leftStack}
-            <PresentInstructionsPanel instructions={instructions} className="h-full" />
+            <PresentInstructionsPanel
+              instructions={instructions}
+              className="h-full min-h-0"
+            />
           </div>
         ) : null}
 
@@ -145,16 +150,16 @@ export function PresentSessionReadyLobby({
         ) : null}
 
         {!useSplit && showInstructions ? (
-          <div className="mb-[clamp(1rem,2.5vh,1.5rem)] mx-auto w-full max-w-xl">
+          <div className="mb-[clamp(1rem,2.5vh,1.5rem)] mx-auto w-full max-w-3xl">
             <PresentInstructionsPanel instructions={instructions} />
           </div>
         ) : null}
 
-        <p className="text-center text-[clamp(0.95rem,1.8vw,1.2rem)] leading-relaxed text-slate-600">
+        {/* <p className="shrink-0 text-center text-[clamp(0.95rem,1.8vw,1.2rem)] leading-relaxed text-slate-600">
           {readOnly
             ? 'Waiting for the host to continue.'
             : "Advance when you're ready to show the first question."}
-        </p>
+        </p> */}
       </div>
     </div>
   )

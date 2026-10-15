@@ -29,7 +29,7 @@ export function QuizCompletedThanksPanel({
           <p className="mt-3 text-base text-slate-600 sm:text-lg">{sessionTitle}</p>
         ) : null}
         <p className="mt-4 text-sm leading-relaxed text-slate-600 sm:text-base">
-          Your answers have been recorded. Waiting for the host to continue.
+          Your answers have been recorded.
         </p>
         {showPrevious ? (
           <div className="mt-8 flex justify-center">
