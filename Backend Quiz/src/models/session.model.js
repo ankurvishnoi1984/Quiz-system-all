@@ -213,6 +213,14 @@ const Session = sequelize.define(
       type: DataTypes.TEXT,
       allowNull: true
     },
+    waiting_screen_image_url: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    thanks_screen_image_url: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
     present_mode_settings: {
       type: DataTypes.JSON,
       allowNull: true,

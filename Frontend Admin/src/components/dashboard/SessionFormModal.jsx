@@ -119,6 +119,8 @@ const defaultInitial = {
   overallLeaderboard: false,
   showParticipantCount: false,
   logoUrl: '',
+  waitingScreenImageUrl: '',
+  thanksScreenImageUrl: '',
   participantTheme: DEFAULT_PARTICIPANT_THEME,
   participantThemeCustom: { ...DEFAULT_CUSTOM_THEME_COLORS },
   builderMode: 'normal',
@@ -148,6 +150,8 @@ function SessionFormModal({
   isSubmitting = false,
 }) {
   const logoInputRef = useRef(null)
+  const waitingImageInputRef = useRef(null)
+  const thanksImageInputRef = useRef(null)
   const allowlistInputRef = useRef(null)
   const [joinRequirement, setJoinRequirement] = useState(defaultInitial.joinRequirement)
   const [joinOtpRequired, setJoinOtpRequired] = useState(defaultInitial.joinOtpRequired)
@@ -215,6 +219,12 @@ function SessionFormModal({
   const [logoUrl, setLogoUrl] = useState('')
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoError, setLogoError] = useState('')
+  const [waitingScreenImageUrl, setWaitingScreenImageUrl] = useState('')
+  const [waitingImageUploading, setWaitingImageUploading] = useState(false)
+  const [waitingImageError, setWaitingImageError] = useState('')
+  const [thanksScreenImageUrl, setThanksScreenImageUrl] = useState('')
+  const [thanksImageUploading, setThanksImageUploading] = useState(false)
+  const [thanksImageError, setThanksImageError] = useState('')
   const [participantTheme, setParticipantTheme] = useState(DEFAULT_PARTICIPANT_THEME)
   const [participantThemeCustom, setParticipantThemeCustom] = useState(() => ({
     ...DEFAULT_CUSTOM_THEME_COLORS,
@@ -297,6 +307,12 @@ function SessionFormModal({
     setLogoUrl(initialValues.logoUrl || '')
     setLogoError('')
     setLogoUploading(false)
+    setWaitingScreenImageUrl(initialValues.waitingScreenImageUrl || '')
+    setWaitingImageError('')
+    setWaitingImageUploading(false)
+    setThanksScreenImageUrl(initialValues.thanksScreenImageUrl || '')
+    setThanksImageError('')
+    setThanksImageUploading(false)
     setParticipantTheme(normalizeParticipantTheme(initialValues.participantTheme))
     setParticipantThemeCustom(
       normalizeCustomThemeColors(initialValues.participantThemeCustom),
@@ -338,36 +354,80 @@ function SessionFormModal({
     }
   }
 
-  const handleLogoUpload = async (file) => {
-    if (!file || logoUploading) return
+  const uploadSessionImage = async ({
+    file,
+    uploading,
+    setUploading,
+    setError,
+    setUrl,
+    inputRef,
+    label,
+  }) => {
+    if (!file || uploading) return
 
     if (!QUESTION_MEDIA_SUPPORTED_IMAGE_TYPES.includes(file.type)) {
-      setLogoError('Please upload a PNG, JPG, WebP, or GIF logo.')
+      setError(`Please upload a PNG, JPG, WebP, or GIF ${label}.`)
       return
     }
     if (file.size > LOGO_MAX_BYTES) {
-      setLogoError('Logo must be 5 MB or smaller.')
+      setError(`${label} must be 5 MB or smaller.`)
       return
     }
     if (!uploadDeptId) {
-      setLogoError('Select a department before uploading a logo.')
+      setError(`Select a department before uploading a ${label}.`)
       return
     }
 
-    setLogoError('')
-    setLogoUploading(true)
+    setError('')
+    setUploading(true)
     try {
       const prepared =
         file.type !== 'image/gif' ? await compressQuestionImage(file) : file
       const { fileUrl } = await uploadQuestionMediaApi(uploadDeptId, prepared)
       if (!fileUrl) throw new Error('Upload succeeded but no file URL was returned')
-      setLogoUrl(normalizeQuestionMediaUrlForStorage(fileUrl) || fileUrl)
+      setUrl(normalizeQuestionMediaUrlForStorage(fileUrl) || fileUrl)
     } catch (err) {
-      setLogoError(err.message || 'Failed to upload logo')
+      setError(err.message || `Failed to upload ${label}`)
     } finally {
-      setLogoUploading(false)
-      if (logoInputRef.current) logoInputRef.current.value = ''
+      setUploading(false)
+      if (inputRef.current) inputRef.current.value = ''
     }
+  }
+
+  const handleLogoUpload = async (file) => {
+    await uploadSessionImage({
+      file,
+      uploading: logoUploading,
+      setUploading: setLogoUploading,
+      setError: setLogoError,
+      setUrl: setLogoUrl,
+      inputRef: logoInputRef,
+      label: 'logo',
+    })
+  }
+
+  const handleWaitingImageUpload = async (file) => {
+    await uploadSessionImage({
+      file,
+      uploading: waitingImageUploading,
+      setUploading: setWaitingImageUploading,
+      setError: setWaitingImageError,
+      setUrl: setWaitingScreenImageUrl,
+      inputRef: waitingImageInputRef,
+      label: 'waiting screen image',
+    })
+  }
+
+  const handleThanksImageUpload = async (file) => {
+    await uploadSessionImage({
+      file,
+      uploading: thanksImageUploading,
+      setUploading: setThanksImageUploading,
+      setError: setThanksImageError,
+      setUrl: setThanksScreenImageUrl,
+      inputRef: thanksImageInputRef,
+      label: 'thank you image',
+    })
   }
 
   const clearJoinAllowlist = () => {
@@ -547,6 +607,16 @@ function SessionFormModal({
       logoUrl: logoUrl
         ? normalizeQuestionMediaUrlForStorage(logoUrl) || logoUrl
         : null,
+      waitingScreenImageUrl:
+        enableNavigation && quizTotalTimeEnabled && waitingScreenImageUrl
+          ? normalizeQuestionMediaUrlForStorage(waitingScreenImageUrl) ||
+            waitingScreenImageUrl
+          : null,
+      thanksScreenImageUrl:
+        enableNavigation && quizTotalTimeEnabled && thanksScreenImageUrl
+          ? normalizeQuestionMediaUrlForStorage(thanksScreenImageUrl) ||
+            thanksScreenImageUrl
+          : null,
       participantTheme: normalizeParticipantTheme(participantTheme),
       participantThemeCustom: toCustomThemeColorsApi(participantThemeCustom),
       builderMode: liveSettingsOnly ? undefined : builderMode,
@@ -561,6 +631,8 @@ function SessionFormModal({
   }
 
   const logoPreviewSrc = resolveQuestionMediaUrl(logoUrl)
+  const waitingImagePreviewSrc = resolveQuestionMediaUrl(waitingScreenImageUrl)
+  const thanksImagePreviewSrc = resolveQuestionMediaUrl(thanksScreenImageUrl)
 
   return (
     <Modal open={open} title={modalTitle} onClose={onClose}>
@@ -1049,10 +1121,155 @@ function SessionFormModal({
                     <p className="mt-1 text-xs text-slate-500">
                       Limit how long participants have to complete the full quiz in multiple-question
                       mode. Question timers stay off unless you enable both below.
+                      {quizTotalTimeEnabled
+                        ? ' You can upload a waiting screen and thank-you image below.'
+                        : ''}
                     </p>
                   </div>
                   {quizTotalTimeEnabled ? (
                     <div className="md:col-span-2 space-y-3">
+                      <p className="rounded-xl border border-sky-100 bg-sky-50/80 px-3 py-2 text-xs text-sky-900">
+                        After Launch, use <span className="font-semibold">Activate All</span> on the
+                        lobby (or Live page) to start the quiz for everyone.
+                      </p>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-700">Waiting screen image</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Shown to participants after Launch, before you click Activate All.
+                        </p>
+                        <div className="mt-2 flex flex-wrap items-center gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
+                          <div className="flex h-16 w-28 items-center justify-center overflow-hidden rounded-lg border border-blue-100 bg-slate-50">
+                            {waitingImagePreviewSrc ? (
+                              <img
+                                src={waitingImagePreviewSrc}
+                                alt="Waiting screen preview"
+                                className="max-h-full max-w-full object-contain p-1.5"
+                              />
+                            ) : (
+                              <span className="px-2 text-center text-[0.7rem] text-slate-400">
+                                No image
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                            <input
+                              ref={waitingImageInputRef}
+                              type="file"
+                              accept={LOGO_ACCEPT}
+                              className="hidden"
+                              onChange={(event) => {
+                                const file = event.target.files?.[0]
+                                if (file) void handleWaitingImageUpload(file)
+                              }}
+                            />
+                            <button
+                              type="button"
+                              disabled={waitingImageUploading || !uploadDeptId}
+                              onClick={() => waitingImageInputRef.current?.click()}
+                              className="inline-flex h-10 items-center gap-2 rounded-xl border border-blue-200/70 bg-white px-3 text-sm font-semibold text-navy-800 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {waitingImageUploading ? (
+                                <Loader2 className="size-4 animate-spin" />
+                              ) : (
+                                <FileUp className="size-4" />
+                              )}
+                              {waitingImageUploading
+                                ? 'Uploading…'
+                                : waitingImagePreviewSrc
+                                  ? 'Replace image'
+                                  : 'Upload image'}
+                            </button>
+                            {waitingImagePreviewSrc ? (
+                              <button
+                                type="button"
+                                disabled={waitingImageUploading}
+                                onClick={() => {
+                                  setWaitingScreenImageUrl('')
+                                  setWaitingImageError('')
+                                }}
+                                className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
+                              >
+                                <X className="size-4" />
+                                Remove
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                        {waitingImageError ? (
+                          <p className="mt-1.5 text-xs font-semibold text-red-700">
+                            {waitingImageError}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-700">Thank you image</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Shown instead of the thank-you message when the quiz total timer ends.
+                        </p>
+                        <div className="mt-2 flex flex-wrap items-center gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
+                          <div className="flex h-16 w-28 items-center justify-center overflow-hidden rounded-lg border border-blue-100 bg-slate-50">
+                            {thanksImagePreviewSrc ? (
+                              <img
+                                src={thanksImagePreviewSrc}
+                                alt="Thank you screen preview"
+                                className="max-h-full max-w-full object-contain p-1.5"
+                              />
+                            ) : (
+                              <span className="px-2 text-center text-[0.7rem] text-slate-400">
+                                No image
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                            <input
+                              ref={thanksImageInputRef}
+                              type="file"
+                              accept={LOGO_ACCEPT}
+                              className="hidden"
+                              onChange={(event) => {
+                                const file = event.target.files?.[0]
+                                if (file) void handleThanksImageUpload(file)
+                              }}
+                            />
+                            <button
+                              type="button"
+                              disabled={thanksImageUploading || !uploadDeptId}
+                              onClick={() => thanksImageInputRef.current?.click()}
+                              className="inline-flex h-10 items-center gap-2 rounded-xl border border-blue-200/70 bg-white px-3 text-sm font-semibold text-navy-800 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {thanksImageUploading ? (
+                                <Loader2 className="size-4 animate-spin" />
+                              ) : (
+                                <FileUp className="size-4" />
+                              )}
+                              {thanksImageUploading
+                                ? 'Uploading…'
+                                : thanksImagePreviewSrc
+                                  ? 'Replace image'
+                                  : 'Upload image'}
+                            </button>
+                            {thanksImagePreviewSrc ? (
+                              <button
+                                type="button"
+                                disabled={thanksImageUploading}
+                                onClick={() => {
+                                  setThanksScreenImageUrl('')
+                                  setThanksImageError('')
+                                }}
+                                className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
+                              >
+                                <X className="size-4" />
+                                Remove
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                        {thanksImageError ? (
+                          <p className="mt-1.5 text-xs font-semibold text-red-700">
+                            {thanksImageError}
+                          </p>
+                        ) : null}
+                      </div>
                       <label className="flex items-start justify-between gap-3 rounded-xl border border-blue-100 bg-slate-50/80 px-3 py-2.5">
                         <div>
                           <p className="text-sm font-semibold text-slate-700">
@@ -1078,9 +1295,9 @@ function SessionFormModal({
                             Sync all participants time
                           </p>
                           <p className="text-xs text-slate-500">
-                            Quiz clock starts when you launch. Everyone shares the same remaining
-                            time; late joiners only get what&apos;s left. Present Mode always shows
-                            this session clock.
+                            Quiz clock starts when you click Activate All. Everyone shares the same
+                            remaining time; late joiners only get what&apos;s left. Present Mode
+                            always shows this session clock.
                           </p>
                         </div>
                         <input

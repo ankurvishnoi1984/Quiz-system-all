@@ -380,6 +380,30 @@ function validateCreateSessionPayload(payload) {
       errors.push("logo_url must be a non-empty string or null");
     }
   }
+  if (
+    payload?.waiting_screen_image_url !== undefined &&
+    payload.waiting_screen_image_url !== null &&
+    payload.waiting_screen_image_url !== ""
+  ) {
+    if (
+      typeof payload.waiting_screen_image_url !== "string" ||
+      payload.waiting_screen_image_url.trim().length === 0
+    ) {
+      errors.push("waiting_screen_image_url must be a non-empty string or null");
+    }
+  }
+  if (
+    payload?.thanks_screen_image_url !== undefined &&
+    payload.thanks_screen_image_url !== null &&
+    payload.thanks_screen_image_url !== ""
+  ) {
+    if (
+      typeof payload.thanks_screen_image_url !== "string" ||
+      payload.thanks_screen_image_url.trim().length === 0
+    ) {
+      errors.push("thanks_screen_image_url must be a non-empty string or null");
+    }
+  }
 
   const presentModeSettingsError = validatePresentModeSettings(payload?.present_mode_settings);
   if (presentModeSettingsError) errors.push(presentModeSettingsError);
@@ -448,6 +472,8 @@ function validateUpdateSessionPayload(payload) {
     "auto_end_date",
     "auto_end_time",
     "logo_url",
+    "waiting_screen_image_url",
+    "thanks_screen_image_url",
     "present_mode_settings",
     "participant_theme",
     "participant_theme_custom",
@@ -523,6 +549,30 @@ function validateUpdateSessionPayload(payload) {
   if (payload?.logo_url !== undefined && payload.logo_url !== null && payload.logo_url !== "") {
     if (typeof payload.logo_url !== "string" || payload.logo_url.trim().length === 0) {
       errors.push("logo_url must be a non-empty string or null");
+    }
+  }
+  if (
+    payload?.waiting_screen_image_url !== undefined &&
+    payload.waiting_screen_image_url !== null &&
+    payload.waiting_screen_image_url !== ""
+  ) {
+    if (
+      typeof payload.waiting_screen_image_url !== "string" ||
+      payload.waiting_screen_image_url.trim().length === 0
+    ) {
+      errors.push("waiting_screen_image_url must be a non-empty string or null");
+    }
+  }
+  if (
+    payload?.thanks_screen_image_url !== undefined &&
+    payload.thanks_screen_image_url !== null &&
+    payload.thanks_screen_image_url !== ""
+  ) {
+    if (
+      typeof payload.thanks_screen_image_url !== "string" ||
+      payload.thanks_screen_image_url.trim().length === 0
+    ) {
+      errors.push("thanks_screen_image_url must be a non-empty string or null");
     }
   }
 

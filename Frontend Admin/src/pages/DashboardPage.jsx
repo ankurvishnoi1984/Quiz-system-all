@@ -560,6 +560,14 @@ function DashboardPage() {
         auto_end_date: values.autoEndEnabled ? values.autoEndDate || null : null,
         auto_end_time: values.autoEndEnabled ? values.autoEndTime || null : null,
         logo_url: values.logoUrl || null,
+        waiting_screen_image_url:
+          values.enableNavigation && values.quizTotalTimeEnabled
+            ? values.waitingScreenImageUrl || null
+            : null,
+        thanks_screen_image_url:
+          values.enableNavigation && values.quizTotalTimeEnabled
+            ? values.thanksScreenImageUrl || null
+            : null,
         participant_theme: values.participantTheme || 'default',
         participant_theme_custom: values.participantThemeCustom || null,
         builder_mode: values.builderMode === 'advanced' ? 'advanced' : 'normal',
@@ -618,6 +626,8 @@ function DashboardPage() {
       autoEndDate: toDateInputValue(editSession.auto_end_date),
       autoEndTime: toTimeInputValue(editSession.auto_end_time),
       logoUrl: editSession.logo_url || '',
+      waitingScreenImageUrl: editSession.waiting_screen_image_url || '',
+      thanksScreenImageUrl: editSession.thanks_screen_image_url || '',
       participantTheme: editSession.participant_theme || 'default',
       participantThemeCustom: editSession.participant_theme_custom || null,
       builderMode: editSession.builder_mode === 'advanced' ? 'advanced' : 'normal',
@@ -668,6 +678,8 @@ function DashboardPage() {
       title: values.title,
       leaderboard_enabled: values.overallLeaderboard,
       logo_url: values.logoUrl || null,
+      waiting_screen_image_url: values.waitingScreenImageUrl || null,
+      thanks_screen_image_url: values.thanksScreenImageUrl || null,
       participant_theme: values.participantTheme || 'default',
       participant_theme_custom: values.participantThemeCustom || null,
       present_mode_settings: values.presentModeSettings || null,

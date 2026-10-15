@@ -938,14 +938,6 @@ async function activateAllQuestionsForSession({ sessionId, user }) {
   const session = await getSessionForQuestionFlow(sessionId);
   assertScopeAccess(user, session);
 
-  if (isSessionQuizTotalTimeEnabled(session)) {
-    const error = new Error(
-      "All questions are activated automatically when a quiz total time session is launched"
-    );
-    error.statusCode = 400;
-    throw error;
-  }
-
   if (session.status !== "live" && session.status !== "paused") {
     const error = new Error("Questions can be activated only while the session is live");
     error.statusCode = 400;
@@ -1000,10 +992,19 @@ async function activateAllQuestionsForSession({ sessionId, user }) {
     { where: { session_id: sessionId, question_id: questionIds } }
   );
 
-  return Question.findAll({
+  let startedAt = session.started_at || null;
+  if (isSessionQuizTotalTimeEnabled(session) && !session.started_at) {
+    session.started_at = now;
+    await session.save();
+    startedAt = now;
+  }
+
+  const questions = await Question.findAll({
     where: { question_id: questionIds },
     include: [{ model: QuestionOption, order: [["display_order", "ASC"]] }]
   });
+
+  return { questions, started_at: startedAt };
 }
 
 /**

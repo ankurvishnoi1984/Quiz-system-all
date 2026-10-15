@@ -29,9 +29,9 @@ const {
 } = require("../models");
 const {
   isMultiNavTimedJoinClosed,
+  isSessionQuizTotalTimeEnabled,
   MULTI_NAV_TIMED_JOIN_CLOSED_MESSAGE
 } = require("../utils/sessionFlags");
-const { ensureAllQuestionsLiveForQuizTotalTimeSession } = require("./question.service");
 const {
   assertParticipantCapacity,
   assertSessionAcceptingJoin,
@@ -270,6 +270,16 @@ async function createSession({ deptId, input, user }) {
        input.logo_url != null && String(input.logo_url).trim()
          ? String(input.logo_url).trim()
          : null,
+     waiting_screen_image_url:
+       input.waiting_screen_image_url != null &&
+       String(input.waiting_screen_image_url).trim()
+         ? String(input.waiting_screen_image_url).trim()
+         : null,
+     thanks_screen_image_url:
+       input.thanks_screen_image_url != null &&
+       String(input.thanks_screen_image_url).trim()
+         ? String(input.thanks_screen_image_url).trim()
+         : null,
      participant_theme: normalizeParticipantTheme(input.participant_theme),
      participant_theme_custom:
        normalizeParticipantTheme(input.participant_theme) === CUSTOM_PARTICIPANT_THEME
@@ -405,6 +415,8 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
         response_time_score_bands: source.response_time_score_bands ?? null,
         qr_code_url: null,
         logo_url: source.logo_url || null,
+        waiting_screen_image_url: source.waiting_screen_image_url || null,
+        thanks_screen_image_url: source.thanks_screen_image_url || null,
         participant_theme: normalizeParticipantTheme(source.participant_theme),
         participant_theme_custom:
           normalizeParticipantTheme(source.participant_theme) === CUSTOM_PARTICIPANT_THEME
@@ -554,6 +566,8 @@ async function updateSession({ sessionId, input, user }) {
     "show_participant_count",
     "title",
     "logo_url",
+    "waiting_screen_image_url",
+    "thanks_screen_image_url",
     "present_mode_settings",
     "participant_theme",
     "participant_theme_custom",
@@ -778,6 +792,20 @@ async function updateSession({ sessionId, input, user }) {
           ? String(input.logo_url).trim()
           : null
         : session.logo_url,
+    waiting_screen_image_url:
+      input.waiting_screen_image_url !== undefined
+        ? input.waiting_screen_image_url != null &&
+          String(input.waiting_screen_image_url).trim()
+          ? String(input.waiting_screen_image_url).trim()
+          : null
+        : session.waiting_screen_image_url,
+    thanks_screen_image_url:
+      input.thanks_screen_image_url !== undefined
+        ? input.thanks_screen_image_url != null &&
+          String(input.thanks_screen_image_url).trim()
+          ? String(input.thanks_screen_image_url).trim()
+          : null
+        : session.thanks_screen_image_url,
     participant_theme:
       input.participant_theme !== undefined
         ? normalizeParticipantTheme(input.participant_theme)
@@ -954,7 +982,12 @@ async function transitionSessionStatus({ sessionId, user, action }) {
   }
 
   session.status = rule.to;
-  if (action === "start" && !session.started_at) session.started_at = new Date();
+  const quizTotalOnStart =
+    action === "start" && isSessionQuizTotalTimeEnabled(session);
+  // Quiz total time: Launch opens joining only. started_at + questions go live on Activate All.
+  if (action === "start" && !session.started_at && !quizTotalOnStart) {
+    session.started_at = new Date();
+  }
   if (action === "start" || action === "resume" || action === "pause") {
     session.last_activity_at = new Date();
   }
@@ -963,10 +996,6 @@ async function transitionSessionStatus({ sessionId, user, action }) {
     await clearParticipantFacingDisplaysOnEnd(session);
   }
   await session.save();
-
-  if (action === "start") {
-    await ensureAllQuestionsLiveForQuizTotalTimeSession(session);
-  }
 
   return session;
 }

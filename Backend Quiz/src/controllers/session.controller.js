@@ -347,6 +347,8 @@ async function lookupByCode(req, res) {
           join_otp_required: Boolean(session.join_otp_required),
           customer_match_enabled: Boolean(session.customer_match_enabled),
           logo_url: session.logo_url || null,
+          waiting_screen_image_url: session.waiting_screen_image_url || null,
+          thanks_screen_image_url: session.thanks_screen_image_url || null,
           leaderboard_enabled: Boolean(session.leaderboard_enabled),
           current_rankings_enabled: Boolean(session.current_rankings_enabled),
           leaderboard_top_n: resolveLeaderboardTopN(session),
@@ -636,12 +638,14 @@ function buildActivatedQuestionChangePayload(question) {
 async function activateAllQuestions(req, res) {
   try {
     const sessionId = Number(req.params.sessionId);
-    const questions = await activateAllQuestionsForSession({
+    const result = await activateAllQuestionsForSession({
       sessionId,
       user: req.user
     });
+    const questions = result?.questions || result || [];
+    const startedAt = result?.started_at ?? null;
     const session = await Session.findByPk(sessionId, {
-      attributes: ["session_code"]
+      attributes: ["session_code", "status", "started_at"]
     });
     if (session?.session_code) {
       for (const question of questions) {
@@ -650,10 +654,19 @@ async function activateAllQuestions(req, res) {
           buildActivatedQuestionChangePayload(question)
         );
       }
+      if (startedAt) {
+        notifySessionUpdate(session.session_code, session.status, {
+          started_at: startedAt
+        });
+      }
     }
     return successResponse(
       res,
-      { questions, activated_count: questions.length },
+      {
+        questions,
+        activated_count: questions.length,
+        started_at: startedAt || session?.started_at || null
+      },
       "All questions activated",
       200
     );

@@ -36,9 +36,8 @@ export function sessionRequiresActivateAllQuestions(session, mappedQuestions, se
 /** Multi-question sessions (timed or untimed): activate every question at once. */
 export function canHostActivateAllQuestions(
   questions,
-  { canEditLive, singleActiveQuestionMode, sessionQuizTotalTimeEnabled = false },
+  { canEditLive, singleActiveQuestionMode },
 ) {
-  if (sessionQuizTotalTimeEnabled) return false
   if (!canEditLive || singleActiveQuestionMode) return false
   const list = questions || []
   if (!list.length) return false

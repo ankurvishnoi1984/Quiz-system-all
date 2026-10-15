@@ -185,13 +185,14 @@ function PresentModePage({
     session?.quiz_total_time_minutes,
     quizCountdownTick,
   ])
-  const headerQuizTimerProps = sessionQuizTotalTimeEnabled
-    ? {
-        hasQuizCountdown: true,
-        quizTimer: presentQuizTimer,
-        quizTimeLimit: sessionQuizTotalTimeSeconds,
-      }
-    : {}
+  const headerQuizTimerProps =
+    sessionQuizTotalTimeEnabled && session?.started_at
+      ? {
+          hasQuizCountdown: true,
+          quizTimer: presentQuizTimer,
+          quizTimeLimit: sessionQuizTotalTimeSeconds,
+        }
+      : {}
   const advancedBuilderEnabled = isAdvancedBuilderSession(session)
   const advancedSlotActivation = sessionUsesAdvancedSlotActivation(session)
   const distributedPresentMode = getDistributedPresentMode(session, mappedQuestions)
@@ -1320,6 +1321,9 @@ function PresentModePage({
             {...headerQuizTimerProps}
             // onQaClick={openQaModal} // Q&A feature disabled
             readOnly={readOnly}
+            showActivateAll={Boolean(showActivateAllQuestionsButton && isSessionLive)}
+            activateAllPending={activateAllQuestionsMutation.isPending}
+            onActivateAll={activateAllQuestions}
           />
         ) : null}
 

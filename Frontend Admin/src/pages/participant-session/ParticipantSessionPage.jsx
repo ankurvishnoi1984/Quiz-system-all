@@ -583,7 +583,7 @@ function ParticipantSessionPage({ embed = false }) {
     Number(timeLimit) > 0 &&
     question?.type !== 'Survey' &&
     (!sessionQuizTotalTimeEnabled || quizTotalWithQuestionTimers)
-  const hasQuizCountdown = sessionQuizTotalTimeEnabled
+  const hasQuizCountdown = sessionQuizTotalTimeEnabled && Boolean(session?.started_at)
   const hasCountdown = hasQuestionCountdown || hasQuizCountdown
   const questionLockedBySubmission = Boolean((quizSubmittedQuestionIds || {})[String(question?.id)])
   const dbSessionId = session?.session_id
@@ -957,7 +957,7 @@ function ParticipantSessionPage({ embed = false }) {
     })
 
     const offSession = client.on(RealtimeEvent.SESSION_UPDATED, (data) => {
-      if (data?.status || data?.advanced_active_slot != null) {
+      if (data?.status || data?.advanced_active_slot != null || data?.started_at) {
         const ended = data.status === 'completed' || data.status === 'archived'
         queryClient.setQueryData(['participant-session', effectiveSessionCode], (old) =>
           old
@@ -967,6 +967,7 @@ function ParticipantSessionPage({ embed = false }) {
                 ...(data?.advanced_active_slot != null
                   ? { advanced_active_slot: data.advanced_active_slot }
                   : {}),
+                ...(data?.started_at ? { started_at: data.started_at } : {}),
                 // Match backend clearParticipantFacingDisplaysOnEnd before settings WS lands.
                 ...(ended
                   ? {
@@ -3032,7 +3033,10 @@ function ParticipantSessionPage({ embed = false }) {
                 sessionQuizTotalTimeEnabled &&
                 (lastQuestionFinalized || sessionTimerExpired)
               ) && (
-                <WaitingForQuestion />
+                <WaitingForQuestion
+                  quizTotalWaiting={Boolean(sessionQuizTotalTimeEnabled)}
+                  waitingImageUrl={session?.waiting_screen_image_url || ''}
+                />
               )}
 
 
@@ -3042,6 +3046,7 @@ function ParticipantSessionPage({ embed = false }) {
               (lastQuestionFinalized || sessionTimerExpired) && (
                 <QuizCompletedThanksPanel
                   sessionTitle={session?.title}
+                  thanksImageUrl={session?.thanks_screen_image_url || ''}
                   onPrevious={handlePrevious}
                   canGoPrevious={canShowPreviousQuestion && displayQuestionIndex > 0}
                 />

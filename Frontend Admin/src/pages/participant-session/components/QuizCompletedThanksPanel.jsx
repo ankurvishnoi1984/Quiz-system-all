@@ -1,4 +1,5 @@
 import { CheckCircle2 } from 'lucide-react'
+import { resolveQuestionMediaUrl } from '../../../utils/questionMedia'
 
 /**
  * Flip to true to re-enable Previous on the quiz-complete thanks screen
@@ -8,10 +9,40 @@ export const QUIZ_THANKS_ALLOW_REVIEW = false
 
 export function QuizCompletedThanksPanel({
   sessionTitle = '',
+  thanksImageUrl = '',
   onPrevious,
   canGoPrevious = false,
 }) {
   const showPrevious = QUIZ_THANKS_ALLOW_REVIEW && typeof onPrevious === 'function'
+  const imageSrc = resolveQuestionMediaUrl(thanksImageUrl)
+
+  if (imageSrc) {
+    return (
+      <section className="flex min-h-[min(70vh,36rem)] w-full flex-col items-center justify-center">
+        <div className="quiz-pop w-full max-w-5xl rounded-2xl border border-emerald-200/80 bg-white p-2 text-center shadow-sm sm:p-3">
+          <div className="mx-auto flex w-full items-center justify-center overflow-hidden rounded-xl">
+            <img
+              src={imageSrc}
+              alt=""
+              className="max-h-[min(78vh,42rem)] w-full object-contain"
+            />
+          </div>
+          {showPrevious ? (
+            <div className="mt-4 flex justify-center pb-2">
+              <button
+                type="button"
+                disabled={!canGoPrevious}
+                onClick={onPrevious}
+                className="participant-btn-secondary h-11 rounded-xl border border-slate-200 bg-white px-5 text-sm font-semibold text-navy-900 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Previous
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </section>
+    )
+  }
 
   return (
     <section className="flex min-h-[min(60vh,28rem)] flex-col items-center justify-center">

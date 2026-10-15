@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Calendar, Clock3, Link2, QrCode } from 'lucide-react'
+import { Calendar, Clock3, Link2, Play, QrCode } from 'lucide-react'
 import { BrandLogoPair } from '../../components/branding/BrandLogoPair'
 import {
   buildGenericJoinUrl,
@@ -206,6 +206,9 @@ export function PresentJoinPanel({
   className = '',
   showInstructions = false,
   instructions = [],
+  showActivateAll = false,
+  activateAllPending = false,
+  onActivateAll,
 }) {
   const { sessionCode, directJoinUrl, joinPageUrl, qrDataUrl } = usePresentJoinInfo(session)
   const sessionTitle = session?.title || 'Live session'
@@ -327,6 +330,23 @@ export function PresentJoinPanel({
             {joinGrid}
           </>
         )}
+
+        {showActivateAll ? (
+          <div className="mt-[clamp(1rem,2.5vh,1.5rem)] shrink-0 text-center">
+            <button
+              type="button"
+              disabled={activateAllPending || typeof onActivateAll !== 'function'}
+              onClick={() => onActivateAll?.()}
+              className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-[clamp(1.25rem,3vw,1.75rem)] py-[clamp(0.75rem,1.8vh,1rem)] text-[clamp(0.95rem,1.8vw,1.15rem)] font-semibold text-white shadow-lg shadow-emerald-900/25 transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Play className="size-5" aria-hidden />
+              {activateAllPending ? 'Activating…' : 'Activate All'}
+            </button>
+            <p className="mt-2 text-[clamp(0.75rem,1.3vw,0.9rem)] text-slate-500">
+              Starts the quiz for all participants and begins the quiz clock.
+            </p>
+          </div>
+        ) : null}
       </div>
     </div>
   )

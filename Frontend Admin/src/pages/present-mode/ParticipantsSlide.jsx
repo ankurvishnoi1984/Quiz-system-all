@@ -18,6 +18,9 @@ export function ParticipantsSlide({
   hasQuizCountdown = false,
   quizTimer = 0,
   quizTimeLimit = 0,
+  showActivateAll = false,
+  activateAllPending = false,
+  onActivateAll,
 }) {
   const sessionTitle = session?.title || 'Live session'
   const presentSettings = getPresentModeSettings(session)
@@ -51,6 +54,9 @@ export function ParticipantsSlide({
           session={session}
           showInstructions={showInstructions}
           instructions={customInstructions}
+          showActivateAll={showActivateAll}
+          activateAllPending={activateAllPending}
+          onActivateAll={onActivateAll}
         />
       ) : (
         <PresentSessionReadyLobby
@@ -62,6 +68,9 @@ export function ParticipantsSlide({
           instructions={customInstructions}
           readOnly={readOnly}
           isSessionLive={isSessionLive}
+          showActivateAll={showActivateAll}
+          activateAllPending={activateAllPending}
+          onActivateAll={onActivateAll}
         />
       )}
     </div>

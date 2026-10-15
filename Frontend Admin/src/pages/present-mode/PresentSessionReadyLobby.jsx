@@ -1,4 +1,4 @@
-import { Calendar, Clock3, Users } from 'lucide-react'
+import { Calendar, Clock3, Play, Users } from 'lucide-react'
 import { BrandLogoPair } from '../../components/branding/BrandLogoPair'
 import {
   formatScheduledDateForDisplay,
@@ -64,6 +64,9 @@ export function PresentSessionReadyLobby({
   instructions = [],
   readOnly = false,
   isSessionLive = false,
+  showActivateAll = false,
+  activateAllPending = false,
+  onActivateAll,
   className = '',
 }) {
   const sessionTitle = session?.title || 'Live session'
@@ -155,11 +158,22 @@ export function PresentSessionReadyLobby({
           </div>
         ) : null}
 
-        {/* <p className="shrink-0 text-center text-[clamp(0.95rem,1.8vw,1.2rem)] leading-relaxed text-slate-600">
-          {readOnly
-            ? 'Waiting for the host to continue.'
-            : "Advance when you're ready to show the first question."}
-        </p> */}
+        {showActivateAll && !readOnly ? (
+          <div className="mt-auto shrink-0 pb-[clamp(0.75rem,2vh,1.25rem)] text-center">
+            <button
+              type="button"
+              disabled={activateAllPending || typeof onActivateAll !== 'function'}
+              onClick={() => onActivateAll?.()}
+              className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-[clamp(1.25rem,3vw,1.75rem)] py-[clamp(0.75rem,1.8vh,1rem)] text-[clamp(0.95rem,1.8vw,1.15rem)] font-semibold text-white shadow-lg shadow-emerald-900/25 transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Play className="size-5" aria-hidden />
+              {activateAllPending ? 'Activating…' : 'Activate All'}
+            </button>
+            <p className="mt-2 text-[clamp(0.75rem,1.3vw,0.9rem)] text-slate-500">
+              Starts the quiz for all participants and begins the quiz clock.
+            </p>
+          </div>
+        ) : null}
       </div>
     </div>
   )
