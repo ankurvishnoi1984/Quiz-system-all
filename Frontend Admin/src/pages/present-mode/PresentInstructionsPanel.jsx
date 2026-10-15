@@ -55,11 +55,11 @@ export function PresentInstructionsPanel({ instructions = [], className = '' }) 
           <p className="text-[clamp(0.65rem,1.2vw,0.8rem)] font-semibold uppercase tracking-wider text-slate-500">
             Instructions
           </p>
-          {list.length > 0 ? (
+          {/* {list.length > 0 ? (
             <p className="mt-0.5 text-[clamp(0.65rem,1.1vw,0.75rem)] font-medium text-slate-400">
               {list.length === 1 ? '1 note' : `${list.length} notes`}
             </p>
-          ) : null}
+          ) : null} */}
         </div>
         <ChevronDown
           className={`size-[clamp(1.1rem,2vw,1.35rem)] shrink-0 text-slate-500 transition-transform duration-200 ${

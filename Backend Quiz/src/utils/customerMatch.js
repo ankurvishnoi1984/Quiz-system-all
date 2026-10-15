@@ -21,7 +21,7 @@ function normalizeCustomerMatchZone(raw) {
 /**
  * Normalize one or more zones into a deduped array in canonical order.
  * Accepts null/undefined, a single string (legacy), a comma-separated string, or an array.
- * If All is present, returns ["All"] only (regions are dropped).
+ * All may be combined with East/West/North/South.
  * @returns {string[]|null}
  */
 function normalizeCustomerMatchZones(raw) {
@@ -44,9 +44,7 @@ function normalizeCustomerMatchZones(raw) {
     if (zone) seen.add(zone);
   }
 
-  if (seen.has("All")) return ["All"];
-
-  const zones = CUSTOMER_MATCH_REGION_ZONES.filter((z) => seen.has(z));
+  const zones = CUSTOMER_MATCH_ZONES.filter((z) => seen.has(z));
   return zones.length > 0 ? zones : null;
 }
 

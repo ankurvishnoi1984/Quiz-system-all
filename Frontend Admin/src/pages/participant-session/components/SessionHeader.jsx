@@ -18,7 +18,7 @@ export function SessionHeader({
   const showRightCluster = hasParticipantCount || hasQuizCountdown
 
   return (
-    <div className="participant-topbar flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200/70 bg-white p-4 shadow-sm shadow-navy-900/5">
+    <div className="participant-topbar flex flex-col gap-3 rounded-2xl border border-blue-200/70 bg-white p-4 shadow-sm shadow-navy-900/5 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
       <div className="min-w-0 flex-1">
         <BrandLogoPair
           variant="header"
@@ -26,8 +26,13 @@ export function SessionHeader({
           sessionTitle={session?.title || 'Session'}
           className="mb-2"
         />
-        <h1 className="participant-heading text-xl font-bold text-navy-900">{session.title}</h1>
-        <p className="participant-muted text-sm text-slate-600">
+        <h1
+          className="participant-heading line-clamp-2 text-xl font-bold text-navy-900"
+          title={session?.title || ''}
+        >
+          {session.title}
+        </h1>
+        <p className="participant-muted truncate text-sm text-slate-600">
           {joinedUser?.name
             ? `${joinedUser.name}${!joinedUser.anonymous && joinedUser.email ? ` • ${joinedUser.email}` : ''}`
             : joinedUser?.anonymous
@@ -37,7 +42,7 @@ export function SessionHeader({
       </div>
 
       {showRightCluster ? (
-        <div className="flex flex-wrap items-stretch justify-end gap-2">
+        <div className="flex w-full flex-wrap items-stretch gap-2 sm:w-auto sm:shrink-0 sm:justify-end">
           {hasQuizCountdown ? (
             <HeaderQuizTimer timer={quizTimer} timeLimit={quizTimeLimit} />
           ) : null}

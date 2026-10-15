@@ -53,9 +53,9 @@ export function ParticipantInstructionsRail({ instructions = [] }) {
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold leading-tight">Important Instructions</p>
-          <p className="mt-0.5 text-xs font-medium text-sky-200/90">
+          {/* <p className="mt-0.5 text-xs font-medium text-sky-200/90">
             {list.length === 1 ? '1 note' : `${list.length} notes`}
-          </p>
+          </p> */}
         </div>
         <button
           type="button"
