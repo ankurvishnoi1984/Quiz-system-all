@@ -1326,8 +1326,8 @@ function SessionFormModal({
                             Quiz clock starts when you click Activate All. Everyone shares the same
                             remaining time; late joiners only get what&apos;s left. With both
                             timers on, questions also run in lockstep (same question and countdown
-                            for everyone; no early Submit). Present Mode always shows this session
-                            clock.
+                            for everyone; cannot advance until each question timer ends). Present
+                            Mode always shows this session clock.
                           </p>
                         </div>
                         <input

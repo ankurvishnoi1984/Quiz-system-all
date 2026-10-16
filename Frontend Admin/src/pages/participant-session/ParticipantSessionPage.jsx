@@ -2131,7 +2131,10 @@ function ParticipantSessionPage({ embed = false }) {
       try {
         await submitResponseApi(participantToken, payload)
         markQuestionsSubmitted([questionId])
-        if (Number(q.timeLimit) > 0) {
+        // Lockstep early save: keep the shared wall-clock countdown running.
+        const skipFreezeForLockstep =
+          syncedQuestionLockstep && hasQuestionCountdown && questionTimer > 0
+        if (Number(q.timeLimit) > 0 && !skipFreezeForLockstep) {
           freezeCountdownAfterSubmit(questionId)
         }
         playSubmitSuccess()
@@ -2161,6 +2164,9 @@ function ParticipantSessionPage({ embed = false }) {
       freezeCountdownAfterSubmit,
       navigationEnabled,
       participantEditPolicy,
+      syncedQuestionLockstep,
+      hasQuestionCountdown,
+      questionTimer,
     ],
   )
 
@@ -2400,6 +2406,11 @@ function ParticipantSessionPage({ embed = false }) {
 
   const handleNextOrSubmit = async () => {
     if (isSessionEnded) return
+    // Lockstep: Submit saves the answer only; schedule advances when the shared timer ends.
+    if (syncedQuestionLockstep && !sessionTimerExpired) {
+      if (question?.id) await submitQuestionById(question.id)
+      return
+    }
     if (!navigationEnabled) {
       await handleSubmitCurrentQuestion()
       return
@@ -2428,12 +2439,11 @@ function ParticipantSessionPage({ embed = false }) {
     // Quiz total expiry wins: lock all, no auto-advance / auto-submit.
     if (sessionTimerExpired) return
     if (questionTimer > 0) return
-    if (questionLockedBySubmission) return
 
     const qid = question?.id
 
     // Lockstep: schedule effect saves + advances with the wall clock (no popup).
-    // Only finalize when this is the last shared slot.
+    // Last slot still finalizes at timer 0 even if the participant saved early.
     if (syncedQuestionLockstep) {
       if (isLastDisplayedQuestion) {
         const timeout = setTimeout(() => {
@@ -2443,6 +2453,8 @@ function ParticipantSessionPage({ embed = false }) {
       }
       return
     }
+
+    if (questionLockedBySubmission) return
 
     if (!navigationEnabled) {
       const timeout = setTimeout(async () => {

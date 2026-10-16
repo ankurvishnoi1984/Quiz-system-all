@@ -392,7 +392,7 @@ export function ActiveQuestionPanel({
               sessionEnded ||
               isSubmitting ||
               (useLockstepSubmit
-                ? hasQuestionCountdown && !canGoToNextQuestion
+                ? false
                 : useNextNav
                   ? hasQuestionCountdown && !canGoToNextQuestion
                   : (submissionsClosed && !question?.openForReattempt) ||
@@ -405,9 +405,7 @@ export function ActiveQuestionPanel({
               sessionEnded
                 ? 'Session has ended'
                 : useLockstepSubmit
-                  ? hasQuestionCountdown && !canGoToNextQuestion
-                    ? 'Wait for the question timer to finish'
-                    : undefined
+                  ? undefined
                   : useNextNav
                     ? hasQuestionCountdown && !canGoToNextQuestion
                       ? 'Answer this question or wait for the question timer'
