@@ -115,18 +115,18 @@ export function ActiveQuestionPanel({
 
   const attemptProgress = showAttemptProgress ? (
     <div
-      className="flex flex-wrap items-center gap-1.5"
+      className="flex w-full flex-wrap items-center gap-1.5"
       aria-label={`${answeredLabel}, ${leftBlankLabel} so far`}
     >
       <span
-        className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 ring-1 ring-emerald-200/80"
+        className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 ring-1 ring-emerald-200/80"
         title="Questions you have selected or filled in so far"
       >
         <CheckCircle2 className="size-3 shrink-0" aria-hidden />
         {answeredLabel}
       </span>
       <span
-        className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200/80"
+        className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200/80"
         title="Reached questions with no answer yet (includes skipped or timed out)"
       >
         <CircleDashed className="size-3 shrink-0" aria-hidden />
@@ -134,6 +134,32 @@ export function ActiveQuestionPanel({
       </span>
     </div>
   ) : null
+
+  const navHelperText = syncedQuestionLockstep
+    ? null
+    : sessionQuizTotalTimeEnabled && !canShowPreviousQuestion
+      ? 'Submit the last question or wait for the quiz timer to end.'
+      : sessionQuizTotalTimeEnabled && canShowPreviousQuestion
+        ? allQuestionsClosedByHost
+          ? 'Questions closed by the host — use Previous and Next to review your answers.'
+          : lastQuestionFinalized
+            ? 'Answers are locked — use Previous and Next to review only.'
+            : 'Quiz timer: use Previous and Next to review your answers.'
+        : hasQuestionCountdown &&
+            canGoToNextQuestion &&
+            inputsLocked &&
+            canShowPreviousQuestion &&
+            !sessionQuizTotalTimeEnabled
+          ? 'Timed: use Previous and Next to browse; answers cannot be changed after submit or when time runs out.'
+          : hasQuestionCountdown &&
+              canGoToNextQuestion &&
+              inputsLocked &&
+              !canShowPreviousQuestion &&
+              !sessionQuizTotalTimeEnabled
+            ? 'Submit the latest active question before you can use Previous.'
+            : !hasCountdown && hasAnyQuestionSaved && canShowPreviousQuestion
+              ? 'No timer: revisit questions with Previous; use Submit on the last question to update.'
+              : null
 
   return (
     <ParticipantFitProvider densityId={densityId}>
@@ -144,64 +170,24 @@ export function ActiveQuestionPanel({
       className={`participant-surface quiz-fade-in rounded-2xl border border-blue-200/70 bg-white shadow-sm shadow-navy-900/5 ${density.panelClass}`}
     >
       {navigationEnabled ? (
-      <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
-            <p className="participant-accent-text min-w-0 truncate text-xs font-semibold uppercase tracking-wider text-navy-700">
-              {serialTotal != null
-                ? `Question ${serialLabel} / ${serialTotal}`
-                : `Question ${serialLabel}`}
+      <div className="flex w-full flex-col gap-2">
+          <p className="participant-accent-text min-w-0 truncate text-xs font-semibold uppercase tracking-wider text-navy-700">
+            {serialTotal != null
+              ? `Question ${serialLabel} / ${serialTotal}`
+              : `Question ${serialLabel}`}
+          </p>
+          {attemptProgress}
+          {navHelperText ? (
+            <p className="w-full text-[11px] font-medium leading-snug text-slate-500">
+              {navHelperText}
             </p>
-            {attemptProgress}
-          </div>
-        {sessionQuizTotalTimeEnabled && !canShowPreviousQuestion && (
-          <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
-            Submit the last question or wait for the quiz timer to end.
-          </p>
-        )}
-        {sessionQuizTotalTimeEnabled && canShowPreviousQuestion && (
-          <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
-            {allQuestionsClosedByHost
-              ? 'Questions closed by the host — use Previous and Next to review your answers.'
-              : lastQuestionFinalized
-                ? 'Answers are locked — use Previous and Next to review only.'
-                : 'Quiz timer: use Previous and Next to review your answers.'}
-          </p>
-        )}
-        {/* {hasQuestionCountdown && !canGoToNextQuestion && (
-          <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
-            Answer this question or wait for the question timer to use Next.
-          </p>
-        )} */}
-        {hasQuestionCountdown &&
-          canGoToNextQuestion &&
-          inputsLocked &&
-          canShowPreviousQuestion &&
-          !sessionQuizTotalTimeEnabled && (
-          <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
-            Timed: use Previous and Next to browse; answers cannot be changed after submit or when
-            time runs out.
-          </p>
-        )}
-        {hasQuestionCountdown &&
-          canGoToNextQuestion &&
-          inputsLocked &&
-          !canShowPreviousQuestion &&
-          !sessionQuizTotalTimeEnabled && (
-          <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
-            Submit the latest active question before you can use Previous.
-          </p>
-        )}
-        {!hasCountdown && hasAnyQuestionSaved && canShowPreviousQuestion && (
-          <p className="max-w-[min(100%,18rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
-            No timer: revisit questions with Previous; use Submit on the last question to update.
-          </p>
-        )}
+          ) : null}
       </div>
       ) : showAttemptProgress ? (
-        <div className="flex flex-wrap items-center gap-2">{attemptProgress}</div>
+        <div className="flex w-full flex-wrap items-center gap-2">{attemptProgress}</div>
       ) : null}
 
-      {showNewQuestionAlert ? (
+      {showNewQuestionAlert && !syncedQuestionLockstep ? (
         <p className="quiz-pop rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
           {highlightNextButton
             ? 'New question available — tap Next to view it.'
@@ -392,7 +378,7 @@ export function ActiveQuestionPanel({
               sessionEnded ||
               isSubmitting ||
               (useLockstepSubmit
-                ? false
+                ? Boolean(hasSubmittedQuestion)
                 : useNextNav
                   ? hasQuestionCountdown && !canGoToNextQuestion
                   : (submissionsClosed && !question?.openForReattempt) ||
@@ -405,7 +391,9 @@ export function ActiveQuestionPanel({
               sessionEnded
                 ? 'Session has ended'
                 : useLockstepSubmit
-                  ? undefined
+                  ? hasSubmittedQuestion
+                    ? 'Answer submitted'
+                    : undefined
                   : useNextNav
                     ? hasQuestionCountdown && !canGoToNextQuestion
                       ? 'Answer this question or wait for the question timer'

@@ -62,6 +62,8 @@ import { useHostNavSessions, getLivePresenterSessionId } from '../hooks/useHostN
 import { useShell } from '../context/ShellContext'
 import { HostQuestionControls } from '../components/live/HostQuestionControls'
 import { HostQuestionTimer } from '../components/live/HostQuestionTimer'
+import { HeaderQuizTimer } from './participant-session/components/HeaderQuizTimer'
+import { getQuizTotalRemainingSeconds } from '../utils/questionTimer'
 import { LiveChartViewToggle } from '../components/live/LiveChartViewToggle'
 import { RankingLiveChartPanel } from '../components/live/RankingLiveChartPanel'
 import { MatchLiveChartPanel } from '../components/live/MatchLiveChartPanel'
@@ -1111,6 +1113,27 @@ function LivePage() {
   const singleActiveQuestionMode = session?.participant_navigation_enabled === false
   const sessionQuizTotalTimeEnabled = isSessionQuizTotalTimeEnabled(session)
   const quizTotalWithQuestionTimers = isQuizTotalWithQuestionTimersEnabled(session)
+  const sessionQuizTotalTimeSeconds = sessionQuizTotalTimeEnabled
+    ? Math.max(0, Number(session?.quiz_total_time_minutes) || 0) * 60
+    : 0
+  const [quizCountdownTick, setQuizCountdownTick] = useState(0)
+  useEffect(() => {
+    if (!sessionQuizTotalTimeEnabled || !session?.started_at) return undefined
+    const id = setInterval(() => setQuizCountdownTick((t) => t + 1), 1000)
+    return () => clearInterval(id)
+  }, [sessionQuizTotalTimeEnabled, session?.started_at, session?.quiz_total_time_minutes])
+  const liveQuizTimer = useMemo(() => {
+    if (!sessionQuizTotalTimeEnabled || !session?.started_at) return 0
+    void quizCountdownTick
+    return getQuizTotalRemainingSeconds(session)
+  }, [
+    sessionQuizTotalTimeEnabled,
+    session,
+    session?.started_at,
+    session?.quiz_total_time_minutes,
+    quizCountdownTick,
+  ])
+  const showLiveQuizTimer = Boolean(sessionQuizTotalTimeEnabled && session?.started_at)
   const disableSingleActivation = useMemo(
     () => sessionRequiresActivateAllQuestions(session, mappedQuestions, sessionUsesQuestionSets),
     [session, mappedQuestions],
@@ -1383,6 +1406,13 @@ function LivePage() {
             ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {showLiveQuizTimer ? (
+              <HeaderQuizTimer
+                timer={liveQuizTimer}
+                timeLimit={sessionQuizTotalTimeSeconds}
+                className="shrink-0"
+              />
+            ) : null}
             {canToggleOverallLeaderboard && showSessionControls ? (
               <LeaderboardLimitSelect
                 id="live-rankings-top-n"

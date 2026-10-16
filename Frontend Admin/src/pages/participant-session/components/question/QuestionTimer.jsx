@@ -37,8 +37,8 @@ export function QuestionTimer({
   const compact = variant === 'compact'
   const limit = Math.max(1, timeLimit)
   const remaining = Math.max(0, Math.min(1, timer / limit))
-  const size = compact ? 64 : 72
-  const stroke = compact ? 5 : 4
+  const size = compact ? 52 : 72
+  const stroke = compact ? 4 : 4
   const radius = (size - stroke) / 2
   const circumference = 2 * Math.PI * radius
   const dashOffset = circumference * (1 - remaining)
@@ -103,9 +103,7 @@ export function QuestionTimer({
         />
       </svg>
       <span
-        className={`absolute inset-0 flex items-center justify-center font-mono font-bold tabular-nums ${
-          compact ? 'text-base' : 'text-sm'
-        } ${
+        className={`absolute inset-0 flex items-center justify-center font-mono font-bold tabular-nums text-sm ${
           statusTone
             ? 'participant-timer-label--alert text-red-700'
             : 'participant-timer-label text-navy-800'
@@ -119,7 +117,7 @@ export function QuestionTimer({
   if (compact) {
     return (
       <div
-        className={`participant-timer-panel inline-flex items-center gap-2.5 rounded-2xl border px-2.5 py-2 shadow-lg shadow-navy-900/10 ${
+        className={`participant-timer-panel inline-flex items-center gap-2 rounded-xl border px-2 py-1.5 shadow-md shadow-navy-900/10 ${
           expired
             ? 'quiz-timer-expired border-red-200/90 bg-red-50'
             : urgent
@@ -132,7 +130,7 @@ export function QuestionTimer({
       >
         {ring}
         <span
-          className={`pr-1 text-[0.65rem] font-semibold uppercase tracking-[0.14em] ${
+          className={`pr-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.12em] ${
             statusTone
               ? 'participant-timer-label--alert text-red-600'
               : 'participant-timer-label text-slate-500'
