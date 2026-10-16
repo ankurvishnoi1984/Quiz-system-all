@@ -118,6 +118,8 @@ const defaultInitial = {
   quizTotalTimeSynced: false,
   overallLeaderboard: false,
   showParticipantCount: false,
+  showSessionTitle: true,
+  showAppLogo: true,
   logoUrl: '',
   waitingScreenImageUrl: '',
   thanksScreenImageUrl: '',
@@ -203,6 +205,10 @@ function SessionFormModal({
   const [showParticipantCount, setShowParticipantCount] = useState(
     defaultInitial.showParticipantCount,
   )
+  const [showSessionTitle, setShowSessionTitle] = useState(
+    defaultInitial.showSessionTitle !== false,
+  )
+  const [showAppLogo, setShowAppLogo] = useState(defaultInitial.showAppLogo !== false)
   const [autoEndEnabled, setAutoEndEnabled] = useState(defaultInitial.autoEndEnabled)
   const [logoUrl, setLogoUrl] = useState('')
   const [logoUploading, setLogoUploading] = useState(false)
@@ -291,6 +297,8 @@ function SessionFormModal({
     )
     setOverallLeaderboard(initialValues.overallLeaderboard === true)
     setShowParticipantCount(initialValues.showParticipantCount === true)
+    setShowSessionTitle(initialValues.showSessionTitle !== false)
+    setShowAppLogo(initialValues.showAppLogo !== false)
     setAutoEndEnabled(Boolean(initialValues.autoEndEnabled))
     setLogoUrl(initialValues.logoUrl || '')
     setLogoError('')
@@ -589,6 +597,8 @@ function SessionFormModal({
       quizTotalTimeSynced: enableNavigation && quizTotalTimeEnabled && quizTotalTimeSynced,
       overallLeaderboard,
       showParticipantCount,
+      showSessionTitle,
+      showAppLogo,
       autoEndEnabled: !liveSettingsOnly && autoEndEnabled,
       autoEndDate: !liveSettingsOnly && autoEndEnabled ? autoEndDate : '',
       autoEndTime: !liveSettingsOnly && autoEndEnabled ? autoEndTime : '',
@@ -1051,6 +1061,41 @@ function SessionFormModal({
                     type="checkbox"
                     checked={showParticipantCount}
                     onChange={(event) => setShowParticipantCount(event.target.checked)}
+                    className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
+                  />
+                </label>
+              </div>
+              <div className="md:col-span-2">
+                <label className="flex items-center justify-between gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-700">
+                      Show session title to participants
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      When off, joiners do not see the session name on the participant page.
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={showSessionTitle}
+                    onChange={(event) => setShowSessionTitle(event.target.checked)}
+                    className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
+                  />
+                </label>
+              </div>
+              <div className="md:col-span-2">
+                <label className="flex items-center justify-between gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-700">Show High Voltage logo</p>
+                    <p className="text-xs text-slate-500">
+                      When off, participants do not see the High Voltage (company) logo. A custom
+                      session logo still shows if set.
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={showAppLogo}
+                    onChange={(event) => setShowAppLogo(event.target.checked)}
                     className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
                   />
                 </label>

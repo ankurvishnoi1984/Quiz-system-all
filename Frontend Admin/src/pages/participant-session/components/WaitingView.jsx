@@ -4,6 +4,8 @@ import { PageCenteredShell } from './PageCenteredShell'
 
 export function WaitingView({ session, transitioningLive }) {
   const showParticipantCount = Boolean(session?.show_participant_count)
+  const showSessionTitle = session?.show_session_title !== false
+  const showAppLogo = session?.show_app_logo !== false
   const liveCount = Number(session?.live_participants_count)
   const fallbackCount = Number(session?.participants_count)
   const participantCount =
@@ -24,6 +26,7 @@ export function WaitingView({ session, transitioningLive }) {
           variant="hero"
           sessionLogoUrl={session?.logo_url}
           sessionTitle={session?.title || 'Session'}
+          showAppLogo={showAppLogo}
         />
         <div className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-blue-100 text-blue-700">
           <Clock3 className={`size-7 ${transitioningLive ? 'animate-spin' : 'animate-pulse'}`} />
@@ -31,7 +34,7 @@ export function WaitingView({ session, transitioningLive }) {
         <h1 className="participant-heading text-3xl font-bold text-navy-900">
           {transitioningLive ? 'Session is live!' : 'Waiting for the host to start...'}
         </h1>
-        <p className="text-slate-600">{session.title}</p>
+        {showSessionTitle ? <p className="text-slate-600">{session.title}</p> : null}
         <div className="mx-auto flex max-w-md items-center justify-center gap-6 rounded-xl bg-blue-50 p-3 text-sm font-semibold text-blue-900">
           {showParticipantCount ? (
             <span className="inline-flex items-center gap-2" title="Participants currently connected">

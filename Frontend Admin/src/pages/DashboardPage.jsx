@@ -556,6 +556,8 @@ function DashboardPage() {
             : null
           : null,
         show_participant_count: Boolean(values.showParticipantCount),
+        show_session_title: values.showSessionTitle !== false,
+        show_app_logo: values.showAppLogo !== false,
         auto_end_enabled: Boolean(values.autoEndEnabled),
         auto_end_date: values.autoEndEnabled ? values.autoEndDate || null : null,
         auto_end_time: values.autoEndEnabled ? values.autoEndTime || null : null,
@@ -625,6 +627,8 @@ function DashboardPage() {
       quizTotalTimeSynced: Boolean(editSession.quiz_total_time_synced),
       overallLeaderboard: Boolean(editSession.leaderboard_enabled),
       showParticipantCount: Boolean(editSession.show_participant_count),
+      showSessionTitle: editSession.show_session_title !== false,
+      showAppLogo: editSession.show_app_logo !== false,
       autoEndEnabled: Boolean(editSession.auto_end_enabled),
       autoEndDate: toDateInputValue(editSession.auto_end_date),
       autoEndTime: toTimeInputValue(editSession.auto_end_time),
@@ -686,6 +690,9 @@ function DashboardPage() {
       participant_theme: values.participantTheme || 'default',
       participant_theme_custom: values.participantThemeCustom || null,
       present_mode_settings: values.presentModeSettings || null,
+      // Live-editable participant display flags (backend liveSettingsOnly).
+      show_session_title: values.showSessionTitle !== false,
+      show_app_logo: values.showAppLogo !== false,
     }
 
     if (!editSessionLiveSettingsOnly) {
@@ -748,7 +755,7 @@ function DashboardPage() {
           values.builderMode === 'advanced' && values.advancedSelectionMode === 'random_from_selected'
             ? 'random_from_selected'
             : 'random_all',
-        // Omit on edit — builder owns bands; sending null/defaults would wipe them.
+        // Omit bands on edit — builder owns them; sending null/defaults would wipe them.
       })
     }
 

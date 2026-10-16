@@ -1256,6 +1256,14 @@ function ParticipantSessionPage({ embed = false }) {
                   : old.leaderboard_top_n,
               survey_results_enabled: isSurveyResultsEnabled,
               show_participant_count: isParticipantCountVisible,
+              show_session_title:
+                data.show_session_title !== undefined
+                  ? data.show_session_title !== false
+                  : old.show_session_title,
+              show_app_logo:
+                data.show_app_logo !== undefined
+                  ? data.show_app_logo !== false
+                  : old.show_app_logo,
               participants_count: isParticipantCountVisible
                 ? old.participants_count
                 : null,
@@ -3012,7 +3020,7 @@ function ParticipantSessionPage({ embed = false }) {
           )
         ) : showSurveyEndingScreen ? (
           <SurveySessionEndingPanel
-            sessionTitle={session.title}
+            sessionTitle={session?.show_session_title !== false ? session.title : ''}
             summary={showSurveyResults ? surveySummaryQuery.data : null}
             isLoading={showSurveyResults ? surveySummaryQuery.isLoading : false}
             thanksOnly={showSurveyThanks}
@@ -3045,7 +3053,9 @@ function ParticipantSessionPage({ embed = false }) {
               sessionQuizTotalTimeEnabled &&
               (lastQuestionFinalized || sessionTimerExpired) && (
                 <QuizCompletedThanksPanel
-                  sessionTitle={session?.title}
+                  sessionTitle={
+                    session?.show_session_title !== false ? session?.title : ''
+                  }
                   thanksImageUrl={session?.thanks_screen_image_url || ''}
                   onPrevious={handlePrevious}
                   canGoPrevious={canShowPreviousQuestion && displayQuestionIndex > 0}

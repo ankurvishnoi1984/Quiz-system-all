@@ -10,6 +10,8 @@ export function SessionHeader({
   quizTimeLimit = 0,
 }) {
   const showParticipantCount = Boolean(session?.show_participant_count)
+  const showSessionTitle = session?.show_session_title !== false
+  const showAppLogo = session?.show_app_logo !== false
   const liveCount = Number(session?.live_participants_count)
   const fallbackCount = Number(session?.participants_count)
   const participantCount = Number.isFinite(liveCount) && liveCount >= 0 ? liveCount : fallbackCount
@@ -24,14 +26,17 @@ export function SessionHeader({
           variant="header"
           sessionLogoUrl={session?.logo_url}
           sessionTitle={session?.title || 'Session'}
+          showAppLogo={showAppLogo}
           className="mb-2"
         />
-        <h1
-          className="participant-heading line-clamp-2 text-xl font-bold text-navy-900"
-          title={session?.title || ''}
-        >
-          {session.title}
-        </h1>
+        {showSessionTitle ? (
+          <h1
+            className="participant-heading line-clamp-2 text-xl font-bold text-navy-900"
+            title={session?.title || ''}
+          >
+            {session.title}
+          </h1>
+        ) : null}
         <p className="participant-muted truncate text-sm text-slate-600">
           {joinedUser?.name
             ? `${joinedUser.name}${!joinedUser.anonymous && joinedUser.email ? ` • ${joinedUser.email}` : ''}`

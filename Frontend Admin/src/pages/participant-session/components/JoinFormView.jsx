@@ -55,9 +55,14 @@ export function JoinFormView({
             variant="hero"
             sessionLogoUrl={session?.logo_url}
             sessionTitle={session?.title || 'Session'}
+            showAppLogo={session?.show_app_logo !== false}
           />
           <h1 className="participant-heading text-2xl font-bold text-navy-900">
-            {showJoinDetails ? session.title : 'Join a session'}
+            {showJoinDetails
+              ? session?.show_session_title !== false
+                ? session.title
+                : 'Join a session'
+              : 'Join a session'}
           </h1>
           <p className="mt-1 text-sm text-slate-600">
             {showJoinDetails
