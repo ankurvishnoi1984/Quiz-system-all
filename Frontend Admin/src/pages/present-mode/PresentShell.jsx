@@ -185,6 +185,7 @@ export function PresentSlideHeader({
             <HeaderQuizTimer
               timer={quizTimer}
               timeLimit={quizTimeLimit}
+              size="large"
               className="self-center"
             />
           ) : null}
@@ -223,7 +224,7 @@ export function PresentSlideHeader({
       ) : showParticipantStats ? (
         <div className="flex flex-wrap items-end justify-end gap-2">
           {showQuizTimer ? (
-            <HeaderQuizTimer timer={quizTimer} timeLimit={quizTimeLimit} />
+            <HeaderQuizTimer timer={quizTimer} timeLimit={quizTimeLimit} size="large" />
           ) : null}
           <div className="text-right">
             <div className="flex items-center justify-end gap-2">
@@ -236,7 +237,7 @@ export function PresentSlideHeader({
           </div>
         </div>
       ) : showQuizTimer ? (
-        <HeaderQuizTimer timer={quizTimer} timeLimit={quizTimeLimit} />
+        <HeaderQuizTimer timer={quizTimer} timeLimit={quizTimeLimit} size="large" />
       ) : null}
     </header>
   )
