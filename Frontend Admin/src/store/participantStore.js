@@ -18,6 +18,8 @@ const initialQuiz = {
   quizSessionCountdown: null,
   /** Untimed: when the participant first saw each question (epoch ms) */
   quizQuestionOpenedAt: {},
+  /** Elapsed seconds into the question limit when the answer was submitted (survives lockstep re-sync) */
+  quizSubmittedAtSecondsByQuestion: {},
   /** Random-order sessions: participant-specific question id sequence */
   quizQuestionOrder: [],
 }
@@ -94,7 +96,30 @@ export const useParticipantStore = create(
         })),
 
       clearQuizSubmissionLocks: () =>
-        set({ quizSubmittedQuestionIds: {}, quizExplicitSubmittedQuestionIds: {} }),
+        set({
+          quizSubmittedQuestionIds: {},
+          quizExplicitSubmittedQuestionIds: {},
+          quizSubmittedAtSecondsByQuestion: {},
+        }),
+
+      /**
+       * Record when (elapsed into the limit) the participant submitted.
+       * Set once per question — lockstep re-sync must not overwrite.
+       */
+      recordQuestionSubmittedAt: ({ questionId, elapsedSeconds }) => {
+        if (questionId == null) return
+        const qid = String(questionId)
+        const elapsed = Math.max(0, Math.floor(Number(elapsedSeconds) || 0))
+        set((s) => {
+          if (s.quizSubmittedAtSecondsByQuestion?.[qid] != null) return {}
+          return {
+            quizSubmittedAtSecondsByQuestion: {
+              ...(s.quizSubmittedAtSecondsByQuestion || {}),
+              [qid]: elapsed,
+            },
+          }
+        })
+      },
 
       /** Host opened question for reattempt — clear local answer and allow resubmit */
       unlockQuestionForReattempt: (questionId, { timeLimitSeconds = 0 } = {}) => {
@@ -119,12 +144,15 @@ export const useParticipantStore = create(
           }
           const openedAt = { ...(s.quizQuestionOpenedAt || {}) }
           delete openedAt[qid]
+          const submittedAt = { ...(s.quizSubmittedAtSecondsByQuestion || {}) }
+          delete submittedAt[qid]
           return {
             quizSubmittedQuestionIds: locks,
             quizExplicitSubmittedQuestionIds: explicit,
             quizResponses: responses,
             quizCountdownByQuestion: countdowns,
             quizQuestionOpenedAt: openedAt,
+            quizSubmittedAtSecondsByQuestion: submittedAt,
             quizSubmitted: false,
           }
         })
@@ -280,6 +308,7 @@ export const useParticipantStore = create(
         quizCountdownByQuestion: state.quizCountdownByQuestion,
         quizSessionCountdown: state.quizSessionCountdown,
         quizQuestionOpenedAt: state.quizQuestionOpenedAt,
+        quizSubmittedAtSecondsByQuestion: state.quizSubmittedAtSecondsByQuestion,
         quizQuestionOrder: state.quizQuestionOrder,
       }),
       migrate: (persistedState, version) => {

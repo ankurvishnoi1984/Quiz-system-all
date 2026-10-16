@@ -167,6 +167,7 @@ function ParticipantSessionPage({ embed = false }) {
     quizQuestionOpenedAt,
     quizSubmittedQuestionIds,
     quizExplicitSubmittedQuestionIds,
+    quizSubmittedAtSecondsByQuestion,
     quizQuestionOrder,
     setResponses,
     setQuestionIndex,
@@ -182,6 +183,7 @@ function ParticipantSessionPage({ embed = false }) {
     freezeAllCountdowns,
     markQuestionsSubmitted,
     markQuestionsExplicitlySubmitted,
+    recordQuestionSubmittedAt,
     unlockQuestionForReattempt,
     markQuestionOpened,
     setQuizQuestionOrder,
@@ -196,6 +198,7 @@ function ParticipantSessionPage({ embed = false }) {
       quizQuestionOpenedAt: s.quizQuestionOpenedAt,
       quizSubmittedQuestionIds: s.quizSubmittedQuestionIds,
       quizExplicitSubmittedQuestionIds: s.quizExplicitSubmittedQuestionIds,
+      quizSubmittedAtSecondsByQuestion: s.quizSubmittedAtSecondsByQuestion,
       quizQuestionOrder: s.quizQuestionOrder,
       setResponses: s.setQuizResponses,
       setQuestionIndex: s.setQuizQuestionIndex,
@@ -211,6 +214,7 @@ function ParticipantSessionPage({ embed = false }) {
       freezeAllCountdowns: s.freezeAllCountdowns,
       markQuestionsSubmitted: s.markQuestionsSubmitted,
       markQuestionsExplicitlySubmitted: s.markQuestionsExplicitlySubmitted,
+      recordQuestionSubmittedAt: s.recordQuestionSubmittedAt,
       unlockQuestionForReattempt: s.unlockQuestionForReattempt,
       markQuestionOpened: s.markQuestionOpened,
       setQuizQuestionOrder: s.setQuizQuestionOrder,
@@ -671,10 +675,16 @@ function ParticipantSessionPage({ embed = false }) {
     ],
   )
 
-  const questionSubmittedAtSeconds =
-    questionCountdownFrozen != null && questionLockedBySubmission
-      ? Math.max(0, Number(timeLimit) - Number(questionCountdownFrozen))
+  const recordedSubmittedAtSeconds =
+    question?.id != null
+      ? (quizSubmittedAtSecondsByQuestion || {})[String(question.id)]
       : null
+  const questionSubmittedAtSeconds =
+    recordedSubmittedAtSeconds != null && Number.isFinite(Number(recordedSubmittedAtSeconds))
+      ? Math.max(0, Number(recordedSubmittedAtSeconds))
+      : questionCountdownFrozen != null && questionLockedBySubmission
+        ? Math.max(0, Number(timeLimit) - Number(questionCountdownFrozen))
+        : null
   const submittedAtSeconds =
     hasQuizCountdown && !hasQuestionCountdown
       ? quizCountdownFrozen != null && lastQuestionFinalized
@@ -2131,10 +2141,25 @@ function ParticipantSessionPage({ embed = false }) {
       try {
         await submitResponseApi(participantToken, payload)
         markQuestionsSubmitted([questionId])
+        const limitSeconds = Math.max(0, Math.floor(Number(q.timeLimit) || 0))
+        if (limitSeconds > 0) {
+          const entry =
+            useParticipantStore.getState().quizCountdownByQuestion?.[String(questionId)]
+          const remaining =
+            entry?.endsAt != null
+              ? getRemainingQuestionSeconds(entry.endsAt)
+              : Number(questionId) === Number(question?.id)
+                ? questionTimer
+                : 0
+          recordQuestionSubmittedAt({
+            questionId,
+            elapsedSeconds: Math.max(0, limitSeconds - Math.max(0, remaining)),
+          })
+        }
         // Lockstep early save: keep the shared wall-clock countdown running.
         const skipFreezeForLockstep =
           syncedQuestionLockstep && hasQuestionCountdown && questionTimer > 0
-        if (Number(q.timeLimit) > 0 && !skipFreezeForLockstep) {
+        if (limitSeconds > 0 && !skipFreezeForLockstep) {
           freezeCountdownAfterSubmit(questionId)
         }
         playSubmitSuccess()
@@ -2162,11 +2187,13 @@ function ParticipantSessionPage({ embed = false }) {
       quizSubmittedQuestionIds,
       markQuestionsSubmitted,
       freezeCountdownAfterSubmit,
+      recordQuestionSubmittedAt,
       navigationEnabled,
       participantEditPolicy,
       syncedQuestionLockstep,
       hasQuestionCountdown,
       questionTimer,
+      question?.id,
     ],
   )
 
@@ -2229,6 +2256,19 @@ function ParticipantSessionPage({ embed = false }) {
         markQuestionsExplicitlySubmitted([sessionLastQuestionId])
       }
       if (hasQuestionCountdown && question?.id) {
+        const limitSeconds = Math.max(0, Math.floor(Number(question.timeLimit) || 0))
+        if (limitSeconds > 0) {
+          const entry =
+            useParticipantStore.getState().quizCountdownByQuestion?.[String(question.id)]
+          const remaining =
+            entry?.endsAt != null
+              ? getRemainingQuestionSeconds(entry.endsAt)
+              : questionTimer
+          recordQuestionSubmittedAt({
+            questionId: question.id,
+            elapsedSeconds: Math.max(0, limitSeconds - Math.max(0, remaining)),
+          })
+        }
         freezeCountdownAfterSubmit(question.id)
       }
       if (

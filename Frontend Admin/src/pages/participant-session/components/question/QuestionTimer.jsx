@@ -117,7 +117,7 @@ export function QuestionTimer({
   if (compact) {
     return (
       <div
-        className={`participant-timer-panel inline-flex items-center gap-2 rounded-xl border px-2 py-1.5 shadow-md shadow-navy-900/10 ${
+        className={`participant-timer-panel inline-flex max-w-full flex-wrap items-center gap-2 rounded-xl border px-2 py-1.5 shadow-md shadow-navy-900/10 ${
           expired
             ? 'quiz-timer-expired border-red-200/90 bg-red-50'
             : urgent
@@ -129,15 +129,23 @@ export function QuestionTimer({
         aria-label={statusLabel}
       >
         {ring}
-        <span
-          className={`pr-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.12em] ${
-            statusTone
-              ? 'participant-timer-label--alert text-red-600'
-              : 'participant-timer-label text-slate-500'
-          }`}
-        >
-          {statusLabel}
-        </span>
+        <div className="flex min-w-0 flex-col gap-0.5 pr-0.5">
+          <span
+            className={`text-[0.6rem] font-semibold uppercase tracking-[0.12em] ${
+              statusTone
+                ? 'participant-timer-label--alert text-red-600'
+                : 'participant-timer-label text-slate-500'
+            }`}
+          >
+            {statusLabel}
+          </span>
+          {submitted ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 ring-1 ring-emerald-200/80">
+              <Check className="size-2.5 shrink-0" aria-hidden />
+              Submitted at {formatTime(submittedAtSeconds)}
+            </span>
+          ) : null}
+        </div>
       </div>
     )
   }
