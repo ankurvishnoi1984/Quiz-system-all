@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { ListChecks, Pencil } from 'lucide-react'
+import { CheckCircle2, CircleDashed, ListChecks, Pencil } from 'lucide-react'
 import { QuestionMedia } from '../../../components/participant-session/QuestionMedia'
 import { FitText } from '../../../components/ui/FitText'
 import { useParticipantSubmitVisibleDensity } from '../../../hooks/useParticipantSubmitVisibleDensity'
@@ -23,6 +23,8 @@ export function ActiveQuestionPanel({
   displayQuestionIndex,
   questionSerialNumber = null,
   questionSerialTotal = null,
+  answeredCount = 0,
+  leftBlankCount = 0,
   hasCountdown,
   hasQuestionCountdown = false,
   canGoToNextQuestion,
@@ -103,6 +105,33 @@ export function ActiveQuestionPanel({
   const questionTitle =
     questionSerial != null ? `Q${questionSerial}. ${questionTitleBase}` : questionTitleBase
   const serialLabel = questionSerial ?? displayQuestionIndex + 1
+  const answered = Math.max(0, Number(answeredCount) || 0)
+  const leftBlank = Math.max(0, Number(leftBlankCount) || 0)
+  const showAttemptProgress = answered + leftBlank > 0
+  const answeredLabel = answered === 1 ? '1 answered' : `${answered} answered`
+  const leftBlankLabel = leftBlank === 1 ? '1 left blank' : `${leftBlank} left blank`
+
+  const attemptProgress = showAttemptProgress ? (
+    <div
+      className="flex flex-wrap items-center gap-1.5"
+      aria-label={`${answeredLabel}, ${leftBlankLabel} so far`}
+    >
+      <span
+        className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 ring-1 ring-emerald-200/80"
+        title="Questions you have selected or filled in so far"
+      >
+        <CheckCircle2 className="size-3 shrink-0" aria-hidden />
+        {answeredLabel}
+      </span>
+      <span
+        className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200/80"
+        title="Reached questions with no answer yet (includes skipped or timed out)"
+      >
+        <CircleDashed className="size-3 shrink-0" aria-hidden />
+        {leftBlankLabel}
+      </span>
+    </div>
+  ) : null
 
   return (
     <ParticipantFitProvider densityId={densityId}>
@@ -114,12 +143,13 @@ export function ActiveQuestionPanel({
     >
       {navigationEnabled ? (
       <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
             <p className="participant-accent-text min-w-0 truncate text-xs font-semibold uppercase tracking-wider text-navy-700">
               {serialTotal != null
                 ? `Question ${serialLabel} / ${serialTotal}`
                 : `Question ${serialLabel}`}
             </p>
+            {attemptProgress}
           </div>
         {sessionQuizTotalTimeEnabled && !canShowPreviousQuestion && (
           <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
@@ -135,11 +165,11 @@ export function ActiveQuestionPanel({
                 : 'Quiz timer: use Previous and Next to review your answers.'}
           </p>
         )}
-        {hasQuestionCountdown && !canGoToNextQuestion && (
+        {/* {hasQuestionCountdown && !canGoToNextQuestion && (
           <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
             Answer this question or wait for the question timer to use Next.
           </p>
-        )}
+        )} */}
         {hasQuestionCountdown &&
           canGoToNextQuestion &&
           inputsLocked &&
@@ -165,6 +195,8 @@ export function ActiveQuestionPanel({
           </p>
         )}
       </div>
+      ) : showAttemptProgress ? (
+        <div className="flex flex-wrap items-center gap-2">{attemptProgress}</div>
       ) : null}
 
       {showNewQuestionAlert ? (

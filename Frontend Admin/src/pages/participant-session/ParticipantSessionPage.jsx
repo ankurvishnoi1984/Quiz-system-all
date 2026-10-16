@@ -1625,6 +1625,38 @@ function ParticipantSessionPage({ embed = false }) {
     question?.display_order,
   ])
 
+  /** Among questions reached so far (0..displayQuestionIndex): answered vs left blank.
+   * Current unanswered question is omitted from left blank until its timer hits 0
+   * (or until the participant navigates away if untimed). */
+  const attemptStats = useMemo(() => {
+    const list = activeQuestions
+    const end = Math.min(Number(displayQuestionIndex) || 0, list.length - 1)
+    if (end < 0 || !list.length) return { answered: 0, leftBlank: 0, reached: 0 }
+    let answered = 0
+    let leftBlank = 0
+    for (let i = 0; i <= end; i += 1) {
+      const q = list[i]
+      const hasAnswer = participantQuestionHasAnswer(q, responses[q?.id])
+      if (hasAnswer) {
+        answered += 1
+        continue
+      }
+      const isCurrent = i === end
+      if (isCurrent) {
+        const timerStillRunning = hasQuestionCountdown && questionTimer > 0
+        if (timerStillRunning || !hasQuestionCountdown) continue
+      }
+      leftBlank += 1
+    }
+    return { answered, leftBlank, reached: end + 1 }
+  }, [
+    activeQuestions,
+    displayQuestionIndex,
+    responses,
+    hasQuestionCountdown,
+    questionTimer,
+  ])
+
   const isLastDisplayedQuestion = useMemo(() => {
     if (!navigationEnabled) return true
     return activeQuestions.length > 0 && displayQuestionIndex === activeQuestions.length - 1
@@ -3075,6 +3107,8 @@ function ParticipantSessionPage({ embed = false }) {
             displayQuestionIndex={displayQuestionIndex}
             questionSerialNumber={questionSerialNumber}
             questionSerialTotal={questionSerialTotal}
+            answeredCount={attemptStats.answered}
+            leftBlankCount={attemptStats.leftBlank}
             hasCountdown={hasCountdown}
             hasQuestionCountdown={hasQuestionCountdown}
             canGoToNextQuestion={canGoToNextQuestion}
