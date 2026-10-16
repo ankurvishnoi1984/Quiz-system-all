@@ -40,7 +40,8 @@ export function ParticipantsSlide({
         onQaClick={onQaClick}
         readOnly={readOnly}
         showParticipantStats={showParticipantStats}
-        hasQuizCountdown={hasQuizCountdown}
+        // Ready lobby shows the quiz timer under Audience; keep it in the header for join-info lobby.
+        hasQuizCountdown={showSessionInfo ? hasQuizCountdown : false}
         quizTimer={quizTimer}
         quizTimeLimit={quizTimeLimit}
       />
@@ -61,6 +62,9 @@ export function ParticipantsSlide({
           instructions={[]}
           readOnly={readOnly}
           isSessionLive={isSessionLive}
+          hasQuizCountdown={hasQuizCountdown}
+          quizTimer={quizTimer}
+          quizTimeLimit={quizTimeLimit}
         />
       )}
     </div>

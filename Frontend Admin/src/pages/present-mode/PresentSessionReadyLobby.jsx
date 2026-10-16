@@ -1,5 +1,6 @@
 import { Calendar, Clock3, Play, Users } from 'lucide-react'
 import { BrandLogoPair } from '../../components/branding/BrandLogoPair'
+import { HeaderQuizTimer } from '../participant-session/components/HeaderQuizTimer'
 import {
   formatScheduledDateForDisplay,
   formatScheduledTimeForDisplay,
@@ -67,6 +68,9 @@ export function PresentSessionReadyLobby({
   showActivateAll = false,
   activateAllPending = false,
   onActivateAll,
+  hasQuizCountdown = false,
+  quizTimer = 0,
+  quizTimeLimit = 0,
   className = '',
 }) {
   const sessionTitle = session?.title || 'Live session'
@@ -81,8 +85,18 @@ export function PresentSessionReadyLobby({
   const timeLabel = formatScheduledTimeForDisplay(session?.scheduled_time) || '—'
   const joined = Number(participantCount) || 0
   const live = Number(liveParticipantCount) || 0
+  const showQuizTimer = Boolean(hasQuizCountdown)
 
-  const hasLeftContent = hasSchedule || showParticipantStats
+  const quizTimerBlock = showQuizTimer ? (
+    <HeaderQuizTimer
+      timer={quizTimer}
+      timeLimit={quizTimeLimit}
+      size="large"
+      className="w-full !min-w-0"
+    />
+  ) : null
+
+  const hasLeftContent = hasSchedule || showParticipantStats || showQuizTimer
   const useSplit = showInstructions && hasLeftContent
 
   const scheduleBlock = hasSchedule ? (
@@ -100,6 +114,7 @@ export function PresentSessionReadyLobby({
     <div className="flex h-full min-w-0 flex-col gap-[clamp(0.75rem,2vh,1.25rem)]">
       {scheduleBlock}
       {audienceBlock}
+      {quizTimerBlock}
     </div>
   )
 
@@ -149,6 +164,7 @@ export function PresentSessionReadyLobby({
           <div className="mb-[clamp(1rem,2.5vh,1.5rem)] space-y-[clamp(0.75rem,2vh,1.25rem)]">
             {scheduleBlock}
             {audienceBlock}
+            {quizTimerBlock}
           </div>
         ) : null}
 

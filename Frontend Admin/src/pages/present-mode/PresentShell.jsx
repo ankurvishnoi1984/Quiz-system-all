@@ -180,7 +180,15 @@ export function PresentSlideHeader({
       </div>
 
       {showStatTiles || showQuizTimer ? (
-        <div className="flex w-fit max-w-full flex-col items-stretch gap-2 self-end">
+        <div className="flex w-fit max-w-full flex-wrap items-stretch justify-end gap-2 self-end">
+          {showQuizTimer ? (
+            <HeaderQuizTimer
+              timer={quizTimer}
+              timeLimit={quizTimeLimit}
+              size="large"
+              className="shrink-0 !min-w-0"
+            />
+          ) : null}
           {showStatTiles ? (
             <div className="flex flex-wrap items-stretch justify-end gap-2">
               {/* Q&A feature disabled — re-enable when bringing Q&A back
@@ -216,17 +224,17 @@ export function PresentSlideHeader({
               ) : null}
             </div>
           ) : null}
+        </div>
+      ) : showParticipantStats ? (
+        <div className="flex w-fit max-w-full flex-wrap items-center justify-end gap-2 self-end">
           {showQuizTimer ? (
             <HeaderQuizTimer
               timer={quizTimer}
               timeLimit={quizTimeLimit}
               size="large"
-              className="w-full !min-w-0"
+              className="shrink-0 !min-w-0"
             />
           ) : null}
-        </div>
-      ) : showParticipantStats ? (
-        <div className="flex w-fit max-w-full flex-col items-stretch gap-2 self-end">
           <div className="text-right">
             <div className="flex items-center justify-end gap-2">
               <PresentLiveIndicator isSessionLive={isSessionLive} />
@@ -236,14 +244,6 @@ export function PresentSlideHeader({
             </div>
             <PresentParticipantCounts joinedCount={joined} liveCount={live} />
           </div>
-          {showQuizTimer ? (
-            <HeaderQuizTimer
-              timer={quizTimer}
-              timeLimit={quizTimeLimit}
-              size="large"
-              className="w-full !min-w-0"
-            />
-          ) : null}
         </div>
       ) : showQuizTimer ? (
         <HeaderQuizTimer timer={quizTimer} timeLimit={quizTimeLimit} size="large" />
