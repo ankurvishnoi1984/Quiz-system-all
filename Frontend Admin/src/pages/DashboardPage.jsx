@@ -577,7 +577,10 @@ function DashboardPage() {
           values.builderMode === 'advanced' && values.advancedSelectionMode === 'random_from_selected'
             ? 'random_from_selected'
             : 'random_all',
-        response_time_score_bands: values.responseTimeScoreBands ?? null,
+        // Only set on create when the form seeds defaults (advanced). Omit otherwise.
+        ...(values.responseTimeScoreBands !== undefined
+          ? { response_time_score_bands: values.responseTimeScoreBands ?? null }
+          : {}),
         present_mode_settings: values.presentModeSettings || null,
       },
     })
@@ -745,7 +748,7 @@ function DashboardPage() {
           values.builderMode === 'advanced' && values.advancedSelectionMode === 'random_from_selected'
             ? 'random_from_selected'
             : 'random_all',
-        response_time_score_bands: values.responseTimeScoreBands ?? null,
+        // Omit on edit — builder owns bands; sending null/defaults would wipe them.
       })
     }
 

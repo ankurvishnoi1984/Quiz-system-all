@@ -4,6 +4,27 @@
  */
 export const DEFAULT_BAND_POINTS = [500, 400, 300, 200, 100, 50]
 
+/**
+ * Normalize session.response_time_score_bands from API/DB into a non-empty array or null.
+ * Handles real arrays and JSON strings (some drivers return JSON as text).
+ */
+export function normalizeResponseTimeScoreBands(raw) {
+  if (raw == null || raw === '') return null
+  let value = raw
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value)
+    } catch {
+      return null
+    }
+  }
+  if (!Array.isArray(value) || value.length === 0) return null
+  return value.map((b) => ({
+    max_seconds: Number(b?.max_seconds) || 0,
+    points: Number(b?.points) || 0,
+  }))
+}
+
 export function buildScoreBandsForTimer(timeLimitSeconds, bandCount = 6, pointsScale = DEFAULT_BAND_POINTS) {
   const limit = Math.max(1, Math.floor(Number(timeLimitSeconds) || 30))
   const count = Math.min(8, Math.max(2, Math.floor(Number(bandCount) || 6)))

@@ -612,8 +612,10 @@ function SessionFormModal({
         !liveSettingsOnly && builderMode === 'advanced' ? Number(questionsPerParticipant) : null,
       advancedSelectionMode:
         !liveSettingsOnly && builderMode === 'advanced' ? advancedSelectionMode : 'random_all',
-      responseTimeScoreBands:
-        !liveSettingsOnly && builderMode === 'advanced' ? DEFAULT_SCORE_BANDS : null,
+      // Create advanced: seed default bands. Edit: omit so Dashboard does not wipe builder bands.
+      ...(mode === 'create' && !liveSettingsOnly && builderMode === 'advanced'
+        ? { responseTimeScoreBands: DEFAULT_SCORE_BANDS }
+        : {}),
       presentModeSettings: toPresentModeSettingsApi(presentModeSettings),
     })
   }

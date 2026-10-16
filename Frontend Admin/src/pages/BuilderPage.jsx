@@ -83,6 +83,7 @@ import {
 } from '../components/dashboard/PlanExpiredNotice'
 import {
   buildScoreBandsForTimer,
+  normalizeResponseTimeScoreBands,
   resolveUniformPoolTimeLimit,
   DEFAULT_BAND_POINTS,
 } from '../utils/advancedScoreBands'
@@ -1725,6 +1726,9 @@ function BuilderPage() {
             updated.participant_theme_custom ?? prev.participantThemeCustom,
           ),
         }))
+        queryClient.setQueryData(['builder-session', sessionId], (old) =>
+          old ? { ...old, ...updated } : updated,
+        )
       }
       queryClient.invalidateQueries({ queryKey: ['builder-session', sessionId] })
       setSaveError('')
@@ -2245,43 +2249,48 @@ function BuilderPage() {
 
   const [scoreBandCount, setScoreBandCount] = useState(6)
   const [localScoreBands, setLocalScoreBands] = useState(null)
-  const [scoreBandsEnabled, setScoreBandsEnabled] = useState(false)
+  // Optimistic Off while PUT null is in flight (server cache may still have bands).
+  const [bandsDisabledOptimistic, setBandsDisabledOptimistic] = useState(false)
+
+  const serverScoreBands = useMemo(
+    () => normalizeResponseTimeScoreBands(sessionQuery.data?.response_time_score_bands),
+    [sessionQuery.data?.response_time_score_bands],
+  )
 
   useEffect(() => {
-    const raw = sessionQuery.data?.response_time_score_bands
-    const enabled = Array.isArray(raw) && raw.length > 0
-    setScoreBandsEnabled(enabled)
-    if (enabled) {
-      setScoreBandCount(raw.length)
+    if (!sessionQuery.data) return
+    if (serverScoreBands) {
+      // Keep optimistic Off until PUT null lands; do not flip back On mid-flight.
+      if (bandsDisabledOptimistic) return
+      setScoreBandCount(serverScoreBands.length)
       setLocalScoreBands(null)
+      return
     }
-  }, [sessionQuery.data?.session_id, sessionQuery.data?.response_time_score_bands])
+    // Server has no bands — clear optimistic Off after a successful null save.
+    setBandsDisabledOptimistic(false)
+  }, [
+    sessionQuery.data?.session_id,
+    serverScoreBands,
+    sessionQuery.data,
+    bandsDisabledOptimistic,
+  ])
 
   const scoreBands = useMemo(() => {
     if (localScoreBands?.length) return localScoreBands
-    const raw = sessionQuery.data?.response_time_score_bands
-    if (Array.isArray(raw) && raw.length) {
-      return raw.map((b) => ({
-        max_seconds: Number(b.max_seconds) || 0,
-        points: Number(b.points) || 0,
-      }))
-    }
+    if (serverScoreBands?.length) return serverScoreBands
     if (poolTimeLimitSeconds > 0) {
       return buildScoreBandsForTimer(poolTimeLimitSeconds, scoreBandCount)
     }
     return DEFAULT_ADVANCED_SCORE_BANDS
-  }, [
-    localScoreBands,
-    sessionQuery.data?.response_time_score_bands,
-    poolTimeLimitSeconds,
-    scoreBandCount,
-  ])
+  }, [localScoreBands, serverScoreBands, poolTimeLimitSeconds, scoreBandCount])
 
   const responseTimeScoringEnabled =
-    scoreBandsEnabled || (Array.isArray(localScoreBands) && localScoreBands.length > 0)
+    !bandsDisabledOptimistic &&
+    (Boolean(serverScoreBands) ||
+      (Array.isArray(localScoreBands) && localScoreBands.length > 0))
 
   const persistScoreBands = (next) => {
-    setScoreBandsEnabled(true)
+    setBandsDisabledOptimistic(false)
     setLocalScoreBands(next)
     sessionSettingsMutation.mutate({ response_time_score_bands: next })
   }
@@ -2328,11 +2337,11 @@ function BuilderPage() {
       const mode = timeLimitSecondsToMode(sharedSeconds)
       setTimeLimitMode(mode)
       if (mode === 'Custom') setCustomTime(sharedSeconds)
-      setScoreBandsEnabled(true)
+      setBandsDisabledOptimistic(false)
       rebuildBandsFromTimer(sharedSeconds, scoreBandCount)
       return
     }
-    setScoreBandsEnabled(false)
+    setBandsDisabledOptimistic(true)
     setLocalScoreBands(null)
     setDirty(true)
     sessionSettingsMutation.mutate({ response_time_score_bands: null })
