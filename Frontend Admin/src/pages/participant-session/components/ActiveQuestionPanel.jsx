@@ -187,20 +187,9 @@ export function ActiveQuestionPanel({
         </p>
       ) : null}
 
-      <FitText
-        as="h2"
-        className="participant-heading font-bold leading-snug text-navy-900"
-        minPx={density.title.minPx}
-        maxPx={density.title.maxPx}
-        maxLines={density.title.maxLines}
-      >
-        {questionTitle}
-      </FitText>
-
-      <QuestionMedia media={question.media} maxHeightClass={density.mediaMaxHeightClass} />
-
       {hasQuestionCountdown && !question.isSurvey ? (
         <QuestionTimer
+          variant="compact"
           label="Question time"
           timer={questionTimer ?? timer}
           timeLimit={questionTimeLimit || timeLimit}
@@ -212,6 +201,18 @@ export function ActiveQuestionPanel({
           timerSoundStartSeconds={question.timerSoundStartSeconds}
         />
       ) : null}
+
+      <FitText
+        as="h2"
+        className="participant-heading font-bold leading-snug text-navy-900"
+        minPx={density.title.minPx}
+        maxPx={density.title.maxPx}
+        maxLines={density.title.maxLines}
+      >
+        {questionTitle}
+      </FitText>
+
+      <QuestionMedia media={question.media} maxHeightClass={density.mediaMaxHeightClass} />
 
       {(question.type === 'MCQ' || question.type === 'Poll') && question.allowMultipleSelect && (
         <div className="flex gap-3 rounded-xl border border-indigo-200 bg-indigo-50/90 px-3 py-2.5">
