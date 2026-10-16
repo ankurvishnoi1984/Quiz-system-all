@@ -71,7 +71,7 @@ export function HeaderQuizTimer({
 
   return (
     <div
-      className={`inline-flex flex-col rounded-xl border ${
+      className={`${isLarge ? 'flex' : 'inline-flex'} flex-col rounded-xl border ${
         isLarge
           ? `min-w-[clamp(12rem,22vw,18rem)] gap-2 border-2 px-[clamp(1rem,2vw,1.5rem)] py-[clamp(0.75rem,1.5vh,1.1rem)] shadow-md ${toneBorder}`
           : `min-w-[11rem] gap-1.5 px-3.5 py-2.5 shadow-sm ${toneBorder}`
