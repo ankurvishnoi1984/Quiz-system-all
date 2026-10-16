@@ -51,6 +51,7 @@ import {
   isSessionQuizTotalTimeEnabled,
   isSessionRandomQuestionOrderEnabled,
   isStrictLateJoinSession,
+  isSyncedQuestionLockstep,
   sessionHasTimedQuestions,
 } from '../../utils/sessionFlags'
 import {
@@ -67,11 +68,13 @@ import {
 import { normalizeLeaderboardTopN } from '../../utils/leaderboard'
 import { getPresentModeSettings } from '../../utils/presentModeSettings'
 import {
+  buildSyncedQuestionSchedule,
   filterActiveQuestionsForLateJoinPolicy,
   getCountdownEndsAtForQuestion,
   getQuestionDeadlineMs,
   getQuizTotalEndsAt,
   getRemainingQuestionSeconds,
+  getSyncedQuestionIndex,
 } from '../../utils/questionTimer'
 import { ActiveQuestionPanel } from './components/ActiveQuestionPanel'
 import { JoinFormView } from './components/JoinFormView'
@@ -469,6 +472,7 @@ function ParticipantSessionPage({ embed = false }) {
     [session],
   )
   const quizTotalTimeSynced = useMemo(() => isQuizTotalTimeSynced(session), [session])
+  const syncedQuestionLockstep = useMemo(() => isSyncedQuestionLockstep(session), [session])
   const presentModeSettings = useMemo(() => getPresentModeSettings(session), [session])
   const sessionQuizTotalTimeSeconds = sessionQuizTotalTimeEnabled
     ? Math.max(0, Number(session?.quiz_total_time_minutes) || 0) * 60
@@ -507,9 +511,26 @@ function ParticipantSessionPage({ embed = false }) {
   ])
 
   const activeQuestions = useMemo(() => {
+    // Lockstep needs the same question order for every participant.
+    if (syncedQuestionLockstep) return activeQuestionsBase
     if (!randomQuestionOrderEnabled || !quizQuestionOrder?.length) return activeQuestionsBase
     return applyParticipantQuestionOrder(activeQuestionsBase, quizQuestionOrder)
-  }, [activeQuestionsBase, randomQuestionOrderEnabled, quizQuestionOrder])
+  }, [
+    activeQuestionsBase,
+    syncedQuestionLockstep,
+    randomQuestionOrderEnabled,
+    quizQuestionOrder,
+  ])
+
+  const syncedQuestionSchedule = useMemo(() => {
+    if (!syncedQuestionLockstep) return []
+    return buildSyncedQuestionSchedule(activeQuestions, session?.started_at)
+  }, [syncedQuestionLockstep, activeQuestions, session?.started_at])
+
+  const syncedScheduleIndex = useMemo(() => {
+    if (!syncedQuestionSchedule.length) return 0
+    return getSyncedQuestionIndex(syncedQuestionSchedule, Date.now())
+  }, [syncedQuestionSchedule, countdownTick])
 
   const sessionLastQuestionId = useMemo(() => {
     if (!activeQuestions.length) return null
@@ -1674,6 +1695,8 @@ function ParticipantSessionPage({ embed = false }) {
 
   const canShowPreviousQuestion = useMemo(() => {
     if (!navigationEnabled) return false
+    // Lockstep: everyone stays on the shared question until the schedule moves.
+    if (syncedQuestionLockstep && !sessionTimerExpired && !isSessionEnded) return false
     if (sessionQuizTotalTimeEnabled) {
       return canShowPreviousForQuizTotalTimeMultiNav(
         mappedQuestions,
@@ -1691,6 +1714,8 @@ function ParticipantSessionPage({ embed = false }) {
     return canShowPreviousForUntimedMultiNav(activeQuestions)
   }, [
     navigationEnabled,
+    syncedQuestionLockstep,
+    isSessionEnded,
     sessionQuizTotalTimeEnabled,
     sessionTimerExpired,
     allQuestionsClosedByHost,
@@ -1751,8 +1776,10 @@ function ParticipantSessionPage({ embed = false }) {
   const canGoToNextQuestion = useMemo(() => {
     if (sessionTimerExpired) return true
     if (!hasQuestionCountdown) return true
-    if (questionLockedBySubmission) return true
     if (questionTimer === 0) return true
+    // Lockstep: never unlock Submit/Next early by selecting an answer.
+    if (syncedQuestionLockstep) return false
+    if (questionLockedBySubmission) return true
     return currentQuestionAnswered
   }, [
     sessionTimerExpired,
@@ -1760,11 +1787,14 @@ function ParticipantSessionPage({ embed = false }) {
     questionLockedBySubmission,
     questionTimer,
     currentQuestionAnswered,
+    syncedQuestionLockstep,
   ])
 
   const goToQuestionIndex = useCallback(
     (nextIndex) => {
       if (!navigationEnabled || !activeQuestions.length) return
+      // Lockstep navigation is driven by the shared schedule only.
+      if (syncedQuestionLockstep && !sessionTimerExpired && !isSessionEnded) return
       const n = clamp(nextIndex, 0, activeQuestions.length - 1)
       if (
         hasQuestionCountdown &&
@@ -1784,6 +1814,8 @@ function ParticipantSessionPage({ embed = false }) {
       displayQuestionIndex,
       canGoToNextQuestion,
       navigationEnabled,
+      syncedQuestionLockstep,
+      isSessionEnded,
       setLiveQuestionId,
       setQuestionIndex,
     ],
@@ -1845,6 +1877,24 @@ function ParticipantSessionPage({ embed = false }) {
     const qidStr = String(qid)
     const byQuestion = s.quizCountdownByQuestion || {}
     const existingCountdown = byQuestion[qidStr]
+
+    // Shared lockstep: always use the schedule slot end (same for every participant).
+    if (syncedQuestionLockstep) {
+      const slot =
+        syncedQuestionSchedule.find((row) => String(row.questionId) === qidStr) ||
+        syncedQuestionSchedule[syncedScheduleIndex]
+      if (slot?.endMs) {
+        if (
+          !existingCountdown ||
+          existingCountdown.frozen != null ||
+          Math.abs((existingCountdown.endsAt || 0) - slot.endMs) > 250
+        ) {
+          setQuizCountdown({ questionId: qid, endsAt: slot.endMs })
+        }
+      }
+      return
+    }
+
     if (submittedIds[qidStr]) {
       if (!existingCountdown) {
         setQuizCountdown({ questionId: qid, endsAt: Date.now() })
@@ -1883,6 +1933,9 @@ function ParticipantSessionPage({ embed = false }) {
     strictLateJoin,
     setQuizCountdown,
     quizSubmittedQuestionIds,
+    syncedQuestionLockstep,
+    syncedQuestionSchedule,
+    syncedScheduleIndex,
   ])
 
   useEffect(() => {
@@ -2110,6 +2163,46 @@ function ParticipantSessionPage({ embed = false }) {
       participantEditPolicy,
     ],
   )
+
+  // Lockstep: keep everyone on the shared schedule index; submit when the schedule advances.
+  // No confirmation popup — save selection and move with the wall clock.
+  useEffect(() => {
+    if (!syncedQuestionLockstep || !navigationEnabled) return
+    if (step !== 'active') return
+    if (isSessionEnded || sessionTimerExpired) return
+    if (!syncedQuestionSchedule.length) return
+    const target = clamp(syncedScheduleIndex, 0, activeQuestions.length - 1)
+    if (target === questionIndex) return
+
+    const leaving = activeQuestions[questionIndex]
+    const leavingId = leaving?.id
+    let cancelled = false
+    ;(async () => {
+      if (leavingId != null && target > questionIndex) {
+        await submitQuestionById(leavingId)
+      }
+      if (cancelled) return
+      setLiveQuestionId(null)
+      setQuestionIndex(target)
+      setSubmitted(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [
+    syncedQuestionLockstep,
+    navigationEnabled,
+    step,
+    isSessionEnded,
+    sessionTimerExpired,
+    syncedQuestionSchedule.length,
+    syncedScheduleIndex,
+    questionIndex,
+    activeQuestions,
+    submitQuestionById,
+    setLiveQuestionId,
+    setQuestionIndex,
+  ])
 
   const handleSubmitResponse = async () => {
     if (isSessionEnded || lastQuestionFinalized) return false
@@ -2339,6 +2432,18 @@ function ParticipantSessionPage({ embed = false }) {
 
     const qid = question?.id
 
+    // Lockstep: schedule effect saves + advances with the wall clock (no popup).
+    // Only finalize when this is the last shared slot.
+    if (syncedQuestionLockstep) {
+      if (isLastDisplayedQuestion) {
+        const timeout = setTimeout(() => {
+          handleTimerFinalize()
+        }, 500)
+        return () => clearTimeout(timeout)
+      }
+      return
+    }
+
     if (!navigationEnabled) {
       const timeout = setTimeout(async () => {
         if (qid != null) {
@@ -2377,6 +2482,7 @@ function ParticipantSessionPage({ embed = false }) {
   }, [
     isSessionEnded,
     navigationEnabled,
+    syncedQuestionLockstep,
     questionTimer,
     step,
     displayQuestionIndex,
@@ -3134,6 +3240,7 @@ function ParticipantSessionPage({ embed = false }) {
             tagsInput={tagsInput}
             submitted={submitted}
             navigationEnabled={navigationEnabled}
+            syncedQuestionLockstep={syncedQuestionLockstep}
             canShowPreviousQuestion={canShowPreviousQuestion}
             lastActivatedLiveQuestion={lastActivatedLiveQuestion}
             highlightNextButton={highlightNextButton}

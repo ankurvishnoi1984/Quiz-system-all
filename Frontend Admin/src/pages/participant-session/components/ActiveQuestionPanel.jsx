@@ -46,6 +46,7 @@ export function ActiveQuestionPanel({
   participantAnswerIsCorrect,
   sessionEnded = false,
   navigationEnabled = true,
+  syncedQuestionLockstep = false,
   canShowPreviousQuestion = false,
   sessionQuizTotalTimeEnabled = false,
   lastQuestionFinalized = false,
@@ -74,7 +75,8 @@ export function ActiveQuestionPanel({
   onNextOrSubmit,
   onGoToQa,
 }) {
-  const useNextNav = navigationEnabled && !isLastDisplayedQuestion
+  const useNextNav = navigationEnabled && !isLastDisplayedQuestion && !syncedQuestionLockstep
+  const useLockstepSubmit = Boolean(syncedQuestionLockstep && navigationEnabled)
   const panelRef = useRef(null)
   const actionsRef = useRef(null)
   const hasMedia = Boolean(question?.media?.url)
@@ -371,44 +373,69 @@ export function ActiveQuestionPanel({
             </button>
           ) : null}
           {/* Q&A feature disabled — pass onGoToQa from parent to re-enable the button above */}
-          {question.type !== 'Emoji Reaction' || hasFinalizePayload || useNextNav ? (
+          {question.type !== 'Emoji Reaction' ||
+          hasFinalizePayload ||
+          useNextNav ||
+          useLockstepSubmit ? (
           <button
             type="button"
-            aria-label={useNextNav ? 'Next question' : question.type === 'Emoji Reaction' ? 'Submit reaction' : 'Submit answer'}
+            aria-label={
+              useLockstepSubmit
+                ? 'Submit answer'
+                : useNextNav
+                  ? 'Next question'
+                  : question.type === 'Emoji Reaction'
+                    ? 'Submit reaction'
+                    : 'Submit answer'
+            }
             disabled={
               sessionEnded ||
               isSubmitting ||
-              (useNextNav
+              (useLockstepSubmit
                 ? hasQuestionCountdown && !canGoToNextQuestion
-                : (submissionsClosed && !question?.openForReattempt) ||
-                  (allQuestionsClosedByHost && !question?.openForReattempt) ||
-                  inputsLocked ||
-                  !hasFinalizePayload ||
-                  (hasQuestionCountdown && !canGoToNextQuestion))
+                : useNextNav
+                  ? hasQuestionCountdown && !canGoToNextQuestion
+                  : (submissionsClosed && !question?.openForReattempt) ||
+                    (allQuestionsClosedByHost && !question?.openForReattempt) ||
+                    inputsLocked ||
+                    !hasFinalizePayload ||
+                    (hasQuestionCountdown && !canGoToNextQuestion))
             }
             title={
               sessionEnded
                 ? 'Session has ended'
-                : useNextNav
+                : useLockstepSubmit
                   ? hasQuestionCountdown && !canGoToNextQuestion
-                    ? 'Answer this question or wait for the question timer'
+                    ? 'Wait for the question timer to finish'
                     : undefined
-                  : allQuestionsClosedByHost && !question?.openForReattempt
-                    ? 'All questions are closed by the host'
-                    : submissionsClosed && !question?.openForReattempt
-                      ? 'This question was closed by the host'
-                      : hasQuestionCountdown && !canGoToNextQuestion
-                        ? 'Answer this question or wait for the question timer'
-                        : !hasFinalizePayload
-                          ? 'Answer this question before submitting'
-                          : undefined
+                  : useNextNav
+                    ? hasQuestionCountdown && !canGoToNextQuestion
+                      ? 'Answer this question or wait for the question timer'
+                      : undefined
+                    : allQuestionsClosedByHost && !question?.openForReattempt
+                      ? 'All questions are closed by the host'
+                      : submissionsClosed && !question?.openForReattempt
+                        ? 'This question was closed by the host'
+                        : hasQuestionCountdown && !canGoToNextQuestion
+                          ? 'Answer this question or wait for the question timer'
+                          : !hasFinalizePayload
+                            ? 'Answer this question before submitting'
+                            : undefined
             }
             onClick={onNextOrSubmit}
             className={`participant-btn-primary h-11 rounded-xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 text-sm font-semibold text-white shadow-lg shadow-blue-900/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 ${
               highlightNextButton && useNextNav ? 'participant-next-highlight' : ''
             }`}
           >
-            {isSubmitting ? 'Submitting...' : useNextNav ? 'Next' : question.type === 'Emoji Reaction' ? 'Submit reaction' : 'Submit'}
+            {isSubmitting
+              ? 'Submitting...'
+              : useLockstepSubmit
+                ? 'Submit'
+                : useNextNav
+                  ? 'Next'
+                  : question.type === 'Emoji Reaction'
+                    ? 'Submit reaction'
+                    : 'Submit'}
           </button>
           ) : null}
         </div>

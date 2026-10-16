@@ -30,6 +30,16 @@ export function isQuizTotalTimeSynced(session) {
   return value === true || value === 1 || value === '1'
 }
 
+/**
+ * Sync on + both timers: all participants share the same question schedule from Activate All.
+ * Requires started_at for an active lockstep clock.
+ */
+export function isSyncedQuestionLockstep(session) {
+  if (!isQuizTotalTimeSynced(session)) return false
+  if (!isQuizTotalWithQuestionTimersEnabled(session)) return false
+  return Boolean(session?.started_at)
+}
+
 /** Each participant sees questions in a shuffled order; host must activate all at once. */
 export function isSessionRandomQuestionOrderEnabled(session) {
   if (!session) return false

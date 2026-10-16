@@ -91,3 +91,52 @@ export function getCountdownEndsAtForQuestion({ question, strictLateJoin }) {
   // Wait for host live_activated_at — do not invent a local window that desyncs Present/Live.
   return getQuestionDeadlineMs(question)
 }
+
+/**
+ * Wall-clock slots for synced lockstep (Sync on + both timers).
+ * Q1 starts at session.started_at; each next slot starts when the previous ends.
+ * Survey / untimed questions get a 0-length slot (immediately expired).
+ *
+ * @param {Array} questions ordered participant-visible questions
+ * @param {unknown} startedAt session.started_at
+ * @returns {Array<{ index: number, questionId: unknown, startMs: number, endMs: number, limitSeconds: number }>}
+ */
+export function buildSyncedQuestionSchedule(questions = [], startedAt) {
+  const startMs = parseActivationTime(startedAt)
+  if (startMs == null) return []
+  let cursor = startMs
+  const slots = []
+  for (let i = 0; i < (questions || []).length; i += 1) {
+    const q = questions[i]
+    const isSurvey = q?.type === 'Survey' || q?.isSurvey === true
+    const limit = isSurvey
+      ? 0
+      : Math.max(0, Math.floor(Number(q?.timeLimit ?? q?.time_limit_seconds ?? 0) || 0))
+    const slotStart = cursor
+    const slotEnd = cursor + limit * 1000
+    slots.push({
+      index: i,
+      questionId: q?.id ?? q?.question_id ?? null,
+      startMs: slotStart,
+      endMs: slotEnd,
+      limitSeconds: limit,
+    })
+    cursor = slotEnd
+  }
+  return slots
+}
+
+/** Index of the live lockstep slot for `nowMs` (clamped to last after schedule ends). */
+export function getSyncedQuestionIndex(schedule = [], nowMs = Date.now()) {
+  if (!schedule.length) return 0
+  if (nowMs < schedule[0].startMs) return 0
+  for (let i = 0; i < schedule.length; i += 1) {
+    if (nowMs < schedule[i].endMs) return i
+  }
+  return schedule.length - 1
+}
+
+export function getSyncedSlotRemainingSeconds(slot, nowMs = Date.now()) {
+  if (!slot) return 0
+  return getRemainingQuestionSeconds(slot.endMs, nowMs)
+}
