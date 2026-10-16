@@ -50,18 +50,18 @@ export function BrandLogoPair({
           <img
             src={APP_LOGO_SRC}
             alt={APP_LOGO_ALT}
-            className="h-7 w-auto max-w-[5.5rem] object-contain object-left"
+            className="h-9 w-auto max-w-[7rem] object-contain object-left sm:h-10 sm:max-w-[8rem]"
           />
         ) : null}
         {showCustom ? (
           <>
             {showPortal ? (
-              <span className="h-6 w-px shrink-0 bg-blue-200/80" aria-hidden />
+              <span className="h-8 w-px shrink-0 bg-blue-200/80 sm:h-10" aria-hidden />
             ) : null}
             <img
               src={customSrc}
               alt={`${sessionTitle} logo`}
-              className="h-8 w-auto max-w-[6.5rem] object-contain object-left"
+              className="h-12 w-auto max-w-[14rem] object-contain object-left sm:h-14 sm:max-w-[16rem]"
             />
           </>
         ) : null}

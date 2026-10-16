@@ -451,6 +451,8 @@ function validateUpdateSessionPayload(payload) {
     "leaderboard_top_n",
     "survey_results_enabled",
     "show_participant_count",
+    "show_session_title",
+    "show_app_logo",
     "show_question_leaderboard",
     "participant_navigation_enabled",
     "quiz_total_time_minutes",

@@ -230,6 +230,8 @@ async function createSession({ deptId, input, user }) {
          : DEFAULT_LEADERBOARD_TOP_N,
      survey_results_enabled: input.survey_results_enabled ?? false,
      show_participant_count: input.show_participant_count ?? false,
+     show_session_title: input.show_session_title ?? true,
+     show_app_logo: input.show_app_logo ?? true,
      show_question_leaderboard: input.show_question_leaderboard ?? false,
      participant_navigation_enabled:
        input.participant_navigation_enabled !== undefined
@@ -391,6 +393,8 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
         ),
         survey_results_enabled: source.survey_results_enabled ?? false,
         show_participant_count: source.show_participant_count ?? false,
+        show_session_title: source.show_session_title ?? true,
+        show_app_logo: source.show_app_logo ?? true,
         show_question_leaderboard: source.show_question_leaderboard ?? false,
         participant_navigation_enabled: source.participant_navigation_enabled ?? true,
         quiz_total_time_minutes: source.quiz_total_time_minutes ?? null,
@@ -564,6 +568,8 @@ async function updateSession({ sessionId, input, user }) {
     "leaderboard_top_n",
     "survey_results_enabled",
     "show_participant_count",
+    "show_session_title",
+    "show_app_logo",
     "title",
     "logo_url",
     "waiting_screen_image_url",
@@ -713,6 +719,14 @@ async function updateSession({ sessionId, input, user }) {
       input.show_participant_count !== undefined
         ? Boolean(input.show_participant_count)
         : session.show_participant_count,
+    show_session_title:
+      input.show_session_title !== undefined
+        ? Boolean(input.show_session_title)
+        : session.show_session_title,
+    show_app_logo:
+      input.show_app_logo !== undefined
+        ? Boolean(input.show_app_logo)
+        : session.show_app_logo,
     show_question_leaderboard:
       input.show_question_leaderboard !== undefined
         ? Boolean(input.show_question_leaderboard)

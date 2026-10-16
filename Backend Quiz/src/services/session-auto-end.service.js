@@ -44,6 +44,8 @@ async function processDueAutoEndSessions() {
         current_rankings_enabled: ended.current_rankings_enabled,
         survey_results_enabled: ended.survey_results_enabled,
         show_participant_count: ended.show_participant_count,
+        show_session_title: ended.show_session_title !== false,
+        show_app_logo: ended.show_app_logo !== false,
         show_question_leaderboard: ended.show_question_leaderboard,
         participant_navigation_enabled: ended.participant_navigation_enabled !== false,
         quiz_total_time_minutes: ended.quiz_total_time_minutes ?? null,

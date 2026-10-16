@@ -572,6 +572,8 @@ function notifySessionSettings(sessionCode, settings) {
           Buffer.isBuffer(settings.show_participant_count) &&
           settings.show_participant_count[0])
     ),
+    show_session_title: settings.show_session_title !== false,
+    show_app_logo: settings.show_app_logo !== false,
     show_question_leaderboard: Boolean(settings.show_question_leaderboard),
     participant_navigation_enabled: settings.participant_navigation_enabled !== false,
     random_question_order_enabled: Boolean(settings.random_question_order_enabled),

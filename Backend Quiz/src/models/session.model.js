@@ -140,6 +140,16 @@ const Session = sequelize.define(
       allowNull: false,
       defaultValue: false
     },
+    show_session_title: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true
+    },
+    show_app_logo: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true
+    },
     show_question_leaderboard: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
