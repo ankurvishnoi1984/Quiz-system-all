@@ -139,14 +139,25 @@ async function listSessionQuestions({ sessionId, user, publicView = false }) {
   });
 }
 
-async function createQuestion({ sessionId, input, user }) {
-  const session = await getSessionForQuestionFlow(sessionId);
-  assertScopeAccess(user, session);
-  await assertSessionQuestionCapacity({
-    hostId: session.host_id,
-    sessionId: session.session_id,
-    additionalCount: 1
-  });
+async function createQuestion({
+  sessionId,
+  input,
+  user,
+  transaction = null,
+  skipCapacityCheck = false,
+  session: sessionOverride = null
+}) {
+  const session = sessionOverride || (await getSessionForQuestionFlow(sessionId));
+  if (!sessionOverride) {
+    assertScopeAccess(user, session);
+  }
+  if (!skipCapacityCheck) {
+    await assertSessionQuestionCapacity({
+      hostId: session.host_id,
+      sessionId: session.session_id,
+      additionalCount: 1
+    });
+  }
 
   if (session.status !== "draft") {
     const error = new Error("Questions can be created only for draft sessions");
@@ -154,7 +165,11 @@ async function createQuestion({ sessionId, input, user }) {
     throw error;
   }
 
-  const nextOrder = (await Question.count({ where: { session_id: sessionId } })) + 1;
+  const nextOrder =
+    (await Question.count({
+      where: { session_id: sessionId },
+      ...(transaction ? { transaction } : {})
+    })) + 1;
   const setId = await resolveQuestionSetId(sessionId, input.set_id);
 
   const isPoll = input.question_type === "poll";
@@ -162,37 +177,40 @@ async function createQuestion({ sessionId, input, user }) {
   const isEmojiReaction = input.question_type === "emoji_reaction";
   const isNonScored = isPoll || isSurvey || isEmojiReaction;
 
-  const question = await Question.create({
-    session_id: session.session_id,
-    dept_id: session.dept_id,
-    question_type: input.question_type,
-    question_text: input.question_text,
-    media_url: input.media_url || null,
-    media_type: input.media_type || null,
-    media_thumbnail_url: input.media_thumbnail_url || null,
-    is_quiz_mode: isNonScored ? false : input.is_quiz_mode ?? false,
-    points_value: isNonScored ? 0 : input.points_value || 10,
-    time_limit_seconds: isSurvey ? null : input.time_limit_seconds || null,
-    ...normalizeTimerSoundFields({
+  const question = await Question.create(
+    {
+      session_id: session.session_id,
+      dept_id: session.dept_id,
+      question_type: input.question_type,
+      question_text: input.question_text,
+      media_url: input.media_url || null,
+      media_type: input.media_type || null,
+      media_thumbnail_url: input.media_thumbnail_url || null,
+      is_quiz_mode: isNonScored ? false : input.is_quiz_mode ?? false,
+      points_value: isNonScored ? 0 : input.points_value || 10,
       time_limit_seconds: isSurvey ? null : input.time_limit_seconds || null,
-      timer_sound_key: isSurvey ? "classic" : input.timer_sound_key,
-      timer_sound_url: isSurvey ? null : input.timer_sound_url,
-      timer_ending_sound_key: isSurvey ? "classic" : input.timer_ending_sound_key,
-      timer_ending_sound_url: isSurvey ? null : input.timer_ending_sound_url,
-      timer_sound_start_seconds: isSurvey ? null : input.timer_sound_start_seconds
-    }),
-    allow_multiple_select: isEmojiReaction ? false : input.allow_multiple_select ?? false,
-    survey_subtype: isSurvey ? input.survey_subtype || null : null,
-    rating_min: input.rating_min ?? 1,
-    rating_max: input.rating_max ?? 10,
-    rating_min_label: input.rating_min_label || null,
-    rating_max_label: input.rating_max_label || null,
-    is_live: false,
-    show_leaderboard: false,
-    display_order: input.display_order || nextOrder,
-    set_id: setId === undefined ? null : setId,
-    pool_eligible: input.pool_eligible === false ? false : true
-  });
+      ...normalizeTimerSoundFields({
+        time_limit_seconds: isSurvey ? null : input.time_limit_seconds || null,
+        timer_sound_key: isSurvey ? "classic" : input.timer_sound_key,
+        timer_sound_url: isSurvey ? null : input.timer_sound_url,
+        timer_ending_sound_key: isSurvey ? "classic" : input.timer_ending_sound_key,
+        timer_ending_sound_url: isSurvey ? null : input.timer_ending_sound_url,
+        timer_sound_start_seconds: isSurvey ? null : input.timer_sound_start_seconds
+      }),
+      allow_multiple_select: isEmojiReaction ? false : input.allow_multiple_select ?? false,
+      survey_subtype: isSurvey ? input.survey_subtype || null : null,
+      rating_min: input.rating_min ?? 1,
+      rating_max: input.rating_max ?? 10,
+      rating_min_label: input.rating_min_label || null,
+      rating_max_label: input.rating_max_label || null,
+      is_live: false,
+      show_leaderboard: false,
+      display_order: input.display_order || nextOrder,
+      set_id: setId === undefined ? null : setId,
+      pool_eligible: input.pool_eligible === false ? false : true
+    },
+    transaction ? { transaction } : undefined
+  );
 
   if (Array.isArray(input.options) && input.options.length > 0) {
     const optionsToCreate = input.options.map((option, idx) => ({
@@ -204,11 +222,15 @@ async function createQuestion({ sessionId, input, user }) {
       match_side: option.match_side || null,
       match_key: option.match_key != null ? String(option.match_key).trim() || null : null
     }));
-    await QuestionOption.bulkCreate(optionsToCreate);
+    await QuestionOption.bulkCreate(
+      optionsToCreate,
+      transaction ? { transaction } : undefined
+    );
   }
 
   return Question.findByPk(question.question_id, {
-    include: [{ model: QuestionOption, order: [["display_order", "ASC"]] }]
+    include: [{ model: QuestionOption, order: [["display_order", "ASC"]] }],
+    ...(transaction ? { transaction } : {})
   });
 }
 
@@ -453,11 +475,32 @@ async function getQuestionById({ questionId, user }) {
   return question;
 }
 
-async function updateQuestion({ questionId, input, user }) {
-  const question = await getQuestionById({ questionId, user });
-  const session = await getSessionForQuestionFlow(question.session_id);
-  await assertHostCanRunSessions(session.host_id);
+async function updateQuestion({
+  questionId,
+  input,
+  user,
+  transaction = null,
+  session: sessionOverride = null,
+  skipHostAssert = false
+}) {
+  const question = await Question.findByPk(questionId, {
+    include: [{ model: QuestionOption }, { model: Session, include: [Department] }],
+    ...(transaction ? { transaction } : {})
+  });
+  if (!question) {
+    const error = new Error("Question not found");
+    error.statusCode = 404;
+    throw error;
+  }
+  const session = sessionOverride || (await getSessionForQuestionFlow(question.session_id));
+  if (!sessionOverride) {
+    assertScopeAccess(user, session);
+  }
+  if (!skipHostAssert) {
+    await assertHostCanRunSessions(session.host_id);
+  }
   const isDraft = session.status === "draft";
+  const saveOpts = transaction ? { transaction } : undefined;
 
   if (isDraft) {
     const nextType =
@@ -556,10 +599,17 @@ async function updateQuestion({ questionId, input, user }) {
       question.pool_eligible = Boolean(input.pool_eligible);
     }
 
-    await question.save();
+    if (input.display_order !== undefined) {
+      question.display_order = Number(input.display_order) || question.display_order;
+    }
+
+    await question.save(saveOpts);
 
     if (Array.isArray(input.options)) {
-      await QuestionOption.destroy({ where: { question_id: question.question_id } });
+      await QuestionOption.destroy({
+        where: { question_id: question.question_id },
+        ...(transaction ? { transaction } : {})
+      });
       const optionsToCreate = input.options.map((option, idx) => ({
         question_id: question.question_id,
         option_text: option.option_text,
@@ -570,17 +620,23 @@ async function updateQuestion({ questionId, input, user }) {
         match_key: option.match_key != null ? String(option.match_key).trim() || null : null
       }));
       if (optionsToCreate.length > 0) {
-        await QuestionOption.bulkCreate(optionsToCreate);
+        await QuestionOption.bulkCreate(
+          optionsToCreate,
+          transaction ? { transaction } : undefined
+        );
       }
     }
 
-    return getQuestionById({ questionId, user });
+    return Question.findByPk(questionId, {
+      include: [{ model: QuestionOption }, { model: Session, include: [Department] }],
+      ...(transaction ? { transaction } : {})
+    });
   }
 
   // Live / paused / completed / archived: only question text + option text; correctness is immutable
   if (input.question_text !== undefined) {
     question.question_text = input.question_text;
-    await question.save();
+    await question.save(saveOpts);
   }
 
   if (Array.isArray(input.options) && input.options.length > 0) {
@@ -589,7 +645,8 @@ async function updateQuestion({ questionId, input, user }) {
       order: [
         ["display_order", "ASC"],
         ["option_id", "ASC"]
-      ]
+      ],
+      ...(transaction ? { transaction } : {})
     });
     if (input.options.length !== existing.length) {
       const error = new Error("Cannot add or remove answer options while the session is not in draft");
@@ -614,24 +671,218 @@ async function updateQuestion({ questionId, input, user }) {
         throw error;
       }
       const nextText = inc.option_text !== undefined ? inc.option_text : ex.option_text;
-      await ex.update({ option_text: nextText });
+      await ex.update({ option_text: nextText }, saveOpts);
     }
   }
 
-  return getQuestionById({ questionId, user });
+  return Question.findByPk(questionId, {
+    include: [{ model: QuestionOption }, { model: Session, include: [Department] }],
+    ...(transaction ? { transaction } : {})
+  });
 }
 
-async function deleteQuestion({ questionId, user }) {
-  const question = await getQuestionById({ questionId, user });
-  const session = await getSessionForQuestionFlow(question.session_id);
-  await assertHostCanRunSessions(session.host_id);
+async function deleteQuestion({
+  questionId,
+  user,
+  transaction = null,
+  session: sessionOverride = null,
+  skipHostAssert = false
+}) {
+  const question = await Question.findByPk(questionId, {
+    include: [{ model: Session, include: [Department] }],
+    ...(transaction ? { transaction } : {})
+  });
+  if (!question) {
+    const error = new Error("Question not found");
+    error.statusCode = 404;
+    throw error;
+  }
+  const session = sessionOverride || (await getSessionForQuestionFlow(question.session_id));
+  if (!sessionOverride) {
+    assertScopeAccess(user, session);
+  }
+  if (!skipHostAssert) {
+    await assertHostCanRunSessions(session.host_id);
+  }
   if (session.status !== "draft") {
     const error = new Error("Only draft-session questions can be deleted");
     error.statusCode = 400;
     throw error;
   }
-  await QuestionOption.destroy({ where: { question_id: question.question_id } });
-  await question.destroy();
+  await QuestionOption.destroy({
+    where: { question_id: question.question_id },
+    ...(transaction ? { transaction } : {})
+  });
+  await question.destroy(transaction ? { transaction } : undefined);
+}
+
+/**
+ * Persist the builder's full question list in one transaction:
+ * delete removed IDs, upsert the rest, set display_order from array order.
+ */
+async function syncSessionQuestions({ sessionId, questions, deleteIds = [], user }) {
+  const session = await getSessionForQuestionFlow(sessionId);
+  assertScopeAccess(user, session);
+  await assertHostCanRunSessions(session.host_id);
+
+  const isDraft = session.status === "draft";
+  const questionList = Array.isArray(questions) ? questions : [];
+  const deleteIdList = (Array.isArray(deleteIds) ? deleteIds : [])
+    .map((id) => Number(id))
+    .filter((id) => Number.isFinite(id) && id > 0);
+
+  if (!isDraft && deleteIdList.length > 0) {
+    const error = new Error("Cannot remove questions while the session is not in draft");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const newCount = questionList.filter(
+    (q) => q == null || q.question_id == null || q.question_id === ""
+  ).length;
+  if (!isDraft && newCount > 0) {
+    const error = new Error("Cannot add new questions while the session is not in draft");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (questionList.length > 0) {
+    const types = new Set(questionList.map((q) => q?.question_type).filter(Boolean));
+    if (types.size > 1) {
+      const error = new Error(
+        "Only one question type is allowed per session. Please keep all questions the same type before saving."
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const existingTypes = await Question.findAll({
+      where: {
+        session_id: sessionId,
+        ...(deleteIdList.length
+          ? { question_id: { [Op.notIn]: deleteIdList } }
+          : {})
+      },
+      attributes: ["question_type"],
+      group: ["question_type"],
+      raw: true
+    });
+    const incomingType = questionList[0]?.question_type;
+    if (
+      existingTypes.length > 0 &&
+      incomingType &&
+      (existingTypes.length !== 1 || existingTypes[0].question_type !== incomingType)
+    ) {
+      const error = new Error(
+        `All questions must match the existing session type (${existingTypes
+          .map((entry) => entry.question_type)
+          .join(", ")})`
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  await assertSessionQuestionCapacity({
+    hostId: session.host_id,
+    sessionId: session.session_id,
+    absoluteCount: questionList.length
+  });
+
+  // Ensure delete targets belong to this session
+  if (deleteIdList.length) {
+    const owned = await Question.findAll({
+      where: { session_id: sessionId, question_id: { [Op.in]: deleteIdList } },
+      attributes: ["question_id"]
+    });
+    const ownedSet = new Set(owned.map((row) => Number(row.question_id)));
+    const missing = deleteIdList.filter((id) => !ownedSet.has(id));
+    if (missing.length) {
+      const error = new Error("One or more questions to delete were not found in this session");
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  // Ensure update targets belong to this session
+  const updateIds = questionList
+    .map((q) => (q?.question_id != null ? Number(q.question_id) : null))
+    .filter((id) => Number.isFinite(id) && id > 0);
+  if (updateIds.length) {
+    const owned = await Question.findAll({
+      where: { session_id: sessionId, question_id: { [Op.in]: updateIds } },
+      attributes: ["question_id"]
+    });
+    const ownedSet = new Set(owned.map((row) => Number(row.question_id)));
+    const missing = updateIds.filter((id) => !ownedSet.has(id));
+    if (missing.length) {
+      const error = new Error("One or more questions to update were not found in this session");
+      error.statusCode = 400;
+      throw error;
+    }
+  }
+
+  await sequelize.transaction(async (transaction) => {
+    for (const questionId of deleteIdList) {
+      await deleteQuestion({
+        questionId,
+        user,
+        transaction,
+        session,
+        skipHostAssert: true
+      });
+    }
+
+    const orderedIds = [];
+    for (let index = 0; index < questionList.length; index += 1) {
+      const input = {
+        ...questionList[index],
+        display_order: index + 1
+      };
+      const questionId =
+        input.question_id != null && input.question_id !== ""
+          ? Number(input.question_id)
+          : null;
+
+      if (questionId && Number.isFinite(questionId) && questionId > 0) {
+        await updateQuestion({
+          questionId,
+          input,
+          user,
+          transaction,
+          session,
+          skipHostAssert: true
+        });
+        orderedIds.push(questionId);
+      } else {
+        const created = await createQuestion({
+          sessionId,
+          input,
+          user,
+          transaction,
+          skipCapacityCheck: true,
+          session
+        });
+        orderedIds.push(Number(created.question_id));
+      }
+    }
+
+    if (isDraft && orderedIds.length > 0) {
+      await Promise.all(
+        orderedIds.map((id, index) =>
+          Question.update(
+            { display_order: index + 1 },
+            {
+              where: { question_id: id, session_id: sessionId },
+              transaction
+            }
+          )
+        )
+      );
+    }
+  });
+
+  return listSessionQuestions({ sessionId, user });
 }
 
 async function reorderQuestions({ sessionId, orderedIds, user }) {
@@ -1340,6 +1591,7 @@ module.exports = {
   getQuestionById,
   updateQuestion,
   deleteQuestion,
+  syncSessionQuestions,
   reorderQuestions,
   setQuestionLiveState,
   setQuestionAnswerRevealed,

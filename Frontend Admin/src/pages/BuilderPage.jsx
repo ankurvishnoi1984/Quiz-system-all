@@ -48,15 +48,12 @@ import { QuestionMedia } from '../components/participant-session/QuestionMedia'
 import Modal from '../components/ui/Modal'
 import { useAuthStore } from '../store/authStore'
 import {
-  createQuestionApi,
   createQuestionSetApi,
-  deleteQuestionApi,
   deleteQuestionSetApi,
   getSessionDetailApi,
   listQuestionSetsApi,
   listSessionQuestionsApi,
-  reorderQuestionsApi,
-  updateQuestionApi,
+  syncSessionQuestionsApi,
   updateQuestionSetApi,
   updateSessionApi,
 } from '../services/builderApi'
@@ -2818,11 +2815,7 @@ function BuilderPage() {
       const removedIds = initialQuestionIds.filter(
         (questionId) => !questions.some((item) => item.questionId === questionId),
       )
-      if (isDraft) {
-        for (const questionId of removedIds) {
-          await deleteQuestionApi(accessToken, questionId)
-        }
-      } else if (removedIds.length > 0) {
+      if (!isDraft && removedIds.length > 0) {
         throw new Error('Cannot remove questions while the session is live.')
       }
 
@@ -2864,7 +2857,7 @@ function BuilderPage() {
       }
 
       const questionsToSave = sortQuestionsBySets(questions, questionSets)
-      const orderedIds = []
+      const syncPayloads = []
       for (let index = 0; index < questionsToSave.length; index += 1) {
         const question = questionsToSave[index]
         if (!isDraft && !question.questionId) {
@@ -2875,7 +2868,8 @@ function BuilderPage() {
         const isSurvey = isSurveyQuestionType(question.type)
         const isEmojiReaction = isEmojiReactionQuestionType(question.type)
         const surveySubType = question.surveySubType || 'MCQ'
-        const payload = {
+        syncPayloads.push({
+          ...(question.questionId ? { question_id: question.questionId } : {}),
           question_type: uiToApiType(question.type),
           question_text: question.text || 'Untitled question',
           ...buildQuestionMediaPayload(question.media),
@@ -2924,20 +2918,13 @@ function BuilderPage() {
               }
             : {}),
           ...(question.type === 'Rating' ? buildRatingScalePayload(question) : {}),
-        }
-
-        if (question.questionId) {
-          const updated = await updateQuestionApi(accessToken, question.questionId, payload)
-          orderedIds.push(updated.question_id)
-        } else {
-          const created = await createQuestionApi(accessToken, sessionNumericId, payload)
-          orderedIds.push(created.question_id)
-        }
+        })
       }
 
-      if (isDraft && orderedIds.length > 0) {
-        await reorderQuestionsApi(accessToken, sessionNumericId, orderedIds)
-      }
+      await syncSessionQuestionsApi(accessToken, sessionNumericId, {
+        questions: syncPayloads,
+        delete_ids: isDraft ? removedIds : [],
+      })
 
       await updateSessionApi(accessToken, sessionNumericId, {
         ...(isDraft
@@ -4016,28 +4003,6 @@ function BuilderPage() {
                         }
                       })
                       setQuestions(nextQuestions)
-
-                      if (!isDraftSession || !accessToken) return
-                      nextQuestions.forEach((q) => {
-                        if (!q.questionId || q.type === 'Survey') return
-                        const limit = normalizeTimeLimitSeconds(q.timeLimitSeconds)
-                        const isSelected = q.id === selected.id
-                        if (responseTimeScoringEnabled) {
-                          if (limit <= 0) return
-                        } else if (!isSelected && (!soundKeysChanged || limit <= 0)) {
-                          return
-                        }
-                        void updateQuestionApi(accessToken, q.questionId, {
-                          question_type: uiToApiType(q.type),
-                          question_text: q.text || 'Untitled question',
-                          time_limit_seconds: limit || null,
-                          timer_sound_key: q.timerSoundKey,
-                          timer_sound_url: q.timerSoundUrl,
-                          timer_ending_sound_key: q.timerEndingSoundKey,
-                          timer_ending_sound_url: q.timerEndingSoundUrl,
-                          timer_sound_start_seconds: q.timerSoundStartSeconds,
-                        }).catch(() => {})
-                      })
                     }}
                   />
                 ) : null}

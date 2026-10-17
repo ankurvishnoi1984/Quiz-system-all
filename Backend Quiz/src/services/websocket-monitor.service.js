@@ -2,6 +2,7 @@ const { Op } = require("sequelize");
 const {
   activeConnections,
   closeMatchingConnections,
+  closeAllSessionConnections,
   closeConnectionsByIp
 } = require("./websocket.service");
 const {
@@ -180,12 +181,15 @@ async function enrichSessionsWithMetadata(sessions) {
   const byCode = new Map(dbSessions.map((row) => [row.session_code, row]));
 
   return sessions.map((row) => {
-    const meta = byCode.get(row.session_code);
+    const meta = byCode.get(row.session_code) || byCode.get(String(row.session_code || "").toUpperCase());
+    const status = meta?.status ?? null;
     return {
       ...row,
       session_id: meta?.session_id ?? null,
       title: meta?.title ?? null,
-      status: meta?.status ?? null,
+      status,
+      /** Explicit DB status for ops: live/paused/draft/completed/archived/missing */
+      db_status: status || "missing",
       dept_id: meta?.dept_id ?? null,
       host_id: meta?.host_id ?? null,
       host_name: meta?.user?.full_name || null,
@@ -249,7 +253,56 @@ async function enrichConnectionsWithMetadata(connections) {
   });
 }
 
+/**
+ * Close lingering sockets for session codes that are missing from DB or already
+ * completed/archived (leftovers from before terminate-on-end, or failed notifies).
+ */
+async function sweepTerminalSessionConnections() {
+  const codes = new Set();
+  for (const bucketKey of activeConnections.keys()) {
+    const { sessionCode } = parseBucketKey(bucketKey);
+    if (sessionCode) codes.add(sessionCode);
+  }
+  if (!codes.size) return { swept: 0, closed: 0 };
+
+  const upperCodes = [...codes].map((c) => String(c).trim().toUpperCase());
+  const dbSessions = await Session.findAll({
+    where: { session_code: { [Op.in]: [...new Set(upperCodes)] } },
+    attributes: ["session_code", "status"]
+  });
+  const statusByCode = new Map(
+    dbSessions.map((row) => [String(row.session_code).toUpperCase(), row.status])
+  );
+
+  let swept = 0;
+  let closed = 0;
+  for (const code of codes) {
+    const status = statusByCode.get(String(code).trim().toUpperCase());
+    const missing = status == null;
+    const terminal = status === "completed" || status === "archived";
+    if (!missing && !terminal) continue;
+    const reason = missing
+      ? "session_not_found"
+      : status === "archived"
+        ? "session_archived"
+        : "session_ended";
+    const result = closeAllSessionConnections(code, { reason });
+    if (result.length) {
+      swept += 1;
+      closed += result.length;
+    }
+  }
+  return { swept, closed };
+}
+
 async function getWebSocketMonitorData() {
+  let sweep = { swept: 0, closed: 0 };
+  try {
+    sweep = await sweepTerminalSessionConnections();
+  } catch (err) {
+    console.error("websocket monitor terminal sweep failed:", err.message);
+  }
+
   const snapshot = buildSnapshot();
   appendHistory(snapshot);
 
@@ -276,6 +329,7 @@ async function getWebSocketMonitorData() {
       events: rateLimitEvents
     },
     history: [...history],
+    sweep,
     server: {
       process_uptime_seconds: Math.floor(process.uptime()),
       memory_heap_used_mb: Number((process.memoryUsage().heapUsed / 1024 / 1024).toFixed(1)),
@@ -311,5 +365,6 @@ module.exports = {
   blockMonitorIp,
   unblockMonitorIp,
   buildSnapshot,
-  forEachOpenConnection
+  forEachOpenConnection,
+  sweepTerminalSessionConnections
 };

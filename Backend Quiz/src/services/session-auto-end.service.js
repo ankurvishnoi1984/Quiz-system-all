@@ -6,7 +6,8 @@ const { isSessionRandomQuestionOrderEnabled } = require("../utils/sessionFlags")
 const {
   notifySessionUpdate,
   notifySessionSettings,
-  notifyQuestionLeaderboardVisibility
+  notifyQuestionLeaderboardVisibility,
+  closeAllSessionConnections
 } = require("./websocket.service");
 
 const AUTO_END_POLL_MS = Number(process.env.SESSION_AUTO_END_POLL_MS) || 30000;
@@ -55,6 +56,7 @@ async function processDueAutoEndSessions() {
       for (const questionId of ended.hiddenQuestionResultIds || []) {
         notifyQuestionLeaderboardVisibility(ended.session_code, questionId, false);
       }
+      closeAllSessionConnections(ended.session_code, { reason: "session_ended" });
     } catch (error) {
       console.warn("[auto-end] Failed to notify session end:", error.message);
     }

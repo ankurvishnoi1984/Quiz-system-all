@@ -5,6 +5,7 @@ const {
   getQuestionById,
   updateQuestion,
   deleteQuestion,
+  syncSessionQuestions,
   reorderQuestions,
   setQuestionLiveState,
   setQuestionAnswerRevealed,
@@ -19,7 +20,8 @@ const {
 const {
   validateCreateQuestionPayload,
   validateUpdateQuestionPayload,
-  validateReorderPayload
+  validateReorderPayload,
+  validateSyncQuestionsPayload
 } = require("../validators/question.validator");
 const {
   notifyQuestionChange,
@@ -91,6 +93,28 @@ async function createForSession(req, res) {
     return successResponse(res, { question }, "Question created", 201);
   } catch (err) {
     return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
+async function syncForSession(req, res) {
+  try {
+    const sessionId = Number(req.params.sessionId);
+    if (Number.isNaN(sessionId)) {
+      return errorResponse(res, "sessionId must be a number", 400);
+    }
+    const errors = validateSyncQuestionsPayload(req.body);
+    if (errors.length > 0) {
+      return errorResponse(res, "Validation failed", 400, errors);
+    }
+    const questions = await syncSessionQuestions({
+      sessionId,
+      questions: req.body.questions,
+      deleteIds: req.body.delete_ids || [],
+      user: req.user
+    });
+    return successResponse(res, { questions }, "Questions saved", 200);
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500, err.details || null);
   }
 }
 
@@ -458,6 +482,7 @@ module.exports = {
   listBySession,
   listBySessionPublic,
   createForSession,
+  syncForSession,
   previewImport,
   confirmImport,
   detail,

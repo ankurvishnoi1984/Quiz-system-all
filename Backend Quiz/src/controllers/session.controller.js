@@ -28,6 +28,8 @@ const {
   notifyQuestionChange,
   notifyAllQuestionsSubmissionsClosed,
   notifyQuestionLeaderboardVisibility,
+  closeAllSessionConnections,
+  terminateSessionRealtime,
   countLiveUniqueParticipantsForSessionCode,
   getLiveUniqueParticipantIdsForSessionCode
 } = require("../services/websocket.service");
@@ -213,6 +215,13 @@ async function remove(req, res) {
       sessionId: Number(req.params.sessionId),
       user: req.user
     });
+    if (session?.session_code) {
+      try {
+        terminateSessionRealtime(session, { status: "archived" });
+      } catch (notifyErr) {
+        console.warn("[session] archive realtime terminate failed:", notifyErr.message);
+      }
+    }
     return successResponse(res, { session }, "Session archived", 200);
   } catch (err) {
     return errorResponse(res, err.message, err.statusCode || 500);
@@ -291,6 +300,7 @@ function lifecycleAction(action) {
             for (const questionId of session.hiddenQuestionResultIds || []) {
               notifyQuestionLeaderboardVisibility(session.session_code, questionId, false);
             }
+            closeAllSessionConnections(session.session_code, { reason: "session_ended" });
           }
         })().catch(() => {});
       }

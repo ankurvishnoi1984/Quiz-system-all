@@ -52,6 +52,12 @@ router.post(
   authorizeRights("builder"),
   questionController.confirmImport
 );
+router.put(
+  "/sessions/:sessionId/questions/sync",
+  authorizeStaff,
+  authorizeRights("builder"),
+  questionController.syncForSession
+);
 router.post(
   "/sessions/:sessionId/questions",
   authorizeStaff,

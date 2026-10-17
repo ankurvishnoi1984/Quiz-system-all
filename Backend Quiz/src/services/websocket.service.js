@@ -8,12 +8,68 @@ const { isIpBlocked } = require("./blocked-ip.service");
 
 const ADMIN_CLOSE_CODE = 4008;
 const ADMIN_CLOSE_REASON = "Closed by administrator";
+/** Same code as admin close so clients skip auto-reconnect. */
+const SESSION_TERMINATED_CODE = 4008;
 const IP_BLOCKED_CODE = 4009;
 const IP_BLOCKED_REASON = "IP address blocked";
+
+const TERMINAL_SESSION_STATUSES = new Set(["completed", "archived"]);
+const SESSION_STATUS_CACHE_TTL_MS = 5000;
+/** @type {Map<string, { status: string|null, expiresAt: number }>} */
+const sessionStatusCache = new Map();
 
 const activeConnections = new Map();
 
 const WS_LOG = process.env.WS_DEBUG === "true" || process.env.NODE_ENV !== "production";
+
+function normalizeSessionCodeKey(sessionCode) {
+  return String(sessionCode || "")
+    .trim()
+    .toUpperCase();
+}
+
+function invalidateSessionStatusCache(sessionCode) {
+  const code = normalizeSessionCodeKey(sessionCode);
+  if (code) sessionStatusCache.delete(code);
+}
+
+function setSessionStatusCache(sessionCode, status) {
+  const code = normalizeSessionCodeKey(sessionCode);
+  if (!code) return;
+  sessionStatusCache.set(code, {
+    status: status == null ? null : String(status),
+    expiresAt: Date.now() + SESSION_STATUS_CACHE_TTL_MS
+  });
+}
+
+/**
+ * Resolve session status for WS handshake (short TTL cache).
+ * @returns {Promise<{ code: string, status: string|null, missing: boolean }>}
+ */
+async function resolveSessionStatusForWs(sessionCode) {
+  const code = normalizeSessionCodeKey(sessionCode);
+  if (!code) return { code: "", status: null, missing: true };
+
+  const cached = sessionStatusCache.get(code);
+  if (cached && cached.expiresAt > Date.now()) {
+    return { code, status: cached.status, missing: cached.status == null };
+  }
+
+  const { Session } = require("../models");
+  const row = await Session.findOne({
+    where: { session_code: code },
+    attributes: ["session_code", "status"]
+  });
+  const status = row?.status ?? null;
+  setSessionStatusCache(code, status);
+  return { code, status, missing: !row };
+}
+
+function sessionTerminationMessage(reason) {
+  if (reason === "session_archived") return "This session has been archived.";
+  if (reason === "session_not_found") return "This session was not found.";
+  return "This session has ended.";
+}
 
 function wsLog(level, message, meta = {}) {
   if (!WS_LOG && level === "debug") return;
@@ -78,6 +134,91 @@ function setupWebSocketServer(server) {
         return;
       }
 
+      sessionCode = normalizeSessionCodeKey(sessionCode);
+
+      // Gate: reject missing / completed / archived before joining a room.
+      resolveSessionStatusForWs(sessionCode)
+        .then((gate) => {
+          if (
+            gate.missing ||
+            TERMINAL_SESSION_STATUSES.has(String(gate.status || "").toLowerCase())
+          ) {
+            const reason = gate.missing
+              ? "session_not_found"
+              : gate.status === "archived"
+                ? "session_archived"
+                : "session_ended";
+            const message = sessionTerminationMessage(reason);
+            wsLog("warn", "handshake_rejected", {
+              remote,
+              session: sessionCode,
+              role,
+              reason,
+              status: gate.status,
+              code: SESSION_TERMINATED_CODE
+            });
+            try {
+              send(ws, {
+                type: "connection_closed_by_admin",
+                reason,
+                session: sessionCode,
+                role,
+                message
+              });
+            } catch {
+              // ignore
+            }
+            try {
+              ws.close(SESSION_TERMINATED_CODE, message);
+            } catch {
+              // ignore
+            }
+            return;
+          }
+          continueHandshakeAfterSessionGate({
+            ws,
+            req,
+            remote,
+            sessionCode,
+            role,
+            token
+          });
+        })
+        .catch((error) => {
+          wsLog("error", "handshake_session_gate_failed", {
+            remote,
+            session: sessionCode,
+            role,
+            message: error.message
+          });
+          try {
+            ws.close(1011, "Handshake failed");
+          } catch {
+            // ignore
+          }
+        });
+    } catch (error) {
+      wsLog("error", "handshake_exception", {
+        remote,
+        session: sessionCode,
+        role,
+        message: error.message,
+        stack: error.stack
+      });
+      try {
+        ws.close(1011, "Handshake failed");
+      } catch {
+        // ignore
+      }
+    }
+  });
+
+  wsLog("info", "server_listening", { path: "/ws" });
+  return wss;
+}
+
+function continueHandshakeAfterSessionGate({ ws, req, remote, sessionCode, role, token }) {
+  try {
       let decoded = null;
       let authStatus = "anonymous";
 
@@ -277,24 +418,20 @@ function setupWebSocketServer(server) {
           message: error.message
         });
       });
-    } catch (error) {
-      wsLog("error", "handshake_exception", {
-        remote,
-        session: sessionCode,
-        role,
-        message: error.message,
-        stack: error.stack
-      });
-      try {
-        ws.close(1011, "Handshake failed");
-      } catch {
-        // ignore
-      }
+  } catch (error) {
+    wsLog("error", "handshake_exception", {
+      remote,
+      session: sessionCode,
+      role,
+      message: error.message,
+      stack: error.stack
+    });
+    try {
+      ws.close(1011, "Handshake failed");
+    } catch {
+      // ignore
     }
-  });
-
-  wsLog("info", "server_listening", { path: "/ws" });
-  return wss;
+  }
 }
 
 function send(ws, data) {
@@ -777,6 +914,84 @@ function closeMatchingConnections({ sessionCode, role, connectionId } = {}) {
   return closed;
 }
 
+/**
+ * Close every open socket for a session code (all roles).
+ * Used when a session ends or is archived so the connection monitor clears.
+ */
+function closeAllSessionConnections(sessionCode, { reason = "session_ended", message } = {}) {
+  const wantedCode = normalizeSessionCodeKey(sessionCode);
+  if (!wantedCode) return [];
+
+  const closeReason = reason || "session_ended";
+  const closeMessage = message || sessionTerminationMessage(closeReason);
+  const closed = [];
+
+  for (const [bucketKey, connSet] of activeConnections.entries()) {
+    const parsed = parseConnectionBucketKey(bucketKey);
+    if (normalizeSessionCodeKey(parsed.sessionCode) !== wantedCode) continue;
+
+    for (const ws of [...connSet]) {
+      if (ws.readyState !== WS_OPEN) continue;
+      try {
+        send(ws, {
+          type: "connection_closed_by_admin",
+          reason: closeReason,
+          session: wantedCode,
+          role: parsed.role,
+          message: closeMessage
+        });
+      } catch {
+        // ignore
+      }
+      try {
+        ws.close(SESSION_TERMINATED_CODE, closeMessage);
+      } catch {
+        // ignore
+      }
+      closed.push({
+        connection_id: ws.connectionId || null,
+        session_code: wantedCode,
+        role: parsed.role
+      });
+    }
+  }
+
+  if (closeReason === "session_archived") {
+    setSessionStatusCache(wantedCode, "archived");
+  } else if (closeReason === "session_not_found") {
+    setSessionStatusCache(wantedCode, null);
+  } else {
+    setSessionStatusCache(wantedCode, "completed");
+  }
+
+  wsLog("info", "session_connections_terminated", {
+    session: wantedCode,
+    reason: closeReason,
+    closed: closed.length
+  });
+
+  return closed;
+}
+
+/**
+ * Notify clients of terminal status, then permanently close all sockets for the session.
+ */
+function terminateSessionRealtime(session, { status } = {}) {
+  const code = normalizeSessionCodeKey(session?.session_code);
+  if (!code) return { closed: [] };
+
+  const finalStatus = status || session.status || "completed";
+  notifySessionUpdate(code, finalStatus);
+  const reason =
+    finalStatus === "archived"
+      ? "session_archived"
+      : finalStatus === "completed"
+        ? "session_ended"
+        : "session_ended";
+  const closed = closeAllSessionConnections(code, { reason });
+  return { closed, status: finalStatus };
+}
+
 function getConnectionCount(sessionCode) {
   let count = 0;
   activeConnections.forEach((connSet, key) => {
@@ -926,8 +1141,13 @@ module.exports = {
   getSessionProgress,
   getConnectionCount,
   closeMatchingConnections,
+  closeAllSessionConnections,
   closeConnectionsByIp,
+  terminateSessionRealtime,
+  invalidateSessionStatusCache,
+  resolveSessionStatusForWs,
   ADMIN_CLOSE_CODE,
+  SESSION_TERMINATED_CODE,
   IP_BLOCKED_CODE,
   countLiveUniqueParticipantsForSessionCode,
   getLiveUniqueParticipantIdsForSessionCode,

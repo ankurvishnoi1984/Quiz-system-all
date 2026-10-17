@@ -49,6 +49,18 @@ export async function createQuestionApi(accessToken, sessionId, payload) {
   return data?.question || null
 }
 
+export async function syncSessionQuestionsApi(
+  accessToken,
+  sessionId,
+  { questions = [], delete_ids = [] } = {},
+) {
+  const data = await authRequest(`/sessions/${sessionId}/questions/sync`, accessToken, {
+    method: 'PUT',
+    body: JSON.stringify({ questions, delete_ids }),
+  })
+  return data?.questions || []
+}
+
 export async function previewQuestionImportApi(
   accessToken,
   sessionId,
