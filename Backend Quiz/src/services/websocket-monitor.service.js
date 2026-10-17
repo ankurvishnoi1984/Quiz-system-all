@@ -11,15 +11,22 @@ const {
   unblockIp,
   isIpBlocked
 } = require("./blocked-ip.service");
-const { listRecentRateLimitEvents } = require("./rate-limit-event.service");
+const {
+  listRecentRateLimitEvents,
+  purgeExpiredRateLimitEvents,
+  MONITOR_LIST_LIMIT
+} = require("./rate-limit-event.service");
 const { getLiveRateLimitWindows } = require("../utils/ip-rate-limit");
 const { Session, User, Department, Client } = require("../models");
 const { normalizeIp } = require("../utils/ip");
 
 const WS_OPEN = 1;
 const HISTORY_MAX_POINTS = 120;
+const SWEEP_THROTTLE_MS = 30 * 1000;
 
 const history = [];
+let lastSweepAt = 0;
+let lastSweepResult = { swept: 0, closed: 0 };
 
 function parseBucketKey(bucketKey) {
   const colonIndex = bucketKey.indexOf(":");
@@ -72,6 +79,7 @@ function buildSnapshot() {
       byAuthStatus[authStatus] = (byAuthStatus[authStatus] || 0) + 1;
 
       const ipAddress = normalizeIp(ws.remoteAddress);
+      // Slim row — session title/host/dept come from sessions[] on the client.
       connections.push({
         connection_id: ws.connectionId || null,
         session_code: sessionCode,
@@ -87,13 +95,15 @@ function buildSnapshot() {
           session_code: sessionCode,
           total_connections: 0,
           by_role: {},
-          ip_addresses: []
+          ip_addresses: [],
+          _ipSet: new Set()
         });
       }
       const sessionRow = sessionMap.get(sessionCode);
       sessionRow.total_connections += 1;
       sessionRow.by_role[role] = (sessionRow.by_role[role] || 0) + 1;
-      if (ipAddress && !sessionRow.ip_addresses.includes(ipAddress)) {
+      if (ipAddress && !sessionRow._ipSet.has(ipAddress)) {
+        sessionRow._ipSet.add(ipAddress);
         sessionRow.ip_addresses.push(ipAddress);
       }
     }
@@ -114,9 +124,10 @@ function buildSnapshot() {
     return bTime - aTime;
   });
 
-  const sessions = [...sessionMap.values()].sort(
-    (a, b) => b.total_connections - a.total_connections
-  );
+  const sessions = [...sessionMap.values()].map((row) => {
+    const { _ipSet, ...rest } = row;
+    return rest;
+  }).sort((a, b) => b.total_connections - a.total_connections);
 
   buckets.sort((a, b) => b.connections - a.connections);
 
@@ -201,58 +212,6 @@ async function enrichSessionsWithMetadata(sessions) {
   });
 }
 
-async function enrichConnectionsWithMetadata(connections) {
-  if (!connections.length) return [];
-
-  const codes = [...new Set(connections.map((row) => row.session_code).filter(Boolean))];
-  if (!codes.length) return connections;
-
-  const dbSessions = await Session.findAll({
-    where: { session_code: { [Op.in]: codes } },
-    attributes: ["session_id", "session_code", "title", "status", "dept_id", "host_id"],
-    include: [
-      {
-        model: User,
-        as: "user",
-        attributes: ["user_id", "full_name", "email"],
-        required: false
-      },
-      {
-        model: Department,
-        as: "department",
-        attributes: ["dept_id", "name", "client_id"],
-        required: false,
-        include: [
-          {
-            model: Client,
-            as: "client",
-            attributes: ["client_id", "name"],
-            required: false
-          }
-        ]
-      }
-    ]
-  });
-  const byCode = new Map(dbSessions.map((row) => [row.session_code, row]));
-
-  return connections.map((row) => {
-    const meta = byCode.get(row.session_code);
-    return {
-      ...row,
-      session_id: meta?.session_id ?? null,
-      title: meta?.title ?? null,
-      status: meta?.status ?? null,
-      dept_id: meta?.dept_id ?? null,
-      host_id: meta?.host_id ?? null,
-      host_name: meta?.user?.full_name || null,
-      host_email: meta?.user?.email || null,
-      department_name: meta?.department?.name || null,
-      client_id: meta?.department?.client_id ?? meta?.department?.client?.client_id ?? null,
-      client_name: meta?.department?.client?.name || null
-    };
-  });
-}
-
 /**
  * Close lingering sockets for session codes that are missing from DB or already
  * completed/archived (leftovers from before terminate-on-end, or failed notifies).
@@ -295,25 +254,37 @@ async function sweepTerminalSessionConnections() {
   return { swept, closed };
 }
 
-async function getWebSocketMonitorData() {
-  let sweep = { swept: 0, closed: 0 };
+async function maybeSweepTerminalSessionConnections() {
+  const now = Date.now();
+  if (now - lastSweepAt < SWEEP_THROTTLE_MS) {
+    return { ...lastSweepResult, throttled: true };
+  }
+  lastSweepAt = now;
   try {
-    sweep = await sweepTerminalSessionConnections();
+    lastSweepResult = await sweepTerminalSessionConnections();
   } catch (err) {
     console.error("websocket monitor terminal sweep failed:", err.message);
+    lastSweepResult = { swept: 0, closed: 0, error: err.message };
   }
+  return { ...lastSweepResult, throttled: false };
+}
 
+async function getWebSocketMonitorData() {
+  const sweep = await maybeSweepTerminalSessionConnections();
+
+  // Rebuild after sweep so closed sockets are not returned in this snapshot.
   const snapshot = buildSnapshot();
   appendHistory(snapshot);
 
-  const [sessions, connections, blockedIps, rateLimitEvents] = await Promise.all([
+  void purgeExpiredRateLimitEvents().catch(() => {});
+
+  const [sessions, blockedIps, rateLimitEvents] = await Promise.all([
     enrichSessionsWithMetadata(snapshot.sessions),
-    enrichConnectionsWithMetadata(snapshot.connections),
     listBlockedIps().catch((err) => {
       console.error("list blocked ips for monitor failed:", err.message);
       return [];
     }),
-    listRecentRateLimitEvents().catch((err) => {
+    listRecentRateLimitEvents({ limit: MONITOR_LIST_LIMIT }).catch((err) => {
       console.error("list rate limit events for monitor failed:", err.message);
       return [];
     })
@@ -322,7 +293,8 @@ async function getWebSocketMonitorData() {
   return {
     ...snapshot,
     sessions,
-    connections,
+    // Slim connections — join session meta from sessions[] on the client
+    connections: snapshot.connections,
     blocked_ips: blockedIps,
     rate_limit: {
       live: getLiveRateLimitWindows({ minCount: 2 }),

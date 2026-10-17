@@ -1,5 +1,5 @@
 import { Ban, Gauge, ShieldOff } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 
 const ACTION_LABELS = {
   join: 'Join',
@@ -185,7 +185,7 @@ function IpActionButton({
   )
 }
 
-export function WebSocketRateLimitSection({
+function WebSocketRateLimitSection({
   rateLimit,
   blockedIps = [],
   isLoading,
@@ -459,6 +459,9 @@ export function WebSocketRateLimitSection({
     </div>
   )
 }
+
+const WebSocketRateLimitSectionMemo = memo(WebSocketRateLimitSection)
+export { WebSocketRateLimitSectionMemo as WebSocketRateLimitSection }
 
 export function countRecentRateLimitEvents(events, windowMs = 15 * 60 * 1000) {
   if (!Array.isArray(events) || !events.length) return 0

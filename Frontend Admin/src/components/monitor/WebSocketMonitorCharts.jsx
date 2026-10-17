@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { memo, useMemo } from 'react'
 import {
   Bar,
   BarChart,
@@ -24,7 +24,7 @@ import {
   buildSessionChartData,
 } from '../../utils/websocketMonitor'
 
-export function WebSocketMonitorCharts({ monitor, isLoading }) {
+function WebSocketMonitorCharts({ monitor, isLoading }) {
   const historyData = useMemo(() => buildHistoryChartData(monitor?.history), [monitor?.history])
   const roleData = useMemo(() => buildRoleChartData(monitor?.by_role), [monitor?.by_role])
   const authData = useMemo(() => buildAuthChartData(monitor?.by_auth_status), [monitor?.by_auth_status])
@@ -160,3 +160,6 @@ export function WebSocketMonitorCharts({ monitor, isLoading }) {
     </div>
   )
 }
+
+const WebSocketMonitorChartsMemo = memo(WebSocketMonitorCharts)
+export { WebSocketMonitorChartsMemo as WebSocketMonitorCharts }

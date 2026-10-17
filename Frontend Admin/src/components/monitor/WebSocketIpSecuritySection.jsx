@@ -1,5 +1,5 @@
-import { Ban, ShieldOff } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { Ban, ChevronLeft, ChevronRight, ShieldOff } from 'lucide-react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { formatMonitorRole, formatAuthStatus } from '../../utils/websocketMonitor'
 
 const EMPTY_FILTERS = {
@@ -8,6 +8,14 @@ const EMPTY_FILTERS = {
   hostId: '',
   sessionCode: '',
   search: '',
+}
+
+const PAGE_SIZE = 50
+
+function sessionMetaKey(code) {
+  return String(code || '')
+    .trim()
+    .toUpperCase()
 }
 
 function formatConnectedAt(value) {
@@ -145,8 +153,9 @@ function ReasonConfirmModal({
   )
 }
 
-export function WebSocketIpSecuritySection({
+function WebSocketIpSecuritySectionInner({
   connections = [],
+  sessions = [],
   blockedIps = [],
   isLoading,
   busyKey,
@@ -157,11 +166,38 @@ export function WebSocketIpSecuritySection({
   const [unblockTarget, setUnblockTarget] = useState(null)
   const [manualIp, setManualIp] = useState('')
   const [filters, setFilters] = useState(EMPTY_FILTERS)
+  const [page, setPage] = useState(1)
 
-  const openConnections = useMemo(
-    () => (Array.isArray(connections) ? connections : []),
-    [connections],
-  )
+  const sessionMetaByCode = useMemo(() => {
+    const map = new Map()
+    for (const row of Array.isArray(sessions) ? sessions : []) {
+      const key = sessionMetaKey(row.session_code)
+      if (key) map.set(key, row)
+    }
+    return map
+  }, [sessions])
+
+  const openConnections = useMemo(() => {
+    const rows = Array.isArray(connections) ? connections : []
+    return rows.map((row) => {
+      const meta = sessionMetaByCode.get(sessionMetaKey(row.session_code))
+      if (!meta) return row
+      return {
+        ...row,
+        session_id: meta.session_id ?? row.session_id ?? null,
+        title: meta.title ?? row.title ?? null,
+        status: meta.status ?? row.status ?? null,
+        dept_id: meta.dept_id ?? row.dept_id ?? null,
+        host_id: meta.host_id ?? row.host_id ?? null,
+        host_name: meta.host_name ?? row.host_name ?? null,
+        host_email: meta.host_email ?? row.host_email ?? null,
+        department_name: meta.department_name ?? row.department_name ?? null,
+        client_id: meta.client_id ?? row.client_id ?? null,
+        client_name: meta.client_name ?? row.client_name ?? null,
+      }
+    })
+  }, [connections, sessionMetaByCode])
+
   const blocked = useMemo(() => (Array.isArray(blockedIps) ? blockedIps : []), [blockedIps])
   const blockedSet = useMemo(
     () => new Set(blocked.map((row) => String(row.ip_address || '').toLowerCase())),
@@ -236,6 +272,24 @@ export function WebSocketIpSecuritySection({
       return haystack.includes(search)
     })
   }, [openConnections, filters])
+
+  const totalFiltered = filteredConnections.length
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages)
+  const pageStart = totalFiltered === 0 ? 0 : (currentPage - 1) * PAGE_SIZE
+  const pageEnd = Math.min(pageStart + PAGE_SIZE, totalFiltered)
+  const pagedConnections = useMemo(
+    () => filteredConnections.slice(pageStart, pageEnd),
+    [filteredConnections, pageStart, pageEnd],
+  )
+
+  useEffect(() => {
+    setPage(1)
+  }, [filters])
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages)
+  }, [page, totalPages])
 
   const updateFilter = (key, value) => {
     setFilters((prev) => {
@@ -346,9 +400,28 @@ export function WebSocketIpSecuritySection({
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-50 px-4 py-2 text-xs text-slate-500">
           <p>
-            Showing <span className="font-semibold text-navy-900">{filteredConnections.length}</span>{' '}
-            of <span className="font-semibold text-navy-900">{openConnections.length}</span>{' '}
-            connections
+            {totalFiltered === 0 ? (
+              <>
+                Showing <span className="font-semibold text-navy-900">0</span> of{' '}
+                <span className="font-semibold text-navy-900">{openConnections.length}</span>{' '}
+                connections
+              </>
+            ) : (
+              <>
+                Showing{' '}
+                <span className="font-semibold text-navy-900">
+                  {pageStart + 1}–{pageEnd}
+                </span>{' '}
+                of <span className="font-semibold text-navy-900">{totalFiltered}</span> filtered
+                {totalFiltered !== openConnections.length ? (
+                  <>
+                    {' '}
+                    (<span className="font-semibold text-navy-900">{openConnections.length}</span>{' '}
+                    total)
+                  </>
+                ) : null}
+              </>
+            )}
           </p>
           <button
             type="button"
@@ -364,77 +437,115 @@ export function WebSocketIpSecuritySection({
         ) : !filteredConnections.length ? (
           <p className="px-4 py-6 text-sm text-slate-600">No connections match these filters.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1100px] text-left text-sm">
-              <thead className="border-b border-blue-100 bg-white">
-                <tr>
-                  <th className="px-4 py-3 font-semibold text-slate-700">IP address</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">Client</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">Department</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">Host</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">Session</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">Role</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">Auth</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">Connected</th>
-                  <th className="px-4 py-3 font-semibold text-slate-700">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredConnections.map((row) => {
-                  const ip = row.ip_address || '—'
-                  const alreadyBlocked = row.ip_address
-                    ? blockedSet.has(String(row.ip_address).toLowerCase())
-                    : false
-                  const pending = busyKey === `block:${row.ip_address}`
-                  return (
-                    <tr
-                      key={row.connection_id || `${row.session_code}:${row.role}:${ip}`}
-                      className="border-b border-blue-50 last:border-b-0"
-                    >
-                      <td className="px-4 py-3 font-mono text-xs font-semibold text-navy-900">
-                        {ip}
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">{row.client_name || '—'}</td>
-                      <td className="px-4 py-3 text-slate-700">{row.department_name || '—'}</td>
-                      <td className="px-4 py-3 text-slate-700">
-                        <div>{row.host_name || '—'}</div>
-                        {row.host_email ? (
-                          <div className="text-[11px] text-slate-500">{row.host_email}</div>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-navy-900">{row.title || 'Untitled session'}</div>
-                        <div className="font-mono text-[11px] text-slate-500">{row.session_code}</div>
-                      </td>
-                      <td className="px-4 py-3 text-slate-700">{formatMonitorRole(row.role)}</td>
-                      <td className="px-4 py-3 text-slate-700">{formatAuthStatus(row.auth_status)}</td>
-                      <td className="px-4 py-3 text-slate-600">{formatConnectedAt(row.connected_at)}</td>
-                      <td className="px-4 py-3">
-                        {row.ip_address ? (
-                          <button
-                            type="button"
-                            disabled={Boolean(busyKey) || alreadyBlocked}
-                            onClick={() =>
-                              setBlockTarget({
-                                ip_address: row.ip_address,
-                                context: `${row.session_code}/${row.role}`,
-                              })
-                            }
-                            className="inline-flex items-center gap-1 rounded-xl border border-red-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            <Ban className="size-3.5" />
-                            {alreadyBlocked ? 'Blocked' : pending ? 'Blocking…' : 'Block IP'}
-                          </button>
-                        ) : (
-                          <span className="text-xs text-slate-400">No IP</span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1100px] text-left text-sm">
+                <thead className="border-b border-blue-100 bg-white">
+                  <tr>
+                    <th className="px-4 py-3 font-semibold text-slate-700">IP address</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">Client</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">Department</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">Host</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">Session</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">Role</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">Auth</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">Connected</th>
+                    <th className="px-4 py-3 font-semibold text-slate-700">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagedConnections.map((row) => {
+                    const ip = row.ip_address || '—'
+                    const alreadyBlocked = row.ip_address
+                      ? blockedSet.has(String(row.ip_address).toLowerCase())
+                      : false
+                    const pending = busyKey === `block:${row.ip_address}`
+                    return (
+                      <tr
+                        key={row.connection_id || `${row.session_code}:${row.role}:${ip}`}
+                        className="border-b border-blue-50 last:border-b-0"
+                      >
+                        <td className="px-4 py-3 font-mono text-xs font-semibold text-navy-900">
+                          {ip}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">{row.client_name || '—'}</td>
+                        <td className="px-4 py-3 text-slate-700">{row.department_name || '—'}</td>
+                        <td className="px-4 py-3 text-slate-700">
+                          <div>{row.host_name || '—'}</div>
+                          {row.host_email ? (
+                            <div className="text-[11px] text-slate-500">{row.host_email}</div>
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-navy-900">
+                            {row.title || 'Untitled session'}
+                          </div>
+                          <div className="font-mono text-[11px] text-slate-500">
+                            {row.session_code}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-slate-700">{formatMonitorRole(row.role)}</td>
+                        <td className="px-4 py-3 text-slate-700">
+                          {formatAuthStatus(row.auth_status)}
+                        </td>
+                        <td className="px-4 py-3 text-slate-600">
+                          {formatConnectedAt(row.connected_at)}
+                        </td>
+                        <td className="px-4 py-3">
+                          {row.ip_address ? (
+                            <button
+                              type="button"
+                              disabled={Boolean(busyKey) || alreadyBlocked}
+                              onClick={() =>
+                                setBlockTarget({
+                                  ip_address: row.ip_address,
+                                  context: `${row.session_code}/${row.role}`,
+                                })
+                              }
+                              className="inline-flex items-center gap-1 rounded-xl border border-red-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              <Ban className="size-3.5" />
+                              {alreadyBlocked ? 'Blocked' : pending ? 'Blocking…' : 'Block IP'}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-400">No IP</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {totalPages > 1 ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-blue-50 px-4 py-3 text-xs text-slate-600">
+                <p>
+                  Page <span className="font-semibold text-navy-900">{currentPage}</span> of{' '}
+                  <span className="font-semibold text-navy-900">{totalPages}</span>
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={currentPage <= 1}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    className="inline-flex h-9 items-center gap-1 rounded-xl border border-blue-200/70 bg-white px-3 font-semibold text-navy-800 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <ChevronLeft className="size-3.5" />
+                    Prev
+                  </button>
+                  <button
+                    type="button"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    className="inline-flex h-9 items-center gap-1 rounded-xl border border-blue-200/70 bg-white px-3 font-semibold text-navy-800 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Next
+                    <ChevronRight className="size-3.5" />
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </>
         )}
       </div>
 
@@ -584,3 +695,5 @@ export function WebSocketIpSecuritySection({
     </div>
   )
 }
+
+export const WebSocketIpSecuritySection = memo(WebSocketIpSecuritySectionInner)

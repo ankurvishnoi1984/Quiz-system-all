@@ -1,5 +1,5 @@
 import { Unplug } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { formatMonitorRole } from '../../utils/websocketMonitor'
 
 function RoleBreakdown({ byRole = {} }) {
@@ -127,7 +127,7 @@ function CloseConfirmModal({ target, pending, onCancel, onConfirm }) {
   )
 }
 
-export function WebSocketSessionsTable({ sessions = [], isLoading, closingKey, onCloseRole }) {
+function WebSocketSessionsTable({ sessions = [], isLoading, closingKey, onCloseRole }) {
   const [confirmTarget, setConfirmTarget] = useState(null)
 
   if (isLoading) {
@@ -234,3 +234,6 @@ export function WebSocketSessionsTable({ sessions = [], isLoading, closingKey, o
     </div>
   )
 }
+
+const WebSocketSessionsTableMemo = memo(WebSocketSessionsTable)
+export { WebSocketSessionsTableMemo as WebSocketSessionsTable }

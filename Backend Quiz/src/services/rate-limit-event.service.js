@@ -3,6 +3,10 @@ const RateLimitEvent = require("../models/rate-limit-event.model");
 
 const RETENTION_DAYS = 7;
 const LIST_LIMIT = 500;
+const MONITOR_LIST_LIMIT = 50;
+const PURGE_THROTTLE_MS = 60 * 60 * 1000;
+
+let lastPurgeAt = 0;
 
 function normalizeIdentity(value) {
   if (value == null) return null;
@@ -41,21 +45,34 @@ async function recordRateLimitEvent({
   });
 }
 
-async function listRecentRateLimitEvents({ limit = LIST_LIMIT } = {}) {
-  const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
-
-  await RateLimitEvent.destroy({
+/**
+ * Delete events older than retention. Throttled so monitor polls do not DELETE every 5s.
+ */
+async function purgeExpiredRateLimitEvents({ force = false } = {}) {
+  const now = Date.now();
+  if (!force && now - lastPurgeAt < PURGE_THROTTLE_MS) {
+    return { purged: false, skipped: true };
+  }
+  lastPurgeAt = now;
+  const cutoff = new Date(now - RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const deleted = await RateLimitEvent.destroy({
     where: {
       created_at: { [Op.lt]: cutoff }
     }
-  }).catch(() => {});
+  }).catch(() => 0);
+  return { purged: true, deleted: Number(deleted) || 0 };
+}
+
+async function listRecentRateLimitEvents({ limit = LIST_LIMIT } = {}) {
+  const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const cappedLimit = Math.min(Math.max(1, Number(limit) || LIST_LIMIT), LIST_LIMIT);
 
   const rows = await RateLimitEvent.findAll({
     where: {
       created_at: { [Op.gte]: cutoff }
     },
     order: [["created_at", "DESC"]],
-    limit: Math.min(Math.max(1, Number(limit) || LIST_LIMIT), LIST_LIMIT)
+    limit: cappedLimit
   });
 
   return rows.map((row) => ({
@@ -74,6 +91,9 @@ async function listRecentRateLimitEvents({ limit = LIST_LIMIT } = {}) {
 module.exports = {
   recordRateLimitEvent,
   listRecentRateLimitEvents,
+  purgeExpiredRateLimitEvents,
   normalizeIdentity,
-  normalizeSessionCode
+  normalizeSessionCode,
+  MONITOR_LIST_LIMIT,
+  LIST_LIMIT
 };

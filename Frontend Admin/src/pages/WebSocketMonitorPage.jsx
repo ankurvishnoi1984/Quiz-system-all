@@ -1,6 +1,6 @@
 import { Activity, Cpu, MemoryStick, RefreshCw, Server, ShieldAlert, ShieldBan, Users } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import StatCard from '../components/dashboard/StatCard'
 import { WebSocketMonitorCharts } from '../components/monitor/WebSocketMonitorCharts'
 import { WebSocketSessionsTable } from '../components/monitor/WebSocketSessionsTable'
@@ -170,6 +170,26 @@ function WebSocketMonitorPage() {
   const blockedCount = monitor?.blocked_ips?.length ?? 0
   const recent429Count = countRecentRateLimitEvents(monitor?.rate_limit?.events)
 
+  const sparklineHistory = useMemo(() => {
+    const history = monitor?.history
+    if (!Array.isArray(history) || !history.length) {
+      return {
+        totalConnections: [],
+        uniqueSessions: [],
+        activeBuckets: [],
+      }
+    }
+    const totalConnections = []
+    const uniqueSessions = []
+    const activeBuckets = []
+    for (const row of history) {
+      totalConnections.push(row.total_connections)
+      uniqueSessions.push(row.unique_sessions)
+      activeBuckets.push(row.active_buckets)
+    }
+    return { totalConnections, uniqueSessions, activeBuckets }
+  }, [monitor?.history])
+
   const handleManualRefresh = () => {
     monitorQuery.refetch()
   }
@@ -208,7 +228,7 @@ function WebSocketMonitorPage() {
           label="Open connections"
           value={monitor?.total_connections ?? '—'}
           trendLabel="Active WebSocket sockets"
-          sparkline={monitor?.history?.map((row) => row.total_connections) ?? []}
+          sparkline={sparklineHistory.totalConnections}
           accent="navy"
           pulse={isLive && (monitor?.total_connections ?? 0) > 0}
         />
@@ -216,14 +236,14 @@ function WebSocketMonitorPage() {
           label="Active sessions"
           value={monitor?.unique_sessions ?? '—'}
           trendLabel="Sessions with ≥1 socket"
-          sparkline={monitor?.history?.map((row) => row.unique_sessions) ?? []}
+          sparkline={sparklineHistory.uniqueSessions}
           accent="blue"
         />
         <StatCard
           label="Connection buckets"
           value={monitor?.active_buckets ?? '—'}
           trendLabel="session:role groups"
-          sparkline={monitor?.history?.map((row) => row.active_buckets) ?? []}
+          sparkline={sparklineHistory.activeBuckets}
           accent="cyan"
         />
         <StatCard
@@ -327,6 +347,7 @@ function WebSocketMonitorPage() {
 
       <WebSocketIpSecuritySection
         connections={monitor?.connections}
+        sessions={monitor?.sessions}
         blockedIps={monitor?.blocked_ips}
         isLoading={isLoading}
         busyKey={ipBusyKey}
