@@ -10,6 +10,8 @@ import {
   countRecentRateLimitEvents,
 } from '../components/monitor/WebSocketRateLimitSection'
 import { HostAlertModal } from '../components/live/HostAlertModal'
+import { AdminActionOtpModal } from '../components/management/AdminActionOtpModal'
+import { useAdminActionOtp } from '../hooks/useAdminActionOtp'
 import { useAuthStore } from '../store/authStore'
 import {
   blockWebSocketIpApi,
@@ -24,6 +26,7 @@ const POLL_INTERVAL_MS = 5000
 function WebSocketMonitorPage() {
   const accessToken = useAuthStore((state) => state.accessToken)
   const queryClient = useQueryClient()
+  const { requestAdminAction, modalProps: adminOtpModalProps } = useAdminActionOtp()
   const [closingKey, setClosingKey] = useState(null)
   const [ipBusyKey, setIpBusyKey] = useState(null)
   const [alert, setAlert] = useState(null)
@@ -37,10 +40,11 @@ function WebSocketMonitorPage() {
   })
 
   const closeMutation = useMutation({
-    mutationFn: ({ sessionCode, role }) =>
+    mutationFn: ({ sessionCode, role, otp_token }) =>
       closeWebSocketConnectionsApi(accessToken, {
         session_code: sessionCode,
         role,
+        ...(otp_token ? { otp_token } : {}),
       }),
     onMutate: ({ sessionCode, role }) => {
       setClosingKey(`${sessionCode}:${role}`)
@@ -69,11 +73,12 @@ function WebSocketMonitorPage() {
   })
 
   const blockIpMutation = useMutation({
-    mutationFn: ({ ip_address, reason }) =>
+    mutationFn: ({ ip_address, reason, otp_token }) =>
       blockWebSocketIpApi(accessToken, {
         ip_address,
         reason,
         close_existing: true,
+        ...(otp_token ? { otp_token } : {}),
       }),
     onMutate: ({ ip_address }) => {
       setIpBusyKey(`block:${ip_address}`)
@@ -103,10 +108,11 @@ function WebSocketMonitorPage() {
   })
 
   const unblockIpMutation = useMutation({
-    mutationFn: ({ ip_address, reason }) =>
+    mutationFn: ({ ip_address, reason, otp_token }) =>
       unblockWebSocketIpApi(accessToken, {
         ip_address,
         reason,
+        ...(otp_token ? { otp_token } : {}),
       }),
     onMutate: ({ ip_address }) => {
       setIpBusyKey(`unblock:${ip_address}`)
@@ -130,6 +136,33 @@ function WebSocketMonitorPage() {
       setIpBusyKey(null)
     },
   })
+
+  const requestCloseRole = (target) => {
+    requestAdminAction((otpToken) =>
+      closeMutation.mutate({
+        ...target,
+        ...(otpToken ? { otp_token: otpToken } : {}),
+      }),
+    )
+  }
+
+  const requestBlockIp = (target) => {
+    requestAdminAction((otpToken) =>
+      blockIpMutation.mutate({
+        ...target,
+        ...(otpToken ? { otp_token: otpToken } : {}),
+      }),
+    )
+  }
+
+  const requestUnblockIp = (target) => {
+    requestAdminAction((otpToken) =>
+      unblockIpMutation.mutate({
+        ...target,
+        ...(otpToken ? { otp_token: otpToken } : {}),
+      }),
+    )
+  }
 
   const monitor = monitorQuery.data
   const isLoading = monitorQuery.isLoading && !monitor
@@ -287,9 +320,7 @@ function WebSocketMonitorPage() {
             sessions={monitor?.sessions}
             isLoading={isLoading}
             closingKey={closingKey}
-            onCloseRole={async (target) => {
-              await closeMutation.mutateAsync(target)
-            }}
+            onCloseRole={requestCloseRole}
           />
         </div>
       </div>
@@ -299,12 +330,8 @@ function WebSocketMonitorPage() {
         blockedIps={monitor?.blocked_ips}
         isLoading={isLoading}
         busyKey={ipBusyKey}
-        onBlockIp={async (target) => {
-          await blockIpMutation.mutateAsync(target)
-        }}
-        onUnblockIp={async (target) => {
-          await unblockIpMutation.mutateAsync(target)
-        }}
+        onBlockIp={requestBlockIp}
+        onUnblockIp={requestUnblockIp}
       />
 
       <WebSocketRateLimitSection
@@ -312,13 +339,11 @@ function WebSocketMonitorPage() {
         blockedIps={monitor?.blocked_ips}
         isLoading={isLoading}
         busyKey={ipBusyKey}
-        onBlockIp={async (target) => {
-          await blockIpMutation.mutateAsync(target)
-        }}
-        onUnblockIp={async (target) => {
-          await unblockIpMutation.mutateAsync(target)
-        }}
+        onBlockIp={requestBlockIp}
+        onUnblockIp={requestUnblockIp}
       />
+
+      <AdminActionOtpModal {...adminOtpModalProps} />
 
       <HostAlertModal
         open={Boolean(alert)}
