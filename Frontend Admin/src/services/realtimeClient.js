@@ -145,8 +145,12 @@ class RealtimeClient {
           const data = JSON.parse(event.data)
           if (
             data?.type === 'connection_closed_by_admin' ||
+            data?.type === 'session_terminated' ||
             data?.code === 'ip_blocked' ||
-            data?.type === 'connection_ip_blocked'
+            data?.type === 'connection_ip_blocked' ||
+            data?.reason === 'session_ended' ||
+            data?.reason === 'session_archived' ||
+            data?.reason === 'session_not_found'
           ) {
             this.#adminClosed = true
           }
@@ -435,6 +439,7 @@ export const RealtimeEvent = {
   PARTICIPANT_PRESENCE: 'participant_presence',
   PRESENT_SLIDE_CHANGED: 'present_slide_changed',
   CONNECTION_CLOSED_BY_ADMIN: 'connection_closed_by_admin',
+  SESSION_TERMINATED: 'session_terminated',
   CONNECTION_IP_BLOCKED: 'connection_ip_blocked',
 }
 
