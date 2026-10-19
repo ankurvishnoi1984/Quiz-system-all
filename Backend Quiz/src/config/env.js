@@ -5,6 +5,14 @@ dotenv.config();
 const env = {
   nodeEnv: process.env.NODE_ENV || "development",
   port: Number(process.env.PORT || 5000),
+  // RATE_LIMIT_ENABLED: unset/true = enforce IP + OTP resend limits; false = load-test mode
+  rateLimitEnabled: (() => {
+    const raw = process.env.RATE_LIMIT_ENABLED;
+    if (raw == null || String(raw).trim() === "") return true;
+    const normalized = String(raw).trim().toLowerCase();
+    if (["0", "false", "no", "off"].includes(normalized)) return false;
+    return true;
+  })(),
   db: {
     host: process.env.DB_HOST || "localhost",
     port: Number(process.env.DB_PORT || 3306),

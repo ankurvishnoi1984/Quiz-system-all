@@ -8,11 +8,17 @@ const {
   startPlanExpiryReminderScheduler
 } = require("./services/plan-expiry-reminder-scheduler.service");
 const { loadBlockedIpCache } = require("./services/blocked-ip.service");
+const { isRateLimitEnabled } = require("./utils/ip-rate-limit");
 
 async function bootstrap() {
   try {
     await connectDatabase();
     await loadBlockedIpCache();
+    if (!isRateLimitEnabled()) {
+      console.warn(
+        "[rate-limit] RATE_LIMIT_ENABLED=false — IP/OTP rate limits not enforcing"
+      );
+    }
     const server = app.listen(env.port, () => {
       console.log(`Server is running on port ${env.port}`);
     });

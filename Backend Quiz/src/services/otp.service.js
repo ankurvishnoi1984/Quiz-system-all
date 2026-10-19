@@ -11,6 +11,7 @@ const {
   isAdminActionOtpEnabled
 } = require("../config/auth-features");
 const env = require("../config/env");
+const { isRateLimitEnabled } = require("../utils/ip-rate-limit");
 
 const PURPOSES = {
   PAYMENT: "payment",
@@ -89,6 +90,8 @@ function assertFeatureEnabled(purpose) {
 }
 
 async function assertResendCooldown(Model, where) {
+  if (!isRateLimitEnabled()) return;
+
   const latest = await Model.findOne({
     where: { ...where, consumed_at: null },
     order: [["created_at", "DESC"]]

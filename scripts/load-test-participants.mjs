@@ -13,24 +13,26 @@
  *   --delay-ms / DELAY_MS                     pause between a user's submits
  *   --ws-hold-sec / WS_HOLD_SEC               keep sockets open after run (default 30)
  *
- * Join IP rate pacing (matches Backend Quiz join-rate-limit.middleware.js):
- *   JOIN_IP_MAX=20 per IP+session code, JOIN_IP_WINDOW_MS=5 minutes
- *   --join-ip-max / JOIN_IP_MAX               joins allowed per window (default 20)
- *   --join-ip-window-ms / JOIN_IP_WINDOW_MS   window length (default 300000)
- *   --join-gap-ms / JOIN_GAP_MS               pause between starting each join (default 300)
- *   --no-join-rate-pace                       disable fixed-window pacing (burst; may 429)
+ * Join IP rate pacing (optional — wait after every JOIN_IP_MAX joins):
+ *   Default OFF (burst). Turn ON when the live API enforces join IP rate limits.
+ *   --join-rate-pace / JOIN_RATE_PACE=true    enable wait after every N joins
+ *   --no-join-rate-pace / JOIN_RATE_PACE=false  disable wait (default; for RATE_LIMIT_ENABLED=false)
+ *   --join-ip-max / JOIN_IP_MAX               joins per window when pacing on (default 20)
+ *   --join-ip-window-ms / JOIN_IP_WINDOW_MS   window length (default 300000 = 5 min)
+ *   --join-gap-ms / JOIN_GAP_MS               pause between starting each join (default 0 when pacing off, 300 when on)
  *   --max-retries / MAX_RETRIES               retries on 429/5xx (default 5)
  *
  * Examples:
+ *   # Burst join (rate limits off on server):
  *   node scripts/load-test-participants.mjs \
  *     --api https://demoquizapi.netcastservice.online/api/v1 \
  *     --session ABC123 \
  *     --join-count 200 \
  *     --attempt-count 150 \
- *     --join-concurrency 10 \
- *     --attempt-concurrency 20
+ *     --join-concurrency 20
  *
- *   # 200 joins ≈ ceil(200/20) windows → expect ~45+ minutes of join pacing
+ *   # Pace joins when server enforces 20 / 5 min:
+ *   node scripts/load-test-participants.mjs --session ABC123 --join-count 200 --join-rate-pace
  *
  *   JOIN_COUNT=50 ATTEMPT_COUNT=30 SESSION_CODE=ABC123 node scripts/load-test-participants.mjs
  *
@@ -140,7 +142,7 @@ const ATTEMPT_COUNT = Math.max(
     pickNumber(cli['attempt-count'], process.env.ATTEMPT_COUNT, JOIN_COUNT),
   ),
 )
-/** Defaults match Backend Quiz/src/middlewares/join-rate-limit.middleware.js */
+/** Optional pacing window (only used when JOIN_RATE_PACE is on). */
 const JOIN_IP_MAX = Math.max(
   1,
   pickNumber(cli['join-ip-max'], process.env.JOIN_IP_MAX, 20),
@@ -149,11 +151,20 @@ const JOIN_IP_WINDOW_MS = Math.max(
   1000,
   pickNumber(cli['join-ip-window-ms'], process.env.JOIN_IP_WINDOW_MS, 5 * 60 * 1000),
 )
-const JOIN_GAP_MS = Math.max(0, pickNumber(cli['join-gap-ms'], process.env.JOIN_GAP_MS, 300))
+/** Default off — no wait after 20 joins (server rate limits often disabled for load tests). */
 const JOIN_RATE_PACE = (() => {
   if (cli['no-join-rate-pace'] === true || cli['no-join-rate-pace'] === 'true') return false
-  return pickBool(cli['join-rate-pace'], process.env.JOIN_RATE_PACE, true)
+  if (cli['join-rate-pace'] === true || cli['join-rate-pace'] === 'true') return true
+  return pickBool(cli['join-rate-pace'], process.env.JOIN_RATE_PACE, false)
 })()
+const JOIN_GAP_MS = Math.max(
+  0,
+  pickNumber(
+    cli['join-gap-ms'],
+    process.env.JOIN_GAP_MS,
+    JOIN_RATE_PACE ? 300 : 0,
+  ),
+)
 const MAX_RETRIES = Math.max(0, pickNumber(cli['max-retries'], process.env.MAX_RETRIES, 5))
 
 const JOIN_CONCURRENCY_RAW = Math.max(
@@ -664,11 +675,15 @@ async function main() {
     const windows = Math.ceil(JOIN_COUNT / JOIN_IP_MAX)
     const minPaceSec = Math.max(0, (windows - 1) * (JOIN_IP_WINDOW_MS / 1000))
     console.log(
-      `Join rate pace:      ${JOIN_IP_MAX} / ${Math.round(JOIN_IP_WINDOW_MS / 1000)}s` +
+      `Join rate pace:      ON — wait after every ${JOIN_IP_MAX} joins / ${Math.round(JOIN_IP_WINDOW_MS / 1000)}s` +
         ` (gap ${JOIN_GAP_MS}ms) · ~${windows} window(s), ≥${Math.round(minPaceSec / 60)} min join pacing`,
     )
   } else {
-    console.log('Join rate pace:      off (--no-join-rate-pace)')
+    console.log(
+      `Join rate pace:      OFF (no wait after ${JOIN_IP_MAX} joins)` +
+        (JOIN_GAP_MS > 0 ? ` · gap ${JOIN_GAP_MS}ms` : '') +
+        ' — use --join-rate-pace if the API enforces IP limits',
+    )
   }
   console.log(`HTTP retries:        ${MAX_RETRIES} (429 / 5xx)`)
   console.log('')
