@@ -62,6 +62,12 @@ const {
   assertHostCanRunSessions,
   assertSessionQuestionCapacity
 } = require("./plan.service");
+const {
+  provisionSessionAdminForSession,
+  attachSessionAdminCredentials,
+  deactivateSessionAdminForSession,
+  ensureSessionAdminOnSession
+} = require("./session-admin.service");
 
 async function getDepartmentOrThrow(deptId) {
   const department = await Department.findByPk(deptId);
@@ -80,7 +86,13 @@ async function getSessionOrThrow(sessionId) {
         model: Department,
         include: [{ model: Client, attributes: ["client_id", "name", "slug"] }]
       },
-      { model: User, attributes: ["user_id", "full_name", "email", "role"] }
+      { model: User, attributes: ["user_id", "full_name", "email", "role"] },
+      {
+        model: User,
+        as: "sessionAdmin",
+        attributes: ["user_id", "email", "full_name", "role", "is_active"],
+        required: false
+      }
     ]
   });
 
@@ -118,11 +130,23 @@ async function listDepartmentSessions({ deptId, status, user }) {
 
   const where = { dept_id: deptId };
   if (status) where.status = status;
-  if (getDataScope(user) === "own_sessions") where.host_id = user.user_id;
+  if (user?.role === "session_admin") {
+    where.session_admin_user_id = user.user_id;
+  } else if (getDataScope(user) === "own_sessions") {
+    where.host_id = user.user_id;
+  }
 
   const sessions = await Session.findAll({
     where,
-    include: [{ model: User, attributes: ["user_id", "full_name", "email"] }],
+    include: [
+      { model: User, attributes: ["user_id", "full_name", "email"] },
+      {
+        model: User,
+        as: "sessionAdmin",
+        attributes: ["user_id", "email", "full_name", "role", "is_active"],
+        required: false
+      }
+    ],
     order: [["session_id", "DESC"]]
   });
 
@@ -158,16 +182,17 @@ async function listDepartmentSessions({ deptId, status, user }) {
       const completionProgress =
         participantsCount > 0 ? Math.round((completedParticipants / participantsCount) * 100) : 0;
 
-      return {
+      const plain = {
         ...session.toJSON(),
         participants_count: participantsCount,
         completed_participants: completedParticipants,
         completion_progress: completionProgress
       };
+      return attachSessionAdminCredentials(plain);
     })
   );
 
-  return withParticipantCounts;
+  return Promise.all(withParticipantCounts);
 }
 
 async function createSession({ deptId, input, user }) {
@@ -197,7 +222,7 @@ async function createSession({ deptId, input, user }) {
   }
 
    const sessionCode = await generateSessionCode();
-   return Session.create({
+   const session = await Session.create({
      dept_id: Number(deptId),
      host_id: Number(input.host_id),
      title: input.title.trim(),
@@ -293,6 +318,9 @@ async function createSession({ deptId, input, user }) {
            : null,
      present_mode_settings: normalizePresentModeSettings(input.present_mode_settings)
    });
+
+   await provisionSessionAdminForSession({ session, host });
+   return attachSessionAdminCredentials(await getSessionOrThrow(session.session_id));
 }
 
 /**
@@ -544,7 +572,12 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
     }
 
     await transaction.commit();
-    return getSessionOrThrow(newSession.session_id);
+    const created = await getSessionOrThrow(newSession.session_id);
+    const targetHostUser = await User.findByPk(hostId, {
+      attributes: ["user_id", "parent_id", "client_id", "dept_id"]
+    });
+    await provisionSessionAdminForSession({ session: created, host: targetHostUser });
+    return attachSessionAdminCredentials(await getSessionOrThrow(created.session_id));
   } catch (err) {
     await transaction.rollback();
     throw err;
@@ -554,7 +587,10 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
 async function getSessionById({ sessionId, user }) {
   const session = await getSessionOrThrow(sessionId);
   assertSessionWriteAccess(user, session);
-  return session;
+  if (user?.role !== "session_admin" && !session.session_admin_user_id) {
+    return ensureSessionAdminOnSession(session);
+  }
+  return attachSessionAdminCredentials(session);
 }
 
 async function updateSession({ sessionId, input, user }) {
@@ -859,7 +895,8 @@ async function archiveSession({ sessionId, user }) {
   assertSessionWriteAccess(user, session);
   session.status = "archived";
   await session.save();
-  return session;
+  await deactivateSessionAdminForSession(session);
+  return attachSessionAdminCredentials(session);
 }
 
 /**

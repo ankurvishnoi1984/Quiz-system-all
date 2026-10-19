@@ -1,7 +1,8 @@
-import { Check, Code2, Copy, Download, Hash, Link2, Monitor, QrCode } from 'lucide-react'
+import { Check, Code2, Copy, Download, Hash, Link2, Monitor, QrCode, Shield } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import QRCode from 'qrcode'
 import { getPresentViewLinkApi, getSessionQrApi } from '../../services/dashboardApi'
+import SessionAdminCredentialsCard from '../session/SessionAdminCredentialsCard'
 import {
   buildEmbedControlsUrl,
   buildEmbedIframeSnippet,
@@ -25,6 +26,7 @@ const SHARE_TABS = [
   { id: 'link', label: 'Link', icon: Link2 },
   { id: 'qr', label: 'QR code', icon: QrCode },
   { id: 'code', label: 'Session code', icon: Hash },
+  { id: 'admin', label: 'Session Admin', icon: Shield },
 ]
 
 function dataUrlToBlob(dataUrl) {
@@ -197,8 +199,9 @@ export default function ShareSessionPanel({
   accessToken,
   sessionDbId,
   showPresentViewShare = true,
+  initialTab = 'link',
 }) {
-  const [shareTab, setShareTab] = useState('link')
+  const [shareTab, setShareTab] = useState(initialTab)
   const [shareJoinUrl, setShareJoinUrl] = useState('')
   const [qrDataUrl, setQrDataUrl] = useState('')
   const [presentViewUrl, setPresentViewUrl] = useState('')
@@ -211,9 +214,14 @@ export default function ShareSessionPanel({
   const [signedJoinBusy, setSignedJoinBusy] = useState(false)
   const [signedJoinError, setSignedJoinError] = useState('')
   const [signedJoinExpiresIn, setSignedJoinExpiresIn] = useState(null)
+  const [sessionAdmin, setSessionAdmin] = useState(session?.session_admin || null)
 
   const resolvedSessionDbId = sessionDbId ?? session?.session_id ?? session?.id
   const canSharePresentView = showPresentViewShare && session?.status !== 'archived'
+
+  useEffect(() => {
+    setSessionAdmin(session?.session_admin || null)
+  }, [session?.session_admin, session?.session_id, session?.id])
 
   const sessionCode = normalizeSessionCode(session?.session_code)
   const genericJoinUrl = buildGenericJoinUrl()
@@ -757,6 +765,15 @@ export default function ShareSessionPanel({
             code — protect the code the same way you share it today.
           </p>
         </div>
+      )}
+
+      {shareTab === 'admin' && (
+        <SessionAdminCredentialsCard
+          sessionAdmin={sessionAdmin}
+          sessionId={resolvedSessionDbId}
+          accessToken={accessToken}
+          onUpdated={(updated) => setSessionAdmin(updated)}
+        />
       )}
 
       {shareTab === 'display' && (

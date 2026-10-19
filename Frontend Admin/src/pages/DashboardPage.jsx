@@ -57,6 +57,7 @@ function DashboardPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [editSession, setEditSession] = useState(null)
   const [shareSession, setShareSession] = useState(null)
+  const [shareInitialTab, setShareInitialTab] = useState('link')
   const [sessionAlert, setSessionAlert] = useState(null)
   const [deleteConfirmSession, setDeleteConfirmSession] = useState(null)
   const [resetConfirmSession, setResetConfirmSession] = useState(null)
@@ -127,6 +128,17 @@ function DashboardPage() {
       setCreateOpen(false)
       if (tourActive && ['create', 'create-form'].includes(tourStep?.id)) {
         continueAfterSessionCreated(session?.session_id || session?.id)
+        return
+      }
+      if (session?.session_admin) {
+        setShareSession(session)
+        setShareInitialTab('admin')
+        setSessionAlert({
+          variant: 'success',
+          title: 'Session created',
+          message: `"${variables.input.title}" was created. Session Admin login is ready to share.`,
+          confirmLabel: 'OK',
+        })
         return
       }
       setSessionAlert({
@@ -472,6 +484,7 @@ function DashboardPage() {
     }
     if (action === 'share') {
       if (!canPresent) return
+      setShareInitialTab('link')
       setShareSession(session)
       return
     }
@@ -946,12 +959,21 @@ function DashboardPage() {
         />
       ) : null}
 
-      <Modal open={Boolean(shareSession)} title="Share Session" onClose={() => setShareSession(null)}>
+      <Modal
+        open={Boolean(shareSession)}
+        title="Share Session"
+        onClose={() => {
+          setShareSession(null)
+          setShareInitialTab('link')
+        }}
+      >
         {shareSession && (
           <ShareSessionPanel
+            key={`${shareSession.session_id || shareSession.id}-${shareInitialTab}`}
             session={shareSession}
             accessToken={accessToken}
-            sessionDbId={shareSession.id}
+            sessionDbId={shareSession.session_id || shareSession.id}
+            initialTab={shareInitialTab}
           />
         )}
       </Modal>

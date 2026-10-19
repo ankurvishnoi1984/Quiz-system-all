@@ -98,6 +98,14 @@ const SYSTEM_ROLE_DEFAULTS = {
     permissions: [],
     is_system: true,
     is_active: true
+  },
+  session_admin: {
+    slug: "session_admin",
+    name: "Session Admin",
+    data_scope: "own_sessions",
+    permissions: ["reports"],
+    is_system: true,
+    is_active: true
   }
 };
 

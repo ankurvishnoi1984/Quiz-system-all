@@ -37,7 +37,7 @@ export function HostIdleSessionsGuard() {
   const viewingSessionId = currentLiveSessionId(location.pathname, location.search)
 
   const idleSessions = useMemo(() => {
-    if (userRole === 'super_admin') return []
+    if (userRole === 'super_admin' || userRole === 'session_admin') return []
     if (isLoading || !accessToken) return []
     return sessions.filter((session) => {
       const id = sessionKey(session)

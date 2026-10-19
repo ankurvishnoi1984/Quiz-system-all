@@ -22,6 +22,7 @@ const websocketMonitorRoutes = require("./websocket-monitor.routes");
 const auditLogRoutes = require("./audit-log.routes");
 const aiRoutes = require("./ai.routes");
 const questionBankRoutes = require("./question-bank.routes");
+const sessionAdminRoutes = require("./session-admin.routes");
 
 const router = express.Router();
 
@@ -37,6 +38,7 @@ router.use("/admin/sub-admins", subAdminRoutes);
 router.use("/roles", roleRoutes);
 router.use("/plans", planRoutes);
 router.use("/question-bank", questionBankRoutes);
+router.use("/session-admin", sessionAdminRoutes);
 router.use("/clients", clientRoutes);
 router.use("/departments", departmentRoutes);
 router.use("/", responseRoutes);

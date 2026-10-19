@@ -27,6 +27,7 @@ import TeamManagementPage from './pages/TeamManagementPage'
 import VerifyEmailPage from './pages/VerifyEmailPage'
 import WebSocketMonitorPage from './pages/WebSocketMonitorPage'
 import QuestionBankPage from './pages/QuestionBankPage'
+import SessionAdminPage from './pages/SessionAdminPage'
 import ParticipantSessionPage from './pages/participant-session'
 import PresentModePage from './pages/present-mode'
 import PresentViewPage from './pages/present-mode/PresentViewPage'
@@ -51,6 +52,9 @@ function getPostLoginPath(user) {
   }
   if (user?.role === 'author' || user?.role === 'auditor') {
     return '/question-bank'
+  }
+  if (user?.role === 'session_admin') {
+    return '/session-admin'
   }
   return '/dashboard'
 }
@@ -197,12 +201,24 @@ function App() {
               element={
                 user?.role === 'author' || user?.role === 'auditor' ? (
                   <Navigate to="/question-bank" replace />
+                ) : user?.role === 'session_admin' ? (
+                  <Navigate to="/session-admin" replace />
                 ) : (
                   <DashboardPage />
                 )
               }
             />
             <Route path="/question-bank" element={<QuestionBankPage />} />
+            <Route
+              path="/session-admin"
+              element={
+                user?.role === 'session_admin' ? (
+                  <SessionAdminPage />
+                ) : (
+                  <Navigate to={postLoginPath} replace />
+                )
+              }
+            />
             <Route
               path="/team"
               element={

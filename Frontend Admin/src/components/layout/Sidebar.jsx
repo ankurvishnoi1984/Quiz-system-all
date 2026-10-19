@@ -14,6 +14,7 @@ import {
   Layers,
   PanelLeftClose,
   PanelLeftOpen,
+  Shield,
   Users,
 } from 'lucide-react'
 import { SidebarNavGroup } from './SidebarNavGroup'
@@ -26,6 +27,13 @@ import { useHostOnboarding } from '../../context/HostOnboardingContext'
 
 const staticNavigationItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, kind: 'static' },
+  {
+    to: '/session-admin',
+    label: 'Session Admin',
+    icon: Shield,
+    kind: 'static',
+    sessionAdminOnly: true,
+  },
   {
     to: '/question-bank',
     label: 'Question Bank',
@@ -60,6 +68,9 @@ function Sidebar({ collapsed, onToggle }) {
       staticNavigationItems
         .filter((item) => {
           const questionBankOnly = user?.role === 'author' || user?.role === 'auditor'
+          const sessionAdminOnly = user?.role === 'session_admin'
+          if (sessionAdminOnly) return Boolean(item.sessionAdminOnly)
+          if (item.sessionAdminOnly) return false
           if (questionBankOnly && item.to !== '/question-bank') return false
           if (item.questionBankRoles && !item.questionBankRoles.includes(user?.role)) return false
           if (item.superAdminOnly && user?.role !== 'super_admin') return false

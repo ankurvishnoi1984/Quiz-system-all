@@ -71,6 +71,7 @@ function mapApiSessionToLocal(session) {
     last_activity_at: session.last_activity_at || null,
     started_at: session.started_at || null,
     updated_at: session.updated_at || null,
+    session_admin: session.session_admin || null,
   }
 }
 
@@ -109,7 +110,8 @@ export function SessionsProvider({ children }) {
       !!accessToken &&
       !!userRole &&
       userRole !== 'author' &&
-      userRole !== 'auditor',
+      userRole !== 'auditor' &&
+      userRole !== 'session_admin',
   })
 
   const [localSessions, setLocalSessions] = useState([])

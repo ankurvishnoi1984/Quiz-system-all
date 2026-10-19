@@ -17,6 +17,15 @@ const Session = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false
     },
+    session_admin_user_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    session_admin_password_is_default: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true
+    },
     title: {
       type: DataTypes.STRING(255),
       allowNull: false

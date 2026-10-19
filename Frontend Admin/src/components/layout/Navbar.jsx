@@ -10,6 +10,7 @@ import { isWebsiteSignupHost } from '../../utils/websiteSignupHost'
 
 const pageTitles = {
   '/dashboard': 'Admin Dashboard',
+  '/session-admin': 'Session Admin',
   '/builder': 'Question Builder',
   '/live': 'Live Present Mode',
   '/analytics': 'Session Analytics',

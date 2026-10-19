@@ -77,7 +77,7 @@ router.get(
 router.get(
   "/sessions/:sessionId/participants",
   authorizeStaff,
-  authorizeAnyRight("sessions", "present"),
+  authorizeAnyRight("sessions", "present", "reports"),
   sessionController.listParticipants
 );
 router.get(

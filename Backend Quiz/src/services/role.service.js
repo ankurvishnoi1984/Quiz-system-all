@@ -107,6 +107,13 @@ async function updateRole({ roleId, name, data_scope, permissions, is_active }) 
         );
       }
       role.permissions = [];
+    } else if (role.slug === "session_admin") {
+      const requested = normalizeOperationalPermissions(permissions);
+      const allowed = requested.filter((right) => right === "reports");
+      if (requested.length !== allowed.length) {
+        throw createError("Session Admin may only keep the reports permission", 400);
+      }
+      role.permissions = ["reports"];
     } else {
       role.permissions = normalizeOperationalPermissions(permissions);
     }

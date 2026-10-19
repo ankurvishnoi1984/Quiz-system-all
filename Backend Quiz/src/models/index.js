@@ -68,6 +68,8 @@ Department.hasMany(Session, { foreignKey: "dept_id" });
 Session.belongsTo(Department, { foreignKey: "dept_id" });
 User.hasMany(Session, { foreignKey: "host_id" });
 Session.belongsTo(User, { foreignKey: "host_id" });
+User.hasMany(Session, { foreignKey: "session_admin_user_id", as: "administeredSessions" });
+Session.belongsTo(User, { foreignKey: "session_admin_user_id", as: "sessionAdmin" });
 Session.hasMany(SessionEmbedToken, { foreignKey: "session_id" });
 SessionEmbedToken.belongsTo(Session, { foreignKey: "session_id" });
 Session.hasMany(Participant, { foreignKey: "session_id" });
