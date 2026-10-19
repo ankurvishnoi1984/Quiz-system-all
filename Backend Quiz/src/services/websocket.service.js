@@ -56,11 +56,22 @@ async function resolveSessionStatusForWs(sessionCode) {
   }
 
   const { Session } = require("../models");
-  const row = await Session.findOne({
-    where: { session_code: code },
-    attributes: ["session_code", "status"]
-  });
+  let row;
+  try {
+    row = await Session.findOne({
+      where: { session_code: code },
+      attributes: ["session_code", "status"]
+    });
+  } catch (error) {
+    // Fail open: do not poison the cache as "missing" on a DB blip.
+    wsLog("error", "handshake_session_lookup_failed", {
+      session: code,
+      message: error.message
+    });
+    return { code, status: "live", missing: false, lookupError: true };
+  }
   const status = row?.status ?? null;
+  // Only cache null when findOne actually returned no row.
   setSessionStatusCache(code, status);
   return { code, status, missing: !row };
 }

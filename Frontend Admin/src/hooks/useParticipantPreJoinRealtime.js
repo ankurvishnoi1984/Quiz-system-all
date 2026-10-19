@@ -45,7 +45,7 @@ export function useParticipantPreJoinRealtime({ sessionCode, enabled }) {
             }
           : old,
       )
-      queryClient.invalidateQueries({ queryKey: ['participant-session', sessionCode] })
+      // Status is applied locally — avoid an immediate public lookup refetch herd.
     })
 
     const offSettings = client.on(RealtimeEvent.SESSION_SETTINGS_UPDATED, (data) => {

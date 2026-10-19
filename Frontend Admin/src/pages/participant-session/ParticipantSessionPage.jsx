@@ -318,9 +318,14 @@ function ParticipantSessionPage({ embed = false }) {
     queryKey: ['participant-session', effectiveSessionCode],
     queryFn: () => lookupSessionApi(effectiveSessionCode),
     enabled: Boolean(effectiveSessionCode) && !ipBlocked,
-    retry: false,
-    staleTime: 0,
-    refetchOnWindowFocus: true,
+    // Retry transient network/5xx; never retry a real missing session.
+    retry: (failureCount, error) => {
+      if (Number(error?.status) === 404) return false
+      return failureCount < 2
+    },
+    // After join, avoid immediate refetch storms on focus / CONNECTED.
+    staleTime: participantToken || canUseStoredJoin ? 20_000 : 0,
+    refetchOnWindowFocus: !(participantToken || canUseStoredJoin),
     refetchIntervalInBackground: true,
     refetchInterval: (query) => {
       if (ipBlocked) return false
@@ -973,7 +978,8 @@ function ParticipantSessionPage({ embed = false }) {
     if (!client || !effectiveSessionCode || !participantToken || !dbSessionId) return
 
     const offConnected = client.on(RealtimeEvent.CONNECTED, () => {
-      queryClient.invalidateQueries({ queryKey: ['participant-session', effectiveSessionCode] })
+      // Session status arrives via SESSION_UPDATED setQueryData — do not invalidate
+      // the public join lookup here (causes thundering-herd 404/5xx flashes).
       queryClient.invalidateQueries({ queryKey: ['participant-questions', dbSessionId] })
     })
 
@@ -1011,7 +1017,10 @@ function ParticipantSessionPage({ embed = false }) {
             : old,
         )
       }
-      queryClient.invalidateQueries({ queryKey: ['participant-session', effectiveSessionCode] })
+      // Only refetch public lookup when the event has no status to apply locally.
+      if (!data?.status) {
+        queryClient.invalidateQueries({ queryKey: ['participant-session', effectiveSessionCode] })
+      }
       queryClient.invalidateQueries({ queryKey: ['participant-questions', dbSessionId] })
       if (data.status === 'completed' || data.status === 'live') {
         queryClient.invalidateQueries({ queryKey: ['participant-leaderboard', dbSessionId] })
@@ -2551,11 +2560,31 @@ function ParticipantSessionPage({ embed = false }) {
     setQuestionIndex,
   ])
 
+  const isAlreadyJoined =
+    Boolean(participantToken) &&
+    Boolean(joinedSessionCode) &&
+    Boolean(effectiveSessionCode) &&
+    joinedSessionCode === effectiveSessionCode
+
+  const lookupErrorStatus = Number(sessionQuery.error?.status) || 0
+  // Hard "Session not found" only when there is no cached session AND the API said 404
+  // (or returned empty). Transient refetch errors must not replace the live quiz UI.
   const sessionLookupFailed =
     Boolean(effectiveSessionCode) &&
+    !isAlreadyJoined &&
+    !session &&
     sessionQuery.isFetched &&
     !sessionQuery.isLoading &&
-    (!session || sessionQuery.isError)
+    (sessionQuery.isError ? lookupErrorStatus === 404 : true)
+
+  const sessionLookupTransient =
+    Boolean(effectiveSessionCode) &&
+    !isAlreadyJoined &&
+    !session &&
+    sessionQuery.isFetched &&
+    !sessionQuery.isLoading &&
+    sessionQuery.isError &&
+    lookupErrorStatus !== 404
 
   const handleJoin = async (event, options = {}) => {
     event?.preventDefault?.()
@@ -3058,6 +3087,7 @@ function ParticipantSessionPage({ embed = false }) {
         sessionCodeInput={sessionCodeInput}
         onSessionCodeChange={setSessionCodeInput}
         sessionLookupFailed={sessionLookupFailed}
+        sessionLookupTransient={sessionLookupTransient}
         effectiveSessionCode={effectiveSessionCode}
         sessionQueryLoading={sessionQuery.isLoading}
         showJoinDetails={Boolean(session)}
@@ -3108,6 +3138,21 @@ function ParticipantSessionPage({ embed = false }) {
       >
         <h1 className="text-2xl font-bold text-navy-900">Session not found</h1>
         <p className="mt-2 text-slate-600">The join link is invalid or this session was removed.</p>
+      </PageCenteredShell>
+    )
+  }
+
+  if (effectiveSessionCode && sessionLookupTransient) {
+    return (
+      <PageCenteredShell
+        compact={embedMode}
+        theme={participantTheme}
+        customTheme={participantThemeCustom}
+      >
+        <h1 className="text-2xl font-bold text-navy-900">Could not load session</h1>
+        <p className="mt-2 text-slate-600">
+          A temporary network error occurred. Retrying automatically…
+        </p>
       </PageCenteredShell>
     )
   }

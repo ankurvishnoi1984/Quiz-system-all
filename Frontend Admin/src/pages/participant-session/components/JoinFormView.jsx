@@ -8,6 +8,7 @@ export function JoinFormView({
   sessionCodeInput,
   onSessionCodeChange,
   sessionLookupFailed,
+  sessionLookupTransient = false,
   effectiveSessionCode,
   sessionQueryLoading,
   showJoinDetails,
@@ -85,6 +86,11 @@ export function JoinFormView({
             {sessionLookupFailed && effectiveSessionCode ? (
               <p className="mt-2 text-sm font-semibold text-red-700">
                 Session not found. Check the code and try again.
+              </p>
+            ) : null}
+            {sessionLookupTransient && effectiveSessionCode ? (
+              <p className="mt-2 text-sm font-semibold text-amber-700">
+                Could not reach the server. Retrying…
               </p>
             ) : null}
             {effectiveSessionCode && sessionQueryLoading ? (
