@@ -98,7 +98,7 @@ const Session = sequelize.define(
     max_participants: {
       type: DataTypes.INTEGER,
       allowNull: true,
-      defaultValue: 500
+      defaultValue: 2000
     },
     show_results_to_participants: {
       type: DataTypes.BOOLEAN,

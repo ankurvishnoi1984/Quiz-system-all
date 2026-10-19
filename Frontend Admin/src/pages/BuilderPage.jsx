@@ -1397,7 +1397,7 @@ function BuilderPage() {
   const [settings, setSettings] = useState({
     anonymous: false,
     leaderboard: false,
-    maxParticipants: 300,
+    maxParticipants: 2000,
     password: '',
     participantTheme: DEFAULT_PARTICIPANT_THEME,
     participantThemeCustom: { ...DEFAULT_CUSTOM_THEME_COLORS },
@@ -1650,7 +1650,7 @@ function BuilderPage() {
     setSettings({
       anonymous: Boolean(sessionQuery.data.is_anonymous_default),
       leaderboard: Boolean(sessionQuery.data.leaderboard_enabled),
-      maxParticipants: Number(sessionQuery.data.max_participants || 300),
+      maxParticipants: Number(sessionQuery.data.max_participants || 2000),
       password: '',
       participantTheme: normalizeParticipantTheme(sessionQuery.data.participant_theme),
       participantThemeCustom: normalizeCustomThemeColors(

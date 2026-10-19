@@ -218,7 +218,7 @@ async function createSession({ deptId, input, user }) {
        joinType: input.join_type ?? "name"
      }),
      ...resolveCustomerMatchFields(input),
-     max_participants: input.max_participants || 500,
+     max_participants: input.max_participants || 2000,
      show_results_to_participants: input.show_results_to_participants ?? true,
      allow_late_join: false,
      join_locked: false,
@@ -382,7 +382,7 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
           customer_match_wc_code: source.customer_match_wc_code,
           customer_match_zones: source.customer_match_zones
         }),
-        max_participants: source.max_participants ?? 500,
+        max_participants: source.max_participants ?? 2000,
         show_results_to_participants: source.show_results_to_participants ?? true,
         allow_late_join: source.allow_late_join ?? false,
         join_locked: false,
