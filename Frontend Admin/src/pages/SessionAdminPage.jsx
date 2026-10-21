@@ -1,8 +1,10 @@
 import {
   Activity,
   BarChart3,
+  Download,
   FileBarChart2,
   LayoutDashboard,
+  Loader2,
   LoaderCircle,
   Radio,
   Users,
@@ -21,9 +23,16 @@ import {
 import { SessionSummaryReportCard } from '../components/analytics/SessionSummaryReportCard'
 import { QuestionBreakdownTables } from '../components/analytics/QuestionBreakdownTables'
 import { SESSION_REPORT_VIEWS } from '../constants/sessionReportTypes'
-import { getSessionSummaryReportApi } from '../services/analyticsApi'
+import {
+  getSessionParticipantsReportApi,
+  getSessionSummaryReportApi,
+} from '../services/analyticsApi'
+import { listSessionQuestionsApi, getSessionResponsesApi } from '../services/liveApi'
 import { getSessionAdminDashboardApi } from '../services/sessionAdminApi'
 import { useAuthStore } from '../store/authStore'
+import { buildAnalyticsCsvRows, apiQuestionTypeToUi } from '../utils/analyticsQuestions'
+import { buildEmojiBarData } from '../utils/emojiReaction'
+import { exportCombinedSessionReportExcel } from '../utils/combinedSessionReportExcelExport'
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -70,6 +79,7 @@ function SessionAdminPage() {
   const accessToken = useAuthStore((s) => s.accessToken)
   const [nav, setNav] = useState('dashboard')
   const [reportView, setReportView] = useState('summary')
+  const [exportingReport, setExportingReport] = useState(false)
 
   const dashboardQuery = useQuery({
     queryKey: ['session-admin-dashboard'],
@@ -83,12 +93,59 @@ function SessionAdminPage() {
   const questions = dashboardQuery.data?.questions || []
   const live = dashboardQuery.data?.live || { connected_now: 0, total_joined: 0 }
   const timeline = dashboardQuery.data?.join_timeline || []
+  const reportsEnabled = Boolean(accessToken && sessionId && nav === 'reports')
 
   const summaryQuery = useQuery({
     queryKey: ['session-admin-summary', sessionId],
     queryFn: () => getSessionSummaryReportApi(accessToken, sessionId),
-    enabled: Boolean(accessToken && sessionId && nav === 'reports'),
+    enabled: reportsEnabled,
   })
+
+  const participantsQuery = useQuery({
+    queryKey: ['session-admin-participants-report', sessionId],
+    queryFn: () => getSessionParticipantsReportApi(accessToken, sessionId),
+    enabled: reportsEnabled,
+  })
+
+  const questionsQuery = useQuery({
+    queryKey: ['session-admin-export-questions', sessionId],
+    queryFn: () => listSessionQuestionsApi(accessToken, sessionId),
+    enabled: reportsEnabled,
+  })
+
+  const responsesQuery = useQuery({
+    queryKey: ['session-admin-export-responses', sessionId],
+    queryFn: () => getSessionResponsesApi(accessToken, sessionId),
+    enabled: reportsEnabled,
+  })
+
+  const sortedQuestions = useMemo(
+    () =>
+      [...(questionsQuery.data || [])].sort(
+        (a, b) => (Number(a.display_order) || 0) - (Number(b.display_order) || 0),
+      ),
+    [questionsQuery.data],
+  )
+
+  const allResponses = responsesQuery.data || []
+
+  const sessionMeta = useMemo(() => {
+    if (!sessionId) return null
+    return {
+      id: String(sessionId),
+      title: session?.title || 'Session',
+      status: formatStatus(session?.status),
+      startedAt: session?.started_at ?? null,
+      endedAt: session?.ended_at ?? null,
+    }
+  }, [sessionId, session?.title, session?.status, session?.started_at, session?.ended_at])
+
+  const isPollOrSurveySession = useMemo(() => {
+    if (!sortedQuestions.length) return false
+    return sortedQuestions.every(
+      (q) => q.question_type === 'poll' || q.question_type === 'survey',
+    )
+  }, [sortedQuestions])
 
   const chartData = useMemo(
     () =>
@@ -99,6 +156,78 @@ function SessionAdminPage() {
       })),
     [timeline],
   )
+
+  const buildRawResponseExportRows = () => {
+    if (!sessionMeta) {
+      return { rawResponseRows: [], emojiSummaryRows: [] }
+    }
+
+    let rawResponseRows = buildAnalyticsCsvRows({
+      sessionMeta,
+      sortedQuestions,
+      allResponses,
+    })
+
+    if (!rawResponseRows.length) {
+      rawResponseRows = sortedQuestions.map((q, index) => [
+        sessionMeta.id,
+        sessionMeta.title,
+        String(q.display_order ?? index + 1),
+        apiQuestionTypeToUi(q.question_type),
+        q.question_type === 'survey' ? q.survey_subtype || '' : '',
+        (q.question_text || '').replaceAll('"', '""'),
+        '',
+        '',
+        '',
+        '',
+      ])
+    }
+
+    const emojiSummaryRows = []
+    const emojiQuestions = sortedQuestions.filter((q) => q.question_type === 'emoji_reaction')
+    for (const question of emojiQuestions) {
+      const questionResponses = allResponses.filter(
+        (row) => Number(row.question_id) === Number(question.question_id),
+      )
+      const { rows: emojiRows } = buildEmojiBarData(question, null, questionResponses)
+      const emojiCols = Array.from({ length: 5 }, (_, index) => emojiRows[index]?.emoji ?? '')
+      const countCols = Array.from({ length: 5 }, (_, index) => String(emojiRows[index]?.count ?? 0))
+      emojiSummaryRows.push([
+        sessionMeta.id,
+        sessionMeta.title,
+        String(question.display_order ?? ''),
+        (question.question_text || '').replaceAll('"', '""'),
+        ...emojiCols,
+        ...countCols,
+      ])
+    }
+
+    return { rawResponseRows, emojiSummaryRows }
+  }
+
+  const handleDownloadReport = async () => {
+    if (!sessionId) return
+    try {
+      setExportingReport(true)
+      const [summaryReport, participantsReport] = await Promise.all([
+        summaryQuery.data || getSessionSummaryReportApi(accessToken, sessionId),
+        participantsQuery.data || getSessionParticipantsReportApi(accessToken, sessionId),
+      ])
+      const { rawResponseRows, emojiSummaryRows } = buildRawResponseExportRows()
+      await exportCombinedSessionReportExcel({
+        summaryReport,
+        participantsReport,
+        showScore: !isPollOrSurveySession,
+        rawResponseRows,
+        emojiSummaryRows,
+      })
+    } catch (error) {
+      console.error(error)
+      window.alert(error?.message || 'Export failed')
+    } finally {
+      setExportingReport(false)
+    }
+  }
 
   if (dashboardQuery.isLoading) {
     return (
@@ -278,24 +407,39 @@ function SessionAdminPage() {
         </div>
       ) : (
         <div className="space-y-5">
-          <div className="flex flex-wrap gap-2">
-            {SESSION_REPORT_VIEWS.map((view) => {
-              const active = reportView === view.id
-              return (
-                <button
-                  key={view.id}
-                  type="button"
-                  onClick={() => setReportView(view.id)}
-                  className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
-                    active
-                      ? 'bg-cyan-700 text-white shadow-sm'
-                      : 'border border-teal-200 bg-white text-teal-900 hover:bg-teal-50'
-                  }`}
-                >
-                  {view.label}
-                </button>
-              )
-            })}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-2">
+              {SESSION_REPORT_VIEWS.map((view) => {
+                const active = reportView === view.id
+                return (
+                  <button
+                    key={view.id}
+                    type="button"
+                    onClick={() => setReportView(view.id)}
+                    className={`rounded-xl px-4 py-2 text-sm font-bold transition ${
+                      active
+                        ? 'bg-cyan-700 text-white shadow-sm'
+                        : 'border border-teal-200 bg-white text-teal-900 hover:bg-teal-50'
+                    }`}
+                  >
+                    {view.label}
+                  </button>
+                )
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleDownloadReport()}
+              disabled={summaryQuery.isLoading || exportingReport || !sessionId}
+              className="inline-flex h-11 items-center gap-2 rounded-xl border border-teal-200/80 bg-white px-4 text-sm font-bold text-teal-900 shadow-sm transition hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {exportingReport ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Download className="size-4" />
+              )}
+              Download Report
+            </button>
           </div>
 
           {summaryQuery.isLoading ? (
