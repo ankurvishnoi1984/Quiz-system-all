@@ -1124,7 +1124,10 @@ async function getSessionResponses({ sessionId, user }) {
   return Response.findAll({
     where: { session_id: sessionId },
     include: [
-      { model: Participant, attributes: ["participant_id", "nickname"] },
+      {
+        model: Participant,
+        attributes: ["participant_id", "nickname", "email", "mobile"]
+      },
       { model: Question, attributes: ["question_id", "question_text", "question_type"] },
       { model: QuestionOption, attributes: ["option_id", "option_text"] }
     ],

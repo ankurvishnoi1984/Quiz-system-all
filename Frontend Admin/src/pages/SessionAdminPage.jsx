@@ -30,7 +30,11 @@ import {
 import { listSessionQuestionsApi, getSessionResponsesApi } from '../services/liveApi'
 import { getSessionAdminDashboardApi } from '../services/sessionAdminApi'
 import { useAuthStore } from '../store/authStore'
-import { buildAnalyticsCsvRows, apiQuestionTypeToUi } from '../utils/analyticsQuestions'
+import {
+  apiQuestionTypeToUi,
+  buildAnalyticsCsvRows,
+  joinTypeContactFields,
+} from '../utils/analyticsQuestions'
 import { buildEmojiBarData } from '../utils/emojiReaction'
 import { exportCombinedSessionReportExcel } from '../utils/combinedSessionReportExcelExport'
 
@@ -157,7 +161,7 @@ function SessionAdminPage() {
     [timeline],
   )
 
-  const buildRawResponseExportRows = () => {
+  const buildRawResponseExportRows = ({ includeEmail = false, includeMobile = false } = {}) => {
     if (!sessionMeta) {
       return { rawResponseRows: [], emojiSummaryRows: [] }
     }
@@ -166,21 +170,26 @@ function SessionAdminPage() {
       sessionMeta,
       sortedQuestions,
       allResponses,
+      includeEmail,
+      includeMobile,
     })
 
     if (!rawResponseRows.length) {
-      rawResponseRows = sortedQuestions.map((q, index) => [
-        sessionMeta.id,
-        sessionMeta.title,
-        String(q.display_order ?? index + 1),
-        apiQuestionTypeToUi(q.question_type),
-        q.question_type === 'survey' ? q.survey_subtype || '' : '',
-        (q.question_text || '').replaceAll('"', '""'),
-        '',
-        '',
-        '',
-        '',
-      ])
+      rawResponseRows = sortedQuestions.map((q, index) => {
+        const row = [
+          sessionMeta.id,
+          sessionMeta.title,
+          String(q.display_order ?? index + 1),
+          apiQuestionTypeToUi(q.question_type),
+          q.question_type === 'survey' ? q.survey_subtype || '' : '',
+          (q.question_text || '').replaceAll('"', '""'),
+          '',
+        ]
+        if (includeEmail) row.push('')
+        if (includeMobile) row.push('')
+        row.push('', '', '')
+        return row
+      })
     }
 
     const emojiSummaryRows = []
@@ -213,7 +222,13 @@ function SessionAdminPage() {
         summaryQuery.data || getSessionSummaryReportApi(accessToken, sessionId),
         participantsQuery.data || getSessionParticipantsReportApi(accessToken, sessionId),
       ])
-      const { rawResponseRows, emojiSummaryRows } = buildRawResponseExportRows()
+      const joinType =
+        summaryReport?.session?.join_type || participantsReport?.session?.join_type || null
+      const { includeEmail, includeMobile } = joinTypeContactFields(joinType)
+      const { rawResponseRows, emojiSummaryRows } = buildRawResponseExportRows({
+        includeEmail,
+        includeMobile,
+      })
       await exportCombinedSessionReportExcel({
         summaryReport,
         participantsReport,

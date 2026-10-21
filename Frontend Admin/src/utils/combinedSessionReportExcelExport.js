@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs'
+import { joinTypeContactFields } from './analyticsQuestions'
 import { formatQuizSubmitTimeParticipant } from './quizResponseTime'
 
 function formatDateTime(value) {
@@ -63,7 +64,7 @@ function addBreakdownSection(sheet, title, questions, startRow) {
   return row + 1
 }
 
-const RAW_RESPONSE_COLUMNS = [
+const RAW_RESPONSE_BASE_BEFORE_CONTACT = [
   'sessionId',
   'sessionTitle',
   'questionIndex',
@@ -71,10 +72,17 @@ const RAW_RESPONSE_COLUMNS = [
   'survey_sub_type',
   'questionText',
   'participant',
-  'response',
-  'points',
-  'Correct',
 ]
+
+const RAW_RESPONSE_BASE_AFTER_CONTACT = ['response', 'points', 'Correct']
+
+function buildRawResponseColumns({ includeEmail = false, includeMobile = false } = {}) {
+  const columns = [...RAW_RESPONSE_BASE_BEFORE_CONTACT]
+  if (includeEmail) columns.push('Participant_email')
+  if (includeMobile) columns.push('Participant_mobile')
+  columns.push(...RAW_RESPONSE_BASE_AFTER_CONTACT)
+  return columns
+}
 
 const EMOJI_SUMMARY_COLUMNS = [
   'sessionId',
@@ -142,6 +150,10 @@ export async function exportCombinedSessionReportExcel({
     throw new Error('Report data is missing')
   }
 
+  const joinType =
+    summaryReport.session.join_type || participantsReport?.session?.join_type || null
+  const { includeEmail, includeMobile } = joinTypeContactFields(joinType)
+
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'Quiz System'
   workbook.created = new Date()
@@ -150,6 +162,8 @@ export async function exportCombinedSessionReportExcel({
   summarySheet.columns = [
     { width: 28 },
     { width: 24 },
+    { width: 28 },
+    { width: 18 },
     { width: 18 },
     { width: 14 },
     { width: 12 },
@@ -189,21 +203,19 @@ export async function exportCombinedSessionReportExcel({
   summarySheet.getRow(nextRow).getCell(1).font = { bold: true, size: 12 }
   nextRow += 1
 
-  const participantColumns = showScore
-    ? [
-        'Rank',
-        'Nickname',
-        'Questions answered',
-        'Correct count',
-        'Total score',
-        'Avg response time',
-      ]
-    : [
-        'Rank',
-        'Nickname',
-        'Questions answered',
-        'Avg response time',
-      ]
+  const participantColumns = ['Rank', 'Nickname']
+  if (includeEmail) participantColumns.push('Email')
+  if (includeMobile) participantColumns.push('Mobile')
+  if (showScore) {
+    participantColumns.push(
+      'Questions answered',
+      'Correct count',
+      'Total score',
+      'Avg response time',
+    )
+  } else {
+    participantColumns.push('Questions answered', 'Avg response time')
+  }
   const participantHeader = summarySheet.getRow(nextRow)
   participantColumns.forEach((label, index) => {
     participantHeader.getCell(index + 1).value = label
@@ -215,6 +227,8 @@ export async function exportCombinedSessionReportExcel({
     participantsReport?.summary_rows ||
       (summaryReport.participant_summaries || []).map((row) => ({
         nickname: row.nickname,
+        email: row.email || '',
+        mobile: row.mobile || '',
         questions_answered: row.responses_submitted,
         correct_count: null,
         total_score: row.score,
@@ -226,21 +240,19 @@ export async function exportCombinedSessionReportExcel({
   participantRows.forEach((row, index) => {
     const avgTimeLabel = formatQuizSubmitTimeParticipant(row.avg_response_time_ms)
     const dataRow = summarySheet.getRow(nextRow)
-    const values = showScore
-      ? [
-          index + 1,
-          row.nickname,
-          row.questions_answered,
-          row.correct_count ?? '—',
-          row.total_score ?? '—',
-          avgTimeLabel,
-        ]
-      : [
-          index + 1,
-          row.nickname,
-          row.questions_answered,
-          avgTimeLabel,
-        ]
+    const values = [index + 1, row.nickname]
+    if (includeEmail) values.push(row.email || '')
+    if (includeMobile) values.push(row.mobile || '')
+    if (showScore) {
+      values.push(
+        row.questions_answered,
+        row.correct_count ?? '—',
+        row.total_score ?? '—',
+        avgTimeLabel,
+      )
+    } else {
+      values.push(row.questions_answered, avgTimeLabel)
+    }
     values.forEach((value, colIndex) => {
       dataRow.getCell(colIndex + 1).value = value
     })
@@ -281,12 +293,18 @@ export async function exportCombinedSessionReportExcel({
   ]
   addBreakdownSection(questionSheet, 'Question Summary', questionBreakdowns, 1)
 
+  const rawResponseColumns = buildRawResponseColumns({ includeEmail, includeMobile })
   const rawSheet = workbook.addWorksheet('Responses')
-  rawSheet.columns = RAW_RESPONSE_COLUMNS.map((header) => ({
-    width: header === 'questionText' || header === 'response' ? 42 : header === 'sessionTitle' ? 28 : 16,
+  rawSheet.columns = rawResponseColumns.map((header) => ({
+    width:
+      header === 'questionText' || header === 'response'
+        ? 42
+        : header === 'sessionTitle' || header === 'Participant_email'
+          ? 28
+          : 16,
   }))
-  const rawHeader = rawSheet.addRow(RAW_RESPONSE_COLUMNS)
-  styleHeaderRow(rawSheet, rawHeader.number, RAW_RESPONSE_COLUMNS.length)
+  const rawHeader = rawSheet.addRow(rawResponseColumns)
+  styleHeaderRow(rawSheet, rawHeader.number, rawResponseColumns.length)
 
   for (const row of rawResponseRows) {
     rawSheet.addRow(row)
