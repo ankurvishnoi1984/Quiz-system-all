@@ -3226,7 +3226,7 @@ function ParticipantSessionPage({ embed = false }) {
           <SessionHeader
             session={session}
             joinedUser={joinedUser}
-            hasQuizCountdown={hasQuizCountdown && step === 'active'}
+            hasQuizCountdown={hasQuizCountdown && step === 'active' && !isSessionEnded}
             quizTimer={quizTimer}
             quizTimeLimit={sessionQuizTotalTimeSeconds}
           />
