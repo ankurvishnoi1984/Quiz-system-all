@@ -63,6 +63,14 @@ const ALLOWLIST_FILE_ACCEPT =
   '.xlsx,.csv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain'
 
 const CONTACT_JOIN_TYPES = new Set(['name_email', 'name_mobile', 'name_email_mobile'])
+const EMAIL_JOIN_TYPES = new Set(['name_email', 'name_email_mobile'])
+
+const SESSION_FORM_TABS = [
+  { id: 'basics', label: 'Basics' },
+  { id: 'join', label: 'Join' },
+  { id: 'quiz', label: 'Quiz' },
+  { id: 'look', label: 'Look' },
+]
 
 const DEFAULT_SCORE_BANDS = buildScoreBandsForTimer(30, 6)
 
@@ -235,6 +243,12 @@ function SessionFormModal({
     customInstructions: [],
   }))
   const [presentSettingsOpen, setPresentSettingsOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState('basics')
+
+  const visibleTabs = liveSettingsOnly
+    ? SESSION_FORM_TABS.filter((tab) => tab.id === 'basics' || tab.id === 'look')
+    : SESSION_FORM_TABS
+  const effectiveTab = visibleTabs.some((tab) => tab.id === activeTab) ? activeTab : 'basics'
 
   const uploadDeptId = useWorkspaceDepartment
     ? String(defaultDepartmentId || '')
@@ -242,6 +256,7 @@ function SessionFormModal({
 
   useEffect(() => {
     if (!open) return
+    setActiveTab('basics')
     setJoinRequirement(initialValues.joinRequirement ?? defaultInitial.joinRequirement)
     setJoinOtpRequired(
       CONTACT_JOIN_TYPES.has(initialValues.joinRequirement ?? defaultInitial.joinRequirement)
@@ -500,6 +515,12 @@ function SessionFormModal({
       setJoinAllowlistEnabled(false)
       clearJoinAllowlist()
     }
+    if (!EMAIL_JOIN_TYPES.has(next)) {
+      setCustomerMatchEnabled(false)
+      setCustomerMatchWcCode('')
+      setCustomerMatchZones([])
+      setCustomerMatchConfigError('')
+    }
   }
 
   const handleSubmit = (event) => {
@@ -512,22 +533,26 @@ function SessionFormModal({
 
     if (!liveSettingsOnly && autoEndEnabled) {
       if (!autoEndDate || !autoEndTime) {
+        setActiveTab('basics')
         window.alert('Please enter both an end date and end time for automatic session end.')
         return
       }
 
       const endAt = new Date(`${autoEndDate}T${autoEndTime}`)
       if (Number.isNaN(endAt.getTime())) {
+        setActiveTab('basics')
         window.alert('Automatic end date and time are not valid.')
         return
       }
       if (endAt.getTime() <= Date.now()) {
+        setActiveTab('basics')
         window.alert('Automatic end must be scheduled in the future.')
         return
       }
       if (scheduledDate && scheduledTime) {
         const startAt = new Date(`${scheduledDate}T${scheduledTime}`)
         if (!Number.isNaN(startAt.getTime()) && endAt.getTime() <= startAt.getTime()) {
+          setActiveTab('basics')
           window.alert('Automatic end must be after the planned session start.')
           return
         }
@@ -535,6 +560,7 @@ function SessionFormModal({
     }
 
     if (logoUploading) {
+      setActiveTab('look')
       window.alert('Please wait for the logo upload to finish.')
       return
     }
@@ -542,6 +568,7 @@ function SessionFormModal({
     if (!liveSettingsOnly && builderMode === 'advanced') {
       const k = Number(questionsPerParticipant)
       if (!Number.isInteger(k) || k < 1) {
+        setActiveTab('basics')
         window.alert('Questions per participant must be a positive whole number.')
         return
       }
@@ -550,14 +577,18 @@ function SessionFormModal({
     const contactJoin = CONTACT_JOIN_TYPES.has(joinRequirement)
     const allowlistOn = contactJoin && joinAllowlistEnabled
     if (allowlistOn && allowlistEntryCount(joinAllowlist) === 0) {
+      setActiveTab('join')
       window.alert('Upload a participant list with at least one email or mobile number, or turn off restrict join.')
       return
     }
 
-    if (customerMatchEnabled) {
+    const emailJoin = EMAIL_JOIN_TYPES.has(joinRequirement)
+    const customerMatchOn = emailJoin && customerMatchEnabled
+    if (customerMatchOn) {
       const wc = String(customerMatchWcCode ?? '').trim()
       const zones = normalizeCustomerMatchZonesSelection(customerMatchZones)
       if (!/^\d+$/.test(wc) || zones.length < 1) {
+        setActiveTab('join')
         setCustomerMatchConfigError(
           'Enter a numeric WC code and select at least one zone when customer match is enabled.',
         )
@@ -580,9 +611,9 @@ function SessionFormModal({
       joinOtpRequired: contactJoin ? Boolean(joinOtpRequired) : false,
       joinAllowlistEnabled: allowlistOn,
       joinAllowlist: allowlistOn ? joinAllowlist : null,
-      customerMatchEnabled: Boolean(customerMatchEnabled),
-      customerMatchWcCode: customerMatchEnabled ? String(customerMatchWcCode ?? '').trim() : '',
-      customerMatchZones: customerMatchEnabled
+      customerMatchEnabled: Boolean(customerMatchOn),
+      customerMatchWcCode: customerMatchOn ? String(customerMatchWcCode ?? '').trim() : '',
+      customerMatchZones: customerMatchOn
         ? normalizeCustomerMatchZonesSelection(customerMatchZones)
         : [],
       enableNavigation: builderMode === 'advanced' ? true : enableNavigation,
@@ -635,9 +666,36 @@ function SessionFormModal({
   const thanksImagePreviewSrc = resolveQuestionMediaUrl(thanksScreenImageUrl)
 
   return (
-    <Modal open={open} title={modalTitle} onClose={onClose}>
+    <Modal open={open} title={modalTitle} onClose={onClose} size="lg">
       <form data-tour={mode === 'create' ? 'session-form' : undefined} onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-        <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto overscroll-contain pr-1 md:grid-cols-2">
+        <div className="mb-3 flex shrink-0 flex-wrap gap-2" role="tablist" aria-label="Session settings">
+          {visibleTabs.map((tab) => {
+            const active = effectiveTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setActiveTab(tab.id)}
+                className={`rounded-xl px-3.5 py-2 text-sm font-bold transition ${
+                  active
+                    ? 'bg-navy-900 text-white shadow-sm'
+                    : 'border border-blue-200/70 bg-white text-slate-700 hover:bg-blue-50'
+                }`}
+              >
+                {tab.label}
+              </button>
+            )
+          })}
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+          <div className="grid gap-4 md:grid-cols-2">
+          <div
+            className="col-span-full grid gap-4 md:grid-cols-2"
+            role="tabpanel"
+            hidden={effectiveTab !== 'basics'}
+          >
           <div className="md:col-span-2">
             <label className="text-sm font-semibold text-slate-700">Title</label>
             <input
@@ -844,8 +902,17 @@ function SessionFormModal({
               </p>
             </div>
           ) : null}
-          {!liveSettingsOnly ? (
-            <>
+          {liveSettingsOnly ? (
+            <p className="md:col-span-2 rounded-xl border border-amber-200/80 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              This session is live or completed. You can still update the title and session logo.
+            </p>
+          ) : null}
+          </div>
+          <div
+            className="col-span-full grid gap-4 md:grid-cols-2"
+            role="tabpanel"
+            hidden={effectiveTab !== 'join'}
+          >
               <div className="md:col-span-2">
                 <label className="text-sm font-semibold text-slate-700">Join requirements</label>
                 <select
@@ -878,79 +945,81 @@ function SessionFormModal({
                   </label>
                 </div>
               ) : null}
-              <div className="md:col-span-2">
-                <label className="flex items-center justify-between gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-700">
-                      Require customer match verification
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      Participants must provide an email (in the join link or form). WC code and
-                      zones are set here and checked against the customer match API before join.
-                      Participants may join if they match the WC code in any selected zone.
-                    </p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={customerMatchEnabled}
-                    onChange={(event) => {
-                      setCustomerMatchEnabled(event.target.checked)
-                      setCustomerMatchConfigError('')
-                    }}
-                    className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
-                  />
-                </label>
-                {customerMatchEnabled ? (
-                  <div className="mt-3 space-y-3">
+              {EMAIL_JOIN_TYPES.has(joinRequirement) ? (
+                <div className="md:col-span-2">
+                  <label className="flex items-center justify-between gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
                     <div>
-                      <p className="text-xs font-semibold text-slate-600">
-                        Zone (select one or more)
+                      <p className="text-sm font-semibold text-slate-700">
+                        Require customer match verification
                       </p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {CUSTOMER_MATCH_ZONE_OPTIONS.map((z) => {
-                          const checked = customerMatchZones.includes(z)
-                          return (
-                            <label
-                              key={z}
-                              className={`inline-flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
-                                checked
-                                  ? 'border-navy-600 bg-navy-50 text-navy-900'
-                                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => toggleCustomerMatchZone(z)}
-                                className="h-4 w-4 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
-                              />
-                              {z}
-                            </label>
-                          )
-                        })}
-                      </div>
+                      <p className="text-xs text-slate-500">
+                        Participants must provide an email (in the join link or form). WC code and
+                        zones are set here and checked against the customer match API before join.
+                        Participants may join if they match the WC code in any selected zone.
+                      </p>
                     </div>
-                    <label className="block max-w-sm">
-                      <span className="text-xs font-semibold text-slate-600">WC code</span>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={1}
-                        value={customerMatchWcCode}
-                        onChange={(event) => {
-                          setCustomerMatchWcCode(event.target.value)
-                          setCustomerMatchConfigError('')
-                        }}
-                        className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                        placeholder="e.g. 10020301"
-                      />
-                    </label>
-                    {customerMatchConfigError ? (
-                      <p className="text-xs text-red-600">{customerMatchConfigError}</p>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
+                    <input
+                      type="checkbox"
+                      checked={customerMatchEnabled}
+                      onChange={(event) => {
+                        setCustomerMatchEnabled(event.target.checked)
+                        setCustomerMatchConfigError('')
+                      }}
+                      className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
+                    />
+                  </label>
+                  {customerMatchEnabled ? (
+                    <div className="mt-3 space-y-3">
+                      <div>
+                        <p className="text-xs font-semibold text-slate-600">
+                          Zone (select one or more)
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {CUSTOMER_MATCH_ZONE_OPTIONS.map((z) => {
+                            const checked = customerMatchZones.includes(z)
+                            return (
+                              <label
+                                key={z}
+                                className={`inline-flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                                  checked
+                                    ? 'border-navy-600 bg-navy-50 text-navy-900'
+                                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleCustomerMatchZone(z)}
+                                  className="h-4 w-4 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
+                                />
+                                {z}
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </div>
+                      <label className="block max-w-sm">
+                        <span className="text-xs font-semibold text-slate-600">WC code</span>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          value={customerMatchWcCode}
+                          onChange={(event) => {
+                            setCustomerMatchWcCode(event.target.value)
+                            setCustomerMatchConfigError('')
+                          }}
+                          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                          placeholder="e.g. 10020301"
+                        />
+                      </label>
+                      {customerMatchConfigError ? (
+                        <p className="text-xs text-red-600">{customerMatchConfigError}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               {CONTACT_JOIN_TYPES.has(joinRequirement) ? (
                 <div className="md:col-span-2 space-y-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
                   <label className="flex items-center justify-between gap-3">
@@ -1100,6 +1169,12 @@ function SessionFormModal({
                   />
                 </label>
               </div>
+          </div>
+          <div
+            className="col-span-full grid gap-4 md:grid-cols-2"
+            role="tabpanel"
+            hidden={effectiveTab !== 'quiz'}
+          >
               <div className="md:col-span-2">
                 <label className="text-sm font-semibold text-slate-700" htmlFor="question-availability">
                   Question availability
@@ -1444,13 +1519,12 @@ function SessionFormModal({
                   </div>
                 </>
               ) : null}
-            </>
-          ) : (
-            <p className="md:col-span-2 rounded-xl border border-amber-200/80 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-              This session is live or completed. You can still update the title and session logo.
-            </p>
-          )}
-
+          </div>
+          <div
+            className="col-span-full grid gap-4 md:grid-cols-2"
+            role="tabpanel"
+            hidden={effectiveTab !== 'look'}
+          >
           <div className="md:col-span-2">
             <label className="text-sm font-semibold text-slate-700">Session logo</label>
             <p className="mt-1 text-xs text-slate-500">
@@ -1684,6 +1758,8 @@ function SessionFormModal({
                 ))}
               </div>
             ) : null}
+          </div>
+          </div>
           </div>
         </div>
         <div className="mt-4 flex shrink-0 items-end gap-2 border-t border-blue-100/80 pt-4 md:justify-end">
