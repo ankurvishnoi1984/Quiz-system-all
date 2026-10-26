@@ -21,11 +21,15 @@ function getPersistStorage() {
   return localStorage.getItem(REMEMBER_ME_KEY) === 'true' ? localStorage : sessionStorage
 }
 
-/** New-tab handoff: Present uses ?present=1, Preview uses ?preview=1. */
+/** New-tab handoff: Present ?present=1, Preview ?preview=1, Quick View ?quickview=1. */
 function isNewTabAuthHandoff() {
   if (typeof window === 'undefined') return false
   const params = new URLSearchParams(window.location.search)
-  return params.get('present') === '1' || params.get('preview') === '1'
+  return (
+    params.get('present') === '1' ||
+    params.get('preview') === '1' ||
+    params.get('quickview') === '1'
+  )
 }
 
 /**

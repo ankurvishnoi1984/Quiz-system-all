@@ -80,6 +80,139 @@ export function PresentMatchKey({ question }) {
   )
 }
 
+function buildPresentOptionRows(question, chartData = []) {
+  const correctIds = new Set((question?.correctOptionIds || []).map(Number))
+  const options =
+    question?.options?.length > 0
+      ? question.options
+      : chartData.map((row, idx) => ({
+          option_id: row.optionId ?? idx,
+          option_text: row.name,
+        }))
+
+  return options.map((opt, idx) => {
+    const chartRow =
+      chartData.find(
+        (d) =>
+          (opt.option_id != null && Number(d.optionId) === Number(opt.option_id)) ||
+          String(d.name).trim() === String(opt.option_text).trim(),
+      ) || chartData[idx]
+    const isCorrect =
+      correctIds.size > 0
+        ? correctIds.has(Number(opt.option_id))
+        : Boolean(opt.is_correct) || Boolean(chartRow?.isCorrect)
+    return {
+      key: opt.option_id ?? idx,
+      letter: chartRow?.letter || String.fromCharCode(65 + idx),
+      text: opt.option_text,
+      count: chartRow?.value ?? 0,
+      isCorrect,
+      color:
+        chartRow?.color ?? getPresentOptionColor(opt.option_text, idx, question?.rawType),
+    }
+  })
+}
+
+function PresentOptionRows({
+  question,
+  chartData = [],
+  answerRevealed = false,
+  stacked = false,
+  showResponseCounts = true,
+}) {
+  const rows = buildPresentOptionRows(question, chartData)
+  if (!rows.length) return null
+
+  return (
+    <div className={stacked ? 'space-y-2' : 'grid gap-2 sm:grid-cols-2'}>
+      {rows.map((row, idx) => {
+        const highlight = answerRevealed && row.isCorrect
+        return (
+          <div
+            key={row.key}
+            className={`quiz-row-in flex items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
+              highlight
+                ? 'border-emerald-400/90 bg-emerald-50/90'
+                : 'border-slate-200/90 bg-white/80'
+            }`}
+            style={{ animationDelay: `${idx * 50}ms` }}
+          >
+            <span
+              className="grid size-9 shrink-0 place-items-center rounded-lg text-sm font-bold text-white shadow-sm"
+              style={{ backgroundColor: highlight ? '#059669' : row.color }}
+              aria-hidden
+            >
+              {highlight ? <Check className="size-5" strokeWidth={3} /> : row.letter}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p
+                className={`break-words text-[clamp(0.95rem,1.6vw,1.15rem)] font-semibold leading-snug ${
+                  highlight ? 'text-emerald-900' : 'text-slate-700'
+                }`}
+              >
+                {row.text}
+              </p>
+              {showResponseCounts && row.count > 0 ? (
+                <p className="mt-0.5 text-[clamp(0.75rem,1.2vw,0.85rem)] text-slate-500">
+                  {row.count} response{row.count === 1 ? '' : 's'}
+                </p>
+              ) : null}
+            </div>
+            {highlight ? (
+              <span className="shrink-0 pt-1 text-[clamp(0.65rem,1vw,0.75rem)] font-bold uppercase tracking-wide text-emerald-600">
+                Correct
+              </span>
+            ) : null}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
+ * Side panel: full option list beside Results when responses are hidden.
+ */
+export function PresentOptionsPanel({
+  question,
+  chartData = [],
+  answerRevealed = false,
+  showResponseCounts = true,
+}) {
+  if (
+    question?.rawType === 'match' ||
+    question?.type === 'Match' ||
+    question?.chartRawType === 'match'
+  ) {
+    return null
+  }
+
+  const rows = buildPresentOptionRows(question, chartData)
+  if (!rows.length) return null
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-blue-200/70 bg-white/90 shadow-xl shadow-navy-900/10">
+      <div className="shrink-0 border-b border-blue-100/80 px-[clamp(0.85rem,2vw,1.25rem)] py-[clamp(0.65rem,1.5vh,0.85rem)]">
+        <p className="text-[clamp(0.65rem,1.2vw,0.75rem)] font-semibold uppercase tracking-wider text-slate-500">
+          Options
+        </p>
+        <p className="text-[clamp(0.9rem,1.6vw,1rem)] font-semibold text-navy-800">
+          {rows.length} choice{rows.length === 1 ? '' : 's'}
+        </p>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-[clamp(0.65rem,1.5vw,1rem)]">
+        <PresentOptionRows
+          question={question}
+          chartData={chartData}
+          answerRevealed={answerRevealed}
+          showResponseCounts={showResponseCounts}
+          stacked
+        />
+      </div>
+    </div>
+  )
+}
+
 /** All options in a scannable list — correct ones get a green tick badge. */
 export function PresentOptionsKey({ question, chartData = [] }) {
   if (!question?.answerRevealed) return null
@@ -88,72 +221,15 @@ export function PresentOptionsKey({ question, chartData = [] }) {
     return <PresentMatchKey question={question} />
   }
 
-  const correctIds = new Set((question.correctOptionIds || []).map(Number))
-  const options =
-    question.options?.length > 0
-      ? question.options
-      : chartData.map((row, idx) => ({ option_id: idx, option_text: row.name }))
-  if (!options.length) return null
+  const rows = buildPresentOptionRows(question, chartData)
+  if (!rows.length) return null
 
   return (
     <div className="quiz-banner-in mt-4 border-t border-slate-200/80 pt-4">
       <p className="mb-3 text-center text-[clamp(0.7rem,1.2vw,0.8rem)] font-semibold uppercase tracking-wider text-slate-500">
         Answer key
       </p>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {options.map((opt, idx) => {
-          const isCorrect = correctIds.has(Number(opt.option_id))
-          const chartRow = chartData.find(
-            (d) => String(d.name).trim() === String(opt.option_text).trim(),
-          )
-          const count = chartRow?.value ?? 0
-          const optionColor =
-            chartRow?.color ?? getPresentOptionColor(opt.option_text, idx, question.rawType)
-
-          return (
-            <div
-              key={opt.option_id ?? idx}
-              className={`quiz-row-in flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
-                isCorrect
-                  ? 'border-emerald-400/90 bg-emerald-50/90'
-                  : 'border-slate-200/90 bg-white/80'
-              }`}
-              style={{ animationDelay: `${idx * 70}ms` }}
-            >
-              <span
-                className="grid size-9 shrink-0 place-items-center rounded-lg text-sm font-bold text-white shadow-sm"
-                style={{ backgroundColor: isCorrect ? '#059669' : optionColor }}
-                aria-hidden
-              >
-                {isCorrect ? (
-                  <Check className="size-5" strokeWidth={3} />
-                ) : (
-                  String.fromCharCode(65 + idx)
-                )}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p
-                  className={`truncate text-[clamp(0.95rem,1.6vw,1.15rem)] font-semibold ${
-                    isCorrect ? 'text-emerald-900' : 'text-slate-700'
-                  }`}
-                >
-                  {opt.option_text}
-                </p>
-                {count > 0 ? (
-                  <p className="text-[clamp(0.75rem,1.2vw,0.85rem)] text-slate-500">
-                    {count} response{count === 1 ? '' : 's'}
-                  </p>
-                ) : null}
-              </div>
-              {isCorrect ? (
-                <span className="shrink-0 text-[clamp(0.65rem,1vw,0.75rem)] font-bold uppercase tracking-wide text-emerald-600">
-                  Correct
-                </span>
-              ) : null}
-            </div>
-          )
-        })}
-      </div>
+      <PresentOptionRows question={question} chartData={chartData} answerRevealed stacked={false} />
     </div>
   )
 }
@@ -177,36 +253,7 @@ export function shouldShowAnswerRevealUi(question) {
 }
 
 /** Green tick badge above the correct bar(s), including zero-response bars. */
-export function PresentCorrectBarLabel(props) {
-  const { x, y, width, viewBox, value, answerRevealed } = props
-  // value is the chart row from LabelList valueAccessor (Recharts 3 strips payload).
-  const entry = value && typeof value === 'object' ? value : null
-  if (!answerRevealed || !entry?.isCorrect) return null
-
-  const barX = Number(viewBox?.x ?? x)
-  const barY = Number(viewBox?.y ?? y)
-  const barWidth = Number(viewBox?.width ?? width)
-  if (!Number.isFinite(barX) || !Number.isFinite(barY)) return null
-
-  const w = Number.isFinite(barWidth) && barWidth > 0 ? barWidth : 28
-  const cx = barX + w / 2
-  const cy = barY - 14
-  const r = 11
-
-  return (
-    <g aria-hidden>
-      <circle cx={cx} cy={cy} r={r} fill="#059669" stroke="#fff" strokeWidth={2} />
-      <path
-        d={`M ${cx - 4} ${cy} L ${cx - 1} ${cy + 4} L ${cx + 5} ${cy - 4}`}
-        fill="none"
-        stroke="#fff"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </g>
-  )
-}
+export { BarCorrectTickLabel as PresentCorrectBarLabel } from '../../components/charts/BarValueLabels'
 
 /** Option label only on axis — correct mark stays on the bar top to avoid overlap. */
 export function PresentXAxisTick({ x, y, payload, chartData }) {

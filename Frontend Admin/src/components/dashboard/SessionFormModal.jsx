@@ -1,19 +1,111 @@
 import { useEffect, useRef, useState } from 'react'
-import { FileUp, Loader2, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Download, FileUp, Loader2, Plus, Trash2, X } from 'lucide-react'
 import Modal from '../ui/Modal'
 import { uploadQuestionMediaApi } from '../../services/mediaApi'
 import { compressQuestionImage } from '../../utils/compressQuestionImage'
 import {
+  QUESTION_MEDIA_ACCEPT,
+  QUESTION_MEDIA_BANNER,
   QUESTION_MEDIA_SUPPORTED_IMAGE_TYPES,
+  getQuestionMediaKindFromApiType,
+  mapMimeToQuestionMediaType,
   normalizeQuestionMediaUrlForStorage,
   resolveQuestionMediaUrl,
+  validateQuestionMediaFile,
 } from '../../utils/questionMedia'
 
-const QUIZ_TOTAL_TIME_MINUTES = [15, 30, 45, 60]
+import {
+  buildScoreBandsForTimer,
+} from '../../utils/advancedScoreBands'
+import {
+  DEFAULT_PRESENT_MODE_SETTINGS,
+  MAX_CUSTOM_INSTRUCTION_LENGTH,
+  MAX_CUSTOM_INSTRUCTIONS,
+  normalizePresentModeSettings,
+  toPresentModeSettingsApi,
+} from '../../utils/presentModeSettings'
+import {
+  DEFAULT_CUSTOM_THEME_COLORS,
+  DEFAULT_PARTICIPANT_THEME,
+  normalizeCustomThemeColors,
+  normalizeParticipantTheme,
+  toCustomThemeColorsApi,
+} from '../../utils/participantTheme'
+import { ParticipantThemePicker } from '../session/ParticipantThemePicker'
+import {
+  MAX_ALLOWLIST_ENTRIES,
+  allowlistEntryCount,
+  isJoinAllowlistOverLimit,
+  parseJoinAllowlistExcel,
+  parseJoinAllowlistText,
+  summarizeJoinAllowlist,
+} from '../../utils/joinAllowlist'
+import { downloadJoinAllowlistSample } from '../../utils/joinAllowlistSample'
+
+const QUIZ_TOTAL_TIME_PRESETS = [15, 30, 45, 60]
+const QUIZ_TOTAL_TIME_MIN_MINUTES = 1
+const QUIZ_TOTAL_TIME_MAX_MINUTES = 180
+
+function normalizeQuizTotalTimeMinutes(value, fallback = 30) {
+  const n = Number(value)
+  if (
+    Number.isFinite(n) &&
+    Number.isInteger(n) &&
+    n >= QUIZ_TOTAL_TIME_MIN_MINUTES &&
+    n <= QUIZ_TOTAL_TIME_MAX_MINUTES
+  ) {
+    return n
+  }
+  return fallback
+}
+
+function quizTotalTimeModeFromMinutes(minutes) {
+  return QUIZ_TOTAL_TIME_PRESETS.includes(Number(minutes)) ? String(minutes) : 'custom'
+}
 const LOGO_ACCEPT = QUESTION_MEDIA_SUPPORTED_IMAGE_TYPES.join(',')
 const LOGO_MAX_BYTES = 5 * 1024 * 1024
+const ALLOWLIST_FILE_ACCEPT =
+  '.xlsx,.csv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,text/plain'
 
 const CONTACT_JOIN_TYPES = new Set(['name_email', 'name_mobile', 'name_email_mobile'])
+const EMAIL_JOIN_TYPES = new Set(['name_email', 'name_email_mobile'])
+
+const SESSION_FORM_TABS = [
+  { id: 'basics', label: 'Basics' },
+  { id: 'join', label: 'Join' },
+  { id: 'quiz', label: 'Quiz' },
+  { id: 'look', label: 'Look' },
+]
+
+const DEFAULT_SCORE_BANDS = buildScoreBandsForTimer(30, 6)
+
+const PRESENT_MODE_SETTING_OPTIONS = [
+  {
+    key: 'showGraphs',
+    label: 'Show graphs',
+    description: 'Results charts (bars, word cloud, emoji, etc.) on question slides.',
+  },
+  {
+    key: 'showResponses',
+    label: 'Show responses',
+    description: 'Live list of participant answers beside the results.',
+  },
+  {
+    key: 'showSessionInfo',
+    label: 'Show session info',
+    description: 'Join code, QR, and schedule panel on the present screen.',
+  },
+  {
+    key: 'showParticipantStats',
+    label: 'Show participant counts',
+    description: 'Joined / live participant stats in the present header.',
+  },
+  {
+    key: 'showCustomInstructions',
+    label: 'Show custom instructions',
+    description: 'Numbered host instructions on the lobby slide.',
+  },
+]
 
 const defaultInitial = {
   title: '',
@@ -26,13 +118,34 @@ const defaultInitial = {
   departmentId: '',
   joinRequirement: 'name',
   joinOtpRequired: true,
+  joinAllowlistEnabled: false,
+  joinAllowlist: null,
+  customerMatchEnabled: false,
+  customerMatchWcCode: '',
+  customerMatchZones: [],
   enableNavigation: false,
   randomQuestionOrder: false,
   quizTotalTimeEnabled: false,
   quizTotalTimeMinutes: 30,
+  quizTotalQuestionTimersEnabled: false,
+  quizTotalTimeSynced: false,
   overallLeaderboard: false,
   showParticipantCount: false,
+  showSessionTitle: true,
+  showAppLogo: true,
   logoUrl: '',
+  waitingScreenImageUrl: '',
+  waitingScreenMediaType: null,
+  thanksScreenImageUrl: '',
+  participantTheme: DEFAULT_PARTICIPANT_THEME,
+  participantThemeCustom: { ...DEFAULT_CUSTOM_THEME_COLORS },
+  builderMode: 'normal',
+  questionsPerParticipant: 10,
+  advancedSelectionMode: 'random_all',
+  presentModeSettings: {
+    ...DEFAULT_PRESENT_MODE_SETTINGS,
+    customInstructions: [],
+  },
 }
 
 function SessionFormModal({
@@ -53,20 +166,96 @@ function SessionFormModal({
   isSubmitting = false,
 }) {
   const logoInputRef = useRef(null)
+  const waitingImageInputRef = useRef(null)
+  const thanksImageInputRef = useRef(null)
+  const allowlistInputRef = useRef(null)
   const [joinRequirement, setJoinRequirement] = useState(defaultInitial.joinRequirement)
   const [joinOtpRequired, setJoinOtpRequired] = useState(defaultInitial.joinOtpRequired)
+  const [joinAllowlistEnabled, setJoinAllowlistEnabled] = useState(false)
+  const [joinAllowlist, setJoinAllowlist] = useState(null)
+  const [customerMatchEnabled, setCustomerMatchEnabled] = useState(false)
+  const [customerMatchWcCode, setCustomerMatchWcCode] = useState('')
+  const [customerMatchZones, setCustomerMatchZones] = useState([])
+  const [customerMatchConfigError, setCustomerMatchConfigError] = useState('')
+  const CUSTOMER_MATCH_REGIONS = ['East', 'West', 'North', 'South']
+  const CUSTOMER_MATCH_ZONE_OPTIONS = ['All', ...CUSTOMER_MATCH_REGIONS]
+
+  const normalizeCustomerMatchZonesSelection = (zonesRaw) => {
+    const raw = Array.isArray(zonesRaw) ? zonesRaw : []
+    return CUSTOMER_MATCH_ZONE_OPTIONS.filter((z) =>
+      raw.some((item) => String(item).toLowerCase() === z.toLowerCase()),
+    )
+  }
+
+  const toggleCustomerMatchZone = (zone) => {
+    setCustomerMatchZones((prev) => {
+      const next = prev.includes(zone) ? prev.filter((z) => z !== zone) : [...prev, zone]
+      return CUSTOMER_MATCH_ZONE_OPTIONS.filter((z) => next.includes(z))
+    })
+    setCustomerMatchConfigError('')
+  }
+  const [allowlistFileName, setAllowlistFileName] = useState('')
+  const [allowlistError, setAllowlistError] = useState('')
+  const [allowlistSampleDownloading, setAllowlistSampleDownloading] = useState(false)
   const [enableNavigation, setEnableNavigation] = useState(defaultInitial.enableNavigation)
   const [randomQuestionOrder, setRandomQuestionOrder] = useState(defaultInitial.randomQuestionOrder)
   const [quizTotalTimeEnabled, setQuizTotalTimeEnabled] = useState(defaultInitial.quizTotalTimeEnabled)
-  const [quizTotalTimeMinutes, setQuizTotalTimeMinutes] = useState(defaultInitial.quizTotalTimeMinutes)
+  const [quizTotalTimeMinutes, setQuizTotalTimeMinutes] = useState(() =>
+    normalizeQuizTotalTimeMinutes(defaultInitial.quizTotalTimeMinutes),
+  )
+  const [quizTotalTimeMode, setQuizTotalTimeMode] = useState(() =>
+    quizTotalTimeModeFromMinutes(defaultInitial.quizTotalTimeMinutes),
+  )
+  const [customQuizTotalTimeMinutes, setCustomQuizTotalTimeMinutes] = useState(() =>
+    normalizeQuizTotalTimeMinutes(defaultInitial.quizTotalTimeMinutes, 20),
+  )
+  const [quizTotalQuestionTimersEnabled, setQuizTotalQuestionTimersEnabled] = useState(
+    Boolean(defaultInitial.quizTotalQuestionTimersEnabled),
+  )
+  const [quizTotalTimeSynced, setQuizTotalTimeSynced] = useState(
+    Boolean(defaultInitial.quizTotalTimeSynced),
+  )
   const [overallLeaderboard, setOverallLeaderboard] = useState(defaultInitial.overallLeaderboard)
   const [showParticipantCount, setShowParticipantCount] = useState(
     defaultInitial.showParticipantCount,
   )
+  const [showSessionTitle, setShowSessionTitle] = useState(
+    defaultInitial.showSessionTitle !== false,
+  )
+  const [showAppLogo, setShowAppLogo] = useState(defaultInitial.showAppLogo !== false)
   const [autoEndEnabled, setAutoEndEnabled] = useState(defaultInitial.autoEndEnabled)
   const [logoUrl, setLogoUrl] = useState('')
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoError, setLogoError] = useState('')
+  const [waitingScreenImageUrl, setWaitingScreenImageUrl] = useState('')
+  const [waitingScreenMediaType, setWaitingScreenMediaType] = useState(null)
+  const [waitingImageUploading, setWaitingImageUploading] = useState(false)
+  const [waitingImageError, setWaitingImageError] = useState('')
+  const [thanksScreenImageUrl, setThanksScreenImageUrl] = useState('')
+  const [thanksImageUploading, setThanksImageUploading] = useState(false)
+  const [thanksImageError, setThanksImageError] = useState('')
+  const [participantTheme, setParticipantTheme] = useState(DEFAULT_PARTICIPANT_THEME)
+  const [participantThemeCustom, setParticipantThemeCustom] = useState(() => ({
+    ...DEFAULT_CUSTOM_THEME_COLORS,
+  }))
+  const [builderMode, setBuilderMode] = useState(defaultInitial.builderMode)
+  const [questionsPerParticipant, setQuestionsPerParticipant] = useState(
+    defaultInitial.questionsPerParticipant,
+  )
+  const [advancedSelectionMode, setAdvancedSelectionMode] = useState(
+    defaultInitial.advancedSelectionMode,
+  )
+  const [presentModeSettings, setPresentModeSettings] = useState(() => ({
+    ...DEFAULT_PRESENT_MODE_SETTINGS,
+    customInstructions: [],
+  }))
+  const [presentSettingsOpen, setPresentSettingsOpen] = useState(false)
+  const [activeTab, setActiveTab] = useState('basics')
+
+  const visibleTabs = liveSettingsOnly
+    ? SESSION_FORM_TABS.filter((tab) => tab.id === 'basics' || tab.id === 'look')
+    : SESSION_FORM_TABS
+  const effectiveTab = visibleTabs.some((tab) => tab.id === activeTab) ? activeTab : 'basics'
 
   const uploadDeptId = useWorkspaceDepartment
     ? String(defaultDepartmentId || '')
@@ -74,65 +263,295 @@ function SessionFormModal({
 
   useEffect(() => {
     if (!open) return
+    setActiveTab('basics')
     setJoinRequirement(initialValues.joinRequirement ?? defaultInitial.joinRequirement)
     setJoinOtpRequired(
       CONTACT_JOIN_TYPES.has(initialValues.joinRequirement ?? defaultInitial.joinRequirement)
         ? initialValues.joinOtpRequired !== false
         : false,
     )
+    const nextJoinType = initialValues.joinRequirement ?? defaultInitial.joinRequirement
+    const nextAllowlistEnabled =
+      CONTACT_JOIN_TYPES.has(nextJoinType) && Boolean(initialValues.joinAllowlistEnabled)
+    setJoinAllowlistEnabled(nextAllowlistEnabled)
+    setJoinAllowlist(
+      nextAllowlistEnabled && initialValues.joinAllowlist
+        ? {
+            emails: Array.isArray(initialValues.joinAllowlist.emails)
+              ? [...initialValues.joinAllowlist.emails]
+              : [],
+            mobiles: Array.isArray(initialValues.joinAllowlist.mobiles)
+              ? [...initialValues.joinAllowlist.mobiles]
+              : [],
+          }
+        : null,
+    )
+    setCustomerMatchEnabled(Boolean(initialValues.customerMatchEnabled))
+    setCustomerMatchWcCode(String(initialValues.customerMatchWcCode ?? '').trim())
+    {
+      const zonesRaw = Array.isArray(initialValues.customerMatchZones)
+        ? initialValues.customerMatchZones
+        : initialValues.customerMatchZone
+          ? [initialValues.customerMatchZone]
+          : []
+      setCustomerMatchZones(normalizeCustomerMatchZonesSelection(zonesRaw))
+    }
+    setCustomerMatchConfigError('')
+    setAllowlistFileName('')
+    setAllowlistError('')
     setEnableNavigation(Boolean(initialValues.enableNavigation))
     setRandomQuestionOrder(Boolean(initialValues.randomQuestionOrder))
     setQuizTotalTimeEnabled(Boolean(initialValues.quizTotalTimeEnabled))
-    setQuizTotalTimeMinutes(
-      QUIZ_TOTAL_TIME_MINUTES.includes(Number(initialValues.quizTotalTimeMinutes))
-        ? Number(initialValues.quizTotalTimeMinutes)
-        : 30,
+    {
+      const minutes = normalizeQuizTotalTimeMinutes(initialValues.quizTotalTimeMinutes)
+      setQuizTotalTimeMinutes(minutes)
+      setQuizTotalTimeMode(quizTotalTimeModeFromMinutes(minutes))
+      setCustomQuizTotalTimeMinutes(
+        QUIZ_TOTAL_TIME_PRESETS.includes(minutes) ? 20 : minutes,
+      )
+    }
+    setQuizTotalQuestionTimersEnabled(
+      Boolean(initialValues.quizTotalTimeEnabled) &&
+        Boolean(initialValues.quizTotalQuestionTimersEnabled),
+    )
+    setQuizTotalTimeSynced(
+      Boolean(initialValues.quizTotalTimeEnabled) && Boolean(initialValues.quizTotalTimeSynced),
     )
     setOverallLeaderboard(initialValues.overallLeaderboard === true)
     setShowParticipantCount(initialValues.showParticipantCount === true)
+    setShowSessionTitle(initialValues.showSessionTitle !== false)
+    setShowAppLogo(initialValues.showAppLogo !== false)
     setAutoEndEnabled(Boolean(initialValues.autoEndEnabled))
     setLogoUrl(initialValues.logoUrl || '')
     setLogoError('')
     setLogoUploading(false)
+    setWaitingScreenImageUrl(initialValues.waitingScreenImageUrl || '')
+    setWaitingScreenMediaType(
+      initialValues.waitingScreenImageUrl
+        ? initialValues.waitingScreenMediaType || 'image'
+        : null,
+    )
+    setWaitingImageError('')
+    setWaitingImageUploading(false)
+    setThanksScreenImageUrl(initialValues.thanksScreenImageUrl || '')
+    setThanksImageError('')
+    setThanksImageUploading(false)
+    setParticipantTheme(normalizeParticipantTheme(initialValues.participantTheme))
+    setParticipantThemeCustom(
+      normalizeCustomThemeColors(initialValues.participantThemeCustom),
+    )
+    setBuilderMode(initialValues.builderMode === 'advanced' ? 'advanced' : 'normal')
+    setQuestionsPerParticipant(
+      Number(initialValues.questionsPerParticipant) > 0
+        ? Number(initialValues.questionsPerParticipant)
+        : 10,
+    )
+    setAdvancedSelectionMode(
+      initialValues.advancedSelectionMode === 'random_from_selected'
+        ? 'random_from_selected'
+        : 'random_all',
+    )
+    setPresentModeSettings(normalizePresentModeSettings(initialValues.presentModeSettings))
+    setPresentSettingsOpen(false)
   }, [open, initialValues])
 
+  const handleBuilderModeChange = (mode) => {
+    setBuilderMode(mode)
+    if (mode === 'advanced') {
+      // Advanced sessions need multi-question navigation so each participant can take their K.
+      setEnableNavigation(true)
+    }
+  }
+
   const handleNavigationChange = (enabled) => {
+    if (builderMode === 'advanced' && !enabled) {
+      window.alert('Advanced sessions require multiple active questions so participants can answer their assigned set.')
+      return
+    }
     setEnableNavigation(enabled)
     if (!enabled) {
       setQuizTotalTimeEnabled(false)
+      setQuizTotalQuestionTimersEnabled(false)
+      setQuizTotalTimeSynced(false)
       setRandomQuestionOrder(false)
     }
   }
 
-  const handleLogoUpload = async (file) => {
-    if (!file || logoUploading) return
+  const uploadSessionImage = async ({
+    file,
+    uploading,
+    setUploading,
+    setError,
+    setUrl,
+    inputRef,
+    label,
+  }) => {
+    if (!file || uploading) return
 
     if (!QUESTION_MEDIA_SUPPORTED_IMAGE_TYPES.includes(file.type)) {
-      setLogoError('Please upload a PNG, JPG, WebP, or GIF logo.')
+      setError(`Please upload a PNG, JPG, WebP, or GIF ${label}.`)
       return
     }
     if (file.size > LOGO_MAX_BYTES) {
-      setLogoError('Logo must be 5 MB or smaller.')
+      setError(`${label} must be 5 MB or smaller.`)
       return
     }
     if (!uploadDeptId) {
-      setLogoError('Select a department before uploading a logo.')
+      setError(`Select a department before uploading a ${label}.`)
       return
     }
 
-    setLogoError('')
-    setLogoUploading(true)
+    setError('')
+    setUploading(true)
     try {
       const prepared =
         file.type !== 'image/gif' ? await compressQuestionImage(file) : file
       const { fileUrl } = await uploadQuestionMediaApi(uploadDeptId, prepared)
       if (!fileUrl) throw new Error('Upload succeeded but no file URL was returned')
-      setLogoUrl(normalizeQuestionMediaUrlForStorage(fileUrl) || fileUrl)
+      setUrl(normalizeQuestionMediaUrlForStorage(fileUrl) || fileUrl)
     } catch (err) {
-      setLogoError(err.message || 'Failed to upload logo')
+      setError(err.message || `Failed to upload ${label}`)
     } finally {
-      setLogoUploading(false)
-      if (logoInputRef.current) logoInputRef.current.value = ''
+      setUploading(false)
+      if (inputRef.current) inputRef.current.value = ''
+    }
+  }
+
+  const handleLogoUpload = async (file) => {
+    await uploadSessionImage({
+      file,
+      uploading: logoUploading,
+      setUploading: setLogoUploading,
+      setError: setLogoError,
+      setUrl: setLogoUrl,
+      inputRef: logoInputRef,
+      label: 'logo',
+    })
+  }
+
+  const handleWaitingMediaUpload = async (file) => {
+    if (!file || waitingImageUploading) return
+
+    const validationError = validateQuestionMediaFile(file)
+    if (validationError) {
+      setWaitingImageError(validationError)
+      return
+    }
+    if (!uploadDeptId) {
+      setWaitingImageError('Select a department before uploading waiting screen media.')
+      return
+    }
+
+    setWaitingImageError('')
+    setWaitingImageUploading(true)
+    try {
+      const prepared =
+        file.type.startsWith('image/') && file.type !== 'image/gif'
+          ? await compressQuestionImage(file)
+          : file
+      const { fileUrl } = await uploadQuestionMediaApi(uploadDeptId, prepared)
+      if (!fileUrl) throw new Error('Upload succeeded but no file URL was returned')
+      setWaitingScreenImageUrl(normalizeQuestionMediaUrlForStorage(fileUrl) || fileUrl)
+      setWaitingScreenMediaType(mapMimeToQuestionMediaType(prepared.type) || 'image')
+    } catch (err) {
+      setWaitingImageError(err.message || 'Failed to upload waiting screen media')
+    } finally {
+      setWaitingImageUploading(false)
+      if (waitingImageInputRef.current) waitingImageInputRef.current.value = ''
+    }
+  }
+
+  const handleThanksImageUpload = async (file) => {
+    await uploadSessionImage({
+      file,
+      uploading: thanksImageUploading,
+      setUploading: setThanksImageUploading,
+      setError: setThanksImageError,
+      setUrl: setThanksScreenImageUrl,
+      inputRef: thanksImageInputRef,
+      label: 'thank you image',
+    })
+  }
+
+  const clearJoinAllowlist = () => {
+    setJoinAllowlist(null)
+    setAllowlistFileName('')
+    setAllowlistError('')
+    if (allowlistInputRef.current) allowlistInputRef.current.value = ''
+  }
+
+  const applyParsedAllowlist = (parsed, fileName = '') => {
+    const count = allowlistEntryCount(parsed)
+    if (count === 0) {
+      setAllowlistError('No valid emails or mobile numbers found in that file.')
+      setJoinAllowlist(null)
+      setAllowlistFileName('')
+      return
+    }
+    if (isJoinAllowlistOverLimit(parsed)) {
+      setAllowlistError(`Participant list supports at most ${MAX_ALLOWLIST_ENTRIES} contacts.`)
+      return
+    }
+    setJoinAllowlist(parsed)
+    setAllowlistFileName(fileName)
+    setAllowlistError('')
+    setJoinAllowlistEnabled(true)
+  }
+
+  const handleAllowlistFile = async (file) => {
+    if (!file) return
+    const name = String(file.name || '').toLowerCase()
+    const isExcel = name.endsWith('.xlsx')
+    const isText = name.endsWith('.csv') || name.endsWith('.txt') || file.type?.startsWith('text/')
+
+    if (!isExcel && !isText) {
+      setAllowlistError('Please upload an Excel (.xlsx), CSV, or TXT file.')
+      if (allowlistInputRef.current) allowlistInputRef.current.value = ''
+      return
+    }
+
+    try {
+      if (isExcel) {
+        const parsed = await parseJoinAllowlistExcel(file)
+        applyParsedAllowlist(parsed, file.name || 'participants.xlsx')
+      } else {
+        const text = await file.text()
+        applyParsedAllowlist(parseJoinAllowlistText(text), file.name || 'participants.csv')
+      }
+    } catch (err) {
+      setAllowlistError(err.message || 'Could not read that file.')
+    } finally {
+      if (allowlistInputRef.current) allowlistInputRef.current.value = ''
+    }
+  }
+
+  const handleDownloadAllowlistSample = async () => {
+    if (allowlistSampleDownloading) return
+    setAllowlistSampleDownloading(true)
+    setAllowlistError('')
+    try {
+      await downloadJoinAllowlistSample(joinRequirement)
+    } catch (err) {
+      setAllowlistError(err.message || 'Could not download the sample file.')
+    } finally {
+      setAllowlistSampleDownloading(false)
+    }
+  }
+
+  const handleJoinRequirementChange = (next) => {
+    setJoinRequirement(next)
+    if (CONTACT_JOIN_TYPES.has(next)) {
+      setJoinOtpRequired(true)
+    } else {
+      setJoinOtpRequired(false)
+      setJoinAllowlistEnabled(false)
+      clearJoinAllowlist()
+    }
+    if (!EMAIL_JOIN_TYPES.has(next)) {
+      setCustomerMatchEnabled(false)
+      setCustomerMatchWcCode('')
+      setCustomerMatchZones([])
+      setCustomerMatchConfigError('')
     }
   }
 
@@ -146,22 +565,26 @@ function SessionFormModal({
 
     if (!liveSettingsOnly && autoEndEnabled) {
       if (!autoEndDate || !autoEndTime) {
+        setActiveTab('basics')
         window.alert('Please enter both an end date and end time for automatic session end.')
         return
       }
 
       const endAt = new Date(`${autoEndDate}T${autoEndTime}`)
       if (Number.isNaN(endAt.getTime())) {
+        setActiveTab('basics')
         window.alert('Automatic end date and time are not valid.')
         return
       }
       if (endAt.getTime() <= Date.now()) {
+        setActiveTab('basics')
         window.alert('Automatic end must be scheduled in the future.')
         return
       }
       if (scheduledDate && scheduledTime) {
         const startAt = new Date(`${scheduledDate}T${scheduledTime}`)
         if (!Number.isNaN(startAt.getTime()) && endAt.getTime() <= startAt.getTime()) {
+          setActiveTab('basics')
           window.alert('Automatic end must be after the planned session start.')
           return
         }
@@ -169,8 +592,43 @@ function SessionFormModal({
     }
 
     if (logoUploading) {
+      setActiveTab('look')
       window.alert('Please wait for the logo upload to finish.')
       return
+    }
+
+    if (!liveSettingsOnly && builderMode === 'advanced') {
+      const k = Number(questionsPerParticipant)
+      if (!Number.isInteger(k) || k < 1) {
+        setActiveTab('basics')
+        window.alert('Questions per participant must be a positive whole number.')
+        return
+      }
+    }
+
+    const contactJoin = CONTACT_JOIN_TYPES.has(joinRequirement)
+    const allowlistOn = contactJoin && joinAllowlistEnabled
+    if (allowlistOn && allowlistEntryCount(joinAllowlist) === 0) {
+      setActiveTab('join')
+      window.alert('Upload a participant list with at least one email or mobile number, or turn off restrict join.')
+      return
+    }
+
+    const emailJoin = EMAIL_JOIN_TYPES.has(joinRequirement)
+    const customerMatchOn = emailJoin && customerMatchEnabled
+    if (customerMatchOn) {
+      const wc = String(customerMatchWcCode ?? '').trim()
+      const zones = normalizeCustomerMatchZonesSelection(customerMatchZones)
+      if (!/^\d+$/.test(wc) || zones.length < 1) {
+        setActiveTab('join')
+        setCustomerMatchConfigError(
+          'Enter a numeric WC code and select at least one zone when customer match is enabled.',
+        )
+        return
+      }
+      setCustomerMatchConfigError('')
+    } else {
+      setCustomerMatchConfigError('')
     }
 
     onSubmit({
@@ -182,28 +640,94 @@ function SessionFormModal({
         ? String(defaultDepartmentId || '')
         : String(form.get('department') || defaultDepartmentId || ''),
       joinRequirement,
-      joinOtpRequired: CONTACT_JOIN_TYPES.has(joinRequirement) ? Boolean(joinOtpRequired) : false,
-      enableNavigation,
+      joinOtpRequired: contactJoin ? Boolean(joinOtpRequired) : false,
+      joinAllowlistEnabled: allowlistOn,
+      joinAllowlist: allowlistOn ? joinAllowlist : null,
+      customerMatchEnabled: Boolean(customerMatchOn),
+      customerMatchWcCode: customerMatchOn ? String(customerMatchWcCode ?? '').trim() : '',
+      customerMatchZones: customerMatchOn
+        ? normalizeCustomerMatchZonesSelection(customerMatchZones)
+        : [],
+      enableNavigation: builderMode === 'advanced' ? true : enableNavigation,
       randomQuestionOrder: enableNavigation && randomQuestionOrder,
       quizTotalTimeEnabled: enableNavigation && quizTotalTimeEnabled,
-      quizTotalTimeMinutes: enableNavigation && quizTotalTimeEnabled ? quizTotalTimeMinutes : null,
+      quizTotalTimeMinutes:
+        enableNavigation && quizTotalTimeEnabled
+          ? normalizeQuizTotalTimeMinutes(quizTotalTimeMinutes)
+          : null,
+      quizTotalQuestionTimersEnabled:
+        enableNavigation && quizTotalTimeEnabled && quizTotalQuestionTimersEnabled,
+      quizTotalTimeSynced: enableNavigation && quizTotalTimeEnabled && quizTotalTimeSynced,
       overallLeaderboard,
       showParticipantCount,
+      showSessionTitle,
+      showAppLogo,
       autoEndEnabled: !liveSettingsOnly && autoEndEnabled,
       autoEndDate: !liveSettingsOnly && autoEndEnabled ? autoEndDate : '',
       autoEndTime: !liveSettingsOnly && autoEndEnabled ? autoEndTime : '',
       logoUrl: logoUrl
         ? normalizeQuestionMediaUrlForStorage(logoUrl) || logoUrl
         : null,
+      waitingScreenImageUrl: waitingScreenImageUrl
+        ? normalizeQuestionMediaUrlForStorage(waitingScreenImageUrl) || waitingScreenImageUrl
+        : null,
+      waitingScreenMediaType: waitingScreenImageUrl
+        ? waitingScreenMediaType || 'image'
+        : null,
+      thanksScreenImageUrl: thanksScreenImageUrl
+        ? normalizeQuestionMediaUrlForStorage(thanksScreenImageUrl) || thanksScreenImageUrl
+        : null,
+      participantTheme: normalizeParticipantTheme(participantTheme),
+      participantThemeCustom: toCustomThemeColorsApi(participantThemeCustom),
+      builderMode: liveSettingsOnly ? undefined : builderMode,
+      questionsPerParticipant:
+        !liveSettingsOnly && builderMode === 'advanced' ? Number(questionsPerParticipant) : null,
+      advancedSelectionMode:
+        !liveSettingsOnly && builderMode === 'advanced' ? advancedSelectionMode : 'random_all',
+      // Create advanced: seed default bands. Edit: omit so Dashboard does not wipe builder bands.
+      ...(mode === 'create' && !liveSettingsOnly && builderMode === 'advanced'
+        ? { responseTimeScoreBands: DEFAULT_SCORE_BANDS }
+        : {}),
+      presentModeSettings: toPresentModeSettingsApi(presentModeSettings),
     })
   }
 
   const logoPreviewSrc = resolveQuestionMediaUrl(logoUrl)
+  const waitingImagePreviewSrc = resolveQuestionMediaUrl(waitingScreenImageUrl)
+  const waitingMediaKind = getQuestionMediaKindFromApiType(waitingScreenMediaType || 'image')
+  const thanksImagePreviewSrc = resolveQuestionMediaUrl(thanksScreenImageUrl)
 
   return (
-    <Modal open={open} title={modalTitle} onClose={onClose}>
+    <Modal open={open} title={modalTitle} onClose={onClose} size="lg">
       <form data-tour={mode === 'create' ? 'session-form' : undefined} onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-        <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto overscroll-contain pr-1 md:grid-cols-2">
+        <div className="mb-3 flex shrink-0 flex-wrap gap-2" role="tablist" aria-label="Session settings">
+          {visibleTabs.map((tab) => {
+            const active = effectiveTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setActiveTab(tab.id)}
+                className={`rounded-xl px-3.5 py-2 text-sm font-bold transition ${
+                  active
+                    ? 'bg-navy-900 text-white shadow-sm'
+                    : 'border border-blue-200/70 bg-white text-slate-700 hover:bg-blue-50'
+                }`}
+              >
+                {tab.label}
+              </button>
+            )
+          })}
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+          <div className="grid gap-4 md:grid-cols-2">
+          <div
+            className="col-span-full grid gap-4 md:grid-cols-2"
+            role="tabpanel"
+            hidden={effectiveTab !== 'basics'}
+          >
           <div className="md:col-span-2">
             <label className="text-sm font-semibold text-slate-700">Title</label>
             <input
@@ -216,6 +740,68 @@ function SessionFormModal({
               required
             />
           </div>
+          {!liveSettingsOnly ? (
+            <div className="md:col-span-2 rounded-xl border border-blue-200/70 bg-slate-50/80 p-3">
+              <label className="text-sm font-semibold text-slate-700">Question builder</label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleBuilderModeChange('normal')}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium ${
+                    builderMode === 'normal'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white text-slate-700 ring-1 ring-slate-200'
+                  }`}
+                >
+                  Normal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleBuilderModeChange('advanced')}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium ${
+                    builderMode === 'advanced'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white text-slate-700 ring-1 ring-slate-200'
+                  }`}
+                >
+                  Advanced
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                {builderMode === 'advanced'
+                  ? 'Build a large pool; each participant gets a random subset scored by response-time bands.'
+                  : 'Classic builder — everyone can see the same questions (or Sets A/B).'}
+              </p>
+              {builderMode === 'advanced' ? (
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600">
+                      Questions per participant (K)
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={500}
+                      value={questionsPerParticipant}
+                      onChange={(e) => setQuestionsPerParticipant(Number(e.target.value) || 1)}
+                      className="mt-1 h-10 w-full rounded-lg border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600">Selection mode</label>
+                    <select
+                      value={advancedSelectionMode}
+                      onChange={(e) => setAdvancedSelectionMode(e.target.value)}
+                      className="mt-1 h-10 w-full rounded-lg border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400"
+                    >
+                      <option value="random_all">Random K from entire pool</option>
+                      <option value="random_from_selected">Random K from marked eligible</option>
+                    </select>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {!liveSettingsOnly ? (
             <>
               {mode === 'create' && useWorkspaceDepartment && !hideDepartment ? (
@@ -348,21 +934,22 @@ function SessionFormModal({
               </p>
             </div>
           ) : null}
-          {!liveSettingsOnly ? (
-            <>
+          {liveSettingsOnly ? (
+            <p className="md:col-span-2 rounded-xl border border-amber-200/80 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              This session is live or completed. You can still update the title and session logo.
+            </p>
+          ) : null}
+          </div>
+          <div
+            className="col-span-full grid gap-4 md:grid-cols-2"
+            role="tabpanel"
+            hidden={effectiveTab !== 'join'}
+          >
               <div className="md:col-span-2">
                 <label className="text-sm font-semibold text-slate-700">Join requirements</label>
                 <select
                   value={joinRequirement}
-                  onChange={(e) => {
-                    const next = e.target.value
-                    setJoinRequirement(next)
-                    if (CONTACT_JOIN_TYPES.has(next)) {
-                      setJoinOtpRequired(true)
-                    } else {
-                      setJoinOtpRequired(false)
-                    }
-                  }}
+                  onChange={(e) => handleJoinRequirementChange(e.target.value)}
                   className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
                 >
                   <option value="anonymous">Anonymous (no name/email)</option>
@@ -390,6 +977,176 @@ function SessionFormModal({
                   </label>
                 </div>
               ) : null}
+              {EMAIL_JOIN_TYPES.has(joinRequirement) ? (
+                <div className="md:col-span-2">
+                  <label className="flex items-center justify-between gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-700">
+                        Require customer match verification
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Participants must provide an email (in the join link or form). WC code and
+                        zones are set here and checked against the customer match API before join.
+                        Participants may join if they match the WC code in any selected zone.
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={customerMatchEnabled}
+                      onChange={(event) => {
+                        setCustomerMatchEnabled(event.target.checked)
+                        setCustomerMatchConfigError('')
+                      }}
+                      className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
+                    />
+                  </label>
+                  {customerMatchEnabled ? (
+                    <div className="mt-3 space-y-3">
+                      <div>
+                        <p className="text-xs font-semibold text-slate-600">
+                          Zone (select one or more)
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {CUSTOMER_MATCH_ZONE_OPTIONS.map((z) => {
+                            const checked = customerMatchZones.includes(z)
+                            return (
+                              <label
+                                key={z}
+                                className={`inline-flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                                  checked
+                                    ? 'border-navy-600 bg-navy-50 text-navy-900'
+                                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleCustomerMatchZone(z)}
+                                  className="h-4 w-4 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
+                                />
+                                {z}
+                              </label>
+                            )
+                          })}
+                        </div>
+                      </div>
+                      <label className="block max-w-sm">
+                        <span className="text-xs font-semibold text-slate-600">WC code</span>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          value={customerMatchWcCode}
+                          onChange={(event) => {
+                            setCustomerMatchWcCode(event.target.value)
+                            setCustomerMatchConfigError('')
+                          }}
+                          className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                          placeholder="e.g. 10020301"
+                        />
+                      </label>
+                      {customerMatchConfigError ? (
+                        <p className="text-xs text-red-600">{customerMatchConfigError}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {CONTACT_JOIN_TYPES.has(joinRequirement) ? (
+                <div className="md:col-span-2 space-y-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
+                  <label className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-700">
+                        Restrict join to uploaded list
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Only people whose{' '}
+                        {joinRequirement === 'name_mobile'
+                          ? 'mobile number'
+                          : joinRequirement === 'name_email'
+                            ? 'email'
+                            : 'email or mobile'}{' '}
+                        is on the list can join this session.
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={joinAllowlistEnabled}
+                      onChange={(event) => {
+                        const next = event.target.checked
+                        setJoinAllowlistEnabled(next)
+                        if (!next) {
+                          clearJoinAllowlist()
+                        }
+                      }}
+                      className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
+                    />
+                  </label>
+                  {joinAllowlistEnabled ? (
+                    <div className="space-y-2 border-t border-slate-100 pt-3">
+                      <input
+                        ref={allowlistInputRef}
+                        type="file"
+                        accept={ALLOWLIST_FILE_ACCEPT}
+                        className="hidden"
+                        onChange={(event) => handleAllowlistFile(event.target.files?.[0])}
+                      />
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => allowlistInputRef.current?.click()}
+                          className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-blue-200 bg-slate-50 px-3 text-sm font-semibold text-navy-800 transition hover:bg-blue-50"
+                        >
+                          <FileUp className="size-4" />
+                          {allowlistEntryCount(joinAllowlist) > 0
+                            ? 'Replace list'
+                            : 'Upload Excel / CSV'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={allowlistSampleDownloading}
+                          onClick={() => void handleDownloadAllowlistSample()}
+                          className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          {allowlistSampleDownloading ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <Download className="size-4" />
+                          )}
+                          Download sample
+                        </button>
+                        {allowlistEntryCount(joinAllowlist) > 0 ? (
+                          <button
+                            type="button"
+                            onClick={clearJoinAllowlist}
+                            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 text-sm font-semibold text-red-700 transition hover:bg-red-50"
+                          >
+                            <X className="size-4" />
+                            Clear list
+                          </button>
+                        ) : null}
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        Download the sample Excel for column format, then replace rows with your
+                        participants (.xlsx, .csv, or .txt also work).
+                      </p>
+                      {allowlistEntryCount(joinAllowlist) > 0 ? (
+                        <p className="text-xs font-semibold text-emerald-700">
+                          {summarizeJoinAllowlist(joinAllowlist)}
+                          {allowlistFileName ? ` from ${allowlistFileName}` : ''} loaded.
+                        </p>
+                      ) : (
+                        <p className="text-xs font-semibold text-amber-800">
+                          Upload a participant list to enable restricted join.
+                        </p>
+                      )}
+                      {allowlistError ? (
+                        <p className="text-xs font-semibold text-red-700">{allowlistError}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="md:col-span-2">
                 <label className="flex items-center justify-between gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
                   <div>
@@ -409,6 +1166,47 @@ function SessionFormModal({
                   />
                 </label>
               </div>
+              <div className="md:col-span-2">
+                <label className="flex items-center justify-between gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-700">
+                      Show session title to participants
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      When off, joiners do not see the session name on the participant page.
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={showSessionTitle}
+                    onChange={(event) => setShowSessionTitle(event.target.checked)}
+                    className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
+                  />
+                </label>
+              </div>
+              <div className="md:col-span-2">
+                <label className="flex items-center justify-between gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-700">Show High Voltage logo</p>
+                    <p className="text-xs text-slate-500">
+                      When off, participants do not see the High Voltage (company) logo. A custom
+                      session logo still shows if set.
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={showAppLogo}
+                    onChange={(event) => setShowAppLogo(event.target.checked)}
+                    className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
+                  />
+                </label>
+              </div>
+          </div>
+          <div
+            className="col-span-full grid gap-4 md:grid-cols-2"
+            role="tabpanel"
+            hidden={effectiveTab !== 'quiz'}
+          >
               <div className="md:col-span-2">
                 <label className="text-sm font-semibold text-slate-700" htmlFor="question-availability">
                   Question availability
@@ -442,7 +1240,14 @@ function SessionFormModal({
                     <select
                       id="quiz-total-time"
                       value={quizTotalTimeEnabled ? 'yes' : 'no'}
-                      onChange={(e) => setQuizTotalTimeEnabled(e.target.value === 'yes')}
+                      onChange={(e) => {
+                        const enabled = e.target.value === 'yes'
+                        setQuizTotalTimeEnabled(enabled)
+                        if (!enabled) {
+                          setQuizTotalQuestionTimersEnabled(false)
+                          setQuizTotalTimeSynced(false)
+                        }
+                      }}
                       className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
                     >
                       <option value="no">No</option>
@@ -450,29 +1255,135 @@ function SessionFormModal({
                     </select>
                     <p className="mt-1 text-xs text-slate-500">
                       Limit how long participants have to complete the full quiz in multiple-question
-                      mode.
+                      mode. Question timers stay off unless you enable both below.
                     </p>
                   </div>
                   {quizTotalTimeEnabled ? (
-                    <div className="md:col-span-2">
-                      <label
-                        className="text-sm font-semibold text-slate-700"
-                        htmlFor="quiz-total-duration"
-                      >
-                        Total quiz duration
+                    <div className="md:col-span-2 space-y-3">
+                      <p className="rounded-xl border border-sky-100 bg-sky-50/80 px-3 py-2 text-xs text-sky-900">
+                        After Launch, use <span className="font-semibold">Activate All</span> on the
+                        lobby (or Live page) to start the quiz for everyone.
+                      </p>
+                      <label className="flex items-start justify-between gap-3 rounded-xl border border-blue-100 bg-slate-50/80 px-3 py-2.5">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-700">
+                            Apply both quiz total time and question timer
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            When on, the question builder can set per-question time limits and
+                            participants see both the quiz clock and each question clock.
+                            Question timers stay personal (start when each participant opens the
+                            question).
+                          </p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={quizTotalQuestionTimersEnabled}
+                          onChange={(e) => setQuizTotalQuestionTimersEnabled(e.target.checked)}
+                          className="mt-0.5 h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
+                        />
                       </label>
-                      <select
-                        id="quiz-total-duration"
-                        value={String(quizTotalTimeMinutes)}
-                        onChange={(e) => setQuizTotalTimeMinutes(Number(e.target.value))}
-                        className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
-                      >
-                        {QUIZ_TOTAL_TIME_MINUTES.map((minutes) => (
-                          <option key={minutes} value={minutes}>
-                            {minutes} minutes
-                          </option>
-                        ))}
-                      </select>
+                      <label className="flex items-start justify-between gap-3 rounded-xl border border-blue-100 bg-slate-50/80 px-3 py-2.5">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-700">
+                            Sync all participants time
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            Quiz clock starts when you click Activate All. Everyone shares the same
+                            remaining time; late joiners only get what&apos;s left. With both
+                            timers on, questions also run in lockstep (same question and countdown
+                            for everyone; cannot advance until each question timer ends). Present
+                            Mode always shows this session clock.
+                          </p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={quizTotalTimeSynced}
+                          onChange={(e) => setQuizTotalTimeSynced(e.target.checked)}
+                          className="mt-0.5 h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
+                        />
+                      </label>
+                      <div>
+                        <label
+                          className="text-sm font-semibold text-slate-700"
+                          htmlFor="quiz-total-duration"
+                        >
+                          Total quiz duration
+                        </label>
+                        <select
+                          id="quiz-total-duration"
+                          value={quizTotalTimeMode}
+                          onChange={(e) => {
+                            const mode = e.target.value
+                            setQuizTotalTimeMode(mode)
+                            if (mode === 'custom') {
+                              const custom = normalizeQuizTotalTimeMinutes(
+                                customQuizTotalTimeMinutes,
+                                20,
+                              )
+                              setCustomQuizTotalTimeMinutes(custom)
+                              setQuizTotalTimeMinutes(custom)
+                              return
+                            }
+                            setQuizTotalTimeMinutes(Number(mode))
+                          }}
+                          className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+                        >
+                          {QUIZ_TOTAL_TIME_PRESETS.map((minutes) => (
+                            <option key={minutes} value={minutes}>
+                              {minutes} minutes
+                            </option>
+                          ))}
+                          <option value="custom">Custom</option>
+                        </select>
+                      </div>
+                      {quizTotalTimeMode === 'custom' ? (
+                        <div>
+                          <label
+                            className="text-sm font-semibold text-slate-700"
+                            htmlFor="quiz-total-duration-custom"
+                          >
+                            Custom duration (minutes)
+                          </label>
+                          <input
+                            id="quiz-total-duration-custom"
+                            type="number"
+                            min={QUIZ_TOTAL_TIME_MIN_MINUTES}
+                            max={QUIZ_TOTAL_TIME_MAX_MINUTES}
+                            step={1}
+                            value={customQuizTotalTimeMinutes}
+                            onChange={(e) => {
+                              const raw = e.target.value
+                              if (raw === '') {
+                                setCustomQuizTotalTimeMinutes('')
+                                return
+                              }
+                              const next = Math.floor(Number(raw))
+                              if (!Number.isFinite(next)) return
+                              setCustomQuizTotalTimeMinutes(next)
+                              if (
+                                next >= QUIZ_TOTAL_TIME_MIN_MINUTES &&
+                                next <= QUIZ_TOTAL_TIME_MAX_MINUTES
+                              ) {
+                                setQuizTotalTimeMinutes(next)
+                              }
+                            }}
+                            onBlur={() => {
+                              const next = normalizeQuizTotalTimeMinutes(
+                                customQuizTotalTimeMinutes,
+                                20,
+                              )
+                              setCustomQuizTotalTimeMinutes(next)
+                              setQuizTotalTimeMinutes(next)
+                            }}
+                            className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+                          />
+                          <p className="mt-1 text-xs text-slate-500">
+                            Enter a whole number from {QUIZ_TOTAL_TIME_MIN_MINUTES} to{' '}
+                            {QUIZ_TOTAL_TIME_MAX_MINUTES} minutes.
+                          </p>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                   <div className="md:col-span-2">
@@ -499,13 +1410,185 @@ function SessionFormModal({
                   </div>
                 </>
               ) : null}
-            </>
-          ) : (
-            <p className="md:col-span-2 rounded-xl border border-amber-200/80 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-              This session is live or completed. You can still update the title and session logo.
-            </p>
-          )}
-
+              <div className="md:col-span-2 space-y-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">Waiting screen media</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Shown after Launch while participants wait for a live question
+                    {quizTotalTimeEnabled
+                      ? ' (or before Activate All when quiz total time is on)'
+                      : ''}
+                    . Videos play automatically with sound (looping, no controls). Images:{' '}
+                    {QUESTION_MEDIA_BANNER.images} · Videos: {QUESTION_MEDIA_BANNER.videos} · Audio:{' '}
+                    {QUESTION_MEDIA_BANNER.audio}. {QUESTION_MEDIA_BANNER.maxSize}.
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
+                    <div className="flex h-16 w-28 items-center justify-center overflow-hidden rounded-lg border border-blue-100 bg-slate-50">
+                      {waitingImagePreviewSrc ? (
+                        waitingMediaKind === 'video' ? (
+                          <video
+                            src={waitingImagePreviewSrc}
+                            className="max-h-full max-w-full object-contain"
+                            autoPlay
+                            loop
+                            playsInline
+                          />
+                        ) : waitingMediaKind === 'audio' ? (
+                          <span className="px-2 text-center text-[0.7rem] font-semibold text-slate-500">
+                            Audio
+                          </span>
+                        ) : (
+                          <img
+                            src={waitingImagePreviewSrc}
+                            alt="Waiting screen preview"
+                            className="max-h-full max-w-full object-contain p-1.5"
+                          />
+                        )
+                      ) : (
+                        <span className="px-2 text-center text-[0.7rem] text-slate-400">
+                          No media
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                      <input
+                        ref={waitingImageInputRef}
+                        type="file"
+                        accept={QUESTION_MEDIA_ACCEPT}
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0]
+                          if (file) void handleWaitingMediaUpload(file)
+                        }}
+                      />
+                      <button
+                        type="button"
+                        disabled={waitingImageUploading || !uploadDeptId}
+                        onClick={() => waitingImageInputRef.current?.click()}
+                        className="inline-flex h-10 items-center gap-2 rounded-xl border border-blue-200/70 bg-white px-3 text-sm font-semibold text-navy-800 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {waitingImageUploading ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <FileUp className="size-4" />
+                        )}
+                        {waitingImageUploading
+                          ? 'Uploading…'
+                          : waitingImagePreviewSrc
+                            ? 'Replace media'
+                            : 'Upload media'}
+                      </button>
+                      {waitingImagePreviewSrc ? (
+                        <button
+                          type="button"
+                          disabled={waitingImageUploading}
+                          onClick={() => {
+                            setWaitingScreenImageUrl('')
+                            setWaitingScreenMediaType(null)
+                            setWaitingImageError('')
+                          }}
+                          className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
+                        >
+                          <X className="size-4" />
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  {waitingImagePreviewSrc && waitingMediaKind === 'audio' ? (
+                    <div className="mt-2 rounded-xl border border-blue-100 bg-slate-50 px-3 py-2">
+                      <audio src={waitingImagePreviewSrc} controls className="w-full" />
+                    </div>
+                  ) : null}
+                  {waitingImagePreviewSrc && waitingMediaKind === 'video' ? (
+                    <div className="mt-2 overflow-hidden rounded-xl border border-blue-100 bg-slate-50">
+                      <video
+                        src={waitingImagePreviewSrc}
+                        autoPlay
+                        loop
+                        playsInline
+                        className="max-h-48 w-full"
+                      />
+                    </div>
+                  ) : null}
+                  {waitingImageError ? (
+                    <p className="mt-1.5 text-xs font-semibold text-red-700">{waitingImageError}</p>
+                  ) : null}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">Thank you image</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Shown when the quiz total timer ends, or when the host ends the session.
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
+                    <div className="flex h-16 w-28 items-center justify-center overflow-hidden rounded-lg border border-blue-100 bg-slate-50">
+                      {thanksImagePreviewSrc ? (
+                        <img
+                          src={thanksImagePreviewSrc}
+                          alt="Thank you screen preview"
+                          className="max-h-full max-w-full object-contain p-1.5"
+                        />
+                      ) : (
+                        <span className="px-2 text-center text-[0.7rem] text-slate-400">
+                          No image
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                      <input
+                        ref={thanksImageInputRef}
+                        type="file"
+                        accept={LOGO_ACCEPT}
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0]
+                          if (file) void handleThanksImageUpload(file)
+                        }}
+                      />
+                      <button
+                        type="button"
+                        disabled={thanksImageUploading || !uploadDeptId}
+                        onClick={() => thanksImageInputRef.current?.click()}
+                        className="inline-flex h-10 items-center gap-2 rounded-xl border border-blue-200/70 bg-white px-3 text-sm font-semibold text-navy-800 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {thanksImageUploading ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <FileUp className="size-4" />
+                        )}
+                        {thanksImageUploading
+                          ? 'Uploading…'
+                          : thanksImagePreviewSrc
+                            ? 'Replace image'
+                            : 'Upload image'}
+                      </button>
+                      {thanksImagePreviewSrc ? (
+                        <button
+                          type="button"
+                          disabled={thanksImageUploading}
+                          onClick={() => {
+                            setThanksScreenImageUrl('')
+                            setThanksImageError('')
+                          }}
+                          className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
+                        >
+                          <X className="size-4" />
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  {thanksImageError ? (
+                    <p className="mt-1.5 text-xs font-semibold text-red-700">{thanksImageError}</p>
+                  ) : null}
+                </div>
+              </div>
+          </div>
+          <div
+            className="col-span-full grid gap-4 md:grid-cols-2"
+            role="tabpanel"
+            hidden={effectiveTab !== 'look'}
+          >
           <div className="md:col-span-2">
             <label className="text-sm font-semibold text-slate-700">Session logo</label>
             <p className="mt-1 text-xs text-slate-500">
@@ -575,6 +1658,172 @@ function SessionFormModal({
                 Choose a department first so the logo can be uploaded.
               </p>
             ) : null}
+          </div>
+
+          <div className="md:col-span-2 rounded-xl border border-blue-200/70 bg-white p-3">
+            <ParticipantThemePicker
+              value={participantTheme}
+              customColors={participantThemeCustom}
+              deptId={uploadDeptId}
+              onChange={(themeId, custom) => {
+                setParticipantTheme(normalizeParticipantTheme(themeId))
+                if (custom) setParticipantThemeCustom(normalizeCustomThemeColors(custom))
+              }}
+            />
+          </div>
+
+          <div className="md:col-span-2 rounded-xl border border-blue-200/70 bg-white">
+            <button
+              type="button"
+              onClick={() => setPresentSettingsOpen((open) => !open)}
+              aria-expanded={presentSettingsOpen}
+              className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
+            >
+              <div>
+                <p className="text-sm font-semibold text-slate-700">Present mode settings</p>
+                <p className="text-xs text-slate-500">
+                  Choose what appears on the fullscreen present display.
+                </p>
+              </div>
+              <ChevronDown
+                className={`size-4 shrink-0 text-slate-400 transition ${
+                  presentSettingsOpen ? 'rotate-180' : ''
+                }`}
+                aria-hidden
+              />
+            </button>
+            {presentSettingsOpen ? (
+              <div className="space-y-2 border-t border-slate-100 px-3 py-3">
+                {PRESENT_MODE_SETTING_OPTIONS.map((option) => (
+                  <div key={option.key} className="space-y-2">
+                    <label className="flex items-center justify-between gap-3 rounded-xl border border-blue-100 bg-slate-50/80 px-3 py-2.5">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-700">{option.label}</p>
+                        <p className="text-xs text-slate-500">{option.description}</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(presentModeSettings[option.key])}
+                        onChange={(event) =>
+                          setPresentModeSettings((prev) => ({
+                            ...prev,
+                            [option.key]: event.target.checked,
+                          }))
+                        }
+                        className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
+                      />
+                    </label>
+                    {option.key === 'showCustomInstructions' &&
+                    presentModeSettings.showCustomInstructions ? (
+                      <div className="space-y-2 rounded-xl border border-blue-100 bg-white px-3 py-3">
+                        <p className="text-xs font-medium text-slate-500">
+                          Add numbered instructions for the lobby (max {MAX_CUSTOM_INSTRUCTIONS}).
+                        </p>
+                        {(presentModeSettings.customInstructions || []).map((text, index) => (
+                          <div key={`instruction-${index}`} className="flex items-start gap-2">
+                            <span className="mt-2 w-6 shrink-0 text-center text-sm font-semibold tabular-nums text-slate-500">
+                              {index + 1}.
+                            </span>
+                            <textarea
+                              value={text}
+                              rows={2}
+                              maxLength={MAX_CUSTOM_INSTRUCTION_LENGTH}
+                              onChange={(event) => {
+                                const value = event.target.value.slice(
+                                  0,
+                                  MAX_CUSTOM_INSTRUCTION_LENGTH,
+                                )
+                                setPresentModeSettings((prev) => {
+                                  const next = [...(prev.customInstructions || [])]
+                                  next[index] = value
+                                  return { ...prev, customInstructions: next }
+                                })
+                              }}
+                              placeholder="Instruction text"
+                              className="min-h-[2.5rem] flex-1 rounded-lg border border-blue-200/70 bg-slate-50/80 px-3 py-2 text-sm text-slate-800 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-400/20"
+                            />
+                            <div className="flex shrink-0 flex-col gap-1 pt-0.5">
+                              <button
+                                type="button"
+                                disabled={index === 0}
+                                onClick={() =>
+                                  setPresentModeSettings((prev) => {
+                                    const next = [...(prev.customInstructions || [])]
+                                    if (index <= 0) return prev
+                                    ;[next[index - 1], next[index]] = [next[index], next[index - 1]]
+                                    return { ...prev, customInstructions: next }
+                                  })
+                                }
+                                className="rounded-lg border border-blue-200/70 p-1.5 text-slate-500 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                aria-label={`Move instruction ${index + 1} up`}
+                              >
+                                <ChevronUp className="size-3.5" aria-hidden />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={
+                                  index >= (presentModeSettings.customInstructions || []).length - 1
+                                }
+                                onClick={() =>
+                                  setPresentModeSettings((prev) => {
+                                    const next = [...(prev.customInstructions || [])]
+                                    if (index >= next.length - 1) return prev
+                                    ;[next[index], next[index + 1]] = [next[index + 1], next[index]]
+                                    return { ...prev, customInstructions: next }
+                                  })
+                                }
+                                className="rounded-lg border border-blue-200/70 p-1.5 text-slate-500 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-40"
+                                aria-label={`Move instruction ${index + 1} down`}
+                              >
+                                <ChevronDown className="size-3.5" aria-hidden />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setPresentModeSettings((prev) => ({
+                                    ...prev,
+                                    customInstructions: (prev.customInstructions || []).filter(
+                                      (_item, i) => i !== index,
+                                    ),
+                                  }))
+                                }
+                                className="rounded-lg border border-red-200/80 p-1.5 text-red-600 transition hover:bg-red-50"
+                                aria-label={`Remove instruction ${index + 1}`}
+                              >
+                                <Trash2 className="size-3.5" aria-hidden />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          disabled={
+                            (presentModeSettings.customInstructions || []).length >=
+                            MAX_CUSTOM_INSTRUCTIONS
+                          }
+                          onClick={() =>
+                            setPresentModeSettings((prev) => {
+                              const list = prev.customInstructions || []
+                              if (list.length >= MAX_CUSTOM_INSTRUCTIONS) return prev
+                              return {
+                                ...prev,
+                                customInstructions: [...list, ''],
+                              }
+                            })
+                          }
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200/70 bg-slate-50/80 px-3 py-2 text-sm font-semibold text-navy-800 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Plus className="size-4" aria-hidden />
+                          Add instruction
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          </div>
           </div>
         </div>
         <div className="mt-4 flex shrink-0 items-end gap-2 border-t border-blue-100/80 pt-4 md:justify-end">

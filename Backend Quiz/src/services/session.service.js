@@ -1,5 +1,23 @@
 const { sequelize } = require("../config/database");
 const {
+  normalizePresentModeSettings
+} = require("../utils/presentModeSettings");
+const {
+  normalizeParticipantTheme,
+  normalizeCustomThemeColors,
+  CUSTOM_PARTICIPANT_THEME
+} = require("../utils/participantTheme");
+const { normalizeTimerSoundFields } = require("../utils/timerSound");
+const {
+  DEFAULT_LEADERBOARD_TOP_N,
+  normalizeLeaderboardTopN
+} = require("../utils/leaderboardTopN");
+const {
+  resolveJoinAllowlistFields,
+  assertJoinAllowlist
+} = require("../utils/joinAllowlist");
+const { resolveCustomerMatchFields } = require("../utils/customerMatch");
+const {
   Session,
   Department,
   User,
@@ -11,9 +29,9 @@ const {
 } = require("../models");
 const {
   isMultiNavTimedJoinClosed,
+  isSessionQuizTotalTimeEnabled,
   MULTI_NAV_TIMED_JOIN_CLOSED_MESSAGE
 } = require("../utils/sessionFlags");
-const { ensureAllQuestionsLiveForQuizTotalTimeSession } = require("./question.service");
 const {
   assertParticipantCapacity,
   assertSessionAcceptingJoin,
@@ -44,6 +62,12 @@ const {
   assertHostCanRunSessions,
   assertSessionQuestionCapacity
 } = require("./plan.service");
+const {
+  provisionSessionAdminForSession,
+  attachSessionAdminCredentials,
+  deactivateSessionAdminForSession,
+  ensureSessionAdminOnSession
+} = require("./session-admin.service");
 
 async function getDepartmentOrThrow(deptId) {
   const department = await Department.findByPk(deptId);
@@ -62,7 +86,13 @@ async function getSessionOrThrow(sessionId) {
         model: Department,
         include: [{ model: Client, attributes: ["client_id", "name", "slug"] }]
       },
-      { model: User, attributes: ["user_id", "full_name", "email", "role"] }
+      { model: User, attributes: ["user_id", "full_name", "email", "role"] },
+      {
+        model: User,
+        as: "sessionAdmin",
+        attributes: ["user_id", "email", "full_name", "role", "is_active"],
+        required: false
+      }
     ]
   });
 
@@ -100,11 +130,23 @@ async function listDepartmentSessions({ deptId, status, user }) {
 
   const where = { dept_id: deptId };
   if (status) where.status = status;
-  if (getDataScope(user) === "own_sessions") where.host_id = user.user_id;
+  if (user?.role === "session_admin") {
+    where.session_admin_user_id = user.user_id;
+  } else if (getDataScope(user) === "own_sessions") {
+    where.host_id = user.user_id;
+  }
 
   const sessions = await Session.findAll({
     where,
-    include: [{ model: User, attributes: ["user_id", "full_name", "email"] }],
+    include: [
+      { model: User, attributes: ["user_id", "full_name", "email"] },
+      {
+        model: User,
+        as: "sessionAdmin",
+        attributes: ["user_id", "email", "full_name", "role", "is_active"],
+        required: false
+      }
+    ],
     order: [["session_id", "DESC"]]
   });
 
@@ -140,16 +182,17 @@ async function listDepartmentSessions({ deptId, status, user }) {
       const completionProgress =
         participantsCount > 0 ? Math.round((completedParticipants / participantsCount) * 100) : 0;
 
-      return {
+      const plain = {
         ...session.toJSON(),
         participants_count: participantsCount,
         completed_participants: completedParticipants,
         completion_progress: completionProgress
       };
+      return attachSessionAdminCredentials(plain);
     })
   );
 
-  return withParticipantCounts;
+  return Promise.all(withParticipantCounts);
 }
 
 async function createSession({ deptId, input, user }) {
@@ -179,7 +222,7 @@ async function createSession({ deptId, input, user }) {
   }
 
    const sessionCode = await generateSessionCode();
-   return Session.create({
+   const session = await Session.create({
      dept_id: Number(deptId),
      host_id: Number(input.host_id),
      title: input.title.trim(),
@@ -196,12 +239,24 @@ async function createSession({ deptId, input, user }) {
        input.join_type ?? "name",
        input.join_otp_required
      ),
-     max_participants: input.max_participants || 500,
+     ...resolveJoinAllowlistFields(input, {
+       joinType: input.join_type ?? "name"
+     }),
+     ...resolveCustomerMatchFields(input),
+     max_participants: input.max_participants || 2000,
      show_results_to_participants: input.show_results_to_participants ?? true,
      allow_late_join: false,
+     join_locked: false,
      leaderboard_enabled: input.leaderboard_enabled ?? false,
+     current_rankings_enabled: false,
+     leaderboard_top_n:
+       input.leaderboard_top_n !== undefined
+         ? normalizeLeaderboardTopN(input.leaderboard_top_n)
+         : DEFAULT_LEADERBOARD_TOP_N,
      survey_results_enabled: input.survey_results_enabled ?? false,
      show_participant_count: input.show_participant_count ?? false,
+     show_session_title: input.show_session_title ?? true,
+     show_app_logo: input.show_app_logo ?? true,
      show_question_leaderboard: input.show_question_leaderboard ?? false,
      participant_navigation_enabled:
        input.participant_navigation_enabled !== undefined
@@ -211,14 +266,75 @@ async function createSession({ deptId, input, user }) {
        input.participant_navigation_enabled && input.quiz_total_time_minutes != null
          ? Number(input.quiz_total_time_minutes)
          : null,
+     quiz_total_question_timers_enabled: Boolean(
+       input.participant_navigation_enabled &&
+         input.quiz_total_time_minutes != null &&
+         Number(input.quiz_total_time_minutes) > 0 &&
+         input.quiz_total_question_timers_enabled
+     ),
+     quiz_total_time_synced: Boolean(
+       input.participant_navigation_enabled &&
+         input.quiz_total_time_minutes != null &&
+         Number(input.quiz_total_time_minutes) > 0 &&
+         input.quiz_total_time_synced
+     ),
      random_question_order_enabled:
        input.participant_navigation_enabled && Boolean(input.random_question_order_enabled),
+     builder_mode: input.builder_mode === "advanced" ? "advanced" : "normal",
+     questions_per_participant:
+       input.builder_mode === "advanced" && input.questions_per_participant != null
+         ? Number(input.questions_per_participant)
+         : null,
+     advanced_selection_mode:
+       input.builder_mode === "advanced" &&
+       input.advanced_selection_mode === "random_from_selected"
+         ? "random_from_selected"
+         : "random_all",
+     response_time_score_bands:
+       input.response_time_score_bands != null ? input.response_time_score_bands : null,
      qr_code_url: input.qr_code_url || null,
      logo_url:
        input.logo_url != null && String(input.logo_url).trim()
          ? String(input.logo_url).trim()
-         : null
+         : null,
+     waiting_screen_image_url:
+       input.waiting_screen_image_url != null &&
+       String(input.waiting_screen_image_url).trim()
+         ? String(input.waiting_screen_image_url).trim()
+         : null,
+     waiting_screen_media_type: (() => {
+       const url =
+         input.waiting_screen_image_url != null &&
+         String(input.waiting_screen_image_url).trim()
+           ? String(input.waiting_screen_image_url).trim()
+           : null;
+       if (!url) return null;
+       const type =
+         input.waiting_screen_media_type != null &&
+         String(input.waiting_screen_media_type).trim()
+           ? String(input.waiting_screen_media_type).trim()
+           : null;
+       return type || "image";
+     })(),
+     thanks_screen_image_url:
+       input.thanks_screen_image_url != null &&
+       String(input.thanks_screen_image_url).trim()
+         ? String(input.thanks_screen_image_url).trim()
+         : null,
+     participant_theme: normalizeParticipantTheme(input.participant_theme),
+     participant_theme_custom:
+       normalizeParticipantTheme(input.participant_theme) === CUSTOM_PARTICIPANT_THEME
+         ? normalizeCustomThemeColors(
+             input.participant_theme_custom ?? input.participantThemeCustom
+           )
+         : input.participant_theme_custom != null
+           ? normalizeCustomThemeColors(input.participant_theme_custom)
+           : null,
+     present_mode_settings: normalizePresentModeSettings(input.present_mode_settings)
    });
+
+   await provisionSessionAdminForSession({ session, host });
+   return attachSessionAdminCredentials(await getSessionOrThrow(session.session_id));
 }
 
 /**
@@ -296,18 +412,68 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
           source.join_type || "name",
           source.join_otp_required
         ),
-        max_participants: source.max_participants ?? 500,
+        ...resolveJoinAllowlistFields(
+          {
+            join_allowlist_enabled: source.join_allowlist_enabled,
+            join_allowlist: source.join_allowlist
+          },
+          { joinType: source.join_type || "name" }
+        ),
+        ...resolveCustomerMatchFields({
+          customer_match_enabled: source.customer_match_enabled,
+          customer_match_wc_code: source.customer_match_wc_code,
+          customer_match_zones: source.customer_match_zones
+        }),
+        max_participants: source.max_participants ?? 2000,
         show_results_to_participants: source.show_results_to_participants ?? true,
         allow_late_join: source.allow_late_join ?? false,
+        join_locked: false,
         leaderboard_enabled: source.leaderboard_enabled ?? false,
+        current_rankings_enabled: false,
+        leaderboard_top_n: normalizeLeaderboardTopN(
+          source.leaderboard_top_n ?? DEFAULT_LEADERBOARD_TOP_N
+        ),
         survey_results_enabled: source.survey_results_enabled ?? false,
         show_participant_count: source.show_participant_count ?? false,
+        show_session_title: source.show_session_title ?? true,
+        show_app_logo: source.show_app_logo ?? true,
         show_question_leaderboard: source.show_question_leaderboard ?? false,
         participant_navigation_enabled: source.participant_navigation_enabled ?? true,
         quiz_total_time_minutes: source.quiz_total_time_minutes ?? null,
+        quiz_total_question_timers_enabled: Boolean(
+          source.quiz_total_time_minutes != null &&
+            Number(source.quiz_total_time_minutes) > 0 &&
+            source.quiz_total_question_timers_enabled
+        ),
+        quiz_total_time_synced: Boolean(
+          source.quiz_total_time_minutes != null &&
+            Number(source.quiz_total_time_minutes) > 0 &&
+            source.quiz_total_time_synced
+        ),
         random_question_order_enabled: Boolean(source.random_question_order_enabled),
+        builder_mode: source.builder_mode === "advanced" ? "advanced" : "normal",
+        questions_per_participant:
+          source.builder_mode === "advanced" ? source.questions_per_participant ?? null : null,
+        advanced_selection_mode:
+          source.builder_mode === "advanced"
+            ? source.advanced_selection_mode || "random_all"
+            : "random_all",
+        response_time_score_bands: source.response_time_score_bands ?? null,
         qr_code_url: null,
-        logo_url: source.logo_url || null
+        logo_url: source.logo_url || null,
+        waiting_screen_image_url: source.waiting_screen_image_url || null,
+        waiting_screen_media_type: source.waiting_screen_image_url
+          ? source.waiting_screen_media_type || "image"
+          : null,
+        thanks_screen_image_url: source.thanks_screen_image_url || null,
+        participant_theme: normalizeParticipantTheme(source.participant_theme),
+        participant_theme_custom:
+          normalizeParticipantTheme(source.participant_theme) === CUSTOM_PARTICIPANT_THEME
+            ? normalizeCustomThemeColors(source.participant_theme_custom)
+            : source.participant_theme_custom != null
+              ? normalizeCustomThemeColors(source.participant_theme_custom)
+              : null,
+        present_mode_settings: normalizePresentModeSettings(source.present_mode_settings)
       },
       { transaction }
     );
@@ -362,6 +528,25 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
           is_quiz_mode: isNonScored ? false : q.is_quiz_mode ?? false,
           points_value: isNonScored ? 0 : q.points_value ?? 10,
           time_limit_seconds: isSurvey ? null : q.time_limit_seconds,
+          ...normalizeTimerSoundFields(
+            isSurvey
+              ? {
+                  time_limit_seconds: null,
+                  timer_sound_key: "classic",
+                  timer_sound_url: null,
+                  timer_ending_sound_key: "classic",
+                  timer_ending_sound_url: null,
+                  timer_sound_start_seconds: null
+                }
+              : {
+                  time_limit_seconds: q.time_limit_seconds,
+                  timer_sound_key: q.timer_sound_key,
+                  timer_sound_url: q.timer_sound_url,
+                  timer_ending_sound_key: q.timer_ending_sound_key,
+                  timer_ending_sound_url: q.timer_ending_sound_url,
+                  timer_sound_start_seconds: q.timer_sound_start_seconds
+                }
+          ),
           allow_multiple_select: q.allow_multiple_select ?? false,
           survey_subtype: isSurvey ? q.survey_subtype || null : null,
           rating_min: q.rating_min ?? 1,
@@ -375,7 +560,8 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
           source_bank_question_id: preserveBankSource
             ? q.source_bank_question_id || null
             : null,
-          set_id: q.set_id ? setIdMap.get(Number(q.set_id)) || null : null
+          set_id: q.set_id ? setIdMap.get(Number(q.set_id)) || null : null,
+          pool_eligible: q.pool_eligible !== false
         },
         { transaction }
       );
@@ -403,7 +589,12 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
     }
 
     await transaction.commit();
-    return getSessionOrThrow(newSession.session_id);
+    const created = await getSessionOrThrow(newSession.session_id);
+    const targetHostUser = await User.findByPk(hostId, {
+      attributes: ["user_id", "parent_id", "client_id", "dept_id"]
+    });
+    await provisionSessionAdminForSession({ session: created, host: targetHostUser });
+    return attachSessionAdminCredentials(await getSessionOrThrow(created.session_id));
   } catch (err) {
     await transaction.rollback();
     throw err;
@@ -413,7 +604,10 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
 async function getSessionById({ sessionId, user }) {
   const session = await getSessionOrThrow(sessionId);
   assertSessionWriteAccess(user, session);
-  return session;
+  if (user?.role !== "session_admin" && !session.session_admin_user_id) {
+    return ensureSessionAdminOnSession(session);
+  }
+  return attachSessionAdminCredentials(session);
 }
 
 async function updateSession({ sessionId, input, user }) {
@@ -423,10 +617,21 @@ async function updateSession({ sessionId, input, user }) {
 
   const liveSettingsOnly = [
     "leaderboard_enabled",
+    "current_rankings_enabled",
+    "leaderboard_top_n",
     "survey_results_enabled",
     "show_participant_count",
+    "show_session_title",
+    "show_app_logo",
     "title",
-    "logo_url"
+    "logo_url",
+    "waiting_screen_image_url",
+    "waiting_screen_media_type",
+    "thanks_screen_image_url",
+    "present_mode_settings",
+    "participant_theme",
+    "participant_theme_custom",
+    "join_locked"
   ];
   const inputKeys = Object.keys(input || {});
 
@@ -434,7 +639,7 @@ async function updateSession({ sessionId, input, user }) {
     const disallowed = inputKeys.filter((key) => !liveSettingsOnly.includes(key));
     if (disallowed.length > 0) {
       const error = new Error(
-        "Only session title, logo, rankings, survey results, and participant count settings can be updated while the session is live"
+        "Only session title, logo, present mode settings, participant theme, rankings, survey results, and participant count settings can be updated while the session is live"
       );
       error.statusCode = 400;
       throw error;
@@ -456,11 +661,64 @@ async function updateSession({ sessionId, input, user }) {
         : Number(input.quiz_total_time_minutes);
   }
 
+  let nextQuizTotalQuestionTimersEnabled = Boolean(session.quiz_total_question_timers_enabled);
+  if (
+    !nextParticipantNavigationEnabled ||
+    nextQuizTotalTimeMinutes == null ||
+    !(Number(nextQuizTotalTimeMinutes) > 0)
+  ) {
+    nextQuizTotalQuestionTimersEnabled = false;
+  } else if (input.quiz_total_question_timers_enabled !== undefined) {
+    nextQuizTotalQuestionTimersEnabled = Boolean(input.quiz_total_question_timers_enabled);
+  }
+
+  let nextQuizTotalTimeSynced = Boolean(session.quiz_total_time_synced);
+  if (
+    !nextParticipantNavigationEnabled ||
+    nextQuizTotalTimeMinutes == null ||
+    !(Number(nextQuizTotalTimeMinutes) > 0)
+  ) {
+    nextQuizTotalTimeSynced = false;
+  } else if (input.quiz_total_time_synced !== undefined) {
+    nextQuizTotalTimeSynced = Boolean(input.quiz_total_time_synced);
+  }
+
   const nextRandomQuestionOrderEnabled = !nextParticipantNavigationEnabled
     ? false
     : input.random_question_order_enabled !== undefined
       ? Boolean(input.random_question_order_enabled)
       : session.random_question_order_enabled;
+
+  const nextBuilderMode =
+    input.builder_mode !== undefined
+      ? input.builder_mode === "advanced"
+        ? "advanced"
+        : "normal"
+      : session.builder_mode || "normal";
+
+  let nextQuestionsPerParticipant = session.questions_per_participant;
+  let nextAdvancedSelectionMode = session.advanced_selection_mode || "random_all";
+  let nextResponseTimeScoreBands = session.response_time_score_bands;
+  if (nextBuilderMode === "normal") {
+    nextQuestionsPerParticipant = null;
+    nextAdvancedSelectionMode = "random_all";
+  } else {
+    if (input.questions_per_participant !== undefined) {
+      nextQuestionsPerParticipant =
+        input.questions_per_participant == null || input.questions_per_participant === ""
+          ? null
+          : Number(input.questions_per_participant);
+    }
+    if (input.advanced_selection_mode !== undefined) {
+      nextAdvancedSelectionMode =
+        input.advanced_selection_mode === "random_from_selected"
+          ? "random_from_selected"
+          : "random_all";
+    }
+  }
+  if (input.response_time_score_bands !== undefined) {
+    nextResponseTimeScoreBands = input.response_time_score_bands;
+  }
 
   Object.assign(session, {
     title: input.title !== undefined ? input.title : session.title,
@@ -477,18 +735,52 @@ async function updateSession({ sessionId, input, user }) {
       input.show_results_to_participants !== undefined
         ? Boolean(input.show_results_to_participants)
         : session.show_results_to_participants,
-    leaderboard_enabled:
-      input.leaderboard_enabled !== undefined
-        ? Boolean(input.leaderboard_enabled)
-        : session.leaderboard_enabled,
+    ...(() => {
+      let nextLeaderboard =
+        input.leaderboard_enabled !== undefined
+          ? Boolean(input.leaderboard_enabled)
+          : Boolean(session.leaderboard_enabled);
+      let nextCurrent =
+        input.current_rankings_enabled !== undefined
+          ? Boolean(input.current_rankings_enabled)
+          : Boolean(session.current_rankings_enabled);
+      // Mutually exclusive participant ranking screens.
+      if (input.current_rankings_enabled === true) {
+        nextCurrent = true;
+        nextLeaderboard = false;
+      } else if (input.leaderboard_enabled === true) {
+        nextLeaderboard = true;
+        nextCurrent = false;
+      }
+      return {
+        leaderboard_enabled: nextLeaderboard,
+        current_rankings_enabled: nextCurrent
+      };
+    })(),
+    leaderboard_top_n:
+      input.leaderboard_top_n !== undefined
+        ? normalizeLeaderboardTopN(input.leaderboard_top_n)
+        : normalizeLeaderboardTopN(session.leaderboard_top_n),
     survey_results_enabled:
       input.survey_results_enabled !== undefined
         ? Boolean(input.survey_results_enabled)
         : session.survey_results_enabled,
+    join_locked:
+      input.join_locked !== undefined
+        ? Boolean(input.join_locked)
+        : Boolean(session.join_locked),
     show_participant_count:
       input.show_participant_count !== undefined
         ? Boolean(input.show_participant_count)
         : session.show_participant_count,
+    show_session_title:
+      input.show_session_title !== undefined
+        ? Boolean(input.show_session_title)
+        : session.show_session_title,
+    show_app_logo:
+      input.show_app_logo !== undefined
+        ? Boolean(input.show_app_logo)
+        : session.show_app_logo,
     show_question_leaderboard:
       input.show_question_leaderboard !== undefined
         ? Boolean(input.show_question_leaderboard)
@@ -498,7 +790,13 @@ async function updateSession({ sessionId, input, user }) {
         ? Boolean(input.participant_navigation_enabled)
         : session.participant_navigation_enabled,
     quiz_total_time_minutes: nextQuizTotalTimeMinutes,
+    quiz_total_question_timers_enabled: nextQuizTotalQuestionTimersEnabled,
+    quiz_total_time_synced: nextQuizTotalTimeSynced,
     random_question_order_enabled: nextRandomQuestionOrderEnabled,
+    builder_mode: nextBuilderMode,
+    questions_per_participant: nextQuestionsPerParticipant,
+    advanced_selection_mode: nextAdvancedSelectionMode,
+    response_time_score_bands: nextResponseTimeScoreBands,
     join_type:
       input.join_type !== undefined ? input.join_type : session.join_type,
     join_otp_required: (() => {
@@ -509,6 +807,32 @@ async function updateSession({ sessionId, input, user }) {
           ? input.join_otp_required
           : session.join_otp_required;
       return resolveJoinOtpRequired(nextJoinType, nextOtpFlag);
+    })(),
+    ...(() => {
+      const nextJoinType =
+        input.join_type !== undefined ? input.join_type : session.join_type;
+      if (
+        input.join_allowlist_enabled === undefined &&
+        input.join_allowlist === undefined &&
+        input.join_type === undefined
+      ) {
+        return {};
+      }
+      return resolveJoinAllowlistFields(input, {
+        joinType: nextJoinType,
+        previous: session
+      });
+    })(),
+    ...(() => {
+      if (
+        input.customer_match_enabled === undefined &&
+        input.customer_match_wc_code === undefined &&
+        input.customer_match_zones === undefined &&
+        input.customer_match_zone === undefined
+      ) {
+        return {};
+      }
+      return resolveCustomerMatchFields(input, { previous: session });
     })(),
     scheduled_date:
       input.scheduled_date !== undefined ? input.scheduled_date || null : session.scheduled_date,
@@ -535,7 +859,66 @@ async function updateSession({ sessionId, input, user }) {
         ? input.logo_url != null && String(input.logo_url).trim()
           ? String(input.logo_url).trim()
           : null
-        : session.logo_url
+        : session.logo_url,
+    waiting_screen_image_url:
+      input.waiting_screen_image_url !== undefined
+        ? input.waiting_screen_image_url != null &&
+          String(input.waiting_screen_image_url).trim()
+          ? String(input.waiting_screen_image_url).trim()
+          : null
+        : session.waiting_screen_image_url,
+    waiting_screen_media_type: (() => {
+      const nextUrl =
+        input.waiting_screen_image_url !== undefined
+          ? input.waiting_screen_image_url != null &&
+            String(input.waiting_screen_image_url).trim()
+            ? String(input.waiting_screen_image_url).trim()
+            : null
+          : session.waiting_screen_image_url;
+      if (!nextUrl) return null;
+      if (input.waiting_screen_media_type !== undefined) {
+        return input.waiting_screen_media_type != null &&
+          String(input.waiting_screen_media_type).trim()
+          ? String(input.waiting_screen_media_type).trim()
+          : "image";
+      }
+      return session.waiting_screen_media_type || "image";
+    })(),
+    thanks_screen_image_url:
+      input.thanks_screen_image_url !== undefined
+        ? input.thanks_screen_image_url != null &&
+          String(input.thanks_screen_image_url).trim()
+          ? String(input.thanks_screen_image_url).trim()
+          : null
+        : session.thanks_screen_image_url,
+    participant_theme:
+      input.participant_theme !== undefined
+        ? normalizeParticipantTheme(input.participant_theme)
+        : normalizeParticipantTheme(session.participant_theme),
+    participant_theme_custom: (() => {
+      const nextTheme =
+        input.participant_theme !== undefined
+          ? normalizeParticipantTheme(input.participant_theme)
+          : normalizeParticipantTheme(session.participant_theme);
+      if (input.participant_theme_custom !== undefined) {
+        if (input.participant_theme_custom == null) return null;
+        return normalizeCustomThemeColors(input.participant_theme_custom);
+      }
+      if (nextTheme === CUSTOM_PARTICIPANT_THEME) {
+        return session.participant_theme_custom != null
+          ? normalizeCustomThemeColors(session.participant_theme_custom)
+          : normalizeCustomThemeColors(null);
+      }
+      return session.participant_theme_custom != null
+        ? normalizeCustomThemeColors(session.participant_theme_custom)
+        : session.participant_theme_custom;
+    })(),
+    present_mode_settings:
+      input.present_mode_settings !== undefined
+        ? normalizePresentModeSettings(input.present_mode_settings)
+        : session.present_mode_settings != null
+          ? normalizePresentModeSettings(session.present_mode_settings)
+          : session.present_mode_settings
   });
 
   await session.save();
@@ -547,7 +930,8 @@ async function archiveSession({ sessionId, user }) {
   assertSessionWriteAccess(user, session);
   session.status = "archived";
   await session.save();
-  return session;
+  await deactivateSessionAdminForSession(session);
+  return attachSessionAdminCredentials(session);
 }
 
 /**
@@ -631,6 +1015,7 @@ async function hideQuestionResultsForSession(sessionId) {
 /** Close overall rankings, survey results, and per-question Show results when a session ends. */
 async function clearParticipantFacingDisplaysOnEnd(session) {
   session.leaderboard_enabled = false;
+  session.current_rankings_enabled = false;
   session.survey_results_enabled = false;
   const hiddenQuestionIds = await hideQuestionResultsForSession(session.session_id);
   session.hiddenQuestionResultIds = hiddenQuestionIds;
@@ -677,8 +1062,18 @@ async function transitionSessionStatus({ sessionId, user, action }) {
     await assertHostCanRunSessions(session.host_id);
   }
 
+  if (action === "start") {
+    const { assertAdvancedSessionReadyToStart } = require("./advanced-assignment.service");
+    await assertAdvancedSessionReadyToStart(session);
+  }
+
   session.status = rule.to;
-  if (action === "start" && !session.started_at) session.started_at = new Date();
+  const quizTotalOnStart =
+    action === "start" && isSessionQuizTotalTimeEnabled(session);
+  // Quiz total time: Launch opens joining only. started_at + questions go live on Activate All.
+  if (action === "start" && !session.started_at && !quizTotalOnStart) {
+    session.started_at = new Date();
+  }
   if (action === "start" || action === "resume" || action === "pause") {
     session.last_activity_at = new Date();
   }
@@ -687,10 +1082,6 @@ async function transitionSessionStatus({ sessionId, user, action }) {
     await clearParticipantFacingDisplaysOnEnd(session);
   }
   await session.save();
-
-  if (action === "start") {
-    await ensureAllQuestionsLiveForQuizTotalTimeSession(session);
-  }
 
   return session;
 }
@@ -751,6 +1142,9 @@ async function listSessionParticipants({ sessionId, user }) {
   }));
 }
 
+const JOIN_LOCKED_MESSAGE =
+  "This room is locked by the host. New participants cannot join.";
+
 async function getSessionJoinBlockInfo(session, { notifyHost = false } = {}) {
   const planBlock = await getPlanJoinBlock(session);
   if (planBlock.blocked) {
@@ -761,6 +1155,14 @@ async function getSessionJoinBlockInfo(session, { notifyHost = false } = {}) {
       blocked: true,
       message: planBlock.message,
       reason: "plan_limit"
+    };
+  }
+
+  if (Boolean(session.join_locked)) {
+    return {
+      blocked: true,
+      message: JOIN_LOCKED_MESSAGE,
+      reason: "join_locked"
     };
   }
 
@@ -822,6 +1224,10 @@ async function joinSession({ code, payload }) {
 
   if (isContactJoinType(session.join_type)) {
     identity = assertSessionJoinIdentityFields(session.join_type, joinPayload);
+    assertJoinAllowlist(session, {
+      email: identity.email,
+      mobile: identity.mobile
+    });
     if (session.join_otp_required) {
       assertSessionJoinOtpToken(joinPayload.otp_token, {
         sessionCode: session.session_code,
@@ -836,6 +1242,13 @@ async function joinSession({ code, payload }) {
       error.statusCode = 400;
       throw error;
     }
+  }
+
+  if (session.customer_match_enabled) {
+    const { assertCustomerMatchForJoin } = require("./customer-match.service");
+    await assertCustomerMatchForJoin(session, {
+      email: identity.email || joinPayload.email
+    });
   }
 
   const existingByIdentity = await findParticipantByJoinIdentity(session, {
@@ -853,8 +1266,10 @@ async function joinSession({ code, payload }) {
     }
     const { assignRandomSetToParticipant } = require("./question-set.service");
     const { assignRandomQuestionOrderToParticipant } = require("../utils/participantQuestionOrder");
+    const { assignAdvancedQuestionsToParticipant } = require("./advanced-assignment.service");
     await assignRandomSetToParticipant(session, existingByIdentity);
     await assignRandomQuestionOrderToParticipant(session, existingByIdentity);
+    await assignAdvancedQuestionsToParticipant(session, existingByIdentity);
     return finalizeParticipantJoin(session, existingByIdentity, {
       isReturning: true,
       payload: joinPayload
@@ -880,8 +1295,10 @@ async function joinSession({ code, payload }) {
       assertSessionAcceptingJoin(session, { isReturning: true });
       const { assignRandomSetToParticipant } = require("./question-set.service");
       const { assignRandomQuestionOrderToParticipant } = require("../utils/participantQuestionOrder");
+      const { assignAdvancedQuestionsToParticipant } = require("./advanced-assignment.service");
       await assignRandomSetToParticipant(session, existingByDevice);
       await assignRandomQuestionOrderToParticipant(session, existingByDevice);
+      await assignAdvancedQuestionsToParticipant(session, existingByDevice);
       return finalizeParticipantJoin(session, existingByDevice, {
         isReturning: true,
         payload: joinPayload
@@ -926,8 +1343,10 @@ async function joinSession({ code, payload }) {
 
     const { assignRandomSetToParticipant } = require("./question-set.service");
     const { assignRandomQuestionOrderToParticipant } = require("../utils/participantQuestionOrder");
+    const { assignAdvancedQuestionsToParticipant } = require("./advanced-assignment.service");
     await assignRandomSetToParticipant(session, participant);
     await assignRandomQuestionOrderToParticipant(session, participant);
+    await assignAdvancedQuestionsToParticipant(session, participant);
 
     // Slot stays reserved until WebSocket connects (or TTL). Do not release here.
     return finalizeParticipantJoin(session, participant, {

@@ -73,9 +73,9 @@ export function useHostQuestionMutations(
       }
       return updated
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (updatedQuestion, variables) => {
       invalidateQuestions()
-      onQuestionLiveSuccess?.(variables)
+      onQuestionLiveSuccess?.(variables, updatedQuestion)
     },
     onError: (error) =>
       onMutationError?.(error.message || 'Unable to update question live state'),
@@ -126,6 +126,18 @@ export function useHostQuestionMutations(
     },
     onSuccess: (data) => {
       invalidateQuestions()
+      if (sessionId != null) {
+        queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
+        queryClient.invalidateQueries({ queryKey: ['live-session', sessionId, 'host'] })
+        if (data?.started_at) {
+          queryClient.setQueryData(['live-session', sessionId], (old) =>
+            old ? { ...old, started_at: data.started_at } : old,
+          )
+          queryClient.setQueryData(['live-session', sessionId, 'host'], (old) =>
+            old ? { ...old, started_at: data.started_at } : old,
+          )
+        }
+      }
       onActivateAllQuestionsSuccess?.(data?.activated_count ?? 0)
     },
     onError: (error) => {

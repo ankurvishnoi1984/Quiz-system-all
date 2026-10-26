@@ -1,3 +1,97 @@
+const {
+  validateJoinAllowlistFields
+} = require("../utils/joinAllowlist");
+const { validateCustomThemeColors } = require("../utils/participantTheme");
+const {
+  CUSTOMER_MATCH_ZONES,
+  normalizeCustomerMatchZones,
+  normalizeCustomerMatchWcCode
+} = require("../utils/customerMatch");
+const {
+  LEADERBOARD_TOP_N_OPTIONS,
+  normalizeLeaderboardTopN
+} = require("../utils/leaderboardTopN");
+
+function validateLeaderboardTopNField(payload, errors) {
+  if (payload?.leaderboard_top_n === undefined) return;
+  const n = Number(payload.leaderboard_top_n);
+  if (!Number.isFinite(n) || !LEADERBOARD_TOP_N_OPTIONS.includes(Math.floor(n))) {
+    errors.push(
+      `leaderboard_top_n must be one of: ${LEADERBOARD_TOP_N_OPTIONS.join(", ")}`
+    );
+  } else {
+    payload.leaderboard_top_n = normalizeLeaderboardTopN(n);
+  }
+}
+
+function pickCustomerMatchZonesRaw(payload, previous = null) {
+  if (payload?.customer_match_zones !== undefined) {
+    return payload.customer_match_zones;
+  }
+  if (payload?.customer_match_zone !== undefined) {
+    return payload.customer_match_zone;
+  }
+  if (previous?.customer_match_zones !== undefined) {
+    return previous.customer_match_zones;
+  }
+  if (previous?.customer_match_zone !== undefined) {
+    return previous.customer_match_zone;
+  }
+  return undefined;
+}
+
+function validateCustomerMatchZonesShape(raw, errors) {
+  if (raw === undefined || raw === null || raw === "") return;
+  if (typeof raw === "string") {
+    if (!normalizeCustomerMatchZones(raw)) {
+      errors.push(
+        `customer_match_zones must use only: ${CUSTOMER_MATCH_ZONES.join(", ")}`
+      );
+    }
+    return;
+  }
+  if (!Array.isArray(raw)) {
+    errors.push("customer_match_zones must be an array of zone strings");
+    return;
+  }
+  if (raw.length === 0) return;
+  if (!normalizeCustomerMatchZones(raw)) {
+    errors.push(
+      `customer_match_zones must include at least one of: ${CUSTOMER_MATCH_ZONES.join(", ")}`
+    );
+  }
+}
+
+function validateCustomerMatchConfigFields(payload, { previous = null } = {}) {
+  const errors = [];
+  const enabled =
+    payload?.customer_match_enabled !== undefined
+      ? Boolean(payload.customer_match_enabled)
+      : Boolean(previous?.customer_match_enabled);
+
+  if (!enabled) return errors;
+
+  const wcRaw =
+    payload?.customer_match_wc_code !== undefined
+      ? payload.customer_match_wc_code
+      : previous?.customer_match_wc_code;
+  const zonesRaw = pickCustomerMatchZonesRaw(payload, previous);
+
+  const wc = normalizeCustomerMatchWcCode(wcRaw);
+  const zones = normalizeCustomerMatchZones(zonesRaw);
+  if (!wc) {
+    errors.push(
+      "customer_match_wc_code is required when customer match is enabled (numbers only)"
+    );
+  }
+  if (!zones) {
+    errors.push(
+      `customer_match_zones is required when customer match is enabled (one or more of: ${CUSTOMER_MATCH_ZONES.join(", ")})`
+    );
+  }
+  return errors;
+}
+
 function validateScheduledDate(value) {
   if (value == null || value === "") return null;
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value.trim())) {
@@ -61,7 +155,8 @@ function validateAutoEndFields(payload, { requireFuture = true } = {}) {
   return errors;
 }
 
-const QUIZ_TOTAL_TIME_MINUTES = [15, 30, 45, 60];
+const QUIZ_TOTAL_TIME_MIN_MINUTES = 1;
+const QUIZ_TOTAL_TIME_MAX_MINUTES = 180;
 
 function validateRandomQuestionOrder(payload) {
   if (
@@ -85,13 +180,106 @@ function validateQuizTotalTimeMinutes(payload) {
     return null;
   }
   const minutes = Number(payload.quiz_total_time_minutes);
-  if (!QUIZ_TOTAL_TIME_MINUTES.includes(minutes)) {
-    return "quiz_total_time_minutes must be 15, 30, 45, or 60";
+  if (
+    !Number.isFinite(minutes) ||
+    !Number.isInteger(minutes) ||
+    minutes < QUIZ_TOTAL_TIME_MIN_MINUTES ||
+    minutes > QUIZ_TOTAL_TIME_MAX_MINUTES
+  ) {
+    return `quiz_total_time_minutes must be an integer between ${QUIZ_TOTAL_TIME_MIN_MINUTES} and ${QUIZ_TOTAL_TIME_MAX_MINUTES}`;
   }
   if (payload.participant_navigation_enabled === false) {
     return "quiz_total_time_minutes requires multiple active questions";
   }
   return null;
+}
+
+function validateQuizTotalQuestionTimersEnabled(payload, { requireQuizTotalInPayload = false } = {}) {
+  if (
+    payload?.quiz_total_question_timers_enabled === undefined ||
+    payload?.quiz_total_question_timers_enabled === null
+  ) {
+    return null;
+  }
+  if (typeof payload.quiz_total_question_timers_enabled !== "boolean") {
+    return "quiz_total_question_timers_enabled must be a boolean";
+  }
+  if (!payload.quiz_total_question_timers_enabled) return null;
+  if (payload.participant_navigation_enabled === false) {
+    return "quiz_total_question_timers_enabled requires multiple active questions";
+  }
+  if (
+    requireQuizTotalInPayload ||
+    Object.prototype.hasOwnProperty.call(payload, "quiz_total_time_minutes")
+  ) {
+    if (payload?.quiz_total_time_minutes == null || payload?.quiz_total_time_minutes === "") {
+      return "quiz_total_question_timers_enabled requires quiz total time";
+    }
+  }
+  return null;
+}
+
+function validateQuizTotalTimeSynced(payload, { requireQuizTotalInPayload = false } = {}) {
+  if (payload?.quiz_total_time_synced === undefined || payload?.quiz_total_time_synced === null) {
+    return null;
+  }
+  if (typeof payload.quiz_total_time_synced !== "boolean") {
+    return "quiz_total_time_synced must be a boolean";
+  }
+  if (!payload.quiz_total_time_synced) return null;
+  if (payload.participant_navigation_enabled === false) {
+    return "quiz_total_time_synced requires multiple active questions";
+  }
+  if (
+    requireQuizTotalInPayload ||
+    Object.prototype.hasOwnProperty.call(payload, "quiz_total_time_minutes")
+  ) {
+    if (payload?.quiz_total_time_minutes == null || payload?.quiz_total_time_minutes === "") {
+      return "quiz_total_time_synced requires quiz total time";
+    }
+  }
+  return null;
+}
+
+const WAITING_SCREEN_MEDIA_TYPES = new Set([
+  "image",
+  "gif",
+  "video_file",
+  "audio_file"
+]);
+
+function validateWaitingScreenMediaType(payload, errors) {
+  if (payload?.waiting_screen_media_type === undefined) return;
+
+  if (
+    payload.waiting_screen_media_type === null ||
+    payload.waiting_screen_media_type === ""
+  ) {
+    payload.waiting_screen_media_type = null;
+    return;
+  }
+
+  if (typeof payload.waiting_screen_media_type !== "string") {
+    errors.push("waiting_screen_media_type must be a string or null");
+    return;
+  }
+
+  const normalized = payload.waiting_screen_media_type.trim();
+  if (!WAITING_SCREEN_MEDIA_TYPES.has(normalized)) {
+    errors.push(
+      `waiting_screen_media_type must be one of: ${[...WAITING_SCREEN_MEDIA_TYPES].join(", ")}`
+    );
+    return;
+  }
+
+  payload.waiting_screen_media_type = normalized;
+
+  if (
+    payload.waiting_screen_image_url === null ||
+    payload.waiting_screen_image_url === ""
+  ) {
+    payload.waiting_screen_media_type = null;
+  }
 }
 
 const CONTACT_JOIN_TYPES = new Set([
@@ -116,6 +304,62 @@ function coerceOptionalBoolean(value, fieldName, errors) {
   if (typeof value !== "boolean") {
     errors.push(`${fieldName} must be a boolean`);
   }
+}
+
+const {
+  validatePresentModeSettings
+} = require("../utils/presentModeSettings");
+
+function validateAdvancedBuilderFields(payload, { requireKWhenAdvanced = false } = {}) {
+  const errors = [];
+  if (payload?.builder_mode !== undefined) {
+    if (!["normal", "advanced"].includes(payload.builder_mode)) {
+      errors.push("builder_mode must be normal or advanced");
+    }
+  }
+
+  const mode = payload?.builder_mode;
+  const isAdvanced = mode === "advanced";
+
+  if (
+    payload?.advanced_selection_mode !== undefined &&
+    !["random_all", "random_from_selected"].includes(payload.advanced_selection_mode)
+  ) {
+    errors.push("advanced_selection_mode must be random_all or random_from_selected");
+  }
+
+  if (payload?.questions_per_participant !== undefined && payload.questions_per_participant !== null) {
+    const k = Number(payload.questions_per_participant);
+    if (!Number.isInteger(k) || k < 1) {
+      errors.push("questions_per_participant must be a positive integer");
+    }
+  }
+
+  if (payload?.response_time_score_bands !== undefined && payload.response_time_score_bands !== null) {
+    if (!Array.isArray(payload.response_time_score_bands)) {
+      errors.push("response_time_score_bands must be an array or null");
+    } else {
+      for (const band of payload.response_time_score_bands) {
+        const maxSeconds = Number(band?.max_seconds);
+        const points = Number(band?.points);
+        if (!Number.isFinite(maxSeconds) || maxSeconds <= 0 || !Number.isFinite(points) || points < 0) {
+          errors.push(
+            "each response_time_score_bands entry needs positive max_seconds and non-negative points"
+          );
+          break;
+        }
+      }
+    }
+  }
+
+  if (requireKWhenAdvanced && isAdvanced) {
+    const k = Number(payload?.questions_per_participant);
+    if (!Number.isInteger(k) || k < 1) {
+      errors.push("questions_per_participant is required for Advanced sessions");
+    }
+  }
+
+  return errors;
 }
 
 function validateCreateSessionPayload(payload) {
@@ -147,6 +391,10 @@ function validateCreateSessionPayload(payload) {
   }
 
   coerceOptionalBoolean(payload?.join_otp_required, "join_otp_required", errors);
+  coerceOptionalBoolean(payload?.join_allowlist_enabled, "join_allowlist_enabled", errors);
+  coerceOptionalBoolean(payload?.customer_match_enabled, "customer_match_enabled", errors);
+  errors.push(...validateJoinAllowlistFields(payload));
+  errors.push(...validateCustomerMatchConfigFields(payload));
 
   if (
     payload?.participant_navigation_enabled !== undefined &&
@@ -173,14 +421,61 @@ function validateCreateSessionPayload(payload) {
       errors.push("logo_url must be a non-empty string or null");
     }
   }
+  if (
+    payload?.waiting_screen_image_url !== undefined &&
+    payload.waiting_screen_image_url !== null &&
+    payload.waiting_screen_image_url !== ""
+  ) {
+    if (
+      typeof payload.waiting_screen_image_url !== "string" ||
+      payload.waiting_screen_image_url.trim().length === 0
+    ) {
+      errors.push("waiting_screen_image_url must be a non-empty string or null");
+    }
+  }
+  validateWaitingScreenMediaType(payload, errors);
+  if (
+    payload?.thanks_screen_image_url !== undefined &&
+    payload.thanks_screen_image_url !== null &&
+    payload.thanks_screen_image_url !== ""
+  ) {
+    if (
+      typeof payload.thanks_screen_image_url !== "string" ||
+      payload.thanks_screen_image_url.trim().length === 0
+    ) {
+      errors.push("thanks_screen_image_url must be a non-empty string or null");
+    }
+  }
+
+  const presentModeSettingsError = validatePresentModeSettings(payload?.present_mode_settings);
+  if (presentModeSettingsError) errors.push(presentModeSettingsError);
+
+  const customThemeError = validateCustomThemeColors(payload?.participant_theme_custom);
+  if (customThemeError) errors.push(customThemeError);
 
   const quizTotalTimeError = validateQuizTotalTimeMinutes(payload);
   if (quizTotalTimeError) errors.push(quizTotalTimeError);
+
+  const quizTotalQuestionTimersError = validateQuizTotalQuestionTimersEnabled(payload, {
+    requireQuizTotalInPayload: true
+  });
+  if (quizTotalQuestionTimersError) errors.push(quizTotalQuestionTimersError);
+
+  const quizTotalTimeSyncedError = validateQuizTotalTimeSynced(payload, {
+    requireQuizTotalInPayload: true
+  });
+  if (quizTotalTimeSyncedError) errors.push(quizTotalTimeSyncedError);
 
   const randomOrderError = validateRandomQuestionOrder(payload);
   if (randomOrderError) errors.push(randomOrderError);
 
   errors.push(...validateAutoEndFields(payload));
+  errors.push(
+    ...validateAdvancedBuilderFields(payload, {
+      requireKWhenAdvanced: payload?.builder_mode === "advanced"
+    })
+  );
+  validateLeaderboardTopNField(payload, errors);
 
   return errors;
 }
@@ -194,20 +489,43 @@ function validateUpdateSessionPayload(payload) {
     "max_participants",
     "show_results_to_participants",
     "leaderboard_enabled",
+    "current_rankings_enabled",
+    "leaderboard_top_n",
     "survey_results_enabled",
     "show_participant_count",
+    "show_session_title",
+    "show_app_logo",
     "show_question_leaderboard",
     "participant_navigation_enabled",
     "quiz_total_time_minutes",
+    "quiz_total_question_timers_enabled",
+    "quiz_total_time_synced",
     "random_question_order_enabled",
     "join_type",
     "join_otp_required",
+    "join_allowlist_enabled",
+    "join_allowlist",
+    "customer_match_enabled",
+    "customer_match_wc_code",
+    "customer_match_zones",
+    "customer_match_zone", // legacy singular alias during rollout
+    "join_locked",
     "scheduled_date",
     "scheduled_time",
     "auto_end_enabled",
     "auto_end_date",
     "auto_end_time",
-    "logo_url"
+    "logo_url",
+    "waiting_screen_image_url",
+    "waiting_screen_media_type",
+    "thanks_screen_image_url",
+    "present_mode_settings",
+    "participant_theme",
+    "participant_theme_custom",
+    "builder_mode",
+    "questions_per_participant",
+    "advanced_selection_mode",
+    "response_time_score_bands"
   ];
 
   if (!payload || typeof payload !== "object") {
@@ -242,6 +560,30 @@ function validateUpdateSessionPayload(payload) {
   }
 
   coerceOptionalBoolean(payload?.join_otp_required, "join_otp_required", errors);
+  coerceOptionalBoolean(payload?.join_allowlist_enabled, "join_allowlist_enabled", errors);
+  coerceOptionalBoolean(payload?.customer_match_enabled, "customer_match_enabled", errors);
+  if (payload?.customer_match_enabled === true) {
+    errors.push(...validateCustomerMatchConfigFields(payload));
+  }
+  if (
+    payload?.customer_match_wc_code !== undefined &&
+    payload?.customer_match_wc_code !== null &&
+    payload?.customer_match_wc_code !== "" &&
+    !normalizeCustomerMatchWcCode(payload.customer_match_wc_code)
+  ) {
+    errors.push("customer_match_wc_code must contain digits only");
+  }
+  if (payload?.customer_match_zones !== undefined) {
+    validateCustomerMatchZonesShape(payload.customer_match_zones, errors);
+  } else if (
+    payload?.customer_match_zone !== undefined &&
+    payload?.customer_match_zone !== null &&
+    payload?.customer_match_zone !== ""
+  ) {
+    validateCustomerMatchZonesShape(payload.customer_match_zone, errors);
+  }
+  coerceOptionalBoolean(payload?.join_locked, "join_locked", errors);
+  errors.push(...validateJoinAllowlistFields(payload));
 
   const scheduledDateError = validateScheduledDate(payload?.scheduled_date);
   if (scheduledDateError) errors.push(scheduledDateError);
@@ -254,9 +596,46 @@ function validateUpdateSessionPayload(payload) {
       errors.push("logo_url must be a non-empty string or null");
     }
   }
+  if (
+    payload?.waiting_screen_image_url !== undefined &&
+    payload.waiting_screen_image_url !== null &&
+    payload.waiting_screen_image_url !== ""
+  ) {
+    if (
+      typeof payload.waiting_screen_image_url !== "string" ||
+      payload.waiting_screen_image_url.trim().length === 0
+    ) {
+      errors.push("waiting_screen_image_url must be a non-empty string or null");
+    }
+  }
+  validateWaitingScreenMediaType(payload, errors);
+  if (
+    payload?.thanks_screen_image_url !== undefined &&
+    payload.thanks_screen_image_url !== null &&
+    payload.thanks_screen_image_url !== ""
+  ) {
+    if (
+      typeof payload.thanks_screen_image_url !== "string" ||
+      payload.thanks_screen_image_url.trim().length === 0
+    ) {
+      errors.push("thanks_screen_image_url must be a non-empty string or null");
+    }
+  }
+
+  const presentModeSettingsError = validatePresentModeSettings(payload?.present_mode_settings);
+  if (presentModeSettingsError) errors.push(presentModeSettingsError);
+
+  const customThemeError = validateCustomThemeColors(payload?.participant_theme_custom);
+  if (customThemeError) errors.push(customThemeError);
 
   const quizTotalTimeError = validateQuizTotalTimeMinutes(payload);
   if (quizTotalTimeError) errors.push(quizTotalTimeError);
+
+  const quizTotalQuestionTimersError = validateQuizTotalQuestionTimersEnabled(payload);
+  if (quizTotalQuestionTimersError) errors.push(quizTotalQuestionTimersError);
+
+  const quizTotalTimeSyncedError = validateQuizTotalTimeSynced(payload);
+  if (quizTotalTimeSyncedError) errors.push(quizTotalTimeSyncedError);
 
   const randomOrderError = validateRandomQuestionOrder(payload);
   if (randomOrderError) errors.push(randomOrderError);
@@ -264,6 +643,9 @@ function validateUpdateSessionPayload(payload) {
   if (payload?.auto_end_enabled !== undefined) {
     errors.push(...validateAutoEndFields(payload, { requireFuture: false }));
   }
+
+  errors.push(...validateAdvancedBuilderFields(payload));
+  validateLeaderboardTopNField(payload, errors);
 
   return errors;
 }

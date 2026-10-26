@@ -322,7 +322,8 @@ async function loginUser(input) {
   }
   assertRoleActive(user);
 
-  if (isLoginOtpEnabled()) {
+  // Session Admin accounts use a username (not a real mailbox) — skip login OTP.
+  if (isLoginOtpEnabled() && user.role !== "session_admin") {
     await sendOtp({
       email: user.email,
       purpose: PURPOSES.LOGIN,
@@ -578,15 +579,24 @@ async function changePassword(userId, body = {}) {
   user.must_change_password = false;
   await user.save();
 
+  if (user.role === "session_admin") {
+    const { markSessionAdminPasswordChanged } = require("./session-admin.service");
+    await markSessionAdminPasswordChanged(user.user_id);
+  }
+
   let confirmation_email_sent = true;
-  try {
-    await sendPasswordChangedEmail({
-      to: user.email,
-      fullName: user.full_name
-    });
-  } catch (error) {
+  if (user.role === "session_admin") {
     confirmation_email_sent = false;
-    console.error("Password change confirmation email failed:", error);
+  } else {
+    try {
+      await sendPasswordChangedEmail({
+        to: user.email,
+        fullName: user.full_name
+      });
+    } catch (error) {
+      confirmation_email_sent = false;
+      console.error("Password change confirmation email failed:", error);
+    }
   }
 
   const payload = buildUserPayload(user);

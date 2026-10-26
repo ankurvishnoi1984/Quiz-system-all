@@ -1,5 +1,7 @@
+import { FitText } from '../../../../components/ui/FitText'
 import { getChoiceRevealClasses, isOptionCorrectForReveal } from '../../../../utils/answerReveal'
 import { getTrueFalseChoices } from '../../utils/questionUtils'
+import { useParticipantFit } from '../ParticipantFitContext'
 
 export function TrueFalseOptions({
   question,
@@ -9,8 +11,9 @@ export function TrueFalseOptions({
   canSeeAnswerReveal,
   onSelectOption,
 }) {
+  const fit = useParticipantFit()
   return (
-    <div className="grid gap-2 sm:grid-cols-2">
+    <div className={`grid sm:grid-cols-2 ${fit.id >= 2 ? 'gap-1.5' : 'gap-2'}`}>
       {getTrueFalseChoices(question).map((o) => {
         const label = o.option_text
         const isSelected =
@@ -23,7 +26,7 @@ export function TrueFalseOptions({
             key={label}
             type="button"
             onClick={() => onSelectOption(label)}
-            className={`quiz-option rounded-2xl border px-4 py-4 text-sm font-semibold transition ${
+            className={`quiz-option rounded-2xl border font-semibold transition ${fit.optionPadClass} ${
               isSelected ? 'quiz-option-selected' : ''
             } ${getChoiceRevealClasses({
               isSelected,
@@ -31,7 +34,15 @@ export function TrueFalseOptions({
               answerRevealed: canSeeAnswerReveal,
             })}`}
           >
-            {label}
+            <FitText
+              as="span"
+              className="leading-snug"
+              minPx={fit.option.minPx}
+              maxPx={fit.option.maxPx}
+              maxLines={fit.option.maxLines}
+            >
+              {label}
+            </FitText>
           </button>
         )
       })}

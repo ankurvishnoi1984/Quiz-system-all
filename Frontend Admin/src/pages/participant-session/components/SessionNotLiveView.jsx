@@ -41,13 +41,18 @@ export function SessionNotLiveView({
   const showScheduledDetails = copy.tone === 'waiting' && scheduledLabel
 
   return (
-    <PageCenteredShell maxWidth="max-w-lg">
+    <PageCenteredShell
+      maxWidth="max-w-lg"
+      theme={session?.participant_theme}
+      customTheme={session?.participant_theme_custom}
+    >
       <div className="space-y-5">
         <div className="text-center">
           <BrandLogoPair
             variant="hero"
             sessionLogoUrl={session?.logo_url}
             sessionTitle={session?.title || 'Session'}
+            showAppLogo={session?.show_app_logo !== false}
           />
           <div
             className={`mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full ${tone.iconWrap}`}
@@ -57,13 +62,15 @@ export function SessionNotLiveView({
         </div>
 
         <div className="space-y-2 text-center">
-          <h1 className="text-2xl font-bold text-navy-900">{copy.title}</h1>
+          <h1 className="participant-heading text-2xl font-bold text-navy-900">{copy.title}</h1>
           <p className="text-sm leading-relaxed text-slate-600">{copy.message}</p>
         </div>
 
         <div className="rounded-2xl border border-blue-200/70 bg-blue-50/40 px-4 py-4 text-left">
           <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">Session</p>
-          <p className="mt-1 text-lg font-bold text-navy-900">{session?.title || 'Quiz session'}</p>
+          {session?.show_session_title !== false ? (
+            <p className="mt-1 text-lg font-bold text-navy-900">{session?.title || 'Quiz session'}</p>
+          ) : null}
           {showScheduledDetails ? (
             <div className="mt-3 rounded-xl border border-sky-200/80 bg-white/80 px-3 py-2.5">
               <p className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-sky-900">

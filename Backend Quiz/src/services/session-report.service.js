@@ -198,7 +198,15 @@ async function getSessionSummaryReport({ sessionId, user }) {
     }),
     Participant.findAll({
       where: { session_id: numericSessionId },
-      attributes: ["participant_id", "nickname", "email", "is_anonymous", "score", "joined_at"]
+      attributes: [
+        "participant_id",
+        "nickname",
+        "email",
+        "mobile",
+        "is_anonymous",
+        "score",
+        "joined_at"
+      ]
     }),
     Response.findAll({
       where: { session_id: numericSessionId },
@@ -281,6 +289,8 @@ async function getSessionSummaryReport({ sessionId, user }) {
       return {
         participant_id: participant.participant_id,
         nickname,
+        email: String(participant.email || "").trim(),
+        mobile: String(participant.mobile || "").trim(),
         responses_submitted: responseCountsByParticipant[participant.participant_id] || 0,
         score: Number(participant.score || 0)
       };
@@ -306,6 +316,7 @@ async function getSessionSummaryReport({ sessionId, user }) {
       department_name: department?.name || "—",
       dept_id: session.dept_id,
       status: session.status,
+      join_type: session.join_type || null,
       started_at: session.started_at,
       ended_at: session.ended_at,
       date: session.started_at || session.created_at,
@@ -577,14 +588,29 @@ async function getSessionParticipantsReport({ sessionId, user }) {
     }),
     Participant.findAll({
       where: { session_id: numericSessionId },
-      attributes: ["participant_id", "nickname", "email", "is_anonymous", "score", "joined_at"]
+      attributes: [
+        "participant_id",
+        "nickname",
+        "email",
+        "mobile",
+        "is_anonymous",
+        "score",
+        "joined_at"
+      ]
     }),
     Response.findAll({
       where: { session_id: numericSessionId },
       include: [
         {
           model: Participant,
-          attributes: ["participant_id", "nickname", "email", "is_anonymous", "score"]
+          attributes: [
+            "participant_id",
+            "nickname",
+            "email",
+            "mobile",
+            "is_anonymous",
+            "score"
+          ]
         },
         { model: QuestionOption, attributes: ["option_id", "option_text"] }
       ],
@@ -602,6 +628,8 @@ async function getSessionParticipantsReport({ sessionId, user }) {
     participantStats.set(participantId, {
       participant_id: participantId,
       nickname: participantDisplayName(participant, participantId),
+      email: String(participant.email || "").trim(),
+      mobile: String(participant.mobile || "").trim(),
       questions_answered: 0,
       correct_count: 0,
       total_score: Number(participant.score || 0),
@@ -621,6 +649,8 @@ async function getSessionParticipantsReport({ sessionId, user }) {
       stats = {
         participant_id: participantId,
         nickname: participantDisplayName(participant, participantId),
+        email: String(participant?.email || "").trim(),
+        mobile: String(participant?.mobile || "").trim(),
         questions_answered: 0,
         correct_count: 0,
         total_score: Number(participant?.score || 0),
@@ -640,6 +670,8 @@ async function getSessionParticipantsReport({ sessionId, user }) {
     return {
       participant_id: participantId,
       nickname: stats.nickname,
+      email: stats.email,
+      mobile: stats.mobile,
       question_id: row.question_id,
       question_text: question?.question_text || "",
       answer: formatResponseAnswer(row, question, optionMap),
@@ -657,6 +689,8 @@ async function getSessionParticipantsReport({ sessionId, user }) {
     return {
       participant_id: stats.participant_id,
       nickname: stats.nickname,
+      email: stats.email,
+      mobile: stats.mobile,
       questions_answered: stats.questions_answered,
       correct_count: stats.correct_count,
       total_score: stats.total_score,
@@ -684,7 +718,8 @@ async function getSessionParticipantsReport({ sessionId, user }) {
     session: {
       session_id: session.session_id,
       title: session.title,
-      status: session.status
+      status: session.status,
+      join_type: session.join_type || null
     },
     total_participants: participants.length,
     leaderboard,

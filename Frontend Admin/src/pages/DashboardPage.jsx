@@ -57,6 +57,7 @@ function DashboardPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [editSession, setEditSession] = useState(null)
   const [shareSession, setShareSession] = useState(null)
+  const [shareInitialTab, setShareInitialTab] = useState('link')
   const [sessionAlert, setSessionAlert] = useState(null)
   const [deleteConfirmSession, setDeleteConfirmSession] = useState(null)
   const [resetConfirmSession, setResetConfirmSession] = useState(null)
@@ -127,6 +128,17 @@ function DashboardPage() {
       setCreateOpen(false)
       if (tourActive && ['create', 'create-form'].includes(tourStep?.id)) {
         continueAfterSessionCreated(session?.session_id || session?.id)
+        return
+      }
+      if (session?.session_admin) {
+        setShareSession(session)
+        setShareInitialTab('admin')
+        setSessionAlert({
+          variant: 'success',
+          title: 'Session created',
+          message: `"${variables.input.title}" was created. Session Admin login is ready to share.`,
+          confirmLabel: 'OK',
+        })
         return
       }
       setSessionAlert({
@@ -472,6 +484,7 @@ function DashboardPage() {
     }
     if (action === 'share') {
       if (!canPresent) return
+      setShareInitialTab('link')
       setShareSession(session)
       return
     }
@@ -518,6 +531,14 @@ function DashboardPage() {
           values.enableNavigation && values.quizTotalTimeEnabled
             ? Number(values.quizTotalTimeMinutes)
             : null,
+        quiz_total_question_timers_enabled:
+          values.enableNavigation &&
+          values.quizTotalTimeEnabled &&
+          Boolean(values.quizTotalQuestionTimersEnabled),
+        quiz_total_time_synced:
+          values.enableNavigation &&
+          values.quizTotalTimeEnabled &&
+          Boolean(values.quizTotalTimeSynced),
         join_type: values.joinRequirement || 'name',
         join_otp_required:
           values.joinRequirement === 'name_email' ||
@@ -525,11 +546,54 @@ function DashboardPage() {
           values.joinRequirement === 'name_email_mobile'
             ? Boolean(values.joinOtpRequired)
             : false,
+        join_allowlist_enabled:
+          values.joinRequirement === 'name_email' ||
+          values.joinRequirement === 'name_mobile' ||
+          values.joinRequirement === 'name_email_mobile'
+            ? Boolean(values.joinAllowlistEnabled)
+            : false,
+        join_allowlist:
+          values.joinAllowlistEnabled &&
+          (values.joinRequirement === 'name_email' ||
+            values.joinRequirement === 'name_mobile' ||
+            values.joinRequirement === 'name_email_mobile')
+            ? values.joinAllowlist || null
+            : null,
+        customer_match_enabled: Boolean(values.customerMatchEnabled),
+        customer_match_wc_code: values.customerMatchEnabled
+          ? String(values.customerMatchWcCode || '').trim() || null
+          : null,
+        customer_match_zones: values.customerMatchEnabled
+          ? Array.isArray(values.customerMatchZones) && values.customerMatchZones.length
+            ? values.customerMatchZones
+            : null
+          : null,
         show_participant_count: Boolean(values.showParticipantCount),
+        show_session_title: values.showSessionTitle !== false,
+        show_app_logo: values.showAppLogo !== false,
         auto_end_enabled: Boolean(values.autoEndEnabled),
         auto_end_date: values.autoEndEnabled ? values.autoEndDate || null : null,
         auto_end_time: values.autoEndEnabled ? values.autoEndTime || null : null,
         logo_url: values.logoUrl || null,
+        waiting_screen_image_url: values.waitingScreenImageUrl || null,
+        waiting_screen_media_type: values.waitingScreenImageUrl
+          ? values.waitingScreenMediaType || 'image'
+          : null,
+        thanks_screen_image_url: values.thanksScreenImageUrl || null,
+        participant_theme: values.participantTheme || 'default',
+        participant_theme_custom: values.participantThemeCustom || null,
+        builder_mode: values.builderMode === 'advanced' ? 'advanced' : 'normal',
+        questions_per_participant:
+          values.builderMode === 'advanced' ? Number(values.questionsPerParticipant) || null : null,
+        advanced_selection_mode:
+          values.builderMode === 'advanced' && values.advancedSelectionMode === 'random_from_selected'
+            ? 'random_from_selected'
+            : 'random_all',
+        // Only set on create when the form seeds defaults (advanced). Omit otherwise.
+        ...(values.responseTimeScoreBands !== undefined
+          ? { response_time_score_bands: values.responseTimeScoreBands ?? null }
+          : {}),
+        present_mode_settings: values.presentModeSettings || null,
       },
     })
   }
@@ -550,18 +614,49 @@ function DashboardPage() {
         joinType === 'name_email_mobile'
           ? editSession.join_otp_required !== false
           : false,
+      joinAllowlistEnabled: Boolean(editSession.join_allowlist_enabled),
+      joinAllowlist: editSession.join_allowlist || null,
+      customerMatchEnabled: Boolean(editSession.customer_match_enabled),
+      customerMatchWcCode: editSession.customer_match_wc_code
+        ? String(editSession.customer_match_wc_code)
+        : '',
+      customerMatchZones: Array.isArray(editSession.customer_match_zones)
+        ? editSession.customer_match_zones
+        : editSession.customer_match_zone
+          ? [editSession.customer_match_zone]
+          : [],
       enableNavigation: Boolean(editSession.participant_navigation_enabled),
       randomQuestionOrder: Boolean(editSession.random_question_order_enabled),
       quizTotalTimeEnabled:
         editSession.quiz_total_time_minutes != null &&
         Number(editSession.quiz_total_time_minutes) > 0,
       quizTotalTimeMinutes: Number(editSession.quiz_total_time_minutes) || 30,
+      quizTotalQuestionTimersEnabled: Boolean(
+        editSession.quiz_total_question_timers_enabled,
+      ),
+      quizTotalTimeSynced: Boolean(editSession.quiz_total_time_synced),
       overallLeaderboard: Boolean(editSession.leaderboard_enabled),
       showParticipantCount: Boolean(editSession.show_participant_count),
+      showSessionTitle: editSession.show_session_title !== false,
+      showAppLogo: editSession.show_app_logo !== false,
       autoEndEnabled: Boolean(editSession.auto_end_enabled),
       autoEndDate: toDateInputValue(editSession.auto_end_date),
       autoEndTime: toTimeInputValue(editSession.auto_end_time),
       logoUrl: editSession.logo_url || '',
+      waitingScreenImageUrl: editSession.waiting_screen_image_url || '',
+      waitingScreenMediaType: editSession.waiting_screen_image_url
+        ? editSession.waiting_screen_media_type || 'image'
+        : null,
+      thanksScreenImageUrl: editSession.thanks_screen_image_url || '',
+      participantTheme: editSession.participant_theme || 'default',
+      participantThemeCustom: editSession.participant_theme_custom || null,
+      builderMode: editSession.builder_mode === 'advanced' ? 'advanced' : 'normal',
+      questionsPerParticipant: Number(editSession.questions_per_participant) || 10,
+      advancedSelectionMode:
+        editSession.advanced_selection_mode === 'random_from_selected'
+          ? 'random_from_selected'
+          : 'random_all',
+      presentModeSettings: editSession.present_mode_settings || undefined,
     }
   }, [editSession])
 
@@ -603,6 +698,17 @@ function DashboardPage() {
       title: values.title,
       leaderboard_enabled: values.overallLeaderboard,
       logo_url: values.logoUrl || null,
+      waiting_screen_image_url: values.waitingScreenImageUrl || null,
+      waiting_screen_media_type: values.waitingScreenImageUrl
+        ? values.waitingScreenMediaType || 'image'
+        : null,
+      thanks_screen_image_url: values.thanksScreenImageUrl || null,
+      participant_theme: values.participantTheme || 'default',
+      participant_theme_custom: values.participantThemeCustom || null,
+      present_mode_settings: values.presentModeSettings || null,
+      // Live-editable participant display flags (backend liveSettingsOnly).
+      show_session_title: values.showSessionTitle !== false,
+      show_app_logo: values.showAppLogo !== false,
     }
 
     if (!editSessionLiveSettingsOnly) {
@@ -617,6 +723,14 @@ function DashboardPage() {
           values.enableNavigation && values.quizTotalTimeEnabled
             ? Number(values.quizTotalTimeMinutes)
             : null,
+        quiz_total_question_timers_enabled:
+          values.enableNavigation &&
+          values.quizTotalTimeEnabled &&
+          Boolean(values.quizTotalQuestionTimersEnabled),
+        quiz_total_time_synced:
+          values.enableNavigation &&
+          values.quizTotalTimeEnabled &&
+          Boolean(values.quizTotalTimeSynced),
         join_type: values.joinRequirement || 'name',
         join_otp_required:
           values.joinRequirement === 'name_email' ||
@@ -624,10 +738,40 @@ function DashboardPage() {
           values.joinRequirement === 'name_email_mobile'
             ? Boolean(values.joinOtpRequired)
             : false,
+        join_allowlist_enabled:
+          values.joinRequirement === 'name_email' ||
+          values.joinRequirement === 'name_mobile' ||
+          values.joinRequirement === 'name_email_mobile'
+            ? Boolean(values.joinAllowlistEnabled)
+            : false,
+        join_allowlist:
+          values.joinAllowlistEnabled &&
+          (values.joinRequirement === 'name_email' ||
+            values.joinRequirement === 'name_mobile' ||
+            values.joinRequirement === 'name_email_mobile')
+            ? values.joinAllowlist || null
+            : null,
+        customer_match_enabled: Boolean(values.customerMatchEnabled),
+        customer_match_wc_code: values.customerMatchEnabled
+          ? String(values.customerMatchWcCode || '').trim() || null
+          : null,
+        customer_match_zones: values.customerMatchEnabled
+          ? Array.isArray(values.customerMatchZones) && values.customerMatchZones.length
+            ? values.customerMatchZones
+            : null
+          : null,
         show_participant_count: Boolean(values.showParticipantCount),
         auto_end_enabled: Boolean(values.autoEndEnabled),
         auto_end_date: values.autoEndEnabled ? values.autoEndDate || null : null,
         auto_end_time: values.autoEndEnabled ? values.autoEndTime || null : null,
+        builder_mode: values.builderMode === 'advanced' ? 'advanced' : 'normal',
+        questions_per_participant:
+          values.builderMode === 'advanced' ? Number(values.questionsPerParticipant) || null : null,
+        advanced_selection_mode:
+          values.builderMode === 'advanced' && values.advancedSelectionMode === 'random_from_selected'
+            ? 'random_from_selected'
+            : 'random_all',
+        // Omit bands on edit — builder owns them; sending null/defaults would wipe them.
       })
     }
 
@@ -818,12 +962,21 @@ function DashboardPage() {
         />
       ) : null}
 
-      <Modal open={Boolean(shareSession)} title="Share Session" onClose={() => setShareSession(null)}>
+      <Modal
+        open={Boolean(shareSession)}
+        title="Share Session"
+        onClose={() => {
+          setShareSession(null)
+          setShareInitialTab('link')
+        }}
+      >
         {shareSession && (
           <ShareSessionPanel
+            key={`${shareSession.session_id || shareSession.id}-${shareInitialTab}`}
             session={shareSession}
             accessToken={accessToken}
-            sessionDbId={shareSession.id}
+            sessionDbId={shareSession.session_id || shareSession.id}
+            initialTab={shareInitialTab}
           />
         )}
       </Modal>

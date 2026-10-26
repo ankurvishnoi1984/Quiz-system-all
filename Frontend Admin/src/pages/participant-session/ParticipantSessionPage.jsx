@@ -9,6 +9,7 @@ import {
   getParticipantSurveyQuestionResultsApi,
   joinSessionApi,
   sendSessionJoinOtpApi,
+  verifyCustomerMatchApi,
   verifySessionJoinOtpApi,
   // listQaQuestionsApi, // Q&A feature disabled
   listSessionQuestionsApi,
@@ -24,6 +25,7 @@ import { hasSessionCodeInJoinPath, isParticipantEmbedPath, normalizeSessionCode 
 import { isRunningInIframe } from '../../utils/iframeEmbed'
 import {
   canAutoJoinWithIdentity,
+  getCustomerMatchGate,
   mergeJoinIdentity,
   parseJoinIdentityFromSearch,
 } from '../../utils/embedJoinIdentity'
@@ -42,16 +44,37 @@ import {
   playSubmitSuccess,
   unlockTimerAudio,
 } from '../../utils/timerSounds'
-import { isSessionQuizTotalTimeEnabled, isSessionRandomQuestionOrderEnabled, isStrictLateJoinSession, sessionHasTimedQuestions } from '../../utils/sessionFlags'
+import {
+  isAdvancedBuilderSession,
+  isQuizTotalTimeSynced,
+  isQuizTotalWithQuestionTimersEnabled,
+  isSessionQuizTotalTimeEnabled,
+  isSessionRandomQuestionOrderEnabled,
+  isStrictLateJoinSession,
+  isSyncedQuestionLockstep,
+  sessionHasTimedQuestions,
+} from '../../utils/sessionFlags'
+import {
+  buildParticipantThemeStyle,
+  normalizeCustomThemeColors,
+  normalizeParticipantTheme,
+} from '../../utils/participantTheme'
 import {
   questionSupportsLeaderboard,
   questionSupportsParticipantResults,
   sessionSupportsOverallLeaderboard,
   sessionSupportsSurveyEndingScreen,
 } from '../../utils/livePresentation'
+import { normalizeLeaderboardTopN } from '../../utils/leaderboard'
+import { getPresentModeSettings } from '../../utils/presentModeSettings'
 import {
+  buildSyncedQuestionSchedule,
   filterActiveQuestionsForLateJoinPolicy,
   getCountdownEndsAtForQuestion,
+  getQuestionDeadlineMs,
+  getQuizTotalEndsAt,
+  getRemainingQuestionSeconds,
+  getSyncedQuestionIndex,
 } from '../../utils/questionTimer'
 import { ActiveQuestionPanel } from './components/ActiveQuestionPanel'
 import { JoinFormView } from './components/JoinFormView'
@@ -61,9 +84,12 @@ import { ParticipantAlertModal } from './components/ParticipantAlertModal'
 import { ParticipantSessionInactivityModal } from '../../components/session/ParticipantSessionInactivityModal'
 // import { QaPanel } from './components/QaPanel' // Q&A feature disabled
 import { OverallLeaderboardPanel } from './components/OverallLeaderboardPanel'
+import { ParticipantPodiumPanel } from './components/ParticipantPodiumPanel'
 import { SurveySessionEndingPanel } from './components/SurveySessionEndingPanel'
 import { SessionHeader } from './components/SessionHeader'
 import { SessionEndedBanner, SessionEndedPanel } from './components/SessionEndedBanner'
+import { QuizCompletedThanksPanel } from './components/QuizCompletedThanksPanel'
+import { ParticipantInstructionsRail } from './components/ParticipantInstructionsRail'
 import { WaitingForQuestion } from './components/WaitingForQuestion'
 import { WaitingView } from './components/WaitingView'
 import { isParticipantChoiceCorrect } from '../../utils/answerReveal'
@@ -74,7 +100,6 @@ import {
   canShowPreviousForUntimedMultiNav,
   canShowPreviousForQuizTotalTimeMultiNav,
   ensureParticipantQuestionOrder,
-  getSessionLastQuestionId,
   isMultiNavLastQuestionFinalized,
   getLastActivatedLiveQuestion,
   canAutoNavigateToActivatedQuestion,
@@ -142,6 +167,7 @@ function ParticipantSessionPage({ embed = false }) {
     quizQuestionOpenedAt,
     quizSubmittedQuestionIds,
     quizExplicitSubmittedQuestionIds,
+    quizSubmittedAtSecondsByQuestion,
     quizQuestionOrder,
     setResponses,
     setQuestionIndex,
@@ -149,6 +175,7 @@ function ParticipantSessionPage({ embed = false }) {
     setSubmitted,
     setQuizCountdown,
     startQuizSessionCountdown,
+    syncQuizSessionCountdownEndsAt,
     freezeQuizSessionCountdown,
     resetQuizProgress,
     hydrateQuizProgress,
@@ -156,6 +183,7 @@ function ParticipantSessionPage({ embed = false }) {
     freezeAllCountdowns,
     markQuestionsSubmitted,
     markQuestionsExplicitlySubmitted,
+    recordQuestionSubmittedAt,
     unlockQuestionForReattempt,
     markQuestionOpened,
     setQuizQuestionOrder,
@@ -170,6 +198,7 @@ function ParticipantSessionPage({ embed = false }) {
       quizQuestionOpenedAt: s.quizQuestionOpenedAt,
       quizSubmittedQuestionIds: s.quizSubmittedQuestionIds,
       quizExplicitSubmittedQuestionIds: s.quizExplicitSubmittedQuestionIds,
+      quizSubmittedAtSecondsByQuestion: s.quizSubmittedAtSecondsByQuestion,
       quizQuestionOrder: s.quizQuestionOrder,
       setResponses: s.setQuizResponses,
       setQuestionIndex: s.setQuizQuestionIndex,
@@ -177,6 +206,7 @@ function ParticipantSessionPage({ embed = false }) {
       setSubmitted: s.setQuizSubmitted,
       setQuizCountdown: s.setQuizCountdown,
       startQuizSessionCountdown: s.startQuizSessionCountdown,
+      syncQuizSessionCountdownEndsAt: s.syncQuizSessionCountdownEndsAt,
       freezeQuizSessionCountdown: s.freezeQuizSessionCountdown,
       resetQuizProgress: s.resetQuizProgress,
       hydrateQuizProgress: s.hydrateQuizProgress,
@@ -184,6 +214,7 @@ function ParticipantSessionPage({ embed = false }) {
       freezeAllCountdowns: s.freezeAllCountdowns,
       markQuestionsSubmitted: s.markQuestionsSubmitted,
       markQuestionsExplicitlySubmitted: s.markQuestionsExplicitlySubmitted,
+      recordQuestionSubmittedAt: s.recordQuestionSubmittedAt,
       unlockQuestionForReattempt: s.unlockQuestionForReattempt,
       markQuestionOpened: s.markQuestionOpened,
       setQuizQuestionOrder: s.setQuizQuestionOrder,
@@ -195,6 +226,9 @@ function ParticipantSessionPage({ embed = false }) {
   )
   const [countdownTick, setCountdownTick] = useState(0)
   const [step, setStep] = useState('join')
+  /** Present Mode ending sub-screen: podium | leaderboard | null */
+  const [presentEndingSlideType, setPresentEndingSlideType] = useState(null)
+  const presentEndingSlideTypeRef = useRef(null)
   const [name, setName] = useState(() => queryIdentity.name || '')
   const [email, setEmail] = useState(() => queryIdentity.email || '')
   const [mobile, setMobile] = useState(() => queryIdentity.mobile || '')
@@ -269,7 +303,9 @@ function ParticipantSessionPage({ embed = false }) {
   const closedNoticeShownRef = useRef(new Set())
   const allQuestionsClosedNoticeShownRef = useRef(false)
   const sessionEndedNotifiedRef = useRef(false)
+  const quizExpiryFinalizeStartedRef = useRef(false)
   const [leaderboard, setLeaderboard] = useState([])
+  const [leaderboardMe, setLeaderboardMe] = useState(null)
   const [questionLeaderboardByQuestion, setQuestionLeaderboardByQuestion] = useState({})
   const [questionLbVisibleByQuestion, setQuestionLbVisibleByQuestion] = useState({})
   const [answerRevealByQuestion, setAnswerRevealByQuestion] = useState({})
@@ -282,9 +318,14 @@ function ParticipantSessionPage({ embed = false }) {
     queryKey: ['participant-session', effectiveSessionCode],
     queryFn: () => lookupSessionApi(effectiveSessionCode),
     enabled: Boolean(effectiveSessionCode) && !ipBlocked,
-    retry: false,
-    staleTime: 0,
-    refetchOnWindowFocus: true,
+    // Retry transient network/5xx; never retry a real missing session.
+    retry: (failureCount, error) => {
+      if (Number(error?.status) === 404) return false
+      return failureCount < 2
+    },
+    // After join, avoid immediate refetch storms on focus / CONNECTED.
+    staleTime: participantToken || canUseStoredJoin ? 20_000 : 0,
+    refetchOnWindowFocus: !(participantToken || canUseStoredJoin),
     refetchIntervalInBackground: true,
     refetchInterval: (query) => {
       if (ipBlocked) return false
@@ -368,10 +409,23 @@ function ParticipantSessionPage({ embed = false }) {
       mappedQuestions.forEach((q) => {
         const key = String(q.id)
         if (q.answerRevealed) {
+          const apiIds = q.correctOptionIds || []
+          const apiPairs = q.correctMatchingPairs || null
+          const prevEntry = prev[key]
+          const keepLocalIds =
+            !apiIds.length && prevEntry?.correctOptionIds?.length
+          const keepLocalPairs =
+            !apiPairs &&
+            prevEntry?.correctMatchingPairs &&
+            typeof prevEntry.correctMatchingPairs === 'object'
           merged[key] = {
             revealed: true,
-            correctOptionIds: q.correctOptionIds || [],
-            correctMatchingPairs: q.correctMatchingPairs || null,
+            correctOptionIds: keepLocalIds
+              ? prevEntry.correctOptionIds
+              : apiIds,
+            correctMatchingPairs: keepLocalPairs
+              ? prevEntry.correctMatchingPairs
+              : apiPairs,
           }
         } else if (merged[key]) {
           merged[key] = {
@@ -388,7 +442,16 @@ function ParticipantSessionPage({ embed = false }) {
   const session = sessionQuery.data
   const isSessionEnded =
     session?.status === 'completed' || session?.status === 'archived'
-  const showOverallLeaderboard = Boolean(session?.leaderboard_enabled)
+  const showOverallLeaderboard = Boolean(
+    session?.leaderboard_enabled || session?.current_rankings_enabled,
+  )
+  const rankingsTitle = session?.current_rankings_enabled
+    ? 'Current rankings'
+    : 'Overall Rankings'
+  const rankingsSubtitle = session?.current_rankings_enabled
+    ? 'Based on questions attempted so far'
+    : null
+  // Rankings replace the live question — participants only see the leaderboard screen.
   const showOverallLeaderboardTab =
     showOverallLeaderboard &&
     (sessionSupportsOverallLeaderboard(mappedQuestions) || mappedQuestions.length === 0)
@@ -405,12 +468,21 @@ function ParticipantSessionPage({ embed = false }) {
     sessionSupportsSurveyEndingScreen(mappedQuestions)
   const showSurveyEndingScreen = showSurveyResults || showSurveyThanks
   const endingScreenOnlyMode = showOverallLeaderboardTab || showSurveyEndingScreen
-  const navigationEnabled = session?.participant_navigation_enabled !== false
+  // Advanced is host-paced (one slot at a time) — no Previous/Next across assigned questions.
+  const navigationEnabled =
+    !isAdvancedBuilderSession(session) && session?.participant_navigation_enabled !== false
   const randomQuestionOrderEnabled = isSessionRandomQuestionOrderEnabled(session)
   const sessionQuizTotalTimeEnabled = useMemo(
     () => isSessionQuizTotalTimeEnabled(session),
     [session],
   )
+  const quizTotalWithQuestionTimers = useMemo(
+    () => isQuizTotalWithQuestionTimersEnabled(session),
+    [session],
+  )
+  const quizTotalTimeSynced = useMemo(() => isQuizTotalTimeSynced(session), [session])
+  const syncedQuestionLockstep = useMemo(() => isSyncedQuestionLockstep(session), [session])
+  const presentModeSettings = useMemo(() => getPresentModeSettings(session), [session])
   const sessionQuizTotalTimeSeconds = sessionQuizTotalTimeEnabled
     ? Math.max(0, Number(session?.quiz_total_time_minutes) || 0) * 60
     : 0
@@ -448,34 +520,47 @@ function ParticipantSessionPage({ embed = false }) {
   ])
 
   const activeQuestions = useMemo(() => {
+    // Lockstep needs the same question order for every participant.
+    if (syncedQuestionLockstep) return activeQuestionsBase
     if (!randomQuestionOrderEnabled || !quizQuestionOrder?.length) return activeQuestionsBase
     return applyParticipantQuestionOrder(activeQuestionsBase, quizQuestionOrder)
-  }, [activeQuestionsBase, randomQuestionOrderEnabled, quizQuestionOrder])
+  }, [
+    activeQuestionsBase,
+    syncedQuestionLockstep,
+    randomQuestionOrderEnabled,
+    quizQuestionOrder,
+  ])
+
+  const syncedQuestionSchedule = useMemo(() => {
+    if (!syncedQuestionLockstep) return []
+    return buildSyncedQuestionSchedule(activeQuestions, session?.started_at)
+  }, [syncedQuestionLockstep, activeQuestions, session?.started_at])
+
+  const syncedScheduleIndex = useMemo(() => {
+    if (!syncedQuestionSchedule.length) return 0
+    return getSyncedQuestionIndex(syncedQuestionSchedule, Date.now())
+  }, [syncedQuestionSchedule, countdownTick])
 
   const sessionLastQuestionId = useMemo(() => {
-    if (randomQuestionOrderEnabled) {
-      return activeQuestions.length ? activeQuestions[activeQuestions.length - 1]?.id ?? null : null
-    }
-    return getSessionLastQuestionId(mappedQuestions)
-  }, [randomQuestionOrderEnabled, activeQuestions, mappedQuestions])
+    if (!activeQuestions.length) return null
+    // Always use participant navigation order. Re-sorting by host display_order breaks
+    // Advanced assignments (and any custom order) — a mid-list question can look "final".
+    return activeQuestions[activeQuestions.length - 1]?.id ?? null
+  }, [activeQuestions])
 
   const participantEditPolicy = useMemo(
     () => ({
       sessionQuizTotalTimeEnabled,
       lastQuestionFinalized:
         navigationEnabled &&
-        isMultiNavLastQuestionFinalized(
-          randomQuestionOrderEnabled ? activeQuestions : mappedQuestions,
-          quizExplicitSubmittedQuestionIds,
-          { useParticipantOrder: randomQuestionOrderEnabled },
-        ),
+        isMultiNavLastQuestionFinalized(activeQuestions, quizExplicitSubmittedQuestionIds, {
+          useParticipantOrder: true,
+        }),
     }),
     [
       sessionQuizTotalTimeEnabled,
       navigationEnabled,
-      randomQuestionOrderEnabled,
       activeQuestions,
-      mappedQuestions,
       quizExplicitSubmittedQuestionIds,
     ],
   )
@@ -523,31 +608,64 @@ function ParticipantSessionPage({ embed = false }) {
     participantToken,
   })
   const timeLimit = question?.timeLimit ?? 0
-  const hasCountdown = sessionQuizTotalTimeEnabled || Number(timeLimit) > 0
-  const displayTimeLimit = sessionQuizTotalTimeEnabled ? sessionQuizTotalTimeSeconds : timeLimit
+  // Quiz-total-only sessions ignore per-question limits even if left in the DB.
+  const hasQuestionCountdown =
+    Number(timeLimit) > 0 &&
+    question?.type !== 'Survey' &&
+    (!sessionQuizTotalTimeEnabled || quizTotalWithQuestionTimers)
+  const hasQuizCountdown = sessionQuizTotalTimeEnabled && Boolean(session?.started_at)
+  const hasCountdown = hasQuestionCountdown || hasQuizCountdown
   const questionLockedBySubmission = Boolean((quizSubmittedQuestionIds || {})[String(question?.id)])
   const dbSessionId = session?.session_id
 
   const questionCountdown = question?.id
     ? (quizCountdownByQuestion || {})[String(question.id)]
     : null
-  const countdownEndsAt = sessionQuizTotalTimeEnabled
-    ? quizSessionCountdown?.endsAt ?? null
-    : questionCountdown?.endsAt ?? null
-  const countdownFrozen = sessionQuizTotalTimeEnabled
-    ? quizSessionCountdown?.frozen ?? null
-    : questionCountdown?.frozen ?? null
+  const questionCountdownEndsAt = questionCountdown?.endsAt ?? null
+  const questionCountdownFrozen = questionCountdown?.frozen ?? null
+  const quizCountdownEndsAt = quizSessionCountdown?.endsAt ?? null
+  const quizCountdownFrozen = quizSessionCountdown?.frozen ?? null
 
-  const timer = useMemo(() => {
-    if (isSessionEnded && hasCountdown) {
-      if (countdownFrozen != null) return countdownFrozen
+  const questionTimer = useMemo(() => {
+    if (!hasQuestionCountdown) return 0
+    if (isSessionEnded) {
+      if (questionCountdownFrozen != null) return questionCountdownFrozen
       return 0
     }
-    if (!hasCountdown || !countdownEndsAt) return 0
-    return Math.max(0, Math.ceil((countdownEndsAt - Date.now()) / 1000))
-  }, [isSessionEnded, hasCountdown, countdownFrozen, countdownEndsAt, countdownTick])
+    if (!questionCountdownEndsAt) return 0
+    return getRemainingQuestionSeconds(questionCountdownEndsAt)
+  }, [
+    isSessionEnded,
+    hasQuestionCountdown,
+    questionCountdownFrozen,
+    questionCountdownEndsAt,
+    countdownTick,
+  ])
 
-  const sessionTimerExpired = sessionQuizTotalTimeEnabled && hasCountdown && timer === 0
+  const quizTimer = useMemo(() => {
+    if (!hasQuizCountdown) return 0
+    if (isSessionEnded) {
+      if (quizCountdownFrozen != null) return quizCountdownFrozen
+      return 0
+    }
+    if (!quizCountdownEndsAt) return 0
+    return getRemainingQuestionSeconds(quizCountdownEndsAt)
+  }, [
+    isSessionEnded,
+    hasQuizCountdown,
+    quizCountdownFrozen,
+    quizCountdownEndsAt,
+    countdownTick,
+  ])
+
+  // Backward-compatible single timer for callers that still expect one clock.
+  const timer = hasQuizCountdown && !hasQuestionCountdown ? quizTimer : questionTimer
+  const displayTimeLimit = hasQuizCountdown && !hasQuestionCountdown
+    ? sessionQuizTotalTimeSeconds
+    : timeLimit
+
+  const sessionTimerExpired =
+    hasQuizCountdown && quizCountdownEndsAt != null && quizTimer === 0
 
   const canEditResponses = useMemo(
     () =>
@@ -562,13 +680,22 @@ function ParticipantSessionPage({ embed = false }) {
     ],
   )
 
-  const submittedAtSeconds =
-    countdownFrozen != null &&
-    (sessionQuizTotalTimeEnabled
-      ? lastQuestionFinalized
-      : questionLockedBySubmission)
-      ? countdownFrozen
+  const recordedSubmittedAtSeconds =
+    question?.id != null
+      ? (quizSubmittedAtSecondsByQuestion || {})[String(question.id)]
       : null
+  const questionSubmittedAtSeconds =
+    recordedSubmittedAtSeconds != null && Number.isFinite(Number(recordedSubmittedAtSeconds))
+      ? Math.max(0, Number(recordedSubmittedAtSeconds))
+      : questionCountdownFrozen != null && questionLockedBySubmission
+        ? Math.max(0, Number(timeLimit) - Number(questionCountdownFrozen))
+        : null
+  const submittedAtSeconds =
+    hasQuizCountdown && !hasQuestionCountdown
+      ? quizCountdownFrozen != null && lastQuestionFinalized
+        ? Math.max(0, Number(sessionQuizTotalTimeSeconds) - Number(quizCountdownFrozen))
+        : null
+      : questionSubmittedAtSeconds
 
   const submissionsClosed = Boolean(question?.submissionsClosed)
   const openForReattempt = Boolean(question?.openForReattempt)
@@ -580,9 +707,7 @@ function ParticipantSessionPage({ embed = false }) {
     lastQuestionFinalized ||
     (sessionQuizTotalTimeEnabled && sessionTimerExpired) ||
     (question?.type === 'Emoji Reaction' && questionLockedBySubmission) ||
-    (!sessionQuizTotalTimeEnabled &&
-      hasCountdown &&
-      (questionLockedBySubmission || timer === 0))
+    (hasQuestionCountdown && (questionLockedBySubmission || questionTimer === 0))
 
   const wordCloudInputsLocked = useMemo(
     () =>
@@ -793,6 +918,10 @@ function ParticipantSessionPage({ embed = false }) {
   }, [effectiveSessionCode, participantToken])
 
   useEffect(() => {
+    presentEndingSlideTypeRef.current = presentEndingSlideType
+  }, [presentEndingSlideType])
+
+  useEffect(() => {
     const unsub = useParticipantStore.persist.onFinishHydration(() => {
       setParticipantHydrated(true)
     })
@@ -849,7 +978,8 @@ function ParticipantSessionPage({ embed = false }) {
     if (!client || !effectiveSessionCode || !participantToken || !dbSessionId) return
 
     const offConnected = client.on(RealtimeEvent.CONNECTED, () => {
-      queryClient.invalidateQueries({ queryKey: ['participant-session', effectiveSessionCode] })
+      // Session status arrives via SESSION_UPDATED setQueryData — do not invalidate
+      // the public join lookup here (causes thundering-herd 404/5xx flashes).
       queryClient.invalidateQueries({ queryKey: ['participant-questions', dbSessionId] })
     })
 
@@ -864,22 +994,33 @@ function ParticipantSessionPage({ embed = false }) {
     })
 
     const offSession = client.on(RealtimeEvent.SESSION_UPDATED, (data) => {
-      if (data?.status) {
+      if (data?.status || data?.advanced_active_slot != null || data?.started_at) {
         const ended = data.status === 'completed' || data.status === 'archived'
         queryClient.setQueryData(['participant-session', effectiveSessionCode], (old) =>
           old
             ? {
                 ...old,
-                status: data.status,
+                ...(data?.status ? { status: data.status } : {}),
+                ...(data?.advanced_active_slot != null
+                  ? { advanced_active_slot: data.advanced_active_slot }
+                  : {}),
+                ...(data?.started_at ? { started_at: data.started_at } : {}),
                 // Match backend clearParticipantFacingDisplaysOnEnd before settings WS lands.
                 ...(ended
-                  ? { leaderboard_enabled: false, survey_results_enabled: false }
+                  ? {
+                      leaderboard_enabled: false,
+                      current_rankings_enabled: false,
+                      survey_results_enabled: false,
+                    }
                   : {}),
               }
             : old,
         )
       }
-      queryClient.invalidateQueries({ queryKey: ['participant-session', effectiveSessionCode] })
+      // Only refetch public lookup when the event has no status to apply locally.
+      if (!data?.status) {
+        queryClient.invalidateQueries({ queryKey: ['participant-session', effectiveSessionCode] })
+      }
       queryClient.invalidateQueries({ queryKey: ['participant-questions', dbSessionId] })
       if (data.status === 'completed' || data.status === 'live') {
         queryClient.invalidateQueries({ queryKey: ['participant-leaderboard', dbSessionId] })
@@ -907,7 +1048,11 @@ function ParticipantSessionPage({ embed = false }) {
       closedNoticeShownRef.current.delete(String(qid))
       setAllQuestionsClosedByHost(false)
 
-      const cachedQuestions = queryClient.getQueryData(['participant-questions', dbSessionId])
+      const cachedQuestions = queryClient.getQueryData([
+        'participant-questions',
+        dbSessionId,
+        participantToken,
+      ])
       const cachedQuestion = Array.isArray(cachedQuestions)
         ? cachedQuestions.find((q) => Number(q.question_id) === qid)
         : null
@@ -918,7 +1063,9 @@ function ParticipantSessionPage({ embed = false }) {
       const liveActivatedAt = data?.live_activated_at || new Date().toISOString()
 
       if (dbSessionId) {
-        queryClient.setQueryData(['participant-questions', dbSessionId], (old) => {
+        queryClient.setQueryData(
+          ['participant-questions', dbSessionId, participantToken],
+          (old) => {
           if (!Array.isArray(old)) return old
           return old.map((q) =>
             Number(q.question_id) === qid
@@ -956,7 +1103,9 @@ function ParticipantSessionPage({ embed = false }) {
 
     const offQuestion = client.on('question_changed', (data) => {
       if (dbSessionId && data?.question_id != null) {
-        queryClient.setQueryData(['participant-questions', dbSessionId], (old) => {
+        queryClient.setQueryData(
+          ['participant-questions', dbSessionId, participantToken],
+          (old) => {
           if (!Array.isArray(old)) return old
           const qid = Number(data.question_id)
           return old.map((q) => {
@@ -1007,7 +1156,9 @@ function ParticipantSessionPage({ embed = false }) {
         if (!qid) return
 
         if (dbSessionId) {
-          queryClient.setQueryData(['participant-questions', dbSessionId], (old) => {
+          queryClient.setQueryData(
+            ['participant-questions', dbSessionId, participantToken],
+            (old) => {
             if (!Array.isArray(old)) return old
             return old.map((q) =>
               Number(q.question_id) === qid
@@ -1031,7 +1182,9 @@ function ParticipantSessionPage({ embed = false }) {
       RealtimeEvent.ALL_QUESTIONS_SUBMISSIONS_CLOSED,
       () => {
         if (dbSessionId) {
-          queryClient.setQueryData(['participant-questions', dbSessionId], (old) => {
+          queryClient.setQueryData(
+            ['participant-questions', dbSessionId, participantToken],
+            (old) => {
             if (!Array.isArray(old)) return old
             return old.map((q) =>
               q.is_live === true || q.is_live === 1 || q.is_live === '1'
@@ -1099,14 +1252,20 @@ function ParticipantSessionPage({ embed = false }) {
           [String(data.question_id)]: data.question_leaderboard,
         }))
       }
+      // Refetch so "me" / out-of-top-10 rank stays accurate for this participant.
+      if (dbSessionId) {
+        queryClient.invalidateQueries({ queryKey: ['participant-leaderboard', dbSessionId] })
+      }
     })
 
     const offSessionSettings = client.on(RealtimeEvent.SESSION_SETTINGS_UPDATED, (data) => {
       const previousSession = queryClient.getQueryData(['participant-session', effectiveSessionCode])
-      const wasLeaderboardEnabled = Boolean(previousSession?.leaderboard_enabled)
+      const wasLeaderboardEnabled = Boolean(
+        previousSession?.leaderboard_enabled || previousSession?.current_rankings_enabled,
+      )
       const isLeaderboardEnabled =
-        data.leaderboard_enabled !== undefined
-          ? Boolean(data.leaderboard_enabled)
+        data.leaderboard_enabled !== undefined || data.current_rankings_enabled !== undefined
+          ? Boolean(data.leaderboard_enabled) || Boolean(data.current_rankings_enabled)
           : wasLeaderboardEnabled
       const wasSurveyResultsEnabled = Boolean(previousSession?.survey_results_enabled)
       const isSurveyResultsEnabled =
@@ -1123,9 +1282,28 @@ function ParticipantSessionPage({ embed = false }) {
         old
           ? {
               ...old,
-              leaderboard_enabled: isLeaderboardEnabled,
+              leaderboard_enabled:
+                data.leaderboard_enabled !== undefined
+                  ? Boolean(data.leaderboard_enabled)
+                  : old.leaderboard_enabled,
+              current_rankings_enabled:
+                data.current_rankings_enabled !== undefined
+                  ? Boolean(data.current_rankings_enabled)
+                  : old.current_rankings_enabled,
+              leaderboard_top_n:
+                data.leaderboard_top_n !== undefined
+                  ? Number(data.leaderboard_top_n) || old.leaderboard_top_n
+                  : old.leaderboard_top_n,
               survey_results_enabled: isSurveyResultsEnabled,
               show_participant_count: isParticipantCountVisible,
+              show_session_title:
+                data.show_session_title !== undefined
+                  ? data.show_session_title !== false
+                  : old.show_session_title,
+              show_app_logo:
+                data.show_app_logo !== undefined
+                  ? data.show_app_logo !== false
+                  : old.show_app_logo,
               participants_count: isParticipantCountVisible
                 ? old.participants_count
                 : null,
@@ -1134,10 +1312,50 @@ function ParticipantSessionPage({ embed = false }) {
                 : null,
               participant_navigation_enabled:
                 data.participant_navigation_enabled ?? old.participant_navigation_enabled,
+              quiz_total_time_minutes:
+                data.quiz_total_time_minutes !== undefined
+                  ? data.quiz_total_time_minutes
+                  : old.quiz_total_time_minutes,
+              quiz_total_question_timers_enabled:
+                data.quiz_total_question_timers_enabled !== undefined
+                  ? Boolean(data.quiz_total_question_timers_enabled)
+                  : old.quiz_total_question_timers_enabled,
+              quiz_total_time_synced:
+                data.quiz_total_time_synced !== undefined
+                  ? Boolean(data.quiz_total_time_synced)
+                  : old.quiz_total_time_synced,
               random_question_order_enabled:
                 data.random_question_order_enabled ?? old.random_question_order_enabled,
               allow_late_join:
                 data.allow_late_join !== undefined ? data.allow_late_join : old.allow_late_join,
+              join_locked:
+                data.join_locked !== undefined
+                  ? Boolean(data.join_locked)
+                  : old.join_locked,
+              join_blocked:
+                data.join_blocked !== undefined
+                  ? Boolean(data.join_blocked)
+                  : old.join_blocked,
+              join_blocked_message:
+                data.join_blocked_message !== undefined
+                  ? data.join_blocked_message
+                  : old.join_blocked_message,
+              join_blocked_reason:
+                data.join_blocked_reason !== undefined
+                  ? data.join_blocked_reason
+                  : old.join_blocked_reason,
+              participant_theme:
+                data.participant_theme !== undefined
+                  ? normalizeParticipantTheme(data.participant_theme)
+                  : old.participant_theme,
+              participant_theme_custom:
+                data.participant_theme_custom !== undefined
+                  ? data.participant_theme_custom
+                  : old.participant_theme_custom,
+              present_mode_settings:
+                data.present_mode_settings !== undefined
+                  ? data.present_mode_settings
+                  : old.present_mode_settings,
             }
           : old,
       )
@@ -1150,14 +1368,25 @@ function ParticipantSessionPage({ embed = false }) {
         playLeaderboardShown()
         setStep((current) => {
           if (current === 'join' || current === 'waiting') return current
-          return 'leaderboard'
+          return presentEndingSlideTypeRef.current === 'podium' ? 'podium' : 'leaderboard'
         })
         queryClient.invalidateQueries({ queryKey: ['participant-leaderboard', dbSessionId] })
         queryClient.invalidateQueries({ queryKey: ['participant-session', effectiveSessionCode] })
       }
 
+      if (
+        isLeaderboardEnabled &&
+        data.leaderboard_top_n !== undefined &&
+        Number(data.leaderboard_top_n) !== Number(previousSession?.leaderboard_top_n)
+      ) {
+        queryClient.invalidateQueries({ queryKey: ['participant-leaderboard', dbSessionId] })
+      }
+
       if (wasLeaderboardEnabled && !isLeaderboardEnabled) {
-        setStep((current) => (current === 'leaderboard' ? 'active' : current))
+        setPresentEndingSlideType(null)
+        setStep((current) =>
+          current === 'leaderboard' || current === 'podium' ? 'active' : current,
+        )
       }
 
       if (!wasSurveyResultsEnabled && isSurveyResultsEnabled) {
@@ -1220,6 +1449,32 @@ function ParticipantSessionPage({ embed = false }) {
       },
     )
 
+    const offPresentSlide = client.on(RealtimeEvent.PRESENT_SLIDE_CHANGED, (data) => {
+      const slideType = data?.slide_type != null ? String(data.slide_type) : null
+      if (slideType === 'podium') {
+        setPresentEndingSlideType('podium')
+        setStep((current) => {
+          if (current === 'join' || current === 'waiting') return current
+          return 'podium'
+        })
+        queryClient.invalidateQueries({ queryKey: ['participant-leaderboard', dbSessionId] })
+        return
+      }
+      if (slideType === 'leaderboard') {
+        setPresentEndingSlideType('leaderboard')
+        setStep((current) => {
+          if (current === 'join' || current === 'waiting') return current
+          return 'leaderboard'
+        })
+        queryClient.invalidateQueries({ queryKey: ['participant-leaderboard', dbSessionId] })
+        return
+      }
+      // Host left ending slides — clear podium/rankings ending sub-screen hint.
+      if (slideType === 'question' || slideType === 'participants' || slideType === 'distributedQuiz') {
+        setPresentEndingSlideType(null)
+      }
+    })
+
     client.connect()
 
     return () => {
@@ -1237,6 +1492,7 @@ function ParticipantSessionPage({ embed = false }) {
       offSessionSettings()
       offParticipantPresence()
       offQuestionLbVisibility()
+      offPresentSlide()
       client.disconnect()
     }
   }, [
@@ -1268,20 +1524,22 @@ function ParticipantSessionPage({ embed = false }) {
 
   useEffect(() => {
     if (step === 'join' || step === 'waiting') return
-    if (showOverallLeaderboardTab && step !== 'leaderboard') {
-      setStep('leaderboard')
+    if (showOverallLeaderboardTab) {
+      const target =
+        presentEndingSlideType === 'podium' ? 'podium' : 'leaderboard'
+      if (step !== target) setStep(target)
       return
     }
-    if (!showOverallLeaderboardTab && showSurveyEndingScreen && step !== 'surveyEnding') {
+    if (showSurveyEndingScreen && step !== 'surveyEnding') {
       setStep('surveyEnding')
       return
     }
     if (!showOverallLeaderboardTab && !showSurveyEndingScreen) {
-      if (step === 'leaderboard' || step === 'surveyEnding') {
+      if (step === 'leaderboard' || step === 'podium' || step === 'surveyEnding') {
         setStep('active')
       }
     }
-  }, [showOverallLeaderboardTab, showSurveyEndingScreen, step])
+  }, [showOverallLeaderboardTab, showSurveyEndingScreen, presentEndingSlideType, step])
 
   // Q&A feature disabled — leave any stale 'qa' step
   useEffect(() => {
@@ -1359,19 +1617,90 @@ function ParticipantSessionPage({ embed = false }) {
     return idx !== -1 ? idx : clamp(questionIndex, 0, activeQuestions.length - 1)
   }, [question?.id, activeQuestions, questionIndex])
 
+  // Serial for "Q#" labels. participantQuestions is live-only, so list findIndex is often 0
+  // under one-at-a-time activation — prefer API display_order / Advanced slot first.
+  const questionSerialNumber = useMemo(() => {
+    if (!question?.id) return null
+    if (randomQuestionOrderEnabled && activeQuestions.length > 1) {
+      const navIdx = activeQuestions.findIndex((q) => Number(q.id) === Number(question.id))
+      if (navIdx !== -1) return navIdx + 1
+    }
+    if (isAdvancedBuilderSession(session)) {
+      const slot = Number(session?.advanced_active_slot)
+      if (Number.isFinite(slot) && slot > 0) return slot
+    }
+    const order = Number(question.display_order)
+    if (Number.isFinite(order) && order > 0) return order
+    if (mappedQuestions.length > 1) {
+      const overallIdx = mappedQuestions.findIndex((q) => Number(q.id) === Number(question.id))
+      if (overallIdx !== -1) return overallIdx + 1
+    }
+    return displayQuestionIndex + 1
+  }, [
+    question?.id,
+    question?.display_order,
+    randomQuestionOrderEnabled,
+    activeQuestions,
+    mappedQuestions,
+    displayQuestionIndex,
+    session,
+  ])
+
+  // null total when live-only list would show a fake "/ 1" beside a higher serial.
+  const questionSerialTotal = useMemo(() => {
+    if (randomQuestionOrderEnabled && activeQuestions.length > 1) return activeQuestions.length
+    if (mappedQuestions.length > 1) return mappedQuestions.length
+    if (isAdvancedBuilderSession(session)) {
+      const perParticipant = Number(session?.questions_per_participant)
+      if (Number.isFinite(perParticipant) && perParticipant > 0) return perParticipant
+    }
+    const order = Number(question?.display_order)
+    if (mappedQuestions.length <= 1 && Number.isFinite(order) && order > 1) return null
+    return mappedQuestions.length || activeQuestions.length || null
+  }, [
+    randomQuestionOrderEnabled,
+    activeQuestions.length,
+    mappedQuestions.length,
+    session,
+    question?.display_order,
+  ])
+
+  /** Among questions reached so far (0..displayQuestionIndex): answered vs left blank.
+   * Current unanswered question is omitted from left blank until its timer hits 0
+   * (or until the participant navigates away if untimed). */
+  const attemptStats = useMemo(() => {
+    const list = activeQuestions
+    const end = Math.min(Number(displayQuestionIndex) || 0, list.length - 1)
+    if (end < 0 || !list.length) return { answered: 0, leftBlank: 0, reached: 0 }
+    let answered = 0
+    let leftBlank = 0
+    for (let i = 0; i <= end; i += 1) {
+      const q = list[i]
+      const hasAnswer = participantQuestionHasAnswer(q, responses[q?.id])
+      if (hasAnswer) {
+        answered += 1
+        continue
+      }
+      const isCurrent = i === end
+      if (isCurrent) {
+        const timerStillRunning = hasQuestionCountdown && questionTimer > 0
+        if (timerStillRunning || !hasQuestionCountdown) continue
+      }
+      leftBlank += 1
+    }
+    return { answered, leftBlank, reached: end + 1 }
+  }, [
+    activeQuestions,
+    displayQuestionIndex,
+    responses,
+    hasQuestionCountdown,
+    questionTimer,
+  ])
+
   const isLastDisplayedQuestion = useMemo(() => {
     if (!navigationEnabled) return true
-    if (sessionLastQuestionId != null && question?.id != null) {
-      return Number(question.id) === Number(sessionLastQuestionId)
-    }
     return activeQuestions.length > 0 && displayQuestionIndex === activeQuestions.length - 1
-  }, [
-    navigationEnabled,
-    sessionLastQuestionId,
-    question?.id,
-    activeQuestions.length,
-    displayQuestionIndex,
-  ])
+  }, [navigationEnabled, activeQuestions.length, displayQuestionIndex])
 
   const multiNavTimedSession = useMemo(
     () => navigationEnabled && sessionHasTimedQuestions(activeQuestions),
@@ -1385,6 +1714,8 @@ function ParticipantSessionPage({ embed = false }) {
 
   const canShowPreviousQuestion = useMemo(() => {
     if (!navigationEnabled) return false
+    // Lockstep: everyone stays on the shared question until the schedule moves.
+    if (syncedQuestionLockstep && !sessionTimerExpired && !isSessionEnded) return false
     if (sessionQuizTotalTimeEnabled) {
       return canShowPreviousForQuizTotalTimeMultiNav(
         mappedQuestions,
@@ -1402,6 +1733,8 @@ function ParticipantSessionPage({ embed = false }) {
     return canShowPreviousForUntimedMultiNav(activeQuestions)
   }, [
     navigationEnabled,
+    syncedQuestionLockstep,
+    isSessionEnded,
     sessionQuizTotalTimeEnabled,
     sessionTimerExpired,
     allQuestionsClosedByHost,
@@ -1460,26 +1793,31 @@ function ParticipantSessionPage({ embed = false }) {
   )
 
   const canGoToNextQuestion = useMemo(() => {
-    if (sessionQuizTotalTimeEnabled) return true
-    if (!hasCountdown) return true
+    if (sessionTimerExpired) return true
+    if (!hasQuestionCountdown) return true
+    if (questionTimer === 0) return true
+    // Lockstep: never unlock Submit/Next early by selecting an answer.
+    if (syncedQuestionLockstep) return false
     if (questionLockedBySubmission) return true
-    if (timer === 0) return true
     return currentQuestionAnswered
   }, [
-    sessionQuizTotalTimeEnabled,
-    hasCountdown,
+    sessionTimerExpired,
+    hasQuestionCountdown,
     questionLockedBySubmission,
-    timer,
+    questionTimer,
     currentQuestionAnswered,
+    syncedQuestionLockstep,
   ])
 
   const goToQuestionIndex = useCallback(
     (nextIndex) => {
       if (!navigationEnabled || !activeQuestions.length) return
+      // Lockstep navigation is driven by the shared schedule only.
+      if (syncedQuestionLockstep && !sessionTimerExpired && !isSessionEnded) return
       const n = clamp(nextIndex, 0, activeQuestions.length - 1)
       if (
-        !sessionQuizTotalTimeEnabled &&
-        hasCountdown &&
+        hasQuestionCountdown &&
+        !sessionTimerExpired &&
         n > displayQuestionIndex &&
         !canGoToNextQuestion
       ) {
@@ -1490,11 +1828,13 @@ function ParticipantSessionPage({ embed = false }) {
     },
     [
       activeQuestions.length,
-      sessionQuizTotalTimeEnabled,
-      hasCountdown,
+      hasQuestionCountdown,
+      sessionTimerExpired,
       displayQuestionIndex,
       canGoToNextQuestion,
       navigationEnabled,
+      syncedQuestionLockstep,
+      isSessionEnded,
       setLiveQuestionId,
       setQuestionIndex,
     ],
@@ -1513,14 +1853,24 @@ function ParticipantSessionPage({ embed = false }) {
     if (step !== 'active') return
     if (!sessionQuizTotalTimeEnabled) return
     if (!activeQuestions.length) return
+    if (quizTotalTimeSynced) {
+      const sharedEndsAt = getQuizTotalEndsAt(session)
+      if (sharedEndsAt == null) return
+      syncQuizSessionCountdownEndsAt(sharedEndsAt)
+      return
+    }
     startQuizSessionCountdown(Number(session?.quiz_total_time_minutes))
   }, [
     isSessionEnded,
     step,
     sessionQuizTotalTimeEnabled,
+    quizTotalTimeSynced,
     activeQuestions.length,
     session?.quiz_total_time_minutes,
+    session?.started_at,
     startQuizSessionCountdown,
+    syncQuizSessionCountdownEndsAt,
+    session,
   ])
 
   useEffect(() => {
@@ -1529,11 +1879,15 @@ function ParticipantSessionPage({ embed = false }) {
   }, [sessionQuizTotalTimeEnabled, sessionTimerExpired, freezeQuizSessionCountdown])
 
   useEffect(() => {
+    if (!sessionTimerExpired) {
+      quizExpiryFinalizeStartedRef.current = false
+    }
+  }, [sessionTimerExpired])
+
+  useEffect(() => {
     if (isSessionEnded) return
     if (step !== 'active' || !question?.id) return
-    if (sessionQuizTotalTimeEnabled) return
-    if (!hasCountdown) {
-      setQuizCountdown({ questionId: null, endsAt: null })
+    if (!hasQuestionCountdown) {
       return
     }
     const qid = question.id
@@ -1542,11 +1896,42 @@ function ParticipantSessionPage({ embed = false }) {
     const qidStr = String(qid)
     const byQuestion = s.quizCountdownByQuestion || {}
     const existingCountdown = byQuestion[qidStr]
+
+    // Shared lockstep: always use the schedule slot end (same for every participant).
+    if (syncedQuestionLockstep) {
+      const slot =
+        syncedQuestionSchedule.find((row) => String(row.questionId) === qidStr) ||
+        syncedQuestionSchedule[syncedScheduleIndex]
+      if (slot?.endMs) {
+        if (
+          !existingCountdown ||
+          existingCountdown.frozen != null ||
+          Math.abs((existingCountdown.endsAt || 0) - slot.endMs) > 250
+        ) {
+          setQuizCountdown({ questionId: qid, endsAt: slot.endMs })
+        }
+      }
+      return
+    }
+
     if (submittedIds[qidStr]) {
       if (!existingCountdown) {
         setQuizCountdown({ questionId: qid, endsAt: Date.now() })
         useParticipantStore.getState().freezeCountdownAfterSubmit(qid)
       }
+      return
+    }
+    const hostDeadline = getQuestionDeadlineMs(question)
+    // Strict late join: resync sticky early/fallback endsAt to the host deadline once known.
+    // Quiz-total dual mode uses personal question clocks (strictLateJoin is already false).
+    if (
+      strictLateJoin &&
+      hostDeadline != null &&
+      existingCountdown?.endsAt != null &&
+      existingCountdown.frozen == null &&
+      Math.abs(existingCountdown.endsAt - hostDeadline) > 250
+    ) {
+      setQuizCountdown({ questionId: qid, endsAt: hostDeadline })
       return
     }
     if (existingCountdown?.endsAt != null && existingCountdown.endsAt > Date.now()) {
@@ -1562,11 +1947,14 @@ function ParticipantSessionPage({ embed = false }) {
     isSessionEnded,
     step,
     question,
-    hasCountdown,
+    hasQuestionCountdown,
     timeLimit,
     strictLateJoin,
     setQuizCountdown,
     quizSubmittedQuestionIds,
+    syncedQuestionLockstep,
+    syncedQuestionSchedule,
+    syncedScheduleIndex,
   ])
 
   useEffect(() => {
@@ -1627,9 +2015,15 @@ function ParticipantSessionPage({ embed = false }) {
   })
 
   useEffect(() => {
-    if (leaderboardQuery.data != null) {
+    if (leaderboardQuery.data == null) return
+    if (Array.isArray(leaderboardQuery.data)) {
       setLeaderboard(leaderboardQuery.data)
+      return
     }
+    if (Array.isArray(leaderboardQuery.data.leaderboard)) {
+      setLeaderboard(leaderboardQuery.data.leaderboard)
+    }
+    setLeaderboardMe(leaderboardQuery.data.me ?? null)
   }, [leaderboardQuery.data])
 
   const currentResponse = responses[question?.id] || {}
@@ -1641,8 +2035,7 @@ function ParticipantSessionPage({ embed = false }) {
     !question?.isSurvey &&
     question?.type !== 'Poll' &&
     question?.isQuizMode !== false &&
-    isAnswerRevealedByHost &&
-    hasSubmittedQuestion
+    isAnswerRevealedByHost
   const answerRevealMeta = canSeeAnswerReveal
     ? {
         revealed: true,
@@ -1655,14 +2048,17 @@ function ParticipantSessionPage({ embed = false }) {
           question?.correctMatchingPairs ??
           null,
       }
-    : isAnswerRevealedByHost
-      ? { revealed: true, correctOptionIds: [], correctMatchingPairs: null }
-      : null
-  const isAnswerRevealed = isAnswerRevealedByHost
+    : null
   const participantAnswerIsCorrect = useMemo(() => {
-    if (!canSeeAnswerReveal || !question) return null
+    if (!canSeeAnswerReveal || !hasSubmittedQuestion || !question) return null
     return isParticipantChoiceCorrect(question, currentResponse, answerRevealMeta)
-  }, [canSeeAnswerReveal, question, currentResponse, answerRevealMeta])
+  }, [
+    canSeeAnswerReveal,
+    hasSubmittedQuestion,
+    question,
+    currentResponse,
+    answerRevealMeta,
+  ])
   const currentQuestionLeaderboard = question?.id
     ? questionLeaderboardByQuestion[String(question.id)] || []
     : []
@@ -1754,7 +2150,25 @@ function ParticipantSessionPage({ embed = false }) {
       try {
         await submitResponseApi(participantToken, payload)
         markQuestionsSubmitted([questionId])
-        if (Number(q.timeLimit) > 0) {
+        const limitSeconds = Math.max(0, Math.floor(Number(q.timeLimit) || 0))
+        if (limitSeconds > 0) {
+          const entry =
+            useParticipantStore.getState().quizCountdownByQuestion?.[String(questionId)]
+          const remaining =
+            entry?.endsAt != null
+              ? getRemainingQuestionSeconds(entry.endsAt)
+              : Number(questionId) === Number(question?.id)
+                ? questionTimer
+                : 0
+          recordQuestionSubmittedAt({
+            questionId,
+            elapsedSeconds: Math.max(0, limitSeconds - Math.max(0, remaining)),
+          })
+        }
+        // Lockstep early save: keep the shared wall-clock countdown running.
+        const skipFreezeForLockstep =
+          syncedQuestionLockstep && hasQuestionCountdown && questionTimer > 0
+        if (limitSeconds > 0 && !skipFreezeForLockstep) {
           freezeCountdownAfterSubmit(questionId)
         }
         playSubmitSuccess()
@@ -1782,10 +2196,55 @@ function ParticipantSessionPage({ embed = false }) {
       quizSubmittedQuestionIds,
       markQuestionsSubmitted,
       freezeCountdownAfterSubmit,
+      recordQuestionSubmittedAt,
       navigationEnabled,
       participantEditPolicy,
+      syncedQuestionLockstep,
+      hasQuestionCountdown,
+      questionTimer,
+      question?.id,
     ],
   )
+
+  // Lockstep: keep everyone on the shared schedule index; submit when the schedule advances.
+  // No confirmation popup — save selection and move with the wall clock.
+  useEffect(() => {
+    if (!syncedQuestionLockstep || !navigationEnabled) return
+    if (step !== 'active') return
+    if (isSessionEnded || sessionTimerExpired) return
+    if (!syncedQuestionSchedule.length) return
+    const target = clamp(syncedScheduleIndex, 0, activeQuestions.length - 1)
+    if (target === questionIndex) return
+
+    const leaving = activeQuestions[questionIndex]
+    const leavingId = leaving?.id
+    let cancelled = false
+    ;(async () => {
+      if (leavingId != null && target > questionIndex) {
+        await submitQuestionById(leavingId)
+      }
+      if (cancelled) return
+      setLiveQuestionId(null)
+      setQuestionIndex(target)
+      setSubmitted(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [
+    syncedQuestionLockstep,
+    navigationEnabled,
+    step,
+    isSessionEnded,
+    sessionTimerExpired,
+    syncedQuestionSchedule.length,
+    syncedScheduleIndex,
+    questionIndex,
+    activeQuestions,
+    submitQuestionById,
+    setLiveQuestionId,
+    setQuestionIndex,
+  ])
 
   const handleSubmitResponse = async () => {
     if (isSessionEnded || lastQuestionFinalized) return false
@@ -1793,7 +2252,6 @@ function ParticipantSessionPage({ embed = false }) {
     if (!payloads.length || !participantToken) return false
 
     setIsSubmitting(true)
-    const hadCountdown = hasCountdown
     try {
       await Promise.all(payloads.map((p) => submitResponseApi(participantToken, p)))
       const submittedIds = payloads.map((p) => p.question_id)
@@ -1806,12 +2264,24 @@ function ParticipantSessionPage({ embed = false }) {
       ) {
         markQuestionsExplicitlySubmitted([sessionLastQuestionId])
       }
-      if (hadCountdown && !sessionQuizTotalTimeEnabled && question?.id) {
+      if (hasQuestionCountdown && question?.id) {
+        const limitSeconds = Math.max(0, Math.floor(Number(question.timeLimit) || 0))
+        if (limitSeconds > 0) {
+          const entry =
+            useParticipantStore.getState().quizCountdownByQuestion?.[String(question.id)]
+          const remaining =
+            entry?.endsAt != null
+              ? getRemainingQuestionSeconds(entry.endsAt)
+              : questionTimer
+          recordQuestionSubmittedAt({
+            questionId: question.id,
+            elapsedSeconds: Math.max(0, limitSeconds - Math.max(0, remaining)),
+          })
+        }
         freezeCountdownAfterSubmit(question.id)
       }
       if (
-        hadCountdown &&
-        sessionQuizTotalTimeEnabled &&
+        hasQuizCountdown &&
         navigationEnabled &&
         sessionLastQuestionId != null &&
         question?.id != null &&
@@ -1831,6 +2301,53 @@ function ParticipantSessionPage({ embed = false }) {
       setIsSubmitting(false)
     }
   }
+
+  // Quiz total expired: silently save any answered-but-unsubmitted questions once, then finish.
+  useEffect(() => {
+    if (!sessionQuizTotalTimeEnabled || !sessionTimerExpired || isSessionEnded) return
+    if (step !== 'active') return
+    if (quizExpiryFinalizeStartedRef.current) return
+    quizExpiryFinalizeStartedRef.current = true
+
+    ;(async () => {
+      try {
+        if (participantToken) {
+          const payloads = buildFinalPayload()
+          if (payloads.length) {
+            await Promise.all(payloads.map((p) => submitResponseApi(participantToken, p)))
+            markQuestionsSubmitted(payloads.map((p) => p.question_id))
+          }
+        }
+        if (sessionLastQuestionId != null) {
+          markQuestionsExplicitlySubmitted([sessionLastQuestionId])
+        }
+        freezeQuizSessionCountdown()
+        if (dbSessionId) {
+          queryClient.invalidateQueries({ queryKey: ['participant-leaderboard', dbSessionId] })
+        }
+      } catch (err) {
+        console.error(err)
+        // Still mark finished so the participant leaves the question UI.
+        if (sessionLastQuestionId != null) {
+          markQuestionsExplicitlySubmitted([sessionLastQuestionId])
+        }
+        freezeQuizSessionCountdown()
+      }
+    })()
+  }, [
+    sessionQuizTotalTimeEnabled,
+    sessionTimerExpired,
+    isSessionEnded,
+    step,
+    participantToken,
+    buildFinalPayload,
+    markQuestionsSubmitted,
+    markQuestionsExplicitlySubmitted,
+    sessionLastQuestionId,
+    freezeQuizSessionCountdown,
+    dbSessionId,
+    queryClient,
+  ])
 
   const handleSubmitCurrentQuestion = async () => {
     if (isSessionEnded || !question?.id) return
@@ -1938,6 +2455,11 @@ function ParticipantSessionPage({ embed = false }) {
 
   const handleNextOrSubmit = async () => {
     if (isSessionEnded) return
+    // Lockstep: Submit saves the answer only; schedule advances when the shared timer ends.
+    if (syncedQuestionLockstep && !sessionTimerExpired) {
+      if (question?.id) await submitQuestionById(question.id)
+      return
+    }
     if (!navigationEnabled) {
       await handleSubmitCurrentQuestion()
       return
@@ -1962,12 +2484,26 @@ function ParticipantSessionPage({ embed = false }) {
   useEffect(() => {
     if (isSessionEnded) return
     if (step !== 'active') return
-    if (!hasCountdown) return
-    if (timer > 0) return
-    if (sessionQuizTotalTimeEnabled) return
-    if (questionLockedBySubmission) return
+    if (!hasQuestionCountdown) return
+    // Quiz total expiry wins: lock all, no auto-advance / auto-submit.
+    if (sessionTimerExpired) return
+    if (questionTimer > 0) return
 
     const qid = question?.id
+
+    // Lockstep: schedule effect saves + advances with the wall clock (no popup).
+    // Last slot still finalizes at timer 0 even if the participant saved early.
+    if (syncedQuestionLockstep) {
+      if (isLastDisplayedQuestion) {
+        const timeout = setTimeout(() => {
+          handleTimerFinalize()
+        }, 500)
+        return () => clearTimeout(timeout)
+      }
+      return
+    }
+
+    if (questionLockedBySubmission) return
 
     if (!navigationEnabled) {
       const timeout = setTimeout(async () => {
@@ -2007,15 +2543,16 @@ function ParticipantSessionPage({ embed = false }) {
   }, [
     isSessionEnded,
     navigationEnabled,
-    timer,
+    syncedQuestionLockstep,
+    questionTimer,
     step,
     displayQuestionIndex,
     activeQuestions.length,
     questionLockedBySubmission,
-    hasCountdown,
+    hasQuestionCountdown,
     question?.id,
     isLastDisplayedQuestion,
-    sessionQuizTotalTimeEnabled,
+    sessionTimerExpired,
     submitQuestionById,
     tryApplyPendingActivatedQuestion,
     advanceToNextUnsubmittedActiveQuestion,
@@ -2023,11 +2560,31 @@ function ParticipantSessionPage({ embed = false }) {
     setQuestionIndex,
   ])
 
+  const isAlreadyJoined =
+    Boolean(participantToken) &&
+    Boolean(joinedSessionCode) &&
+    Boolean(effectiveSessionCode) &&
+    joinedSessionCode === effectiveSessionCode
+
+  const lookupErrorStatus = Number(sessionQuery.error?.status) || 0
+  // Hard "Session not found" only when there is no cached session AND the API said 404
+  // (or returned empty). Transient refetch errors must not replace the live quiz UI.
   const sessionLookupFailed =
     Boolean(effectiveSessionCode) &&
+    !isAlreadyJoined &&
+    !session &&
     sessionQuery.isFetched &&
     !sessionQuery.isLoading &&
-    (!session || sessionQuery.isError)
+    (sessionQuery.isError ? lookupErrorStatus === 404 : true)
+
+  const sessionLookupTransient =
+    Boolean(effectiveSessionCode) &&
+    !isAlreadyJoined &&
+    !session &&
+    sessionQuery.isFetched &&
+    !sessionQuery.isLoading &&
+    sessionQuery.isError &&
+    lookupErrorStatus !== 404
 
   const handleJoin = async (event, options = {}) => {
     event?.preventDefault?.()
@@ -2064,6 +2621,9 @@ function ParticipantSessionPage({ embed = false }) {
     const formEmail = String(identity.email || '').trim()
     const formMobile = String(identity.mobile || '').trim()
     const skipOtpRequirement = Boolean(options.skipOtp)
+    const customerMatchGate = getCustomerMatchGate(session, {
+      email: formEmail || resolvedIdentity?.email,
+    })
 
     try {
       let nickname = null
@@ -2074,6 +2634,13 @@ function ParticipantSessionPage({ embed = false }) {
         !skipOtpRequirement &&
         sessionJoinOtpRequired &&
         contactJoinTypes.has(joinRequirement)
+
+      if (customerMatchGate.required && !customerMatchGate.ready) {
+        abortJoin(
+          'This session requires customer verification. Enter your email or use a join link that includes your email.',
+        )
+        return
+      }
 
       if (joinRequirement === 'anonymous') {
         isAnonymous = true
@@ -2159,8 +2726,24 @@ function ParticipantSessionPage({ embed = false }) {
         setJoinBusy(true)
       }
 
+      const matchEmail = checkEmail || formEmail || String(resolvedIdentity?.email || '').trim()
+      if (customerMatchGate.required) {
+        setJoinError('Verifying…')
+        const matchResult = await verifyCustomerMatchApi({
+          sessionCode: effectiveSessionCode,
+          email: matchEmail,
+        })
+        if (matchResult.match !== true) {
+          abortJoin(
+            'You are not allowed to join this session.',
+          )
+          return
+        }
+        setJoinError('')
+      }
+
       const joinPayload = {
-        email: checkEmail,
+        email: checkEmail || (customerMatchGate.required ? matchEmail : null),
         mobile: checkMobile,
         is_anonymous: isAnonymous,
       }
@@ -2180,6 +2763,7 @@ function ParticipantSessionPage({ embed = false }) {
         token: result.token,
         refreshToken: result.refreshToken,
         participant: {
+          id: result.participant.participant_id ?? result.participant.id ?? null,
           name: result.participant.nickname || 'Anonymous',
           email: result.participant.email,
           mobile: result.participant.mobile,
@@ -2216,6 +2800,8 @@ function ParticipantSessionPage({ embed = false }) {
     if (!isSessionOpenForNewJoin(session.status)) return
     if (session.join_blocked && session.join_blocked_reason !== 'plan_limit') return
     if (!canAutoJoinWithIdentity(session, resolvedIdentity)) return
+    const matchGate = getCustomerMatchGate(session, resolvedIdentity)
+    if (matchGate.required && !matchGate.ready) return
 
     autoJoinAttemptedRef.current = true
     setAutoJoinPending(true)
@@ -2413,9 +2999,22 @@ function ParticipantSessionPage({ embed = false }) {
     setStep('join')
   }, [])
 
+  const participantTheme = normalizeParticipantTheme(session?.participant_theme)
+  const participantThemeCustom = normalizeCustomThemeColors(
+    session?.participant_theme_custom,
+  )
+  const participantThemeStyle = buildParticipantThemeStyle(
+    participantTheme,
+    participantThemeCustom,
+  )
+
   if (!participantHydrated) {
     return (
-      <PageCenteredShell compact={embedMode}>
+      <PageCenteredShell
+        compact={embedMode}
+        theme={participantTheme}
+        customTheme={participantThemeCustom}
+      >
         <p className="text-slate-600">Restoring session...</p>
       </PageCenteredShell>
     )
@@ -2423,7 +3022,11 @@ function ParticipantSessionPage({ embed = false }) {
 
   if (ipBlocked) {
     return (
-      <PageCenteredShell compact={embedMode}>
+      <PageCenteredShell
+        compact={embedMode}
+        theme={participantTheme}
+        customTheme={participantThemeCustom}
+      >
         <h1 className="text-2xl font-bold text-navy-900">Access blocked</h1>
         <p className="mt-2 text-slate-600">
           This IP address has been blocked by an administrator. You cannot join or stay in this
@@ -2441,7 +3044,11 @@ function ParticipantSessionPage({ embed = false }) {
 
   if (showJoinForm && (autoJoinPending || tokenIdentityLoading) && !joinError && !tokenIdentityError) {
     return (
-      <PageCenteredShell compact={embedMode}>
+      <PageCenteredShell
+        compact={embedMode}
+        theme={participantTheme}
+        customTheme={participantThemeCustom}
+      >
         <p className="text-sm font-semibold text-navy-900">
           {tokenIdentityLoading ? 'Checking signed join link…' : 'Joining session…'}
         </p>
@@ -2480,6 +3087,7 @@ function ParticipantSessionPage({ embed = false }) {
         sessionCodeInput={sessionCodeInput}
         onSessionCodeChange={setSessionCodeInput}
         sessionLookupFailed={sessionLookupFailed}
+        sessionLookupTransient={sessionLookupTransient}
         effectiveSessionCode={effectiveSessionCode}
         sessionQueryLoading={sessionQuery.isLoading}
         showJoinDetails={Boolean(session)}
@@ -2511,7 +3119,11 @@ function ParticipantSessionPage({ embed = false }) {
 
   if (effectiveSessionCode && sessionQuery.isLoading) {
     return (
-      <PageCenteredShell compact={embedMode}>
+      <PageCenteredShell
+        compact={embedMode}
+        theme={participantTheme}
+        customTheme={participantThemeCustom}
+      >
         <p className="text-slate-600">Loading session...</p>
       </PageCenteredShell>
     )
@@ -2519,16 +3131,39 @@ function ParticipantSessionPage({ embed = false }) {
 
   if (effectiveSessionCode && sessionLookupFailed) {
     return (
-      <PageCenteredShell compact={embedMode}>
+      <PageCenteredShell
+        compact={embedMode}
+        theme={participantTheme}
+        customTheme={participantThemeCustom}
+      >
         <h1 className="text-2xl font-bold text-navy-900">Session not found</h1>
         <p className="mt-2 text-slate-600">The join link is invalid or this session was removed.</p>
       </PageCenteredShell>
     )
   }
 
+  if (effectiveSessionCode && sessionLookupTransient) {
+    return (
+      <PageCenteredShell
+        compact={embedMode}
+        theme={participantTheme}
+        customTheme={participantThemeCustom}
+      >
+        <h1 className="text-2xl font-bold text-navy-900">Could not load session</h1>
+        <p className="mt-2 text-slate-600">
+          A temporary network error occurred. Retrying automatically…
+        </p>
+      </PageCenteredShell>
+    )
+  }
+
   if (!session) {
     return (
-      <PageCenteredShell compact={embedMode}>
+      <PageCenteredShell
+        compact={embedMode}
+        theme={participantTheme}
+        customTheme={participantThemeCustom}
+      >
         <p className="text-slate-600">Loading session...</p>
       </PageCenteredShell>
     )
@@ -2553,28 +3188,74 @@ function ParticipantSessionPage({ embed = false }) {
     )
   }
 
+  const showParticipantPodium =
+    showOverallLeaderboardTab &&
+    (presentEndingSlideType === 'podium' || step === 'podium')
+
+  const participantInstructionNotes = presentModeSettings.customInstructions || []
+  const showParticipantInstructions =
+    step === 'active' &&
+    Boolean(presentModeSettings.showCustomInstructions) &&
+    participantInstructionNotes.length > 0
+
   return (
     <main
-      className={`bg-linear-to-br from-sky-50 via-white to-indigo-50 ${
-        embedMode
-          ? 'min-h-dvh overflow-y-auto p-3 sm:p-4'
-          : 'min-h-dvh p-4 md:min-h-screen md:p-6'
+      className={`participant-session-bg ${
+        showParticipantPodium
+          ? embedMode
+            ? 'flex h-dvh min-h-dvh flex-col overflow-hidden p-2 sm:p-3'
+            : 'flex h-dvh min-h-dvh flex-col overflow-hidden p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:p-4'
+          : embedMode
+            ? 'h-dvh min-h-dvh overflow-x-hidden overflow-y-auto overscroll-y-contain p-3 pb-8 sm:p-4'
+            : 'h-dvh min-h-dvh overflow-x-hidden overflow-y-auto overscroll-y-contain p-4 pb-[max(2rem,env(safe-area-inset-bottom))] md:h-auto md:min-h-screen md:overflow-visible md:pb-6 md:p-6'
       }`}
+      data-participant-theme={participantTheme}
+      style={participantThemeStyle}
     >
-      <div className="mx-auto w-full max-w-4xl space-y-4">
-        <SessionHeader session={session} joinedUser={joinedUser} />
+      {showParticipantInstructions ? (
+        <ParticipantInstructionsRail instructions={participantInstructionNotes} />
+      ) : null}
+      <div
+        className={`mx-auto flex w-full flex-col ${
+          showParticipantPodium
+            ? 'h-full max-w-none min-h-0 flex-1'
+            : 'max-w-6xl space-y-4 pb-4'
+        }`}
+      >
+        {!showParticipantPodium ? (
+          <SessionHeader
+            session={session}
+            joinedUser={joinedUser}
+            hasQuizCountdown={hasQuizCountdown && step === 'active' && !isSessionEnded}
+            quizTimer={quizTimer}
+            quizTimeLimit={sessionQuizTotalTimeSeconds}
+          />
+        ) : null}
 
-        {isSessionEnded && endingScreenOnlyMode ? <SessionEndedBanner /> : null}
+        {!showParticipantPodium && isSessionEnded && endingScreenOnlyMode ? (
+          <SessionEndedBanner />
+        ) : null}
 
         {showOverallLeaderboardTab ? (
-          <OverallLeaderboardPanel
-            leaderboard={leaderboard}
-            sessionStatus={session?.status}
-            isLoading={leaderboardQuery.isLoading}
-          />
+          showParticipantPodium ? (
+            <ParticipantPodiumPanel leaderboard={leaderboard} />
+          ) : (
+            <OverallLeaderboardPanel
+              leaderboard={leaderboard}
+              sessionStatus={session?.status}
+              isLoading={leaderboardQuery.isLoading}
+              title={rankingsTitle}
+              subtitle={rankingsSubtitle}
+              viewerEntry={leaderboardMe}
+              highlightParticipantId={
+                joinedUser?.id ?? leaderboardMe?.participant_id ?? null
+              }
+              topN={normalizeLeaderboardTopN(session?.leaderboard_top_n)}
+            />
+          )
         ) : showSurveyEndingScreen ? (
           <SurveySessionEndingPanel
-            sessionTitle={session.title}
+            sessionTitle={session?.show_session_title !== false ? session.title : ''}
             summary={showSurveyResults ? surveySummaryQuery.data : null}
             isLoading={showSurveyResults ? surveySummaryQuery.isLoading : false}
             thanksOnly={showSurveyThanks}
@@ -2586,16 +3267,60 @@ function ParticipantSessionPage({ embed = false }) {
           />
         ) : (
           <>
-            {step === 'active' && isSessionEnded ? <SessionEndedPanel /> : null}
+            {step === 'active' && isSessionEnded ? (
+              <SessionEndedPanel thanksImageUrl={session?.thanks_screen_image_url || ''} />
+            ) : null}
 
-            {step === 'active' && !question && !isSessionEnded && <WaitingForQuestion />}
+            {step === 'active' &&
+              !question &&
+              !isSessionEnded &&
+              !(
+                sessionQuizTotalTimeEnabled &&
+                (lastQuestionFinalized || sessionTimerExpired)
+              ) && (
+                <WaitingForQuestion
+                  quizTotalWaiting={Boolean(sessionQuizTotalTimeEnabled)}
+                  waitingImageUrl={session?.waiting_screen_image_url || ''}
+                  waitingMediaType={
+                    session?.waiting_screen_image_url
+                      ? session?.waiting_screen_media_type || 'image'
+                      : null
+                  }
+                />
+              )}
 
-            {step === 'active' && question && !isSessionEnded && (
+
+            {step === 'active' &&
+              !isSessionEnded &&
+              sessionQuizTotalTimeEnabled &&
+              (lastQuestionFinalized || sessionTimerExpired) && (
+                <QuizCompletedThanksPanel
+                  sessionTitle={
+                    session?.show_session_title !== false ? session?.title : ''
+                  }
+                  thanksImageUrl={session?.thanks_screen_image_url || ''}
+                  onPrevious={handlePrevious}
+                  canGoPrevious={canShowPreviousQuestion && displayQuestionIndex > 0}
+                />
+              )}
+
+            {step === 'active' &&
+              question &&
+              !isSessionEnded &&
+              !(
+                sessionQuizTotalTimeEnabled &&
+                (lastQuestionFinalized || sessionTimerExpired)
+              ) && (
               <ActiveQuestionPanel
             question={question}
             activeQuestions={activeQuestions}
             displayQuestionIndex={displayQuestionIndex}
+            questionSerialNumber={questionSerialNumber}
+            questionSerialTotal={questionSerialTotal}
+            answeredCount={attemptStats.answered}
+            leftBlankCount={attemptStats.leftBlank}
             hasCountdown={hasCountdown}
+            hasQuestionCountdown={hasQuestionCountdown}
             canGoToNextQuestion={canGoToNextQuestion}
             inputsLocked={inputsLocked}
             wordCloudInputsLocked={wordCloudInputsLocked}
@@ -2604,12 +3329,14 @@ function ParticipantSessionPage({ embed = false }) {
             hasAnyQuestionSaved={hasAnyQuestionSaved}
             timeLimit={displayTimeLimit}
             timer={timer}
+            questionTimer={questionTimer}
+            questionTimeLimit={timeLimit}
             submittedAtSeconds={submittedAtSeconds}
+            questionSubmittedAtSeconds={questionSubmittedAtSeconds}
             sessionQuizTotalTimeEnabled={sessionQuizTotalTimeEnabled}
             lastQuestionFinalized={lastQuestionFinalized}
             currentResponse={currentResponse}
             answerRevealMeta={answerRevealMeta}
-            isAnswerRevealed={isAnswerRevealed}
             hasSubmittedQuestion={hasSubmittedQuestion}
             canSeeAnswerReveal={canSeeAnswerReveal}
             participantAnswerIsCorrect={participantAnswerIsCorrect}
@@ -2617,6 +3344,7 @@ function ParticipantSessionPage({ embed = false }) {
             tagsInput={tagsInput}
             submitted={submitted}
             navigationEnabled={navigationEnabled}
+            syncedQuestionLockstep={syncedQuestionLockstep}
             canShowPreviousQuestion={canShowPreviousQuestion}
             lastActivatedLiveQuestion={lastActivatedLiveQuestion}
             highlightNextButton={highlightNextButton}

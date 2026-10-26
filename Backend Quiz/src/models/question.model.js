@@ -63,6 +63,32 @@ const Question = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: true
     },
+    timer_sound_key: {
+      type: DataTypes.STRING(32),
+      allowNull: false,
+      defaultValue: "classic"
+    },
+    timer_sound_url: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      defaultValue: null
+    },
+    timer_ending_sound_key: {
+      type: DataTypes.STRING(32),
+      allowNull: false,
+      defaultValue: "classic"
+    },
+    timer_ending_sound_url: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      defaultValue: null
+    },
+    /** Seconds remaining when ending-window countdown audio starts (NULL → default 10). */
+    timer_sound_start_seconds: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: null
+    },
     allow_multiple_select: {
       type: DataTypes.BOOLEAN,
       allowNull: true,
@@ -144,6 +170,11 @@ const Question = sequelize.define(
     source_bank_question_id: {
       type: DataTypes.INTEGER,
       allowNull: true
+    },
+    pool_eligible: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true
     },
     created_at: {
       type: DataTypes.DATE,

@@ -14,8 +14,22 @@ export function QuestionTimer({
   variant = 'default',
   className = '',
   soundEnabled = true,
+  label = null,
+  timerSoundKey,
+  timerSoundUrl,
+  timerEndingSoundKey,
+  timerEndingSoundUrl,
+  timerSoundStartSeconds,
 }) {
-  useQuestionTimerSound(timer, { enabled: soundEnabled })
+  useQuestionTimerSound(timer, {
+    enabled: soundEnabled,
+    timerSoundKey,
+    timerSoundUrl,
+    timerEndingSoundKey,
+    timerEndingSoundUrl,
+    timerSoundStartSeconds,
+    timeLimitSeconds: timeLimit,
+  })
 
   const expired = timer <= 0
   const urgent = !expired && timer <= 5
@@ -23,16 +37,22 @@ export function QuestionTimer({
   const compact = variant === 'compact'
   const limit = Math.max(1, timeLimit)
   const remaining = Math.max(0, Math.min(1, timer / limit))
-  const size = compact ? 64 : 72
-  const stroke = compact ? 5 : 4
+  const size = compact ? 52 : 72
+  const stroke = compact ? 4 : 4
   const radius = (size - stroke) / 2
   const circumference = 2 * Math.PI * radius
   const dashOffset = circumference * (1 - remaining)
   const submittedMarkerOffset =
     submitted && timeLimit > 0
-      ? circumference * (1 - Math.max(0, Math.min(1, submittedAtSeconds / limit)))
+      ? circumference * Math.max(0, Math.min(1, submittedAtSeconds / limit))
       : null
-  const statusLabel = expired ? "Time's up" : 'Time left'
+  const statusLabel = label
+    ? expired
+      ? `${label} — time's up`
+      : label
+    : expired
+      ? "Time's up"
+      : 'Time left'
   const statusTone = expired || urgent
 
   const ring = (
@@ -49,7 +69,7 @@ export function QuestionTimer({
           cy={size / 2}
           r={radius}
           fill="none"
-          className="stroke-slate-100"
+          className="participant-timer-ring-track stroke-slate-100"
           strokeWidth={stroke}
         />
         {submittedMarkerOffset != null && (
@@ -70,7 +90,11 @@ export function QuestionTimer({
           cy={size / 2}
           r={radius}
           fill="none"
-          className={statusTone ? 'stroke-red-500' : 'stroke-navy-600'}
+          className={`participant-timer-ring-progress ${
+            statusTone
+              ? 'participant-timer-ring--alert stroke-red-500'
+              : 'stroke-navy-600'
+          }`}
           strokeWidth={stroke}
           strokeLinecap="round"
           strokeDasharray={circumference}
@@ -79,9 +103,11 @@ export function QuestionTimer({
         />
       </svg>
       <span
-        className={`absolute inset-0 flex items-center justify-center font-mono font-bold tabular-nums ${
-          compact ? 'text-base' : 'text-sm'
-        } ${statusTone ? 'text-red-700' : 'text-navy-800'}`}
+        className={`absolute inset-0 flex items-center justify-center font-mono font-bold tabular-nums text-sm ${
+          statusTone
+            ? 'participant-timer-label--alert text-red-700'
+            : 'participant-timer-label text-navy-800'
+        }`}
       >
         {formatTime(Math.max(0, timer))}
       </span>
@@ -91,32 +117,42 @@ export function QuestionTimer({
   if (compact) {
     return (
       <div
-        className={`inline-flex items-center gap-2.5 rounded-2xl border px-2.5 py-2 shadow-lg shadow-navy-900/10 backdrop-blur-md ${
+        className={`participant-timer-panel inline-flex max-w-full flex-wrap items-center gap-2 rounded-xl border px-2 py-1.5 shadow-md shadow-navy-900/10 ${
           expired
-            ? 'quiz-timer-expired border-red-200/90 bg-red-50/95'
+            ? 'quiz-timer-expired border-red-200/90 bg-red-50'
             : urgent
-              ? 'quiz-timer-urgent border-red-200/90 bg-red-50/90'
-              : 'border-white/80 bg-white/92'
+              ? 'quiz-timer-urgent border-red-200/90 bg-red-50'
+              : 'border-blue-100 bg-white'
         } ${className}`}
         role="timer"
         aria-live="polite"
         aria-label={statusLabel}
       >
         {ring}
-        <span
-          className={`pr-1 text-[0.65rem] font-semibold uppercase tracking-[0.14em] ${
-            statusTone ? 'text-red-600' : 'text-slate-500'
-          }`}
-        >
-          {statusLabel}
-        </span>
+        <div className="flex min-w-0 flex-col gap-0.5 pr-0.5">
+          <span
+            className={`text-[0.6rem] font-semibold uppercase tracking-[0.12em] ${
+              statusTone
+                ? 'participant-timer-label--alert text-red-600'
+                : 'participant-timer-label text-slate-500'
+            }`}
+          >
+            {statusLabel}
+          </span>
+          {submitted ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800 ring-1 ring-emerald-200/80">
+              <Check className="size-2.5 shrink-0" aria-hidden />
+              Submitted at {formatTime(submittedAtSeconds)}
+            </span>
+          ) : null}
+        </div>
       </div>
     )
   }
 
   return (
     <div
-      className={`flex items-center gap-4 rounded-xl border p-3 ${
+      className={`participant-timer-panel flex items-center gap-4 rounded-xl border p-3 ${
         expired
           ? 'quiz-timer-expired border-red-200 bg-red-50/80'
           : urgent
@@ -131,11 +167,17 @@ export function QuestionTimer({
       <div className="min-w-0 flex-1">
         <div
           className={`flex flex-wrap items-center gap-2 text-sm font-semibold ${
-            expired ? 'text-red-800' : 'text-slate-700'
+            expired
+              ? 'participant-timer-label--alert text-red-800'
+              : 'participant-timer-label text-slate-700'
           }`}
         >
           <Clock3
-            className={`size-4 shrink-0 ${statusTone ? 'text-red-600' : 'text-navy-600'}`}
+            className={`size-4 shrink-0 ${
+              statusTone
+                ? 'participant-timer-icon--alert text-red-600'
+                : 'participant-timer-icon text-navy-600'
+            }`}
           />
           <span>{statusLabel}</span>
           {submitted && (

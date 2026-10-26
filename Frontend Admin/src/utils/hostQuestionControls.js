@@ -1,4 +1,7 @@
-import { isSessionRandomQuestionOrderEnabled } from './sessionFlags'
+import {
+  isAdvancedBuilderSession,
+  isSessionRandomQuestionOrderEnabled,
+} from './sessionFlags'
 
 /** Untimed single-active-question sessions: host may close submissions while question stays live. */
 export function canHostCloseQuestion(question, singleActiveQuestionMode) {
@@ -16,8 +19,14 @@ export function canHostCloseAllQuestions(questions, { canEditLive, singleActiveQ
   return live.some((q) => !q.submissionsClosed)
 }
 
-/** Per-question Activate is hidden when sets or random order require all-or-nothing activation. */
+/** Advanced Present: host activates participant slots 1..K (not full pool at once). */
+export function sessionUsesAdvancedSlotActivation(session) {
+  return isAdvancedBuilderSession(session)
+}
+
+/** Per-question Activate is hidden when sets, random order, or Advanced pool require all-or-nothing. */
 export function sessionRequiresActivateAllQuestions(session, mappedQuestions, sessionUsesQuestionSets) {
+  if (sessionUsesAdvancedSlotActivation(session)) return true
   if (typeof sessionUsesQuestionSets === 'function') {
     return sessionUsesQuestionSets(mappedQuestions) || isSessionRandomQuestionOrderEnabled(session)
   }
@@ -27,9 +36,8 @@ export function sessionRequiresActivateAllQuestions(session, mappedQuestions, se
 /** Multi-question sessions (timed or untimed): activate every question at once. */
 export function canHostActivateAllQuestions(
   questions,
-  { canEditLive, singleActiveQuestionMode, sessionQuizTotalTimeEnabled = false },
+  { canEditLive, singleActiveQuestionMode },
 ) {
-  if (sessionQuizTotalTimeEnabled) return false
   if (!canEditLive || singleActiveQuestionMode) return false
   const list = questions || []
   if (!list.length) return false

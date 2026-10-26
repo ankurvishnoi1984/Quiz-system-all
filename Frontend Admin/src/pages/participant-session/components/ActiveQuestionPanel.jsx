@@ -1,5 +1,10 @@
-import { ListChecks, Pencil } from 'lucide-react'
+import { useRef } from 'react'
+import { CheckCircle2, CircleDashed, ListChecks, Pencil } from 'lucide-react'
 import { QuestionMedia } from '../../../components/participant-session/QuestionMedia'
+import { FitText } from '../../../components/ui/FitText'
+import { useParticipantSubmitVisibleDensity } from '../../../hooks/useParticipantSubmitVisibleDensity'
+import { getParticipantDensityLevel } from '../utils/participantQuestionDensity'
+import { ParticipantFitProvider } from './ParticipantFitContext'
 import { McqOptions } from './question/McqOptions'
 import { QuestionLeaderboard } from './question/QuestionLeaderboard'
 import { QuestionSurveyResults } from './question/QuestionSurveyResults'
@@ -16,7 +21,12 @@ export function ActiveQuestionPanel({
   question,
   activeQuestions,
   displayQuestionIndex,
+  questionSerialNumber = null,
+  questionSerialTotal = null,
+  answeredCount = 0,
+  leftBlankCount = 0,
   hasCountdown,
+  hasQuestionCountdown = false,
   canGoToNextQuestion,
   inputsLocked,
   wordCloudInputsLocked = false,
@@ -25,15 +35,18 @@ export function ActiveQuestionPanel({
   hasAnyQuestionSaved,
   timeLimit,
   timer,
+  questionTimer = null,
+  questionTimeLimit = 0,
   submittedAtSeconds,
+  questionSubmittedAtSeconds = null,
   currentResponse,
   answerRevealMeta,
-  isAnswerRevealed,
   hasSubmittedQuestion,
   canSeeAnswerReveal,
   participantAnswerIsCorrect,
   sessionEnded = false,
   navigationEnabled = true,
+  syncedQuestionLockstep = false,
   canShowPreviousQuestion = false,
   sessionQuizTotalTimeEnabled = false,
   lastQuestionFinalized = false,
@@ -62,65 +75,119 @@ export function ActiveQuestionPanel({
   onNextOrSubmit,
   onGoToQa,
 }) {
-  const useNextNav = navigationEnabled && !isLastDisplayedQuestion
+  const useNextNav = navigationEnabled && !isLastDisplayedQuestion && !syncedQuestionLockstep
+  const useLockstepSubmit = Boolean(syncedQuestionLockstep && navigationEnabled)
+  const panelRef = useRef(null)
+  const actionsRef = useRef(null)
+  const hasMedia = Boolean(question?.media?.url)
+  const contentKey = `${question?.id}:${question?.text || ''}:${question?.media?.url || ''}:${(question?.options || []).length}`
+  const densityId = useParticipantSubmitVisibleDensity({
+    panelRef,
+    actionsRef,
+    contentKey,
+    hasMedia,
+  })
+  const density = getParticipantDensityLevel(densityId)
+  const questionSerial =
+    Number.isFinite(Number(questionSerialNumber)) && Number(questionSerialNumber) > 0
+      ? Number(questionSerialNumber)
+      : Number.isFinite(Number(displayQuestionIndex)) && Number(displayQuestionIndex) >= 0
+        ? Number(displayQuestionIndex) + 1
+        : null
+  const serialTotal =
+    questionSerialTotal == null
+      ? null
+      : Number.isFinite(Number(questionSerialTotal)) && Number(questionSerialTotal) > 0
+        ? Number(questionSerialTotal)
+        : null
+  const questionTitleBase =
+    question.type === 'Emoji Reaction' && !String(question.text || '').trim()
+      ? 'Share your reaction'
+      : question.text || 'Untitled question'
+  const questionTitle =
+    questionSerial != null ? `Q${questionSerial}. ${questionTitleBase}` : questionTitleBase
+  const serialLabel = questionSerial ?? displayQuestionIndex + 1
+  const answered = Math.max(0, Number(answeredCount) || 0)
+  const leftBlank = Math.max(0, Number(leftBlankCount) || 0)
+  const showAttemptProgress = answered + leftBlank > 0
+  const answeredLabel = answered === 1 ? '1 answered' : `${answered} answered`
+  const leftBlankLabel = leftBlank === 1 ? '1 left blank' : `${leftBlank} left blank`
+
+  const attemptProgress = showAttemptProgress ? (
+    <div
+      className="flex w-full flex-wrap items-center gap-1.5"
+      aria-label={`${answeredLabel}, ${leftBlankLabel} so far`}
+    >
+      <span
+        className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 ring-1 ring-emerald-200/80"
+        title="Questions you have selected or filled in so far"
+      >
+        <CheckCircle2 className="size-3 shrink-0" aria-hidden />
+        {answeredLabel}
+      </span>
+      <span
+        className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 ring-1 ring-slate-200/80"
+        title="Reached questions with no answer yet (includes skipped or timed out)"
+      >
+        <CircleDashed className="size-3 shrink-0" aria-hidden />
+        {leftBlankLabel}
+      </span>
+    </div>
+  ) : null
+
+  const navHelperText = syncedQuestionLockstep
+    ? null
+    : sessionQuizTotalTimeEnabled && !canShowPreviousQuestion
+      ? 'Submit the last question or wait for the quiz timer to end.'
+      : sessionQuizTotalTimeEnabled && canShowPreviousQuestion
+        ? allQuestionsClosedByHost
+          ? 'Questions closed by the host — use Previous and Next to review your answers.'
+          : lastQuestionFinalized
+            ? 'Answers are locked — use Previous and Next to review only.'
+            : 'Quiz timer: use Previous and Next to review your answers.'
+        : hasQuestionCountdown &&
+            canGoToNextQuestion &&
+            inputsLocked &&
+            canShowPreviousQuestion &&
+            !sessionQuizTotalTimeEnabled
+          ? 'Timed: use Previous and Next to browse; answers cannot be changed after submit or when time runs out.'
+          : hasQuestionCountdown &&
+              canGoToNextQuestion &&
+              inputsLocked &&
+              !canShowPreviousQuestion &&
+              !sessionQuizTotalTimeEnabled
+            ? 'Submit the latest active question before you can use Previous.'
+            : !hasCountdown && hasAnyQuestionSaved && canShowPreviousQuestion
+              ? 'No timer: revisit questions with Previous; use Submit on the last question to update.'
+              : null
 
   return (
+    <ParticipantFitProvider densityId={densityId}>
     <section
+      ref={panelRef}
       key={question.id}
-      className="quiz-fade-in space-y-4 rounded-2xl border border-blue-200/70 bg-white p-5 shadow-sm"
+      data-pq-density={densityId}
+      className={`participant-surface quiz-fade-in rounded-2xl border border-blue-200/70 bg-white shadow-sm shadow-navy-900/5 ${density.panelClass}`}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        {navigationEnabled ? (
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <p className="min-w-0 truncate text-xs font-semibold uppercase tracking-wider text-navy-700">
-              Question {displayQuestionIndex + 1} / {activeQuestions.length}
+      {navigationEnabled ? (
+      <div className="flex w-full flex-col gap-2">
+          <p className="participant-accent-text min-w-0 truncate text-xs font-semibold uppercase tracking-wider text-navy-700">
+            {serialTotal != null
+              ? `Question ${serialLabel} / ${serialTotal}`
+              : `Question ${serialLabel}`}
+          </p>
+          {attemptProgress}
+          {navHelperText ? (
+            <p className="w-full text-[11px] font-medium leading-snug text-slate-500">
+              {navHelperText}
             </p>
-          </div>
-        ) : null}
-        {navigationEnabled && sessionQuizTotalTimeEnabled && !canShowPreviousQuestion && (
-          <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
-            Submit the last question or wait for the quiz timer to use Previous.
-          </p>
-        )}
-        {navigationEnabled && sessionQuizTotalTimeEnabled && canShowPreviousQuestion && (
-          <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
-            {allQuestionsClosedByHost
-              ? 'Questions closed by the host — use Previous and Next to review your answers.'
-              : lastQuestionFinalized
-                ? 'Answers are locked — use Previous and Next to review only.'
-                : 'Quiz timer: use Previous and Next to review your answers.'}
-          </p>
-        )}
-        {navigationEnabled && hasCountdown && !sessionQuizTotalTimeEnabled && !canGoToNextQuestion && (
-          <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
-            Answer this question or wait for the timer to use Next.
-          </p>
-        )}
-        {navigationEnabled && hasCountdown && !sessionQuizTotalTimeEnabled && canGoToNextQuestion && inputsLocked && canShowPreviousQuestion && (
-          <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
-            Timed: use Previous and Next to browse; answers cannot be changed after submit or when
-            time runs out.
-          </p>
-        )}
-        {navigationEnabled && hasCountdown && !sessionQuizTotalTimeEnabled && canGoToNextQuestion && inputsLocked && !canShowPreviousQuestion && (
-          <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
-            Submit the latest active question before you can use Previous.
-          </p>
-        )}
-        {navigationEnabled && !hasCountdown && hasAnyQuestionSaved && canShowPreviousQuestion && (
-          <p className="max-w-[min(100%,18rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
-            No timer: revisit questions with Previous; use Submit on the last question to update.
-          </p>
-        )}
-        {!navigationEnabled && !submissionsClosed && (
-          <p className="max-w-[min(100%,22rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
-            Answer and submit; the host will show the next question{' '}
-            <span className="whitespace-nowrap">when ready.</span>
-          </p>
-        )}
+          ) : null}
       </div>
+      ) : showAttemptProgress ? (
+        <div className="flex w-full flex-wrap items-center gap-2">{attemptProgress}</div>
+      ) : null}
 
-      {showNewQuestionAlert ? (
+      {showNewQuestionAlert && !syncedQuestionLockstep ? (
         <p className="quiz-pop rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">
           {highlightNextButton
             ? 'New question available — tap Next to view it.'
@@ -140,29 +207,32 @@ export function ActiveQuestionPanel({
         </p>
       ) : null}
 
-      <h2 className="text-2xl font-bold text-navy-900">
-        {question.type === 'Emoji Reaction' && !String(question.text || '').trim()
-          ? 'Share your reaction'
-          : question.text || 'Untitled question'}
-      </h2>
+      {hasQuestionCountdown && !question.isSurvey ? (
+        <QuestionTimer
+          variant="compact"
+          label="Question time"
+          timer={questionTimer ?? timer}
+          timeLimit={questionTimeLimit || timeLimit}
+          submittedAtSeconds={questionSubmittedAtSeconds ?? submittedAtSeconds}
+          timerSoundKey={question.timerSoundKey}
+          timerSoundUrl={question.timerSoundUrl}
+          timerEndingSoundKey={question.timerEndingSoundKey}
+          timerEndingSoundUrl={question.timerEndingSoundUrl}
+          timerSoundStartSeconds={question.timerSoundStartSeconds}
+        />
+      ) : null}
 
-      <QuestionMedia media={question.media} maxHeightClass="max-h-72" />
+      <FitText
+        as="h2"
+        className="participant-heading font-bold leading-snug text-navy-900"
+        minPx={density.title.minPx}
+        maxPx={density.title.maxPx}
+        maxLines={density.title.maxLines}
+      >
+        {questionTitle}
+      </FitText>
 
-      {hasCountdown && !question.isSurvey && (
-        <QuestionTimer timer={timer} timeLimit={timeLimit} submittedAtSeconds={submittedAtSeconds} />
-      )}
-
-      {isAnswerRevealed &&
-        !hasSubmittedQuestion &&
-        !question.isSurvey &&
-        question.type !== 'Poll' &&
-        (question.type === 'MCQ' || question.type === 'True/False') && (
-          <p className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-slate-600">
-            {hasCountdown && timer === 0
-              ? 'Time is up. The correct answer is shown only to participants who submitted a response.'
-              : 'The correct answer will be shown here only after you submit a response.'}
-          </p>
-        )}
+      <QuestionMedia media={question.media} maxHeightClass={density.mediaMaxHeightClass} />
 
       {(question.type === 'MCQ' || question.type === 'Poll') && question.allowMultipleSelect && (
         <div className="flex gap-3 rounded-xl border border-indigo-200 bg-indigo-50/90 px-3 py-2.5">
@@ -258,7 +328,10 @@ export function ActiveQuestionPanel({
       )}
 
       <div
-        className={`flex items-center gap-2 ${navigationEnabled ? 'justify-between' : 'justify-center'}`}
+        ref={actionsRef}
+        className={`mt-3 flex items-center gap-2 ${
+          navigationEnabled ? 'justify-between' : 'justify-center'
+        }`}
       >
         {navigationEnabled && canShowPreviousQuestion ? (
           <button
@@ -266,7 +339,7 @@ export function ActiveQuestionPanel({
             aria-label="Previous question"
             disabled={displayQuestionIndex <= 0}
             onClick={onPrevious}
-            className="h-11 rounded-xl border border-blue-200/70 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="participant-btn-secondary h-11 rounded-xl border border-blue-200/70 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Previous
           </button>
@@ -286,50 +359,78 @@ export function ActiveQuestionPanel({
             </button>
           ) : null}
           {/* Q&A feature disabled — pass onGoToQa from parent to re-enable the button above */}
-          {question.type !== 'Emoji Reaction' || hasFinalizePayload || useNextNav ? (
+          {question.type !== 'Emoji Reaction' ||
+          hasFinalizePayload ||
+          useNextNav ||
+          useLockstepSubmit ? (
           <button
             type="button"
-            aria-label={useNextNav ? 'Next question' : question.type === 'Emoji Reaction' ? 'Submit reaction' : 'Submit answer'}
+            aria-label={
+              useLockstepSubmit
+                ? 'Submit answer'
+                : useNextNav
+                  ? 'Next question'
+                  : question.type === 'Emoji Reaction'
+                    ? 'Submit reaction'
+                    : 'Submit answer'
+            }
             disabled={
               sessionEnded ||
               isSubmitting ||
-              (useNextNav
-                ? hasCountdown && !canGoToNextQuestion
-                : (submissionsClosed && !question?.openForReattempt) ||
-                  (allQuestionsClosedByHost && !question?.openForReattempt) ||
-                  inputsLocked ||
-                  !hasFinalizePayload ||
-                  (hasCountdown && !canGoToNextQuestion))
+              (useLockstepSubmit
+                ? Boolean(hasSubmittedQuestion)
+                : useNextNav
+                  ? hasQuestionCountdown && !canGoToNextQuestion
+                  : (submissionsClosed && !question?.openForReattempt) ||
+                    (allQuestionsClosedByHost && !question?.openForReattempt) ||
+                    inputsLocked ||
+                    !hasFinalizePayload ||
+                    (hasQuestionCountdown && !canGoToNextQuestion))
             }
             title={
               sessionEnded
                 ? 'Session has ended'
-                : useNextNav
-                  ? hasCountdown && !canGoToNextQuestion
-                    ? 'Answer this question or wait for the timer'
+                : useLockstepSubmit
+                  ? hasSubmittedQuestion
+                    ? 'Answer submitted'
                     : undefined
-                  : allQuestionsClosedByHost && !question?.openForReattempt
-                    ? 'All questions are closed by the host'
-                    : submissionsClosed && !question?.openForReattempt
-                      ? 'This question was closed by the host'
-                      : hasCountdown && !canGoToNextQuestion
-                        ? 'Answer this question or wait for the timer'
-                        : !hasFinalizePayload
-                          ? 'Answer this question before submitting'
-                          : undefined
+                  : useNextNav
+                    ? hasQuestionCountdown && !canGoToNextQuestion
+                      ? 'Answer this question or wait for the question timer'
+                      : undefined
+                    : allQuestionsClosedByHost && !question?.openForReattempt
+                      ? 'All questions are closed by the host'
+                      : submissionsClosed && !question?.openForReattempt
+                        ? 'This question was closed by the host'
+                        : hasQuestionCountdown && !canGoToNextQuestion
+                          ? 'Answer this question or wait for the question timer'
+                          : !hasFinalizePayload
+                            ? 'Answer this question before submitting'
+                            : undefined
             }
             onClick={onNextOrSubmit}
-            className={`h-11 rounded-xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 text-sm font-semibold text-white shadow-lg shadow-blue-900/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 ${
+            className={`participant-btn-primary h-11 rounded-xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 text-sm font-semibold text-white shadow-lg shadow-blue-900/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 ${
               highlightNextButton && useNextNav ? 'participant-next-highlight' : ''
             }`}
           >
-            {isSubmitting ? 'Submitting...' : useNextNav ? 'Next' : question.type === 'Emoji Reaction' ? 'Submit reaction' : 'Submit'}
+            {isSubmitting
+              ? 'Submitting...'
+              : useLockstepSubmit
+                ? 'Submit'
+                : useNextNav
+                  ? 'Next'
+                  : question.type === 'Emoji Reaction'
+                    ? 'Submit reaction'
+                    : 'Submit'}
           </button>
           ) : null}
         </div>
       </div>
 
-      {navigationEnabled && lastQuestionFinalized && !sessionEnded && (
+      {navigationEnabled &&
+        lastQuestionFinalized &&
+        !sessionEnded &&
+        !sessionQuizTotalTimeEnabled && (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
           <p className="text-sm font-semibold text-emerald-900">
             {question?.isSurvey ? 'Survey submitted' : 'Quiz submitted'}
@@ -374,6 +475,7 @@ export function ActiveQuestionPanel({
       )}
 
       {canSeeAnswerReveal &&
+        hasSubmittedQuestion &&
         !question.isSurvey &&
         (question.type === 'MCQ' || question.type === 'True/False' || question.type === 'Match') &&
         participantAnswerIsCorrect !== null && (
@@ -412,5 +514,6 @@ export function ActiveQuestionPanel({
         />
       )}
     </section>
+    </ParticipantFitProvider>
   )
 }

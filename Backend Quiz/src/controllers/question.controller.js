@@ -5,6 +5,7 @@ const {
   getQuestionById,
   updateQuestion,
   deleteQuestion,
+  syncSessionQuestions,
   reorderQuestions,
   setQuestionLiveState,
   setQuestionAnswerRevealed,
@@ -19,7 +20,8 @@ const {
 const {
   validateCreateQuestionPayload,
   validateUpdateQuestionPayload,
-  validateReorderPayload
+  validateReorderPayload,
+  validateSyncQuestionsPayload
 } = require("../validators/question.validator");
 const {
   notifyQuestionChange,
@@ -91,6 +93,28 @@ async function createForSession(req, res) {
     return successResponse(res, { question }, "Question created", 201);
   } catch (err) {
     return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
+async function syncForSession(req, res) {
+  try {
+    const sessionId = Number(req.params.sessionId);
+    if (Number.isNaN(sessionId)) {
+      return errorResponse(res, "sessionId must be a number", 400);
+    }
+    const errors = validateSyncQuestionsPayload(req.body);
+    if (errors.length > 0) {
+      return errorResponse(res, "Validation failed", 400, errors);
+    }
+    const questions = await syncSessionQuestions({
+      sessionId,
+      questions: req.body.questions,
+      deleteIds: req.body.delete_ids || [],
+      user: req.user
+    });
+    return successResponse(res, { questions }, "Questions saved", 200);
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500, err.details || null);
   }
 }
 
@@ -234,6 +258,15 @@ function buildQuestionChangePayload(question, isLive) {
     is_live: Boolean(isLive),
     live_activated_at: isLive ? question.live_activated_at ?? null : null,
     time_limit_seconds: question.time_limit_seconds ?? null,
+    timer_sound_key: question.timer_sound_key || "classic",
+    timer_sound_url: question.timer_sound_url || null,
+    timer_ending_sound_key:
+      question.timer_ending_sound_key || question.timer_sound_key || "classic",
+    timer_ending_sound_url: question.timer_ending_sound_url || null,
+    timer_sound_start_seconds:
+      question.timer_sound_start_seconds != null
+        ? Number(question.timer_sound_start_seconds)
+        : null,
     submissions_closed: isLive ? Boolean(question.submissions_closed) : false,
     open_for_reattempt: isLive ? Boolean(question.open_for_reattempt) : false
   };
@@ -397,7 +430,12 @@ async function openForReattempt(req, res) {
       user: req.user
     });
     const session = await Session.findByPk(question.session_id, {
-      attributes: ["session_code", "leaderboard_enabled"]
+      attributes: [
+        "session_code",
+        "leaderboard_enabled",
+        "current_rankings_enabled",
+        "leaderboard_top_n"
+      ]
     });
     if (session?.session_code) {
       for (const otherId of deactivatedQuestionIds) {
@@ -417,8 +455,14 @@ async function openForReattempt(req, res) {
           time_limit_seconds: question.time_limit_seconds
         }
       );
-      if (session.leaderboard_enabled) {
-        buildSessionLeaderboard(question.session_id)
+      if (session.leaderboard_enabled || session.current_rankings_enabled) {
+        const {
+          resolveSessionLeaderboardScope
+        } = require("../services/response.service");
+        const { resolveLeaderboardTopN } = require("../utils/leaderboardTopN");
+        buildSessionLeaderboard(question.session_id, resolveLeaderboardTopN(session), {
+          scope: resolveSessionLeaderboardScope(session)
+        })
           .then((leaderboard) => notifyLeaderboard(session.session_code, { leaderboard }))
           .catch(() => {});
       }
@@ -438,6 +482,7 @@ module.exports = {
   listBySession,
   listBySessionPublic,
   createForSession,
+  syncForSession,
   previewImport,
   confirmImport,
   detail,

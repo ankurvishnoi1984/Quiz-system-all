@@ -1,7 +1,14 @@
 /** @typedef {{ participant_id: number|string, name: string, score: number, attempts?: number, responseTimeMs?: number|null }} LeaderboardEntry */
 
-export const LEADERBOARD_LIMIT_OPTIONS = [10, 20, 30, 40, 50]
+export const LEADERBOARD_LIMIT_OPTIONS = [5, 10, 20, 30, 40, 50]
 export const SESSION_LEADERBOARD_TOP_N = 10
+
+/** Normalize a host/session Top-N value to an allowed option. */
+export function normalizeLeaderboardTopN(value) {
+  const n = Math.floor(Number(value))
+  if (LEADERBOARD_LIMIT_OPTIONS.includes(n)) return n
+  return SESSION_LEADERBOARD_TOP_N
+}
 
 export function participantDisplayName(row, participantId) {
   const p = row?.participant

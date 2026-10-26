@@ -1,4 +1,5 @@
 import { CheckCircle2 } from 'lucide-react'
+import { resolveQuestionMediaUrl } from '../../../utils/questionMedia'
 
 /** Compact notice above ending screens (leaderboard / survey results). */
 export function SessionEndedBanner() {
@@ -10,7 +11,25 @@ export function SessionEndedBanner() {
 }
 
 /** Full-page style message when the session is completed and no question should be shown. */
-export function SessionEndedPanel() {
+export function SessionEndedPanel({ thanksImageUrl = '' }) {
+  const imageSrc = resolveQuestionMediaUrl(thanksImageUrl)
+
+  if (imageSrc) {
+    return (
+      <section className="flex min-h-[min(70vh,36rem)] w-full flex-col items-center justify-center">
+        <div className="quiz-pop w-full max-w-5xl rounded-2xl border border-emerald-200/80 bg-white p-2 text-center shadow-sm sm:p-3">
+          <div className="mx-auto flex w-full items-center justify-center overflow-hidden rounded-xl">
+            <img
+              src={imageSrc}
+              alt=""
+              className="max-h-[min(78vh,42rem)] w-full object-contain"
+            />
+          </div>
+        </div>
+      </section>
+    )
+  }
+
   return (
     <section className="quiz-pop flex min-h-[min(60vh,28rem)] flex-col items-center justify-center rounded-2xl border border-blue-200/70 bg-white px-6 py-12 text-center shadow-sm">
       <div className="mb-5 inline-flex size-16 items-center justify-center rounded-full bg-slate-100 text-slate-600">

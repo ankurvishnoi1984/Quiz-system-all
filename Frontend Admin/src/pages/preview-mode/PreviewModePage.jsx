@@ -26,7 +26,7 @@ function resolveLiveQuestionTarget(questions) {
 }
 
 function resolveEndingScreen(session) {
-  if (session?.leaderboard_enabled) return 'leaderboard'
+  if (session?.leaderboard_enabled || session?.current_rankings_enabled) return 'leaderboard'
   if (session?.survey_results_enabled) return 'surveyEnding'
   return null
 }
@@ -207,6 +207,7 @@ function PreviewModePage() {
     }
   }, [
     session?.leaderboard_enabled,
+    session?.current_rankings_enabled,
     session?.survey_results_enabled,
     session,
     mappedQuestions,

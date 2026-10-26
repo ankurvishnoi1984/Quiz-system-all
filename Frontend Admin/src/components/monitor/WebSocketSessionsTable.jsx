@@ -1,5 +1,5 @@
 import { Unplug } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { formatMonitorRole } from '../../utils/websocketMonitor'
 
 function RoleBreakdown({ byRole = {} }) {
@@ -20,20 +20,24 @@ function RoleBreakdown({ byRole = {} }) {
   )
 }
 
-function StatusBadge({ status }) {
+function StatusBadge({ status, dbStatus }) {
+  const resolved = status || dbStatus || null
   const styles = {
     live: 'bg-emerald-50 text-emerald-700',
     paused: 'bg-amber-50 text-amber-800',
     draft: 'bg-slate-100 text-slate-600',
     completed: 'bg-slate-100 text-slate-600',
     archived: 'bg-slate-100 text-slate-500',
+    missing: 'bg-red-50 text-red-700',
   }
-  const label = status ? String(status).charAt(0).toUpperCase() + String(status).slice(1) : '—'
+  const label = resolved
+    ? String(resolved).charAt(0).toUpperCase() + String(resolved).slice(1)
+    : 'Missing'
 
   return (
     <span
       className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-        styles[status] || 'bg-slate-100 text-slate-600'
+        styles[resolved] || (resolved ? 'bg-slate-100 text-slate-600' : styles.missing)
       }`}
     >
       {label}
@@ -123,7 +127,7 @@ function CloseConfirmModal({ target, pending, onCancel, onConfirm }) {
   )
 }
 
-export function WebSocketSessionsTable({ sessions = [], isLoading, closingKey, onCloseRole }) {
+function WebSocketSessionsTable({ sessions = [], isLoading, closingKey, onCloseRole }) {
   const [confirmTarget, setConfirmTarget] = useState(null)
 
   if (isLoading) {
@@ -171,7 +175,7 @@ export function WebSocketSessionsTable({ sessions = [], isLoading, closingKey, o
                   <td className="px-4 py-3 font-medium text-navy-900">{row.title || 'Untitled session'}</td>
                   <td className="px-4 py-3 font-mono text-xs text-slate-600">{row.session_code}</td>
                   <td className="px-4 py-3">
-                    <StatusBadge status={row.status} />
+                    <StatusBadge status={row.status} dbStatus={row.db_status} />
                   </td>
                   <td className="px-4 py-3 font-semibold tabular-nums text-navy-900">
                     {row.total_connections}
@@ -230,3 +234,6 @@ export function WebSocketSessionsTable({ sessions = [], isLoading, closingKey, o
     </div>
   )
 }
+
+const WebSocketSessionsTableMemo = memo(WebSocketSessionsTable)
+export { WebSocketSessionsTableMemo as WebSocketSessionsTable }

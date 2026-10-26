@@ -30,7 +30,17 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { HostQuestionActionButton } from '../components/live/HostQuestionActionButton'
+import { ParticipantThemePicker } from '../components/session/ParticipantThemePicker'
+import {
+  DEFAULT_CUSTOM_THEME_COLORS,
+  DEFAULT_PARTICIPANT_THEME,
+  normalizeCustomThemeColors,
+  normalizeParticipantTheme,
+  toCustomThemeColorsApi,
+} from '../utils/participantTheme'
 import { QuestionMediaUpload } from '../components/builder/QuestionMediaUpload'
+import { QuestionTimerSoundSettings } from '../components/builder/QuestionTimerSoundSettings'
+import { ResponseTimeScoreBandsEditor } from '../components/builder/ResponseTimeScoreBandsEditor'
 import { QuestionImportModal } from '../components/builder/QuestionImportModal'
 import { AiGenerateQuestionsModal } from '../components/builder/AiGenerateQuestionsModal'
 import { QuestionBankModal } from '../components/builder/QuestionBankModal'
@@ -38,15 +48,12 @@ import { QuestionMedia } from '../components/participant-session/QuestionMedia'
 import Modal from '../components/ui/Modal'
 import { useAuthStore } from '../store/authStore'
 import {
-  createQuestionApi,
   createQuestionSetApi,
-  deleteQuestionApi,
   deleteQuestionSetApi,
   getSessionDetailApi,
   listQuestionSetsApi,
   listSessionQuestionsApi,
-  reorderQuestionsApi,
-  updateQuestionApi,
+  syncSessionQuestionsApi,
   updateQuestionSetApi,
   updateSessionApi,
 } from '../services/builderApi'
@@ -71,9 +78,41 @@ import {
   formatNoActivePlanMessage,
   hasNoActivePlan,
 } from '../components/dashboard/PlanExpiredNotice'
+import {
+  buildScoreBandsForTimer,
+  normalizeResponseTimeScoreBands,
+  resolveUniformPoolTimeLimit,
+  DEFAULT_BAND_POINTS,
+} from '../utils/advancedScoreBands'
+import {
+  DEFAULT_TIMER_SOUND_KEY,
+  normalizeTimerSoundSettings,
+} from '../utils/timerSoundPresets'
+import {
+  OPTION_TEXT_MAX_CHARS,
+  QUESTION_TEXT_MAX_CHARS,
+  clipToMaxChars,
+  getQuestionTextLimitError,
+} from '../utils/questionTextLimits'
+
+function CharCountHint({ value, max }) {
+  const len = String(value ?? '').length
+  const nearLimit = len >= max
+  return (
+    <p
+      className={`mt-1 text-right text-[11px] tabular-nums ${
+        nearLimit ? 'font-semibold text-amber-700' : 'text-slate-500'
+      }`}
+    >
+      {len} / {max}
+    </p>
+  )
+}
 
 /** Question-set management in the builder (exam Set A / Set B). */
 const QUESTION_SETS_UI_ENABLED = true
+
+const DEFAULT_ADVANCED_SCORE_BANDS = buildScoreBandsForTimer(30, 6)
 
 function InlineEditableSessionTitle({ title, onSave, isSaving }) {
   const [editing, setEditing] = useState(false)
@@ -301,13 +340,13 @@ function areAllQuestionsUntimed(questions) {
   return (questions || []).every((q) => normalizeTimeLimitSeconds(q.timeLimitSeconds) === 0)
 }
 
-function resolveDefaultTimeLimitForNewQuestion(questions) {
-  if (!questions.length) return 0
-  if (areAllQuestionsUntimed(questions)) return 0
+function resolveDefaultTimeLimitForNewQuestion(questions, { advancedBuilder = false } = {}) {
+  if (!questions.length) return advancedBuilder ? 30 : 0
+  if (areAllQuestionsUntimed(questions)) return advancedBuilder ? 30 : 0
   const limits = questions.map((q) => normalizeTimeLimitSeconds(q.timeLimitSeconds))
   const unique = new Set(limits)
   if (unique.size === 1) return limits[0]
-  return 0
+  return advancedBuilder ? 30 : 0
 }
 
 function isSessionQuizTotalTimeEnabled(sessionData) {
@@ -318,6 +357,12 @@ function isSessionQuizTotalTimeEnabled(sessionData) {
     Number.isFinite(minutes) &&
     minutes > 0
   )
+}
+
+function isQuizTotalWithQuestionTimersEnabled(sessionData) {
+  if (!isSessionQuizTotalTimeEnabled(sessionData)) return false
+  const value = sessionData?.quiz_total_question_timers_enabled
+  return value === true || value === 1 || value === '1'
 }
 
 function createTrueFalseOptions(correctIsTrue = true) {
@@ -623,20 +668,32 @@ function MatchPairsEditor({ question, onChange, structureLocked }) {
                 <input
                   value={pair.left || ''}
                   disabled={structureLocked}
-                  onChange={(event) => updatePair(pair.id, { left: event.target.value })}
+                  maxLength={OPTION_TEXT_MAX_CHARS}
+                  onChange={(event) =>
+                    updatePair(pair.id, {
+                      left: clipToMaxChars(event.target.value, OPTION_TEXT_MAX_CHARS),
+                    })
+                  }
                   className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-navy-900 outline-none transition focus:border-navy-500 focus:ring-2 focus:ring-navy-500/20 disabled:bg-slate-50"
                   placeholder="e.g. Capital of France"
                 />
+                <CharCountHint value={pair.left} max={OPTION_TEXT_MAX_CHARS} />
               </label>
               <label className="block text-xs font-semibold text-slate-600">
                 Right / answer
                 <input
                   value={pair.right || ''}
                   disabled={structureLocked}
-                  onChange={(event) => updatePair(pair.id, { right: event.target.value })}
+                  maxLength={OPTION_TEXT_MAX_CHARS}
+                  onChange={(event) =>
+                    updatePair(pair.id, {
+                      right: clipToMaxChars(event.target.value, OPTION_TEXT_MAX_CHARS),
+                    })
+                  }
                   className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-navy-900 outline-none transition focus:border-navy-500 focus:ring-2 focus:ring-navy-500/20 disabled:bg-slate-50"
                   placeholder="e.g. Paris"
                 />
+                <CharCountHint value={pair.right} max={OPTION_TEXT_MAX_CHARS} />
               </label>
               <div className="flex items-end">
                 <button
@@ -669,7 +726,9 @@ function OptionsEditor({ question, quizMode, onChange, structureLocked, hideCorr
   const setOptionText = (id, text) => {
     onChange({
       ...question,
-      options: question.options.map((o) => (o.id === id ? { ...o, text } : o)),
+      options: question.options.map((o) =>
+        o.id === id ? { ...o, text: clipToMaxChars(text, OPTION_TEXT_MAX_CHARS) } : o,
+      ),
     })
   }
 
@@ -706,7 +765,7 @@ function OptionsEditor({ question, quizMode, onChange, structureLocked, hideCorr
   }
 
   const optionRows = question.options.map((opt) => (
-    <div key={opt.id} className="flex flex-wrap items-center gap-2">
+    <div key={opt.id} className="flex flex-wrap items-start gap-2">
       {question.type === 'MCQ' && !hideCorrectToggle ? (
         <button
           type="button"
@@ -734,11 +793,15 @@ function OptionsEditor({ question, quizMode, onChange, structureLocked, hideCorr
           {structureLocked ? (opt.isCorrect ? 'Correct' : '—') : quizMode ? (opt.isCorrect ? 'Correct' : 'Mark correct') : 'Quiz mode off'}
         </button>
       ) : null}
-      <input
-        className="h-10 min-w-[220px] flex-1 rounded-xl border border-blue-200/70 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
-        value={opt.text}
-        onChange={(e) => setOptionText(opt.id, e.target.value)}
-      />
+      <div className="min-w-[220px] flex-1">
+        <input
+          className="h-10 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+          value={opt.text}
+          maxLength={OPTION_TEXT_MAX_CHARS}
+          onChange={(e) => setOptionText(opt.id, e.target.value)}
+        />
+        <CharCountHint value={opt.text} max={OPTION_TEXT_MAX_CHARS} />
+      </div>
       <button
         type="button"
         onClick={() => removeOption(opt.id)}
@@ -785,12 +848,12 @@ function OptionsEditor({ question, quizMode, onChange, structureLocked, hideCorr
             <div className="space-y-2">
               {question.options.map((opt) => (
                 <SortableRow key={opt.id} id={opt.id}>
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-start gap-2">
                     {question.type === 'MCQ' && !hideCorrectToggle ? (
                       <button
                         type="button"
                         onClick={() => toggleCorrect(opt.id)}
-                        className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                        className={`inline-flex h-10 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
                           quizMode
                             ? opt.isCorrect
                               ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
@@ -804,11 +867,15 @@ function OptionsEditor({ question, quizMode, onChange, structureLocked, hideCorr
                         {quizMode ? (opt.isCorrect ? 'Correct' : 'Mark correct') : 'Quiz mode off'}
                       </button>
                     ) : null}
-                    <input
-                      className="h-10 min-w-[220px] flex-1 rounded-xl border border-blue-200/70 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
-                      value={opt.text}
-                      onChange={(e) => setOptionText(opt.id, e.target.value)}
-                    />
+                    <div className="min-w-[220px] flex-1">
+                      <input
+                        className="h-10 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
+                        value={opt.text}
+                        maxLength={OPTION_TEXT_MAX_CHARS}
+                        onChange={(e) => setOptionText(opt.id, e.target.value)}
+                      />
+                      <CharCountHint value={opt.text} max={OPTION_TEXT_MAX_CHARS} />
+                    </div>
                     <button
                       type="button"
                       onClick={() => removeOption(opt.id)}
@@ -1330,8 +1397,10 @@ function BuilderPage() {
   const [settings, setSettings] = useState({
     anonymous: false,
     leaderboard: false,
-    maxParticipants: 300,
+    maxParticipants: 2000,
     password: '',
+    participantTheme: DEFAULT_PARTICIPANT_THEME,
+    participantThemeCustom: { ...DEFAULT_CUSTOM_THEME_COLORS },
   })
   const [joinRequirement, setJoinRequirement] = useState('name')
   const [joinOtpRequired, setJoinOtpRequired] = useState(true)
@@ -1466,6 +1535,7 @@ function BuilderPage() {
         id: String(question.question_id),
         questionId: question.question_id,
         setId: question.set_id ?? null,
+        poolEligible: question.pool_eligible !== false,
         type: 'Survey',
         surveySubType,
         allowMultipleSelect: Boolean(question.allow_multiple_select),
@@ -1479,6 +1549,11 @@ function BuilderPage() {
         answerRevealed: Boolean(question.answer_revealed),
         showLeaderboard: Boolean(question.show_leaderboard),
         timeLimitSeconds: 0,
+        timerSoundKey: DEFAULT_TIMER_SOUND_KEY,
+        timerSoundUrl: null,
+        timerEndingSoundKey: DEFAULT_TIMER_SOUND_KEY,
+        timerEndingSoundUrl: null,
+        timerSoundStartSeconds: null,
         options,
       }
     }
@@ -1524,6 +1599,7 @@ function BuilderPage() {
       id: String(question.question_id),
       questionId: question.question_id,
       setId: question.set_id ?? null,
+      poolEligible: question.pool_eligible !== false,
       type: uiType,
       text: question.question_text || '',
       media: mapApiMediaToQuestionMedia(question),
@@ -1541,6 +1617,14 @@ function BuilderPage() {
       answerRevealed: Boolean(question.answer_revealed),
       showLeaderboard: Boolean(question.show_leaderboard),
       timeLimitSeconds: normalizeTimeLimitSeconds(question.time_limit_seconds),
+      ...normalizeTimerSoundSettings({
+        time_limit_seconds: question.time_limit_seconds,
+        timer_sound_key: question.timer_sound_key,
+        timer_sound_url: question.timer_sound_url,
+        timer_ending_sound_key: question.timer_ending_sound_key,
+        timer_ending_sound_url: question.timer_ending_sound_url,
+        timer_sound_start_seconds: question.timer_sound_start_seconds,
+      }),
       options,
     }
   }
@@ -1566,8 +1650,12 @@ function BuilderPage() {
     setSettings({
       anonymous: Boolean(sessionQuery.data.is_anonymous_default),
       leaderboard: Boolean(sessionQuery.data.leaderboard_enabled),
-      maxParticipants: Number(sessionQuery.data.max_participants || 300),
+      maxParticipants: Number(sessionQuery.data.max_participants || 2000),
       password: '',
+      participantTheme: normalizeParticipantTheme(sessionQuery.data.participant_theme),
+      participantThemeCustom: normalizeCustomThemeColors(
+        sessionQuery.data.participant_theme_custom,
+      ),
     })
     const joinType =
       sessionQuery.data.join_type ||
@@ -1628,7 +1716,16 @@ function BuilderPage() {
         setSettings((prev) => ({
           ...prev,
           leaderboard: Boolean(updated.leaderboard_enabled),
+          participantTheme: normalizeParticipantTheme(
+            updated.participant_theme ?? prev.participantTheme,
+          ),
+          participantThemeCustom: normalizeCustomThemeColors(
+            updated.participant_theme_custom ?? prev.participantThemeCustom,
+          ),
         }))
+        queryClient.setQueryData(['builder-session', sessionId], (old) =>
+          old ? { ...old, ...updated } : updated,
+        )
       }
       queryClient.invalidateQueries({ queryKey: ['builder-session', sessionId] })
       setSaveError('')
@@ -1658,11 +1755,37 @@ function BuilderPage() {
   const patchSessionSettings = (partial) => {
     const next = {
       leaderboard: partial.leaderboard ?? settings.leaderboard,
+      participantTheme: normalizeParticipantTheme(
+        partial.participantTheme ?? settings.participantTheme,
+      ),
+      participantThemeCustom: normalizeCustomThemeColors(
+        partial.participantThemeCustom ?? settings.participantThemeCustom,
+      ),
     }
-    setSettings((prev) => ({ ...prev, ...partial }))
-    sessionSettingsMutation.mutate({
-      leaderboard_enabled: next.leaderboard,
-    })
+    setSettings((prev) => ({
+      ...prev,
+      ...partial,
+      participantTheme: next.participantTheme,
+      participantThemeCustom: next.participantThemeCustom,
+    }))
+    const payload = {}
+    if (partial.leaderboard !== undefined) {
+      payload.leaderboard_enabled = next.leaderboard
+    }
+    if (partial.participantTheme !== undefined) {
+      payload.participant_theme = next.participantTheme
+    }
+    if (
+      partial.participantThemeCustom !== undefined ||
+      partial.participantTheme === 'custom'
+    ) {
+      payload.participant_theme_custom = toCustomThemeColorsApi(
+        next.participantThemeCustom,
+      )
+    }
+    if (Object.keys(payload).length) {
+      sessionSettingsMutation.mutate(payload)
+    }
   }
 
   const questionLeaderboardMutation = useMutation({
@@ -1737,7 +1860,10 @@ function BuilderPage() {
         ? `${planUsageQuery.data?.plan?.name || 'Your plan'} allows ${maxQuestionsPerSession} questions per session (plan ${planUsageQuery.data?.plan_question_limit ?? planUsageQuery.data?.plan?.max_questions_per_session} + extra ${Number(planUsageQuery.data.extra_questions)}).`
         : `${planUsageQuery.data?.plan?.name || 'Your plan'} allows ${maxQuestionsPerSession} questions per session.`
   const isDraftSession = session?.rawStatus === 'draft'
+  const isAdvancedBuilder = sessionQuery.data?.builder_mode === 'advanced'
   const sessionQuizTotalTimeEnabled = isSessionQuizTotalTimeEnabled(sessionQuery.data)
+  const quizTotalWithQuestionTimers = isQuizTotalWithQuestionTimersEnabled(sessionQuery.data)
+  const quizTotalOnlyMode = sessionQuizTotalTimeEnabled && !quizTotalWithQuestionTimers
   const sessionQuizTotalTimeMinutes = sessionQuizTotalTimeEnabled
     ? Number(sessionQuery.data?.quiz_total_time_minutes)
     : null
@@ -1787,23 +1913,79 @@ function BuilderPage() {
 
   const applyQuestionTimeLimit = (seconds) => {
     if (!selected || selected.type === 'Survey') return
-    const normalized = normalizeTimeLimitSeconds(seconds)
-    const applyToAll = areAllQuestionsUntimed(questions)
+    let normalized = normalizeTimeLimitSeconds(seconds)
+    // Score bands need one shared timer; Off is not allowed while bands are on.
+    if (responseTimeScoringEnabled && normalized <= 0) {
+      normalized = 30
+      setTimeLimitMode('30s')
+    }
+    const applyToAll = areAllQuestionsUntimed(questions) || responseTimeScoringEnabled
+    const soundPatch =
+      normalized > 0
+        ? normalizeTimerSoundSettings({
+            ...selected,
+            timeLimitSeconds: normalized,
+          })
+        : {
+            timerSoundKey: DEFAULT_TIMER_SOUND_KEY,
+            timerSoundUrl: null,
+            timerEndingSoundKey: DEFAULT_TIMER_SOUND_KEY,
+            timerEndingSoundUrl: null,
+            timerSoundStartSeconds: null,
+          }
     setDirty(true)
     if (applyToAll) {
       setQuestions((prev) =>
-        prev.map((q) => (q.type === 'Survey' ? q : { ...q, timeLimitSeconds: normalized })),
+        prev.map((q) =>
+          q.type === 'Survey'
+            ? q
+            : {
+                ...q,
+                timeLimitSeconds: normalized,
+                ...(normalized > 0
+                  ? {
+                      timerSoundKey: soundPatch.timerSoundKey,
+                      timerSoundUrl: soundPatch.timerSoundUrl,
+                      timerEndingSoundKey: soundPatch.timerEndingSoundKey,
+                      timerEndingSoundUrl: soundPatch.timerEndingSoundUrl,
+                      timerSoundStartSeconds: soundPatch.timerSoundStartSeconds,
+                    }
+                  : { timerSoundStartSeconds: null }),
+              },
+        ),
       )
+      if (responseTimeScoringEnabled && normalized > 0) {
+        rebuildBandsFromTimer(normalized)
+      }
       return
     }
     setQuestions((prev) =>
       prev.map((q) =>
-        q.id === selected.id && q.type !== 'Survey' ? { ...q, timeLimitSeconds: normalized } : q,
+        q.id === selected.id && q.type !== 'Survey'
+          ? {
+              ...q,
+              timeLimitSeconds: normalized,
+              ...(normalized > 0
+                ? {
+                    timerSoundKey: soundPatch.timerSoundKey,
+                    timerSoundUrl: soundPatch.timerSoundUrl,
+                    timerEndingSoundKey: soundPatch.timerEndingSoundKey,
+                    timerEndingSoundUrl: soundPatch.timerEndingSoundUrl,
+                    timerSoundStartSeconds: soundPatch.timerSoundStartSeconds,
+                  }
+                : { timerSoundStartSeconds: null }),
+            }
+          : q,
       ),
     )
   }
 
   const handleTimeLimitModeChange = (mode) => {
+    if (responseTimeScoringEnabled && mode === 'Off') {
+      setTimeLimitMode('30s')
+      applyQuestionTimeLimit(30)
+      return
+    }
     setTimeLimitMode(mode)
     applyQuestionTimeLimit(timeLimitModeToSeconds(mode, customTime))
   }
@@ -1831,6 +2013,23 @@ function BuilderPage() {
     }
     setSaveError('')
     setDirty(true)
+    let defaultTimeLimit = quizTotalOnlyMode
+      ? 0
+      : resolveDefaultTimeLimitForNewQuestion(questions, {
+          advancedBuilder: isAdvancedBuilder,
+        })
+    let defaultSounds = normalizeTimerSoundSettings({
+      timeLimitSeconds: defaultTimeLimit,
+    })
+    if (responseTimeScoringEnabled && type !== 'Survey' && !quizTotalOnlyMode) {
+      const ref = questions.find((q) => q.type !== 'Survey')
+      defaultTimeLimit =
+        (ref && normalizeTimeLimitSeconds(ref.timeLimitSeconds)) || 30
+      defaultSounds = normalizeTimerSoundSettings({
+        ...(ref || {}),
+        timeLimitSeconds: defaultTimeLimit,
+      })
+    }
     const q = {
       id: uid('q'),
       questionId: null,
@@ -1838,10 +2037,14 @@ function BuilderPage() {
       text: '',
       media: null,
         points: type === 'Survey' || type === 'Poll' || type === 'Emoji Reaction' ? 0 : 10,
-        setId: targetSetId ?? null,
-        timeLimitSeconds: sessionQuizTotalTimeEnabled
-        ? 0
-        : resolveDefaultTimeLimitForNewQuestion(questions),
+        setId: isAdvancedBuilder ? null : targetSetId ?? null,
+        poolEligible: true,
+        timeLimitSeconds: defaultTimeLimit,
+      timerSoundKey: defaultSounds.timerSoundKey,
+      timerSoundUrl: defaultSounds.timerSoundUrl,
+      timerEndingSoundKey: defaultSounds.timerEndingSoundKey,
+      timerEndingSoundUrl: defaultSounds.timerEndingSoundUrl,
+      timerSoundStartSeconds: defaultSounds.timerSoundStartSeconds,
       ...(type === 'Survey' ? createSurveyQuestionDefaults('MCQ') : {}),
       ...(type === 'Rating' ? createRatingQuestionDefaults() : {}),
       options:
@@ -1902,9 +2105,23 @@ function BuilderPage() {
       return
     }
 
-    const defaultTime = sessionQuizTotalTimeEnabled
+    let defaultTime = quizTotalOnlyMode
       ? 0
-      : resolveDefaultTimeLimitForNewQuestion(questions)
+      : resolveDefaultTimeLimitForNewQuestion(questions, {
+          advancedBuilder: isAdvancedBuilder,
+        })
+    let defaultSoundsForGenerated = normalizeTimerSoundSettings({
+      timeLimitSeconds: defaultTime,
+    })
+    if (responseTimeScoringEnabled && !quizTotalOnlyMode) {
+      const ref = questions.find((q) => q.type !== 'Survey')
+      defaultTime =
+        (ref && normalizeTimeLimitSeconds(ref.timeLimitSeconds)) || 30
+      defaultSoundsForGenerated = normalizeTimerSoundSettings({
+        ...(ref || {}),
+        timeLimitSeconds: defaultTime,
+      })
+    }
 
     const accepted = generatedList.slice(0, remaining)
     const mapped = accepted.map((item) => {
@@ -1960,12 +2177,14 @@ function BuilderPage() {
       return {
         id: uid('q'),
         questionId: null,
-        setId: activeSetId,
+        setId: isAdvancedBuilder ? null : activeSetId,
+        poolEligible: true,
         type,
         text: item.text || '',
         media: null,
         points: type === 'Poll' ? 0 : 10,
         timeLimitSeconds: defaultTime,
+        ...defaultSoundsForGenerated,
         ...(type === 'Rating'
           ? {
               ...createRatingQuestionDefaults(),
@@ -2003,10 +2222,127 @@ function BuilderPage() {
   const canQuickAddQuestion =
     isDraftSession && Boolean(sessionQuestionType) && !questionLimitReached
 
-  const canManageSets = QUESTION_SETS_UI_ENABLED && isDraftSession
-  const setsModeEnabled = QUESTION_SETS_UI_ENABLED && questionSets.length > 0
+  const setsUiEnabled = QUESTION_SETS_UI_ENABLED && !isAdvancedBuilder
+  const canManageSets = setsUiEnabled && isDraftSession
+  const setsModeEnabled = setsUiEnabled && questionSets.length > 0
   const navigationEnabledForSets =
     sessionQuery.data?.participant_navigation_enabled !== false
+  const advancedSelectionMode =
+    sessionQuery.data?.advanced_selection_mode === 'random_from_selected'
+      ? 'random_from_selected'
+      : 'random_all'
+  const questionsPerParticipant = Number(sessionQuery.data?.questions_per_participant) || 10
+  const eligiblePoolCount = useMemo(
+    () =>
+      advancedSelectionMode === 'random_from_selected'
+        ? questions.filter((q) => q.poolEligible !== false).length
+        : questions.length,
+    [questions, advancedSelectionMode],
+  )
+  const poolTimeLimitSeconds = useMemo(
+    () => resolveUniformPoolTimeLimit(questions),
+    [questions],
+  )
+
+  const [scoreBandCount, setScoreBandCount] = useState(6)
+  const [localScoreBands, setLocalScoreBands] = useState(null)
+  // Optimistic Off while PUT null is in flight (server cache may still have bands).
+  const [bandsDisabledOptimistic, setBandsDisabledOptimistic] = useState(false)
+
+  const serverScoreBands = useMemo(
+    () => normalizeResponseTimeScoreBands(sessionQuery.data?.response_time_score_bands),
+    [sessionQuery.data?.response_time_score_bands],
+  )
+
+  useEffect(() => {
+    if (!sessionQuery.data) return
+    if (serverScoreBands) {
+      // Keep optimistic Off until PUT null lands; do not flip back On mid-flight.
+      if (bandsDisabledOptimistic) return
+      setScoreBandCount(serverScoreBands.length)
+      setLocalScoreBands(null)
+      return
+    }
+    // Server has no bands — clear optimistic Off after a successful null save.
+    setBandsDisabledOptimistic(false)
+  }, [
+    sessionQuery.data?.session_id,
+    serverScoreBands,
+    sessionQuery.data,
+    bandsDisabledOptimistic,
+  ])
+
+  const scoreBands = useMemo(() => {
+    if (localScoreBands?.length) return localScoreBands
+    if (serverScoreBands?.length) return serverScoreBands
+    if (poolTimeLimitSeconds > 0) {
+      return buildScoreBandsForTimer(poolTimeLimitSeconds, scoreBandCount)
+    }
+    return DEFAULT_ADVANCED_SCORE_BANDS
+  }, [localScoreBands, serverScoreBands, poolTimeLimitSeconds, scoreBandCount])
+
+  const responseTimeScoringEnabled =
+    !bandsDisabledOptimistic &&
+    (Boolean(serverScoreBands) ||
+      (Array.isArray(localScoreBands) && localScoreBands.length > 0))
+
+  const persistScoreBands = (next) => {
+    setBandsDisabledOptimistic(false)
+    setLocalScoreBands(next)
+    sessionSettingsMutation.mutate({ response_time_score_bands: next })
+  }
+
+  const rebuildBandsFromTimer = (timerSeconds, count = scoreBandCount, keepPoints = true) => {
+    const limit = Number(timerSeconds) > 0 ? Number(timerSeconds) : 30
+    const existingPoints = keepPoints ? scoreBands.map((b) => b.points) : DEFAULT_BAND_POINTS
+    const next = buildScoreBandsForTimer(limit, count, existingPoints)
+    persistScoreBands(next)
+  }
+
+  const setResponseTimeScoringEnabled = (on) => {
+    if (on) {
+      const refQuestion =
+        selected && selected.type !== 'Survey'
+          ? selected
+          : questions.find((q) => q.type !== 'Survey') || null
+      const sharedSeconds =
+        poolTimeLimitSeconds > 0
+          ? poolTimeLimitSeconds
+          : refQuestion && normalizeTimeLimitSeconds(refQuestion.timeLimitSeconds) > 0
+            ? normalizeTimeLimitSeconds(refQuestion.timeLimitSeconds)
+            : 30
+      const soundPatch = normalizeTimerSoundSettings({
+        ...(refQuestion || {}),
+        timeLimitSeconds: sharedSeconds,
+      })
+      setDirty(true)
+      setQuestions((prev) =>
+        prev.map((q) =>
+          q.type === 'Survey'
+            ? q
+            : {
+                ...q,
+                timeLimitSeconds: sharedSeconds,
+                timerSoundKey: soundPatch.timerSoundKey,
+                timerSoundUrl: soundPatch.timerSoundUrl,
+                timerEndingSoundKey: soundPatch.timerEndingSoundKey,
+                timerEndingSoundUrl: soundPatch.timerEndingSoundUrl,
+                timerSoundStartSeconds: soundPatch.timerSoundStartSeconds,
+              },
+        ),
+      )
+      const mode = timeLimitSecondsToMode(sharedSeconds)
+      setTimeLimitMode(mode)
+      if (mode === 'Custom') setCustomTime(sharedSeconds)
+      setBandsDisabledOptimistic(false)
+      rebuildBandsFromTimer(sharedSeconds, scoreBandCount)
+      return
+    }
+    setBandsDisabledOptimistic(true)
+    setLocalScoreBands(null)
+    setDirty(true)
+    sessionSettingsMutation.mutate({ response_time_score_bands: null })
+  }
 
   const setQuestionCounts = useMemo(() => {
     return questionSets.map((set) => ({
@@ -2315,7 +2651,43 @@ function BuilderPage() {
         throw new Error('Only one question type is allowed per session. Please keep all questions the same type before saving.')
       }
 
+      if (responseTimeScoringEnabled) {
+        const timed = questions.filter((q) => q.type !== 'Survey')
+        if (timed.length) {
+          const firstLimit = normalizeTimeLimitSeconds(timed[0].timeLimitSeconds)
+          if (firstLimit <= 0) {
+            throw new Error(
+              'Response-time score bands require a shared time limit on all questions.',
+            )
+          }
+          const firstSounds = normalizeTimerSoundSettings(timed[0])
+          const mixed = timed.some((q) => {
+            const limit = normalizeTimeLimitSeconds(q.timeLimitSeconds)
+            const sounds = normalizeTimerSoundSettings(q)
+            return (
+              limit !== firstLimit ||
+              sounds.timerSoundKey !== firstSounds.timerSoundKey ||
+              sounds.timerSoundUrl !== firstSounds.timerSoundUrl ||
+              sounds.timerEndingSoundKey !== firstSounds.timerEndingSoundKey ||
+              sounds.timerEndingSoundUrl !== firstSounds.timerEndingSoundUrl ||
+              sounds.timerSoundStartSeconds !== firstSounds.timerSoundStartSeconds
+            )
+          })
+          if (mixed) {
+            throw new Error(
+              'While response-time score bands are on, all questions must share the same time limit and timer audio. Change the timer on any question to sync them.',
+            )
+          }
+        }
+      }
+
       for (const question of questions) {
+        const textLimitError = getQuestionTextLimitError(question)
+        if (textLimitError) {
+          throw new Error(
+            `Question "${question.text || 'Untitled'}": ${textLimitError}`,
+          )
+        }
         if (question.type === 'Poll') {
           if ((question.options || []).length < 2) {
             throw new Error(
@@ -2443,15 +2815,11 @@ function BuilderPage() {
       const removedIds = initialQuestionIds.filter(
         (questionId) => !questions.some((item) => item.questionId === questionId),
       )
-      if (isDraft) {
-        for (const questionId of removedIds) {
-          await deleteQuestionApi(accessToken, questionId)
-        }
-      } else if (removedIds.length > 0) {
+      if (!isDraft && removedIds.length > 0) {
         throw new Error('Cannot remove questions while the session is live.')
       }
 
-      if (QUESTION_SETS_UI_ENABLED && isDraft && questionSets.length > 0) {
+      if (setsUiEnabled && isDraft && questionSets.length > 0) {
         if (questionSets.length < 2) {
           throw new Error(
             'Sets mode needs at least Set A and Set B. Add another set, or turn sets off.',
@@ -2474,8 +2842,22 @@ function BuilderPage() {
         }
       }
 
+      if (isAdvancedBuilder && isDraft) {
+        const k = Number(sessionQuery.data?.questions_per_participant)
+        if (!Number.isInteger(k) || k < 1) {
+          throw new Error('Set questions per participant (K) in Advanced settings before saving.')
+        }
+        if (eligiblePoolCount < k) {
+          throw new Error(
+            advancedSelectionMode === 'random_from_selected'
+              ? `Mark at least ${k} eligible questions (currently ${eligiblePoolCount}).`
+              : `Add at least ${k} questions to the pool (currently ${eligiblePoolCount}).`,
+          )
+        }
+      }
+
       const questionsToSave = sortQuestionsBySets(questions, questionSets)
-      const orderedIds = []
+      const syncPayloads = []
       for (let index = 0; index < questionsToSave.length; index += 1) {
         const question = questionsToSave[index]
         if (!isDraft && !question.questionId) {
@@ -2486,17 +2868,36 @@ function BuilderPage() {
         const isSurvey = isSurveyQuestionType(question.type)
         const isEmojiReaction = isEmojiReactionQuestionType(question.type)
         const surveySubType = question.surveySubType || 'MCQ'
-        const payload = {
+        syncPayloads.push({
+          ...(question.questionId ? { question_id: question.questionId } : {}),
           question_type: uiToApiType(question.type),
           question_text: question.text || 'Untitled question',
           ...buildQuestionMediaPayload(question.media),
           is_quiz_mode: isPoll || isSurvey || isEmojiReaction ? false : true,
           points_value: isPoll || isSurvey || isEmojiReaction ? 0 : Number(question.points || 0),
-          time_limit_seconds: isSurvey
+          time_limit_seconds: isSurvey || quizTotalOnlyMode
             ? null
-            : sessionQuizTotalTimeEnabled
+            : normalizeTimeLimitSeconds(question.timeLimitSeconds) || null,
+          timer_sound_key:
+            isSurvey || quizTotalOnlyMode
+              ? DEFAULT_TIMER_SOUND_KEY
+              : normalizeTimerSoundSettings(question).timerSoundKey,
+          timer_sound_url:
+            isSurvey || quizTotalOnlyMode
               ? null
-              : normalizeTimeLimitSeconds(question.timeLimitSeconds) || null,
+              : normalizeTimerSoundSettings(question).timerSoundUrl,
+          timer_ending_sound_key:
+            isSurvey || quizTotalOnlyMode
+              ? DEFAULT_TIMER_SOUND_KEY
+              : normalizeTimerSoundSettings(question).timerEndingSoundKey,
+          timer_ending_sound_url:
+            isSurvey || quizTotalOnlyMode
+              ? null
+              : normalizeTimerSoundSettings(question).timerEndingSoundUrl,
+          timer_sound_start_seconds:
+            isSurvey || quizTotalOnlyMode
+              ? null
+              : normalizeTimerSoundSettings(question).timerSoundStartSeconds,
           allow_multiple_select:
             isSurvey && (surveySubType === 'MCQ' || surveySubType === 'Poll')
               ? Boolean(question.allowMultipleSelect)
@@ -2508,7 +2909,8 @@ function BuilderPage() {
                 ? buildOptionsPayload(question)
                 : [],
           display_order: index + 1,
-          set_id: question.setId ?? null,
+          set_id: isAdvancedBuilder ? null : question.setId ?? null,
+          pool_eligible: question.poolEligible !== false,
           ...(isSurvey
             ? {
                 survey_subtype: uiToApiType(surveySubType),
@@ -2516,20 +2918,13 @@ function BuilderPage() {
               }
             : {}),
           ...(question.type === 'Rating' ? buildRatingScalePayload(question) : {}),
-        }
-
-        if (question.questionId) {
-          const updated = await updateQuestionApi(accessToken, question.questionId, payload)
-          orderedIds.push(updated.question_id)
-        } else {
-          const created = await createQuestionApi(accessToken, sessionNumericId, payload)
-          orderedIds.push(created.question_id)
-        }
+        })
       }
 
-      if (isDraft && orderedIds.length > 0) {
-        await reorderQuestionsApi(accessToken, sessionNumericId, orderedIds)
-      }
+      await syncSessionQuestionsApi(accessToken, sessionNumericId, {
+        questions: syncPayloads,
+        delete_ids: isDraft ? removedIds : [],
+      })
 
       await updateSessionApi(accessToken, sessionNumericId, {
         ...(isDraft
@@ -2546,6 +2941,8 @@ function BuilderPage() {
             }
           : {}),
         leaderboard_enabled: settings.leaderboard,
+        participant_theme: normalizeParticipantTheme(settings.participantTheme),
+        participant_theme_custom: toCustomThemeColorsApi(settings.participantThemeCustom),
       })
     },
     onSuccess: async () => {
@@ -2882,7 +3279,24 @@ function BuilderPage() {
               </span>
             </div>
 
-            {QUESTION_SETS_UI_ENABLED ? (
+            {isAdvancedBuilder ? (
+              <div className="mt-3 rounded-xl border border-emerald-200/80 bg-emerald-50/60 px-3 py-3">
+                <p className="text-xs font-semibold text-emerald-950">Advanced pool</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-emerald-900/80">
+                  Pool size {questions.length}. Each participant gets {questionsPerParticipant} random
+                  question{questionsPerParticipant === 1 ? '' : 's'}
+                  {advancedSelectionMode === 'random_from_selected'
+                    ? ` from ${eligiblePoolCount} marked eligible`
+                    : ' from the full pool'}
+                  . Scoring uses response-time bands (not per-question points).
+                  {advancedSelectionMode === 'random_from_selected'
+                    ? ' Use the checkbox on each question to include it in the eligible pool.'
+                    : ''}
+                </p>
+              </div>
+            ) : null}
+
+            {setsUiEnabled ? (
               <div className="mt-3 rounded-xl border border-indigo-200/80 bg-indigo-50/60 px-3 py-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -2987,14 +3401,50 @@ function BuilderPage() {
                         <SortableRow id={q.id} className="border-blue-200/70">
                           {(() => {
                             const isTypeMismatch = Boolean(sessionQuestionType && q.type !== sessionQuestionType)
+                            const showEligibleToggle =
+                              isAdvancedBuilder && advancedSelectionMode === 'random_from_selected'
+                            const isEligible = q.poolEligible !== false
                             return (
+                          <div
+                            className={`flex w-full items-start gap-2 rounded-xl px-2 py-2 ${
+                              showEligibleToggle && !isEligible ? 'opacity-70' : ''
+                            }`}
+                          >
+                            {showEligibleToggle ? (
+                              <label
+                                className="mt-1 flex shrink-0 cursor-pointer flex-col items-center gap-0.5"
+                                title={
+                                  isDraftSession
+                                    ? 'Include this question in the eligible pool'
+                                    : 'Eligible pool (locked while live)'
+                                }
+                                onClick={(e) => e.stopPropagation()}
+                                onPointerDown={(e) => e.stopPropagation()}
+                              >
+                                <input
+                                  type="checkbox"
+                                  disabled={!isDraftSession || isTypeMismatch}
+                                  checked={isEligible}
+                                  onChange={(e) => {
+                                    e.stopPropagation()
+                                    setDirty(true)
+                                    updateQuestion({ ...q, poolEligible: e.target.checked })
+                                  }}
+                                  className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500/40 disabled:cursor-not-allowed"
+                                  aria-label={`Mark question ${idx + 1} eligible for random pool`}
+                                />
+                                <span className="text-[9px] font-semibold uppercase tracking-wide text-emerald-800">
+                                  Eligible
+                                </span>
+                              </label>
+                            ) : null}
                           <button
                             type="button"
                             onClick={() => {
                               if (isTypeMismatch) return
                               setSelectedId(q.id)
                             }}
-                            className={`flex w-full items-start justify-between gap-3 rounded-xl px-2 py-2 text-left ${
+                            className={`min-w-0 flex-1 text-left ${
                               isTypeMismatch ? 'cursor-not-allowed opacity-60' : ''
                             }`}
                             disabled={isTypeMismatch}
@@ -3013,6 +3463,11 @@ function BuilderPage() {
                                     {surveySubTypeLabel(q.surveySubType)}
                                   </span>
                                 ) : null}
+                                {showEligibleToggle && isEligible ? (
+                                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-900">
+                                    In pool
+                                  </span>
+                                ) : null}
                               </div>
                               <p className="mt-2 line-clamp-2 text-[15px] font-semibold leading-snug text-navy-900">
                                 {q.text?.trim() ? q.text : `Untitled ${q.type}`}
@@ -3028,6 +3483,7 @@ function BuilderPage() {
                                     : 'No options'}
                               </p>
                             </div>
+                          </button>
                             <button
                               type="button"
                               onClick={(e) => {
@@ -3039,7 +3495,7 @@ function BuilderPage() {
                             >
                               <Trash2 className="size-4" />
                             </button>
-                          </button>
+                          </div>
                             )
                           })()}
                         </SortableRow>
@@ -3071,15 +3527,35 @@ function BuilderPage() {
                       {renderSetGroupHeader(group)}
                       {group.questions.map((q, idx) => {
                   const isTypeMismatch = Boolean(sessionQuestionType && q.type !== sessionQuestionType)
+                  const showEligibleToggle =
+                    isAdvancedBuilder && advancedSelectionMode === 'random_from_selected'
+                  const isEligible = q.poolEligible !== false
                   return (
                     <div
                       key={q.id}
                       className={`rounded-2xl border border-blue-200/70 bg-white/90 shadow-sm shadow-blue-900/5 backdrop-blur ${
                         q.id === selectedId ? 'ring-2 ring-blue-500/25' : ''
-                      }`}
+                      } ${showEligibleToggle && !isEligible ? 'opacity-70' : ''}`}
                     >
                       <div className="px-3 py-2">
-                        <div className="flex w-full items-start justify-between gap-3">
+                        <div className="flex w-full items-start gap-2">
+                          {showEligibleToggle ? (
+                            <label
+                              className="mt-1 flex shrink-0 cursor-default flex-col items-center gap-0.5"
+                              title="Eligible pool (locked while live)"
+                            >
+                              <input
+                                type="checkbox"
+                                disabled
+                                checked={isEligible}
+                                className="h-4 w-4 rounded border-slate-300 text-emerald-600 disabled:cursor-not-allowed"
+                                aria-label={`Question ${idx + 1} eligible for random pool`}
+                              />
+                              <span className="text-[9px] font-semibold uppercase tracking-wide text-emerald-800">
+                                Eligible
+                              </span>
+                            </label>
+                          ) : null}
                           <button
                             type="button"
                             onClick={() => {
@@ -3102,6 +3578,11 @@ function BuilderPage() {
                               {q.type === 'Survey' && q.surveySubType ? (
                                 <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-900">
                                   {surveySubTypeLabel(q.surveySubType)}
+                                </span>
+                              ) : null}
+                              {showEligibleToggle && isEligible ? (
+                                <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-900">
+                                  In pool
                                 </span>
                               ) : null}
                             </div>
@@ -3154,7 +3635,7 @@ function BuilderPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">Editing</p>
-                {QUESTION_SETS_UI_ENABLED && questionSets.length ? (
+                {setsUiEnabled && questionSets.length ? (
                   <label className="mt-2 flex items-center gap-2 text-xs font-semibold text-slate-600">
                     Set
                     <select
@@ -3254,7 +3735,7 @@ function BuilderPage() {
                     tone="violet"
                   />
                 ) : null}
-                {quizMode ? (
+                {quizMode && !responseTimeScoringEnabled ? (
                   <div className="flex items-center gap-2 rounded-2xl border border-blue-200/70 bg-white px-3 py-2">
                     <p className="text-sm font-semibold text-slate-700">Points</p>
                     <input
@@ -3270,6 +3751,10 @@ function BuilderPage() {
                       }`}
                     />
                   </div>
+                ) : quizMode && responseTimeScoringEnabled ? (
+                  <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900">
+                    Points from response-time bands
+                  </span>
                 ) : selected?.type === 'Survey' ? (
                   <span className="rounded-full bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-900">
                     Survey — no timer or scoring
@@ -3299,7 +3784,13 @@ function BuilderPage() {
                 <label className="text-sm font-semibold text-slate-700">Question text</label>
                 <textarea
                   value={selected.text}
-                  onChange={(e) => updateQuestion({ ...selected, text: e.target.value })}
+                  maxLength={QUESTION_TEXT_MAX_CHARS}
+                  onChange={(e) =>
+                    updateQuestion({
+                      ...selected,
+                      text: clipToMaxChars(e.target.value, QUESTION_TEXT_MAX_CHARS),
+                    })
+                  }
                   placeholder={
                     selected.type === 'Emoji Reaction'
                       ? 'How are you feeling about this topic? (optional)'
@@ -3307,6 +3798,7 @@ function BuilderPage() {
                   }
                   className="mt-1 h-24 w-full resize-none rounded-2xl border border-blue-200/70 bg-white p-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
                 />
+                <CharCountHint value={selected.text} max={QUESTION_TEXT_MAX_CHARS} />
               </div>
 
               {selected.type === 'Survey' && (
@@ -3375,25 +3867,43 @@ function BuilderPage() {
                 disabled={!isDraftSession}
               />
 
-              {selected.type !== 'Survey' && sessionQuizTotalTimeEnabled ? (
+              {selected.type !== 'Survey' && quizTotalOnlyMode ? (
                 <div className="rounded-2xl border border-sky-200/70 bg-sky-50/80 p-4">
                   <p className="text-sm font-semibold text-sky-950">Session quiz total time</p>
                   <p className="mt-1 text-xs text-sky-900/80">
                     This session uses a {sessionQuizTotalTimeMinutes}-minute quiz window. Per-question
-                    time limits are disabled while quiz total time is enabled.
+                    time limits are off. Turn on “Apply both quiz total time and question timer” in
+                    session settings to set question timers too.
                   </p>
                 </div>
               ) : null}
 
-              {selected.type !== 'Survey' && !sessionQuizTotalTimeEnabled ? (
+              {selected.type !== 'Survey' && quizTotalWithQuestionTimers ? (
+                <div className="rounded-2xl border border-sky-200/70 bg-sky-50/80 p-4">
+                  <p className="text-sm font-semibold text-sky-950">Quiz total + question timers</p>
+                  <p className="mt-1 text-xs text-sky-900/80">
+                    This session has a {sessionQuizTotalTimeMinutes}-minute quiz window. You can set a
+                    per-question time limit — participants see both timers. Question audio follows each
+                    question&apos;s timer config.
+                  </p>
+                </div>
+              ) : null}
+
+              {selected.type !== 'Survey' && !quizTotalOnlyMode ? (
               <div className="rounded-2xl border border-blue-200/70 bg-white/70 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-semibold text-navy-900">Time limit</p>
                     <p className="text-xs text-slate-600">
-                      {sessionAllUntimed
-                        ? 'All questions are untimed — changing this applies to every question.'
-                        : 'Per-question timing — adjust individually or turn off for specific questions.'}
+                      {responseTimeScoringEnabled
+                        ? 'Response-time score bands are on — timer and timer audio stay the same on every question. Changing either updates all questions and the score ranges.'
+                        : sessionAllUntimed
+                          ? 'All questions are untimed — changing this applies to every question.'
+                          : isAdvancedBuilder
+                            ? 'Per-question timing — adjust individually or turn off for specific questions. Use the sidebar to set the whole pool at once.'
+                            : quizTotalWithQuestionTimers
+                              ? 'Per-question timing runs alongside the quiz total timer. Leave Off to use only the quiz window for this question.'
+                            : 'Per-question timing — adjust individually or turn off for specific questions.'}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -3404,7 +3914,11 @@ function BuilderPage() {
                       className="h-10 rounded-xl border border-blue-200/70 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
                     >
                       {['Off', '15s', '30s', '60s', '120s', 'Custom'].map((x) => (
-                        <option key={x} value={x}>
+                        <option
+                          key={x}
+                          value={x}
+                          disabled={responseTimeScoringEnabled && x === 'Off'}
+                        >
                           {x}
                         </option>
                       ))}
@@ -3422,11 +3936,76 @@ function BuilderPage() {
                   </div>
                 </div>
                 <p className="mt-3 text-sm text-slate-600">
-                  This question:{' '}
+                  {responseTimeScoringEnabled ? 'All questions: ' : 'This question: '}
                   <span className="font-semibold text-navy-900">
                     {selectedTimeLimitSeconds === 0 ? 'Off' : `${selectedTimeLimitSeconds}s`}
                   </span>
                 </p>
+                {responseTimeScoringEnabled ? (
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    Timer cannot be turned off while score bands are on (defaults to 30s).
+                  </p>
+                ) : null}
+                {selectedTimeLimitSeconds > 0 ? (
+                  <QuestionTimerSoundSettings
+                    timerSoundKey={selected.timerSoundKey}
+                    timerSoundUrl={selected.timerSoundUrl}
+                    timerEndingSoundKey={selected.timerEndingSoundKey}
+                    timerEndingSoundUrl={selected.timerEndingSoundUrl}
+                    timerSoundStartSeconds={selected.timerSoundStartSeconds}
+                    timeLimitSeconds={selectedTimeLimitSeconds}
+                    disabled={!isDraftSession}
+                    deptId={departmentId || sessionQuery.data?.dept_id}
+                    onChange={(next) => {
+                      const selectedSounds = normalizeTimerSoundSettings({
+                        ...next,
+                        timeLimitSeconds: selectedTimeLimitSeconds,
+                      })
+                      const soundKeysChanged =
+                        selectedSounds.timerSoundKey !== selected.timerSoundKey ||
+                        selectedSounds.timerSoundUrl !== selected.timerSoundUrl ||
+                        selectedSounds.timerEndingSoundKey !== selected.timerEndingSoundKey ||
+                        selectedSounds.timerEndingSoundUrl !== selected.timerEndingSoundUrl
+
+                      setDirty(true)
+                      const nextQuestions = questions.map((q) => {
+                        if (q.type === 'Survey') return q
+                        const limit = normalizeTimeLimitSeconds(q.timeLimitSeconds)
+                        const isSelected = q.id === selected.id
+
+                        if (responseTimeScoringEnabled) {
+                          if (limit <= 0) return q
+                          return {
+                            ...q,
+                            timerSoundKey: selectedSounds.timerSoundKey,
+                            timerSoundUrl: selectedSounds.timerSoundUrl,
+                            timerEndingSoundKey: selectedSounds.timerEndingSoundKey,
+                            timerEndingSoundUrl: selectedSounds.timerEndingSoundUrl,
+                            timerSoundStartSeconds: selectedSounds.timerSoundStartSeconds,
+                          }
+                        }
+
+                        if (!isSelected && (!soundKeysChanged || limit <= 0)) return q
+
+                        return {
+                          ...q,
+                          ...(isSelected || soundKeysChanged
+                            ? {
+                                timerSoundKey: selectedSounds.timerSoundKey,
+                                timerSoundUrl: selectedSounds.timerSoundUrl,
+                                timerEndingSoundKey: selectedSounds.timerEndingSoundKey,
+                                timerEndingSoundUrl: selectedSounds.timerEndingSoundUrl,
+                              }
+                            : {}),
+                          ...(isSelected
+                            ? { timerSoundStartSeconds: selectedSounds.timerSoundStartSeconds }
+                            : {}),
+                        }
+                      })
+                      setQuestions(nextQuestions)
+                    }}
+                  />
+                ) : null}
               </div>
               ) : null}
             </div>
@@ -3437,6 +4016,193 @@ function BuilderPage() {
 
         {/* Right: Session settings */}
         <aside className="space-y-4">
+          {isAdvancedBuilder ? (
+            <div className="rounded-2xl border border-emerald-200/80 bg-white/90 p-5 shadow-sm shadow-blue-900/5 backdrop-blur">
+              <p className="text-xs font-semibold uppercase tracking-wider text-emerald-800">
+                Advanced builder
+              </p>
+              <h3 className="mt-1 text-lg font-bold text-navy-900">Pool & scoring</h3>
+              <p className="mt-1 text-xs text-slate-600">
+                Participants each receive a random subset. Wrong or expired answers score 0.
+              </p>
+
+              <div className="mt-4 space-y-3">
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">Questions per participant (K)</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={500}
+                    disabled={!isDraftSession}
+                    value={questionsPerParticipant}
+                    onChange={(e) => {
+                      const next = Number(e.target.value) || 1
+                      sessionSettingsMutation.mutate({
+                        questions_per_participant: next,
+                      })
+                    }}
+                    className="mt-1 h-10 w-full rounded-xl border border-emerald-200/70 bg-white px-3 text-sm outline-none focus:border-emerald-400 disabled:bg-slate-50"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-700">Selection mode</span>
+                  <select
+                    disabled={!isDraftSession}
+                    value={advancedSelectionMode}
+                    onChange={(e) => {
+                      sessionSettingsMutation.mutate({
+                        advanced_selection_mode: e.target.value,
+                      })
+                    }}
+                    className="mt-1 h-10 w-full rounded-xl border border-emerald-200/70 bg-white px-3 text-sm outline-none focus:border-emerald-400 disabled:bg-slate-50"
+                  >
+                    <option value="random_all">Random K from entire pool</option>
+                    <option value="random_from_selected">Random K from marked eligible</option>
+                  </select>
+                </label>
+
+                {advancedSelectionMode === 'random_from_selected' ? (
+                  <p className="rounded-xl border border-emerald-200/70 bg-emerald-50/50 px-3 py-2 text-xs leading-relaxed text-slate-600">
+                    Mark questions in the left list with the <strong>Eligible</strong> checkbox to include
+                    them in the random pool.
+                  </p>
+                ) : null}
+
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">Time limit (all pool questions)</p>
+                  <p className="mt-0.5 text-[11px] text-slate-500">
+                    {quizTotalOnlyMode
+                      ? 'Disabled while quiz total time is on without the “both timers” session setting.'
+                      : responseTimeScoringEnabled
+                      ? 'Shared with every question while score bands are on (timer audio stays in sync too).'
+                      : 'Participants see a countdown per question. Required for time-band scoring to matter.'}
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <select
+                      disabled={!isDraftSession || quizTotalOnlyMode}
+                      value={
+                        questions.length &&
+                        questions.every(
+                          (q) =>
+                            q.type === 'Survey' ||
+                            normalizeTimeLimitSeconds(q.timeLimitSeconds) ===
+                              normalizeTimeLimitSeconds(questions[0]?.timeLimitSeconds),
+                        )
+                          ? timeLimitSecondsToMode(questions[0]?.timeLimitSeconds)
+                          : 'Mixed'
+                      }
+                      onChange={(e) => {
+                        const mode = e.target.value
+                        if (mode === 'Mixed') return
+                        let seconds =
+                          mode === 'Off'
+                            ? 0
+                            : mode === 'Custom'
+                              ? Number(customTime) || 30
+                              : Number(String(mode).replace('s', '')) || 30
+                        let nextMode = mode
+                        if (responseTimeScoringEnabled && seconds <= 0) {
+                          seconds = 30
+                          nextMode = '30s'
+                        }
+                        setDirty(true)
+                        const soundPatch =
+                          seconds > 0 && selected
+                            ? normalizeTimerSoundSettings({
+                                ...selected,
+                                timeLimitSeconds: seconds,
+                              })
+                            : null
+                        setQuestions((prev) =>
+                          prev.map((q) =>
+                            q.type === 'Survey'
+                              ? q
+                              : {
+                                  ...q,
+                                  timeLimitSeconds: seconds,
+                                  ...(soundPatch
+                                    ? {
+                                        timerSoundKey: soundPatch.timerSoundKey,
+                                        timerSoundUrl: soundPatch.timerSoundUrl,
+                                        timerEndingSoundKey: soundPatch.timerEndingSoundKey,
+                                        timerEndingSoundUrl: soundPatch.timerEndingSoundUrl,
+                                        timerSoundStartSeconds:
+                                          soundPatch.timerSoundStartSeconds,
+                                      }
+                                    : { timerSoundStartSeconds: null }),
+                                },
+                          ),
+                        )
+                        if (nextMode !== 'Custom') setTimeLimitMode(nextMode)
+                        else setTimeLimitMode('Custom')
+                        if (seconds > 0 && responseTimeScoringEnabled) {
+                          rebuildBandsFromTimer(seconds, scoreBandCount)
+                        }
+                      }}
+                      className="h-10 rounded-xl border border-emerald-200/70 bg-white px-3 text-sm font-semibold text-slate-700 outline-none focus:border-emerald-400 disabled:bg-slate-50"
+                    >
+                      {['Off', '15s', '30s', '60s', '120s', 'Custom'].map((x) => (
+                        <option
+                          key={x}
+                          value={x}
+                          disabled={responseTimeScoringEnabled && x === 'Off'}
+                        >
+                          {x}
+                        </option>
+                      ))}
+                      <option value="Mixed" disabled>
+                        Mixed
+                      </option>
+                    </select>
+                  </div>
+                  <p className="mt-2 text-[11px] text-slate-500">
+                    {responseTimeScoringEnabled
+                      ? 'Changing this timer updates every question and rebuilds score ranges.'
+                      : 'Or set a timer on each question in the editor (Time limit panel). Changing the pool timer rebuilds score ranges to cover the full time.'}
+                  </p>
+                </div>
+
+                <ResponseTimeScoreBandsEditor
+                  enabled={responseTimeScoringEnabled}
+                  onEnabledChange={setResponseTimeScoringEnabled}
+                  scoreBands={scoreBands}
+                  scoreBandCount={scoreBandCount}
+                  onScoreBandCountChange={setScoreBandCount}
+                  poolTimeLimitSeconds={poolTimeLimitSeconds}
+                  isDraftSession={isDraftSession}
+                  onPersistBands={persistScoreBands}
+                  onRebuildFromTimer={rebuildBandsFromTimer}
+                  description="Required for time-based scoring in this pool."
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-emerald-200/80 bg-white/90 p-5 shadow-sm shadow-blue-900/5 backdrop-blur">
+              <p className="text-xs font-semibold uppercase tracking-wider text-emerald-800">
+                Scoring
+              </p>
+              <h3 className="mt-1 text-lg font-bold text-navy-900">Response-time bands</h3>
+              <p className="mt-1 text-xs text-slate-600">
+                Optionally award more points for faster correct answers. Off by default in Normal
+                builder.
+              </p>
+              <div className="mt-4">
+                <ResponseTimeScoreBandsEditor
+                  enabled={responseTimeScoringEnabled}
+                  onEnabledChange={setResponseTimeScoringEnabled}
+                  scoreBands={scoreBands}
+                  scoreBandCount={scoreBandCount}
+                  onScoreBandCountChange={setScoreBandCount}
+                  poolTimeLimitSeconds={poolTimeLimitSeconds}
+                  isDraftSession={isDraftSession}
+                  onPersistBands={persistScoreBands}
+                  onRebuildFromTimer={rebuildBandsFromTimer}
+                />
+              </div>
+            </div>
+          )}
+
           <div className="rounded-2xl border border-blue-200/70 bg-white/90 p-5 shadow-sm shadow-blue-900/5 backdrop-blur">
             <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">Session settings</p>
             <h3 className="mt-1 text-lg font-bold text-navy-900">Controls</h3>
@@ -3534,6 +4300,33 @@ function BuilderPage() {
                 />
               </label>
 
+              <div className="rounded-2xl border border-blue-200/70 bg-white p-3">
+                <ParticipantThemePicker
+                  value={settings.participantTheme || DEFAULT_PARTICIPANT_THEME}
+                  customColors={settings.participantThemeCustom}
+                  deptId={departmentId || sessionQuery.data?.dept_id}
+                  onChange={(themeId, custom) => {
+                    const nextTheme = normalizeParticipantTheme(themeId)
+                    const nextCustom = custom
+                      ? normalizeCustomThemeColors(custom)
+                      : settings.participantThemeCustom
+                    if (isDraftSession) {
+                      setDirty(true)
+                      setSettings((prev) => ({
+                        ...prev,
+                        participantTheme: nextTheme,
+                        participantThemeCustom: nextCustom,
+                      }))
+                    } else {
+                      patchSessionSettings({
+                        participantTheme: nextTheme,
+                        participantThemeCustom: nextCustom,
+                      })
+                    }
+                  }}
+                />
+              </div>
+
               <div className="rounded-2xl border border-blue-200/70 bg-sky-50/80 p-3 text-xs text-slate-600">
                 Per-question rankings visibility is controlled from the question editor (or Live page) for each
                 quiz question while the session is live.
@@ -3620,8 +4413,8 @@ function BuilderPage() {
         onClose={() => setQuestionBankOpen(false)}
         accessToken={accessToken}
         sessionId={sessionId}
-        setId={QUESTION_SETS_UI_ENABLED ? activeSetId : null}
-        sets={QUESTION_SETS_UI_ENABLED ? questionSets : []}
+        setId={setsUiEnabled ? activeSetId : null}
+        sets={setsUiEnabled ? questionSets : []}
         lockedType={sessionQuestionType}
         remainingSlots={
           maxQuestionsPerSession == null

@@ -66,6 +66,9 @@ function canAccessDepartment(user, department) {
 
 function canAccessSession(user, session) {
   if (!user || !session) return false;
+  if (user.role === "session_admin") {
+    return Number(session.session_admin_user_id) === Number(user.user_id);
+  }
   if (isSuperAdmin(user)) return true;
   if (isSubAdmin(user)) {
     const mode = getSubAdminAccess(user);

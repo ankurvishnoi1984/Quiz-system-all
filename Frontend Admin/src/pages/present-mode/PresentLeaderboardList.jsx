@@ -1,5 +1,6 @@
-import { Crown, Medal, Trophy } from 'lucide-react'
+import { Clock3, Crown, Medal, Trophy } from 'lucide-react'
 import { normalizeLeaderboardEntries } from '../../utils/leaderboard'
+import { formatQuizSubmitTimeParticipant } from '../../utils/quizResponseTime'
 
 function RankBadge({ rank }) {
   if (rank === 1) {
@@ -30,7 +31,7 @@ function RankBadge({ rank }) {
   )
 }
 
-function LeaderboardRow({ row, rank, maxScore, highlight }) {
+function LeaderboardRow({ row, rank, maxScore, highlight, timeMode }) {
   const pct = maxScore > 0 ? Math.round((row.score / maxScore) * 100) : 0
 
   return (
@@ -62,16 +63,29 @@ function LeaderboardRow({ row, rank, maxScore, highlight }) {
           />
         </div>
       </div>
-      <p
-        className={`shrink-0 font-bold tabular-nums text-navy-800 ${
-          highlight ? 'text-[clamp(1.5rem,4vw,2.25rem)]' : 'text-[clamp(1.15rem,3vw,1.65rem)]'
-        }`}
-      >
-        {row.score}
-        <span className="ml-1 text-[clamp(0.65rem,1.2vw,0.8rem)] font-semibold text-slate-500">
-          pts
-        </span>
-      </p>
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        <p
+          className={`font-bold tabular-nums text-navy-800 ${
+            highlight ? 'text-[clamp(1.5rem,4vw,2.25rem)]' : 'text-[clamp(1.15rem,3vw,1.65rem)]'
+          }`}
+        >
+          {row.score}
+          <span className="ml-1 text-[clamp(0.65rem,1.2vw,0.8rem)] font-semibold text-slate-500">
+            pts
+          </span>
+        </p>
+        {row.responseTimeMs != null ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-mono text-[clamp(0.65rem,1.2vw,0.75rem)] font-semibold tabular-nums text-slate-600">
+            <Clock3 className="size-3 shrink-0 text-slate-400" aria-hidden />
+            {timeMode === 'session' ? (
+              <span className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                avg
+              </span>
+            ) : null}
+            {formatQuizSubmitTimeParticipant(row.responseTimeMs)}
+          </span>
+        ) : null}
+      </div>
     </li>
   )
 }
@@ -81,6 +95,7 @@ export function PresentLeaderboardList({
   emptyMessage = 'Scores will appear once participants submit answers.',
   title = 'Rankings',
   showTitle = true,
+  timeMode = 'session',
 }) {
   const rows = normalizeLeaderboardEntries(entries)
   const maxScore = rows.length ? Math.max(...rows.map((r) => r.score), 1) : 1
@@ -119,6 +134,7 @@ export function PresentLeaderboardList({
               rank={idx + 1}
               maxScore={maxScore}
               highlight={idx === 0}
+              timeMode={timeMode}
             />
           ))}
         </ul>

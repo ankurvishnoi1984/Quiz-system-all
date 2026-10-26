@@ -1,5 +1,6 @@
 import { Info, Trophy } from 'lucide-react'
 // import { Info, MessageSquare, Trophy } from 'lucide-react' // MessageSquare was for Q&A tile
+import { HeaderQuizTimer } from '../participant-session/components/HeaderQuizTimer'
 
 export function PresentShell({ children, footer, embed = false }) {
   return (
@@ -145,15 +146,20 @@ export function PresentSlideHeader({
   overallRankingsActive = false,
   // onQaClick, // Q&A feature disabled
   readOnly = false,
+  showParticipantStats = true,
+  hasQuizCountdown = false,
+  quizTimer = 0,
+  quizTimeLimit = 0,
 }) {
   const modeLabel = readOnly ? 'View display' : 'Present mode'
-  const showParticipantsTile = Boolean(onParticipantsClick)
+  const showParticipantsTile = showParticipantStats && Boolean(onParticipantsClick)
   const showOverallRankingsTile = Boolean(onOverallRankingsClick)
   // const showQaTile = Boolean(onQaClick) // Q&A feature disabled
   const showStatTiles = showParticipantsTile || showOverallRankingsTile
   // const showStatTiles = showParticipantsTile || showQaTile
   const joined = Number(participantCount) || 0
   const live = Number(liveParticipantCount) || 0
+  const showQuizTimer = Boolean(hasQuizCountdown)
 
   return (
     <header className="mb-[clamp(1rem,3vh,2rem)] flex shrink-0 flex-wrap items-end justify-between gap-4">
@@ -173,51 +179,75 @@ export function PresentSlideHeader({
         <h1 className="mt-1 text-[clamp(1.1rem,2.5vw,1.75rem)] font-bold text-navy-900">{sessionTitle}</h1>
       </div>
 
-      {showStatTiles ? (
-        <div className="flex flex-wrap items-stretch justify-end gap-2">
-          {/* Q&A feature disabled — re-enable when bringing Q&A back
-          {showQaTile ? (
-            <PresentHeaderStatButton
-              label="Q&A"
-              count={qaCount}
-              onClick={onQaClick}
-              icon={MessageSquare}
-              ariaLabel={`${qaCount} Q&A questions. View question list.`}
+      {showStatTiles || showQuizTimer ? (
+        <div className="flex w-fit max-w-full flex-wrap items-stretch justify-end gap-2 self-end">
+          {showQuizTimer ? (
+            <HeaderQuizTimer
+              timer={quizTimer}
+              timeLimit={quizTimeLimit}
+              size="large"
+              className="shrink-0 !min-w-0"
             />
           ) : null}
-          */}
-          {showOverallRankingsTile ? (
-            <PresentHeaderStatButton
-              label="Overall rankings"
-              onClick={onOverallRankingsClick}
-              icon={Trophy}
-              active={overallRankingsActive}
-              ariaLabel="View overall rankings for host only"
-            />
-          ) : null}
-          {showParticipantsTile ? (
-            <PresentHeaderStatButton
-              label="Participants"
-              showParticipantBreakdown
-              joinedCount={joined}
-              liveCount={live}
-              onClick={onParticipantsClick}
-              icon={Info}
-              ariaLabel={`${joined} joined, ${live} live. View participant list.`}
-            />
+          {showStatTiles ? (
+            <div className="flex flex-wrap items-stretch justify-end gap-2">
+              {/* Q&A feature disabled — re-enable when bringing Q&A back
+              {showQaTile ? (
+                <PresentHeaderStatButton
+                  label="Q&A"
+                  count={qaCount}
+                  onClick={onQaClick}
+                  icon={MessageSquare}
+                  ariaLabel={`${qaCount} Q&A questions. View question list.`}
+                />
+              ) : null}
+              */}
+              {showOverallRankingsTile ? (
+                <PresentHeaderStatButton
+                  label="Overall rankings"
+                  onClick={onOverallRankingsClick}
+                  icon={Trophy}
+                  active={overallRankingsActive}
+                  ariaLabel="View overall rankings for host only"
+                />
+              ) : null}
+              {showParticipantsTile ? (
+                <PresentHeaderStatButton
+                  label="Participants"
+                  showParticipantBreakdown
+                  joinedCount={joined}
+                  liveCount={live}
+                  onClick={onParticipantsClick}
+                  icon={Info}
+                  ariaLabel={`${joined} joined, ${live} live. View participant list.`}
+                />
+              ) : null}
+            </div>
           ) : null}
         </div>
-      ) : (
-        <div className="text-right">
-          <div className="flex items-center justify-end gap-2">
-            <PresentLiveIndicator isSessionLive={isSessionLive} />
-            <p className="text-[clamp(0.7rem,1.3vw,0.85rem)] font-semibold uppercase tracking-wider text-slate-500">
-              Participants
-            </p>
+      ) : showParticipantStats ? (
+        <div className="flex w-fit max-w-full flex-wrap items-center justify-end gap-2 self-end">
+          {showQuizTimer ? (
+            <HeaderQuizTimer
+              timer={quizTimer}
+              timeLimit={quizTimeLimit}
+              size="large"
+              className="shrink-0 !min-w-0"
+            />
+          ) : null}
+          <div className="text-right">
+            <div className="flex items-center justify-end gap-2">
+              <PresentLiveIndicator isSessionLive={isSessionLive} />
+              <p className="text-[clamp(0.7rem,1.3vw,0.85rem)] font-semibold uppercase tracking-wider text-slate-500">
+                Participants
+              </p>
+            </div>
+            <PresentParticipantCounts joinedCount={joined} liveCount={live} />
           </div>
-          <PresentParticipantCounts joinedCount={joined} liveCount={live} />
         </div>
-      )}
+      ) : showQuizTimer ? (
+        <HeaderQuizTimer timer={quizTimer} timeLimit={quizTimeLimit} size="large" />
+      ) : null}
     </header>
   )
 }

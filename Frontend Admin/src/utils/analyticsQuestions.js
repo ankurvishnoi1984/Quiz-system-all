@@ -137,7 +137,22 @@ export function mapAnalyticsPerQuestion(q, idx, breakdown, results, allResponses
   }
 }
 
-export function buildAnalyticsCsvRows({ sessionMeta, sortedQuestions, allResponses }) {
+/** Contact fields collected at join for report exports. */
+export function joinTypeContactFields(joinType) {
+  const type = String(joinType || '')
+  return {
+    includeEmail: type === 'name_email' || type === 'name_email_mobile',
+    includeMobile: type === 'name_mobile' || type === 'name_email_mobile',
+  }
+}
+
+export function buildAnalyticsCsvRows({
+  sessionMeta,
+  sortedQuestions,
+  allResponses,
+  includeEmail = false,
+  includeMobile = false,
+}) {
   const questionOrder = new Map(sortedQuestions.map((q, i) => [Number(q.question_id), i + 1]))
   const questionsById = new Map(sortedQuestions.map((q) => [Number(q.question_id), q]))
 
@@ -152,7 +167,7 @@ export function buildAnalyticsCsvRows({ sessionMeta, sortedQuestions, allRespons
       r.text_response ||
       ''
 
-    return [
+    const row = [
       sessionMeta.id,
       sessionMeta.title,
       String(questionOrder.get(Number(r.question_id)) ?? ''),
@@ -160,9 +175,14 @@ export function buildAnalyticsCsvRows({ sessionMeta, sortedQuestions, allRespons
       isSurvey ? q.survey_subtype || chartType : '',
       (r.question?.question_text ?? q?.question_text ?? '').replaceAll('"', '""'),
       r.participant?.nickname ?? '',
+    ]
+    if (includeEmail) row.push(r.participant?.email ?? '')
+    if (includeMobile) row.push(r.participant?.mobile ?? '')
+    row.push(
       responseText,
       isSurvey || isEmojiReaction ? '' : String(r.points_earned ?? 0),
       isSurvey || isEmojiReaction ? '' : r.is_correct == null ? '' : r.is_correct ? 'Yes' : 'No',
-    ]
+    )
+    return row
   })
 }

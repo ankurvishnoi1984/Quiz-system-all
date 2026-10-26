@@ -15,6 +15,7 @@ const {
   assignRandomQuestionOrderToParticipant,
   sortQuestionsByOrder
 } = require("../utils/participantQuestionOrder");
+const { resolveLeaderboardTopN } = require("../utils/leaderboardTopN");
 
 function participantDisplayName(participant, participantId) {
   const p = participant?.participant ?? participant?.Participant ?? participant;
@@ -213,7 +214,39 @@ function buildMatchAnalytics(question, responses) {
   };
 }
 
-async function buildSessionLeaderboard(sessionId, limit = 10) {
+function resolveSessionLeaderboardScope(session) {
+  if (coerceSessionFlag(session?.current_rankings_enabled)) return "current";
+  return "overall";
+}
+
+function sortLeaderboardRows(rows) {
+  return rows.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    // Faster average response time ranks higher on a score tie.
+    const timeA = a.avgResponseTimeMs;
+    const timeB = b.avgResponseTimeMs;
+    if (timeA != null || timeB != null) {
+      if (timeA == null) return 1;
+      if (timeB == null) return -1;
+      if (timeA !== timeB) return timeA - timeB;
+    }
+    const nameCompare = a.displayName.localeCompare(b.displayName, undefined, {
+      sensitivity: "base"
+    });
+    if (nameCompare !== 0) return nameCompare;
+    return Number(a.participant_id) - Number(b.participant_id);
+  });
+}
+
+/**
+ * @param {number} sessionId
+ * @param {{ scope?: 'overall' | 'current' }} [options]
+ * overall: Participant.score (session lifetime cumulative)
+ * current: sum of points_earned on responses submitted so far (attempted questions)
+ */
+async function buildSessionLeaderboardRanked(sessionId, options = {}) {
+  const scope = options.scope === "current" ? "current" : "overall";
+
   const rows = await Participant.findAll({
     where: { session_id: sessionId },
     attributes: ["participant_id", "nickname", "email", "is_anonymous", "score"]
@@ -221,57 +254,57 @@ async function buildSessionLeaderboard(sessionId, limit = 10) {
 
   const responseRows = await Response.findAll({
     where: { session_id: sessionId },
-    attributes: ["participant_id", "response_time_ms"]
+    attributes: ["participant_id", "response_time_ms", "points_earned"]
   });
 
   const responseTimesByParticipant = new Map();
+  const pointsByParticipant = new Map();
   responseRows.forEach((row) => {
+    const pid = row.participant_id;
+    const points = Number(row.points_earned || 0);
+    if (Number.isFinite(points)) {
+      pointsByParticipant.set(pid, (pointsByParticipant.get(pid) || 0) + points);
+    }
     const responseTimeMs =
       row.response_time_ms != null ? Number(row.response_time_ms) : null;
     if (responseTimeMs == null || !Number.isFinite(responseTimeMs) || responseTimeMs < 0) {
       return;
     }
-    if (!responseTimesByParticipant.has(row.participant_id)) {
-      responseTimesByParticipant.set(row.participant_id, []);
+    if (!responseTimesByParticipant.has(pid)) {
+      responseTimesByParticipant.set(pid, []);
     }
-    responseTimesByParticipant.get(row.participant_id).push(responseTimeMs);
+    responseTimesByParticipant.get(pid).push(responseTimeMs);
   });
 
-  return rows
-    .map((participant) => {
-      const times = responseTimesByParticipant.get(participant.participant_id) || [];
-      const avgResponseTimeMs = times.length
-        ? Math.round(times.reduce((sum, value) => sum + value, 0) / times.length)
-        : null;
-      return {
-        participant_id: participant.participant_id,
-        displayName: participantDisplayName(participant, participant.participant_id),
-        score: Number(participant.score || 0),
-        avgResponseTimeMs
-      };
-    })
-    .sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      // Faster average response time ranks higher on a score tie.
-      const timeA = a.avgResponseTimeMs;
-      const timeB = b.avgResponseTimeMs;
-      if (timeA != null || timeB != null) {
-        if (timeA == null) return 1;
-        if (timeB == null) return -1;
-        if (timeA !== timeB) return timeA - timeB;
-      }
-      const nameCompare = a.displayName.localeCompare(b.displayName, undefined, {
-        sensitivity: "base"
-      });
-      if (nameCompare !== 0) return nameCompare;
-      return Number(a.participant_id) - Number(b.participant_id);
-    })
-    .slice(0, limit)
-    .map((row) =>
-      toLeaderboardEntry(row.participant_id, row.displayName, row.score, {
-        avgResponseTimeMs: row.avgResponseTimeMs
-      })
-    );
+  const mapped = rows.map((participant) => {
+    const times = responseTimesByParticipant.get(participant.participant_id) || [];
+    const avgResponseTimeMs = times.length
+      ? Math.round(times.reduce((sum, value) => sum + value, 0) / times.length)
+      : null;
+    const score =
+      scope === "current"
+        ? Number(pointsByParticipant.get(participant.participant_id) || 0)
+        : Number(participant.score || 0);
+    return {
+      participant_id: participant.participant_id,
+      displayName: participantDisplayName(participant, participant.participant_id),
+      score,
+      avgResponseTimeMs
+    };
+  });
+
+  return sortLeaderboardRows(mapped).map((row, index) => ({
+    ...toLeaderboardEntry(row.participant_id, row.displayName, row.score, {
+      avgResponseTimeMs: row.avgResponseTimeMs
+    }),
+    rank: index + 1
+  }));
+}
+
+async function buildSessionLeaderboard(sessionId, limit = 10, options = {}) {
+  const ranked = await buildSessionLeaderboardRanked(sessionId, options);
+  const capped = Math.max(1, Number(limit) || 10);
+  return ranked.slice(0, capped).map(({ rank: _rank, ...entry }) => entry);
 }
 
 async function buildQuestionLeaderboard(questionId, limit = 10) {
@@ -395,6 +428,28 @@ function isNonScoredQuestion(question) {
   );
 }
 
+function resolveQuizPointsEarned({ session, question, isCorrect, responseTimeMs, fraction = 1 }) {
+  const {
+    sessionHasResponseTimeScoreBands,
+    scoreFromResponseTimeBands,
+  } = require("../utils/advancedBuilder");
+  if (sessionHasResponseTimeScoreBands(session)) {
+    if (!isCorrect) return 0;
+    // Partial credit (e.g. match pairs): scale band points by fraction.
+    const bandPoints = scoreFromResponseTimeBands(
+      responseTimeMs,
+      session.response_time_score_bands,
+      { isCorrect: true }
+    );
+    if (fraction >= 1) return bandPoints;
+    return Math.round(bandPoints * Math.max(0, Math.min(1, fraction)));
+  }
+  if (!isCorrect) return 0;
+  const pointsValue = Number(question.points_value || 0);
+  if (fraction >= 1) return pointsValue;
+  return Math.round(pointsValue * Math.max(0, Math.min(1, fraction)));
+}
+
 async function submitResponse({ participant, input }) {
   const question = await Question.findByPk(Number(input.question_id), {
     include: [{ model: QuestionOption }]
@@ -432,6 +487,24 @@ async function submitResponse({ participant, input }) {
     const error = new Error("Session is not accepting responses");
     error.statusCode = 400;
     throw error;
+  }
+
+  const { isAdvancedBuilderSession } = require("../utils/advancedBuilder");
+  if (isAdvancedBuilderSession(session)) {
+    const { participantCanAccessAssignedQuestion } = require("./advanced-assignment.service");
+    const activeSlot = Number(session.advanced_active_slot) || 0;
+    const allowed = await participantCanAccessAssignedQuestion(participant, question, {
+      activeSlot: activeSlot > 0 ? activeSlot : null
+    });
+    if (!activeSlot || !allowed) {
+      const error = new Error(
+        activeSlot
+          ? "This question is not active for you right now"
+          : "Wait for the host to activate the next question"
+      );
+      error.statusCode = 403;
+      throw error;
+    }
   }
 
   const { touchSessionActivity } = require("./session.service");
@@ -615,7 +688,7 @@ async function submitResponse({ participant, input }) {
     }
     const totalPairs = leftIds.length;
     const allCorrect = correctPairs === totalPairs && totalPairs > 0;
-    const pointsValue = Number(question.points_value || 0);
+    const fraction = totalPairs > 0 ? correctPairs / totalPairs : 0;
 
     responsePayload.option_id = null;
     responsePayload.text_response = null;
@@ -628,8 +701,18 @@ async function submitResponse({ participant, input }) {
       responsePayload.points_earned = 0;
     } else {
       responsePayload.is_correct = allCorrect;
-      responsePayload.points_earned =
-        totalPairs > 0 ? Math.round(pointsValue * (correctPairs / totalPairs)) : 0;
+      responsePayload.points_earned = resolveQuizPointsEarned({
+        session,
+        question,
+        isCorrect: fraction > 0,
+        responseTimeMs: responsePayload.response_time_ms,
+        fraction: allCorrect ? 1 : fraction
+      });
+      // Response-time bands: only full correct answers score (wrong / partial → 0).
+      const { sessionHasResponseTimeScoreBands } = require("../utils/advancedBuilder");
+      if (sessionHasResponseTimeScoreBands(session) && !allCorrect) {
+        responsePayload.points_earned = 0;
+      }
     }
   }
 
@@ -645,7 +728,12 @@ async function submitResponse({ participant, input }) {
       responsePayload.points_earned = 0;
     } else if (question.is_quiz_mode) {
       responsePayload.is_correct = Boolean(option.is_correct);
-      responsePayload.points_earned = option.is_correct ? Number(question.points_value || 0) : 0;
+      responsePayload.points_earned = resolveQuizPointsEarned({
+        session,
+        question,
+        isCorrect: Boolean(option.is_correct),
+        responseTimeMs: responsePayload.response_time_ms
+      });
     }
   } else if (effectiveType !== "match" && (nonScored || question.is_quiz_mode)) {
     responsePayload.is_correct = null;
@@ -685,8 +773,14 @@ async function submitResponse({ participant, input }) {
       question_leaderboard: null
     };
 
-    if (session.leaderboard_enabled) {
-      payload.leaderboard = await buildSessionLeaderboard(question.session_id);
+    if (session.leaderboard_enabled || session.current_rankings_enabled) {
+      payload.leaderboard = await buildSessionLeaderboard(
+        question.session_id,
+        resolveLeaderboardTopN(session),
+        {
+          scope: resolveSessionLeaderboardScope(session)
+        }
+      );
     }
 
     if (question.show_leaderboard && question.is_quiz_mode) {
@@ -1030,7 +1124,10 @@ async function getSessionResponses({ sessionId, user }) {
   return Response.findAll({
     where: { session_id: sessionId },
     include: [
-      { model: Participant, attributes: ["participant_id", "nickname"] },
+      {
+        model: Participant,
+        attributes: ["participant_id", "nickname", "email", "mobile"]
+      },
       { model: Question, attributes: ["question_id", "question_text", "question_type"] },
       { model: QuestionOption, attributes: ["option_id", "option_text"] }
     ],
@@ -1146,14 +1243,35 @@ async function listParticipantQuestionsService({ sessionId, participant }) {
   if (participant) {
     const { assignRandomSetToParticipant } = require("./question-set.service");
     await assignRandomSetToParticipant(session, participant);
+    const { assignAdvancedQuestionsToParticipant } = require("./advanced-assignment.service");
+    await assignAdvancedQuestionsToParticipant(session, participant);
   }
 
-  const questionOrder = participant
+  const { isAdvancedBuilderSession } = require("../utils/advancedBuilder");
+  const advancedMode = isAdvancedBuilderSession(session);
+
+  const questionOrder = !advancedMode && participant
     ? await assignRandomQuestionOrderToParticipant(session, participant)
     : [];
 
   const questionWhere = { session_id: sessionId, is_live: true };
-  if (participant?.assigned_set_id) {
+  if (advancedMode && participant?.participant_id) {
+    // Host-paced: only the assignment for the currently activated slot (1..K).
+    // Shared pool questions can stay is_live for other participants' slots — do not list those.
+    const activeSlot = Number(session.advanced_active_slot) || 0;
+    if (!activeSlot) {
+      return [];
+    }
+    const { getAssignedQuestionIdForSlot } = require("./advanced-assignment.service");
+    const slotQuestionId = await getAssignedQuestionIdForSlot(
+      participant.participant_id,
+      activeSlot
+    );
+    if (!slotQuestionId) {
+      return [];
+    }
+    questionWhere.question_id = slotQuestionId;
+  } else if (participant?.assigned_set_id) {
     // Participants see their assigned set plus shared questions that belong to no set.
     // Op.is is required for NULL — `set_id = NULL` would match nothing.
     questionWhere[Op.and] = [
@@ -1182,32 +1300,23 @@ async function listParticipantQuestionsService({ sessionId, participant }) {
     ]
   });
 
-  if (questionOrder.length) {
+  if (advancedMode && participant?.participant_id) {
+    // Host-paced Advanced returns at most one question (current slot) — keep API order.
+  } else if (questionOrder.length) {
     questions = sortQuestionsByOrder(questions, questionOrder);
   }
 
-  let submittedQuestionIds = new Set();
-  if (participant?.participant_id && questions.length) {
-    const rows = await Response.findAll({
-      where: {
-        participant_id: participant.participant_id,
-        question_id: questions.map((q) => q.question_id)
-      },
-      attributes: ["question_id"]
-    });
-    submittedQuestionIds = new Set(rows.map((row) => Number(row.question_id)));
-  }
-
-  return questions.map((q) =>
-    formatQuestionForParticipant(q, {
-      participantSubmitted: submittedQuestionIds.has(Number(q.question_id))
-    })
-  );
+  return questions.map((q) => formatQuestionForParticipant(q));
 }
 
 async function getParticipantSessionLeaderboard({ sessionId, participant }) {
   const session = await Session.findByPk(sessionId, {
-    attributes: ["session_id", "leaderboard_enabled"]
+    attributes: [
+      "session_id",
+      "leaderboard_enabled",
+      "current_rankings_enabled",
+      "leaderboard_top_n"
+    ]
   });
   if (!session) {
     const error = new Error("Session not found");
@@ -1219,17 +1328,45 @@ async function getParticipantSessionLeaderboard({ sessionId, participant }) {
     error.statusCode = 403;
     throw error;
   }
-  const leaderboardEnabled = coerceSessionFlag(session.leaderboard_enabled);
+  const leaderboardEnabled =
+    coerceSessionFlag(session.leaderboard_enabled) ||
+    coerceSessionFlag(session.current_rankings_enabled);
   if (!leaderboardEnabled) {
-    return [];
+    return { leaderboard: [], me: null };
   }
-  return buildSessionLeaderboard(sessionId);
+
+  const ranked = await buildSessionLeaderboardRanked(sessionId, {
+    scope: resolveSessionLeaderboardScope(session)
+  });
+  const topN = resolveLeaderboardTopN(session);
+  const leaderboard = ranked.slice(0, topN).map(({ rank: _rank, ...entry }) => entry);
+  const viewerId = Number(participant?.participant_id);
+  const meRow = ranked.find((row) => Number(row.participant_id) === viewerId) || null;
+  return {
+    leaderboard,
+    me: meRow
+      ? {
+          participant_id: meRow.participant_id,
+          name: meRow.name,
+          nickname: meRow.nickname,
+          score: meRow.score,
+          rank: meRow.rank,
+          avg_response_time_ms: meRow.avg_response_time_ms ?? null,
+          response_time_ms: meRow.response_time_ms ?? null
+        }
+      : null
+  };
 }
 
-async function getSessionLeaderboardForStaff({ sessionId, user, limit = 10 }) {
+async function getSessionLeaderboardForStaff({ sessionId, user, limit = null }) {
   const session = await getSessionForAccess(sessionId);
   assertStaffAccess(user, session);
-  return buildSessionLeaderboard(sessionId, limit);
+  const topN =
+    Number.isFinite(Number(limit)) && Number(limit) > 0
+      ? Math.floor(Number(limit))
+      : resolveLeaderboardTopN(session);
+  // Host Rankings modal stays overall; participant-facing Current uses the flag-aware APIs.
+  return buildSessionLeaderboard(sessionId, topN, { scope: "overall" });
 }
 
 module.exports = {
@@ -1246,6 +1383,8 @@ module.exports = {
   getSessionLeaderboardForStaff,
   buildQuestionLeaderboard,
   buildSessionLeaderboard,
+  resolveSessionLeaderboardScope,
+  resolveLeaderboardTopN,
   buildRankingAnalytics,
   buildMatchAnalytics,
   aggregateWordCloudCounts,

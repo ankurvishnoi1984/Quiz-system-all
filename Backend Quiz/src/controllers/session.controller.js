@@ -28,12 +28,20 @@ const {
   notifyQuestionChange,
   notifyAllQuestionsSubmissionsClosed,
   notifyQuestionLeaderboardVisibility,
+  closeAllSessionConnections,
+  terminateSessionRealtime,
   countLiveUniqueParticipantsForSessionCode,
   getLiveUniqueParticipantIdsForSessionCode
 } = require("../services/websocket.service");
-const { buildSessionLeaderboard } = require("../services/response.service");
+const {
+  buildSessionLeaderboard,
+  resolveSessionLeaderboardScope
+} = require("../services/response.service");
+const { resolveLeaderboardTopN } = require("../utils/leaderboardTopN");
 const {
   activateAllQuestionsForSession,
+  activateAdvancedAssignmentSlot,
+  deactivateAdvancedAssignmentSlot,
   closeAllQuestionSubmissionsForSession
 } = require("../services/question.service");
 const { getSessionSummaryReport, getSessionQuestionsReport, getSessionParticipantsReport, getSessionQaReport } = require("../services/session-report.service");
@@ -117,6 +125,27 @@ async function listParticipants(req, res) {
   }
 }
 
+async function listQuestionAssignments(req, res) {
+  try {
+    const sessionId = Number(req.params.sessionId);
+    const session = await getSessionById({ sessionId, user: req.user });
+    const { listSessionQuestionAssignments } = require("../services/advanced-assignment.service");
+    const assignments = await listSessionQuestionAssignments(sessionId);
+    return successResponse(
+      res,
+      {
+        builder_mode: session.builder_mode || "normal",
+        questions_per_participant: session.questions_per_participant ?? null,
+        assignments
+      },
+      "Question assignments fetched",
+      200
+    );
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
 async function update(req, res) {
   try {
     const errors = validateUpdateSessionPayload(req.body);
@@ -130,18 +159,47 @@ async function update(req, res) {
       user: req.user
     });
     if (session.session_code) {
+      const joinBlock = await getSessionJoinBlockInfo(session);
       notifySessionSettings(session.session_code, {
         leaderboard_enabled: session.leaderboard_enabled,
+        current_rankings_enabled: session.current_rankings_enabled,
+        leaderboard_top_n: resolveLeaderboardTopN(session),
         survey_results_enabled: session.survey_results_enabled,
         show_participant_count: session.show_participant_count,
+        show_session_title: session.show_session_title !== false,
+        show_app_logo: session.show_app_logo !== false,
         show_question_leaderboard: session.show_question_leaderboard,
         participant_navigation_enabled: session.participant_navigation_enabled !== false,
         quiz_total_time_minutes: session.quiz_total_time_minutes ?? null,
+        quiz_total_question_timers_enabled: Boolean(
+          session.quiz_total_question_timers_enabled
+        ),
+        quiz_total_time_synced: Boolean(session.quiz_total_time_synced),
         random_question_order_enabled: isSessionRandomQuestionOrderEnabled(session),
-        allow_late_join: Boolean(session.allow_late_join)
+        allow_late_join: Boolean(session.allow_late_join),
+        join_locked: Boolean(session.join_locked),
+        join_blocked: Boolean(joinBlock.blocked),
+        join_blocked_message: joinBlock.message || null,
+        join_blocked_reason: joinBlock.reason || null,
+        present_mode_settings: session.present_mode_settings ?? null,
+        participant_theme: session.participant_theme || "default",
+        participant_theme_custom: session.participant_theme_custom ?? null
       });
-      if (req.body.leaderboard_enabled === true && session.leaderboard_enabled) {
-        const leaderboard = await buildSessionLeaderboard(session.session_id);
+      const rankingsVisible =
+        Boolean(session.leaderboard_enabled) || Boolean(session.current_rankings_enabled);
+      const shouldRefreshLeaderboard =
+        rankingsVisible &&
+        (req.body.leaderboard_enabled === true ||
+          req.body.current_rankings_enabled === true ||
+          req.body.leaderboard_top_n !== undefined);
+      if (shouldRefreshLeaderboard) {
+        const leaderboard = await buildSessionLeaderboard(
+          session.session_id,
+          resolveLeaderboardTopN(session),
+          {
+            scope: resolveSessionLeaderboardScope(session)
+          }
+        );
         notifyLeaderboard(session.session_code, { leaderboard });
       }
     }
@@ -157,6 +215,13 @@ async function remove(req, res) {
       sessionId: Number(req.params.sessionId),
       user: req.user
     });
+    if (session?.session_code) {
+      try {
+        terminateSessionRealtime(session, { status: "archived" });
+      } catch (notifyErr) {
+        console.warn("[session] archive realtime terminate failed:", notifyErr.message);
+      }
+    }
     return successResponse(res, { session }, "Session archived", 200);
   } catch (err) {
     return errorResponse(res, err.message, err.statusCode || 500);
@@ -173,9 +238,12 @@ async function resetResponses(req, res) {
     const session = await Session.findByPk(result.session_id);
     if (session?.session_code) {
       notifySessionUpdate(session.session_code, session.status);
-      if (session.leaderboard_enabled) {
-        buildSessionLeaderboard(session.session_id)
-          .then((leaderboard) => notifyLeaderboard(session.session_code, leaderboard))
+      if (session.leaderboard_enabled || session.current_rankings_enabled) {
+        const { resolveSessionLeaderboardScope } = require("../services/response.service");
+        buildSessionLeaderboard(session.session_id, resolveLeaderboardTopN(session), {
+          scope: resolveSessionLeaderboardScope(session)
+        })
+          .then((leaderboard) => notifyLeaderboard(session.session_code, { leaderboard }))
           .catch(() => {});
       }
     }
@@ -213,17 +281,26 @@ function lifecycleAction(action) {
           if (action === "end") {
             notifySessionSettings(session.session_code, {
               leaderboard_enabled: session.leaderboard_enabled,
+              current_rankings_enabled: session.current_rankings_enabled,
+              leaderboard_top_n: resolveLeaderboardTopN(session),
               survey_results_enabled: session.survey_results_enabled,
               show_participant_count: session.show_participant_count,
+              show_session_title: session.show_session_title !== false,
+              show_app_logo: session.show_app_logo !== false,
               show_question_leaderboard: session.show_question_leaderboard,
               participant_navigation_enabled: session.participant_navigation_enabled !== false,
               quiz_total_time_minutes: session.quiz_total_time_minutes ?? null,
+              quiz_total_question_timers_enabled: Boolean(
+                session.quiz_total_question_timers_enabled
+              ),
+              quiz_total_time_synced: Boolean(session.quiz_total_time_synced),
               random_question_order_enabled: isSessionRandomQuestionOrderEnabled(session),
               allow_late_join: Boolean(session.allow_late_join)
             });
             for (const questionId of session.hiddenQuestionResultIds || []) {
               notifyQuestionLeaderboardVisibility(session.session_code, questionId, false);
             }
+            closeAllSessionConnections(session.session_code, { reason: "session_ended" });
           }
         })().catch(() => {});
       }
@@ -282,18 +359,39 @@ async function lookupByCode(req, res) {
           department: session.department,
           join_type: session.join_type,
           join_otp_required: Boolean(session.join_otp_required),
+          customer_match_enabled: Boolean(session.customer_match_enabled),
           logo_url: session.logo_url || null,
+          waiting_screen_image_url: session.waiting_screen_image_url || null,
+          waiting_screen_media_type: session.waiting_screen_image_url
+            ? session.waiting_screen_media_type || "image"
+            : null,
+          thanks_screen_image_url: session.thanks_screen_image_url || null,
           leaderboard_enabled: Boolean(session.leaderboard_enabled),
+          current_rankings_enabled: Boolean(session.current_rankings_enabled),
+          leaderboard_top_n: resolveLeaderboardTopN(session),
           survey_results_enabled: Boolean(session.survey_results_enabled),
           show_participant_count: showParticipantCount,
+          show_session_title: session.show_session_title !== false,
+          show_app_logo: session.show_app_logo !== false,
           // Participant join page shows currently connected people only (not join history).
           live_participants_count: showParticipantCount ? liveParticipantsCount : null,
           participants_count: showParticipantCount ? liveParticipantsCount : null,
           show_question_leaderboard: Boolean(session.show_question_leaderboard),
           participant_navigation_enabled: session.participant_navigation_enabled !== false,
           quiz_total_time_minutes: session.quiz_total_time_minutes ?? null,
+          quiz_total_question_timers_enabled: Boolean(
+            session.quiz_total_question_timers_enabled
+          ),
+          quiz_total_time_synced: Boolean(session.quiz_total_time_synced),
           random_question_order_enabled: isSessionRandomQuestionOrderEnabled(session),
+          builder_mode: session.builder_mode || "normal",
+          advanced_active_slot: session.advanced_active_slot ?? null,
+          questions_per_participant: session.questions_per_participant ?? null,
+          participant_theme: session.participant_theme || "default",
+          participant_theme_custom: session.participant_theme_custom ?? null,
+          present_mode_settings: session.present_mode_settings ?? null,
           allow_late_join: Boolean(session.allow_late_join),
+          join_locked: Boolean(session.join_locked),
           last_activity_at: session.last_activity_at || null,
           started_at: session.started_at || null,
           join_blocked: Boolean(joinBlock.blocked),
@@ -505,11 +603,14 @@ async function presentSlide(req, res) {
   try {
     const slideIndex = Number(req.body?.slide_index)
     const slideTotal = Number(req.body?.slide_total)
+    const slideType =
+      req.body?.slide_type != null ? String(req.body.slide_type) : undefined
     const data = await setPresentSlideIndex({
       sessionId: Number(req.params.sessionId),
       user: req.user,
       slideIndex,
-      slideTotal: Number.isFinite(slideTotal) && slideTotal > 0 ? slideTotal : undefined
+      slideTotal: Number.isFinite(slideTotal) && slideTotal > 0 ? slideTotal : undefined,
+      slideType
     });
     return successResponse(res, data, "Present slide updated", 200);
   } catch (err) {
@@ -556,12 +657,14 @@ function buildActivatedQuestionChangePayload(question) {
 async function activateAllQuestions(req, res) {
   try {
     const sessionId = Number(req.params.sessionId);
-    const questions = await activateAllQuestionsForSession({
+    const result = await activateAllQuestionsForSession({
       sessionId,
       user: req.user
     });
+    const questions = result?.questions || result || [];
+    const startedAt = result?.started_at ?? null;
     const session = await Session.findByPk(sessionId, {
-      attributes: ["session_code"]
+      attributes: ["session_code", "status", "started_at"]
     });
     if (session?.session_code) {
       for (const question of questions) {
@@ -570,11 +673,186 @@ async function activateAllQuestions(req, res) {
           buildActivatedQuestionChangePayload(question)
         );
       }
+      if (startedAt) {
+        notifySessionUpdate(session.session_code, session.status, {
+          started_at: startedAt
+        });
+      }
     }
     return successResponse(
       res,
-      { questions, activated_count: questions.length },
+      {
+        questions,
+        activated_count: questions.length,
+        started_at: startedAt || session?.started_at || null
+      },
       "All questions activated",
+      200
+    );
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
+async function activateAdvancedAssignmentSlotHandler(req, res) {
+  try {
+    const sessionId = Number(req.params.sessionId);
+    const rawSlot = req.body?.slot;
+    const shouldDeactivate =
+      req.body?.deactivate === true || rawSlot === null || Number(rawSlot) === 0;
+
+    if (shouldDeactivate) {
+      const result = await deactivateAdvancedAssignmentSlot({
+        sessionId,
+        user: req.user
+      });
+
+      const session = await Session.findByPk(sessionId, {
+        attributes: ["session_code", "status", "advanced_active_slot"]
+      });
+
+      if (session?.session_code) {
+        for (const questionId of result.deactivatedQuestionIds || []) {
+          notifyQuestionChange(session.session_code, {
+            question_id: questionId,
+            is_live: false,
+            live_activated_at: null,
+            submissions_closed: false,
+            open_for_reattempt: false
+          });
+        }
+        notifySessionUpdate(session.session_code, session.status, {
+          advanced_active_slot: null
+        });
+      }
+
+      return successResponse(
+        res,
+        {
+          advanced_active_slot: null,
+          deactivated_count: (result.deactivatedQuestionIds || []).length
+        },
+        "Question deactivated for participants",
+        200
+      );
+    }
+
+    const slot = Number(rawSlot);
+    if (!Number.isInteger(slot) || slot < 1) {
+      return errorResponse(res, "Validation failed", 400, ["slot must be a positive integer"]);
+    }
+
+    const result = await activateAdvancedAssignmentSlot({
+      sessionId,
+      user: req.user,
+      slot
+    });
+
+    const session = await Session.findByPk(sessionId, {
+      attributes: [
+        "session_code",
+        "status",
+        "advanced_active_slot",
+        "leaderboard_enabled",
+        "current_rankings_enabled",
+        "leaderboard_top_n",
+        "survey_results_enabled",
+        "show_participant_count",
+        "show_session_title",
+        "show_app_logo",
+        "show_question_leaderboard",
+        "participant_navigation_enabled",
+        "random_question_order_enabled",
+        "allow_late_join",
+        "join_locked",
+        "quiz_total_time_minutes",
+        "quiz_total_question_timers_enabled",
+        "quiz_total_time_synced",
+        "present_mode_settings",
+        "participant_theme",
+        "participant_theme_custom"
+      ]
+    });
+
+    if (session?.session_code) {
+      for (const questionId of result.deactivatedQuestionIds || []) {
+        notifyQuestionChange(session.session_code, {
+          question_id: questionId,
+          is_live: false,
+          live_activated_at: null,
+          submissions_closed: false,
+          open_for_reattempt: false
+        });
+      }
+      for (const question of result.activatedQuestions || []) {
+        notifyQuestionChange(
+          session.session_code,
+          buildActivatedQuestionChangePayload(question)
+        );
+      }
+      notifySessionUpdate(session.session_code, session.status, {
+        advanced_active_slot: result.advanced_active_slot
+      });
+      if (result.rankingsCleared) {
+        notifySessionSettings(session.session_code, {
+          ...session.toJSON?.() ? session.toJSON() : session,
+          leaderboard_top_n: resolveLeaderboardTopN(session)
+        });
+      }
+    }
+
+    return successResponse(
+      res,
+      {
+        slot: result.slot,
+        advanced_active_slot: result.advanced_active_slot,
+        activated_count: (result.activatedQuestionIds || []).length,
+        deactivated_count: (result.deactivatedQuestionIds || []).length,
+        leaderboard_enabled: Boolean(result.leaderboard_enabled),
+        current_rankings_enabled: Boolean(result.current_rankings_enabled)
+      },
+      `Question ${result.slot} activated for participants`,
+      200
+    );
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
+async function deactivateAdvancedAssignmentSlotHandler(req, res) {
+  try {
+    const sessionId = Number(req.params.sessionId);
+    const result = await deactivateAdvancedAssignmentSlot({
+      sessionId,
+      user: req.user
+    });
+
+    const session = await Session.findByPk(sessionId, {
+      attributes: ["session_code", "status", "advanced_active_slot"]
+    });
+
+    if (session?.session_code) {
+      for (const questionId of result.deactivatedQuestionIds || []) {
+        notifyQuestionChange(session.session_code, {
+          question_id: questionId,
+          is_live: false,
+          live_activated_at: null,
+          submissions_closed: false,
+          open_for_reattempt: false
+        });
+      }
+      notifySessionUpdate(session.session_code, session.status, {
+        advanced_active_slot: null
+      });
+    }
+
+    return successResponse(
+      res,
+      {
+        advanced_active_slot: null,
+        deactivated_count: (result.deactivatedQuestionIds || []).length
+      },
+      "Question deactivated for participants",
       200
     );
   } catch (err) {
@@ -667,6 +945,7 @@ module.exports = {
   createForDepartment,
   detail,
   listParticipants,
+  listQuestionAssignments,
   update,
   remove,
   resetResponses,
@@ -688,5 +967,7 @@ module.exports = {
   getPresentSlide,
   presentSlide,
   closeAllQuestions,
-  activateAllQuestions
+  activateAllQuestions,
+  activateAdvancedAssignmentSlot: activateAdvancedAssignmentSlotHandler,
+  deactivateAdvancedAssignmentSlot: deactivateAdvancedAssignmentSlotHandler
 };

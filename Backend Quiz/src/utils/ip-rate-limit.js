@@ -4,6 +4,20 @@ const { errorResponse } = require("./response");
 /** @type {Map<string, Map<string, { count: number, resetAt: number, meta?: object }>>} */
 const registries = new Map();
 
+/**
+ * Global IP/OTP rate-limit switch.
+ * RATE_LIMIT_ENABLED unset or truthy (1/true/yes/on) → enforce (default).
+ * RATE_LIMIT_ENABLED=false/0/off/no → load-test mode: never 429 from IP limiters.
+ */
+function isRateLimitEnabled() {
+  const raw = process.env.RATE_LIMIT_ENABLED;
+  if (raw == null || String(raw).trim() === "") return true;
+  const normalized = String(raw).trim().toLowerCase();
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  return true;
+}
+
 function getRegistry(keyPrefix) {
   const prefix = String(keyPrefix || "default");
   let map = registries.get(prefix);
@@ -52,9 +66,9 @@ function createIpRateLimiter({
   const safeMax = Math.max(1, Number(max) || 10);
   const hits = getRegistry(keyPrefix);
   const resolvedAction = action || String(keyPrefix || "rate_limit").replace(/-/g, "_");
-  const shouldEnforce = enforce !== false;
 
   return function ipRateLimitMiddleware(req, res, next) {
+    const shouldEnforce = isRateLimitEnabled() && enforce !== false;
     const ip = extractRequestIp(req) || "unknown";
     const extra =
       typeof getKeyExtra === "function" ? String(getKeyExtra(req) || "").trim() : "";
@@ -171,5 +185,6 @@ function getLiveRateLimitWindows({ minCount = 2 } = {}) {
 
 module.exports = {
   createIpRateLimiter,
-  getLiveRateLimitWindows
+  getLiveRateLimitWindows,
+  isRateLimitEnabled
 };

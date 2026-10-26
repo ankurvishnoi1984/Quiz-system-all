@@ -92,6 +92,31 @@ async function listParticipants(req, res) {
   }
 }
 
+async function listQuestionAssignments(req, res) {
+  try {
+    const sessionId = Number(req.params.sessionId);
+    // Validates viewer token access
+    const session = await getPresentViewSession({
+      sessionId,
+      viewer: req.presenterViewer
+    });
+    const { listSessionQuestionAssignments } = require("../services/advanced-assignment.service");
+    const assignments = await listSessionQuestionAssignments(sessionId);
+    return successResponse(
+      res,
+      {
+        builder_mode: session.builder_mode || "normal",
+        questions_per_participant: session.questions_per_participant ?? null,
+        assignments
+      },
+      "Question assignments fetched",
+      200
+    );
+  } catch (err) {
+    return errorResponse(res, err.message, err.statusCode || 500);
+  }
+}
+
 async function listQaQuestions(req, res) {
   try {
     const sessionId = Number(req.params.sessionId);
@@ -132,7 +157,7 @@ async function sessionLeaderboard(req, res) {
     const leaderboard = await getPresentViewLeaderboard({
       sessionId,
       viewer: req.presenterViewer,
-      limit: Number.isFinite(limit) && limit > 0 ? limit : 10
+      limit: Number.isFinite(limit) && limit > 0 ? limit : null
     });
     return successResponse(res, { leaderboard }, "Leaderboard fetched", 200);
   } catch (err) {
@@ -159,6 +184,7 @@ module.exports = {
   listResponses,
   questionResults,
   listParticipants,
+  listQuestionAssignments,
   listQaQuestions,
   presentSlide,
   sessionLeaderboard,

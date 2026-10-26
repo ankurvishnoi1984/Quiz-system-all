@@ -8,6 +8,7 @@ export function JoinFormView({
   sessionCodeInput,
   onSessionCodeChange,
   sessionLookupFailed,
+  sessionLookupTransient = false,
   effectiveSessionCode,
   sessionQueryLoading,
   showJoinDetails,
@@ -44,16 +45,25 @@ export function JoinFormView({
   const busy = otpBusy || joinBusy
 
   return (
-    <PageCenteredShell maxWidth="max-w-lg">
+    <PageCenteredShell
+      maxWidth="max-w-lg"
+      theme={session?.participant_theme}
+      customTheme={session?.participant_theme_custom}
+    >
       <form onSubmit={onSubmit} className="quiz-enter space-y-4 text-left">
         <div className="text-center">
           <BrandLogoPair
             variant="hero"
             sessionLogoUrl={session?.logo_url}
             sessionTitle={session?.title || 'Session'}
+            showAppLogo={session?.show_app_logo !== false}
           />
-          <h1 className="text-2xl font-bold text-navy-900">
-            {showJoinDetails ? session.title : 'Join a session'}
+          <h1 className="participant-heading text-2xl font-bold text-navy-900">
+            {showJoinDetails
+              ? session?.show_session_title !== false
+                ? session.title
+                : 'Join a session'
+              : 'Join a session'}
           </h1>
           <p className="mt-1 text-sm text-slate-600">
             {showJoinDetails
@@ -76,6 +86,11 @@ export function JoinFormView({
             {sessionLookupFailed && effectiveSessionCode ? (
               <p className="mt-2 text-sm font-semibold text-red-700">
                 Session not found. Check the code and try again.
+              </p>
+            ) : null}
+            {sessionLookupTransient && effectiveSessionCode ? (
+              <p className="mt-2 text-sm font-semibold text-amber-700">
+                Could not reach the server. Retrying…
               </p>
             ) : null}
             {effectiveSessionCode && sessionQueryLoading ? (
@@ -201,7 +216,9 @@ export function JoinFormView({
             {joinBlockedMessage ||
               (joinBlockedReason === 'plan_limit'
                 ? 'Participant limit exceeded for this account.'
-                : 'Session has already started')}
+                : joinBlockedReason === 'join_locked'
+                  ? 'This room is locked by the host. New participants cannot join.'
+                  : 'Session has already started')}
           </p>
         ) : null}
 
@@ -217,7 +234,7 @@ export function JoinFormView({
             busy ||
             (needsOtp && (!otpSent || String(otpCode || '').length !== 6))
           }
-          className="h-11 w-full rounded-xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 text-sm font-semibold text-white shadow-lg shadow-blue-900/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+          className="participant-btn-primary h-11 w-full rounded-xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 text-sm font-semibold text-white shadow-lg shadow-blue-900/20 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {joinBusy ? 'Joining…' : needsOtp ? 'Verify & join' : 'Join'}
         </button>

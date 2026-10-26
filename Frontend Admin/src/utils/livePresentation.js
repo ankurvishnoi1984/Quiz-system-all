@@ -1,5 +1,6 @@
 import { sortLeaderboardEntries } from './leaderboard'
 import { mapApiMediaToQuestionMedia } from './questionMedia'
+import { isAdvancedBuilderSession, isSessionRandomQuestionOrderEnabled } from './sessionFlags'
 import { wordCountsFromApiResults, wordCountsFromResponses } from './wordCloud'
 
 /** High-contrast palette for fullscreen present mode (MCQ / rating). */
@@ -173,6 +174,16 @@ export function mapLiveQuestions(questions) {
       surveySubType: isSurvey ? q.survey_subtype : null,
       isLive: Boolean(q.is_live),
       timeLimit: isSurvey ? 0 : Number(q.time_limit_seconds) || 0,
+      timerSoundKey: q.timer_sound_key || 'classic',
+      timerSoundUrl: q.timer_sound_url || null,
+      timerEndingSoundKey: q.timer_ending_sound_key || q.timer_sound_key || 'classic',
+      timerEndingSoundUrl: q.timer_ending_sound_url || null,
+      timerSoundStartSeconds:
+        q.timer_sound_start_seconds != null
+          ? Number(q.timer_sound_start_seconds)
+          : q.timerSoundStartSeconds != null
+            ? Number(q.timerSoundStartSeconds)
+            : null,
       liveActivatedAt: q.live_activated_at || null,
       submissionsClosed: Boolean(q.submissions_closed),
       isQuizMode:
@@ -190,6 +201,7 @@ export function mapLiveQuestions(questions) {
       correctMatchingPairs: q.correct_matching_pairs || null,
       options,
       media: mapApiMediaToQuestionMedia(q),
+      poolEligible: q.pool_eligible !== false && q.poolEligible !== false,
     }
   })
 }
@@ -197,6 +209,21 @@ export function mapLiveQuestions(questions) {
 /** True when any question is assigned to a set — then activation is all-or-nothing. */
 export function sessionUsesQuestionSets(mappedQuestions) {
   return (mappedQuestions || []).some((question) => question.setId != null)
+}
+
+/**
+ * Present Mode: participants do not share one sequential "current question".
+ * @returns {'advanced' | 'sets' | 'randomOrder' | null}
+ */
+export function getDistributedPresentMode(session, mappedQuestions) {
+  if (isAdvancedBuilderSession(session)) return 'advanced'
+  if (sessionUsesQuestionSets(mappedQuestions)) return 'sets'
+  if (isSessionRandomQuestionOrderEnabled(session)) return 'randomOrder'
+  return null
+}
+
+export function sessionUsesDistributedPresentMode(session, mappedQuestions) {
+  return getDistributedPresentMode(session, mappedQuestions) != null
 }
 
 export function questionAllowsMultipleSelect(question) {

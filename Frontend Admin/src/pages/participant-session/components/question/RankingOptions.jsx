@@ -15,6 +15,8 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { ArrowUpDown, ListOrdered } from 'lucide-react'
+import { FitText } from '../../../../components/ui/FitText'
+import { useParticipantFit } from '../ParticipantFitContext'
 
 function rankStyles(index) {
   if (index === 0) {
@@ -42,6 +44,7 @@ function rankStyles(index) {
 }
 
 function SortableRankingRow({ id, text, index, disabled = false }) {
+  const fit = useParticipantFit()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
     disabled,
@@ -83,7 +86,15 @@ function SortableRankingRow({ id, text, index, disabled = false }) {
         </span>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold leading-snug text-navy-900">{text}</p>
+          <FitText
+            as="p"
+            className="font-semibold leading-snug text-navy-900"
+            minPx={fit.option.minPx}
+            maxPx={fit.option.maxPx}
+            maxLines={fit.option.maxLines}
+          >
+            {text}
+          </FitText>
         </div>
 
         {!disabled ? (

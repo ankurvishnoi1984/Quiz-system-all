@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { pickParticipantProgressState } from '../utils/participantSessionState'
+import { getRemainingQuestionSeconds } from '../utils/questionTimer'
 
 const initialQuiz = {
   quizResponses: {},
@@ -17,6 +18,8 @@ const initialQuiz = {
   quizSessionCountdown: null,
   /** Untimed: when the participant first saw each question (epoch ms) */
   quizQuestionOpenedAt: {},
+  /** Elapsed seconds into the question limit when the answer was submitted (survives lockstep re-sync) */
+  quizSubmittedAtSecondsByQuestion: {},
   /** Random-order sessions: participant-specific question id sequence */
   quizQuestionOrder: [],
 }
@@ -93,7 +96,30 @@ export const useParticipantStore = create(
         })),
 
       clearQuizSubmissionLocks: () =>
-        set({ quizSubmittedQuestionIds: {}, quizExplicitSubmittedQuestionIds: {} }),
+        set({
+          quizSubmittedQuestionIds: {},
+          quizExplicitSubmittedQuestionIds: {},
+          quizSubmittedAtSecondsByQuestion: {},
+        }),
+
+      /**
+       * Record when (elapsed into the limit) the participant submitted.
+       * Set once per question — lockstep re-sync must not overwrite.
+       */
+      recordQuestionSubmittedAt: ({ questionId, elapsedSeconds }) => {
+        if (questionId == null) return
+        const qid = String(questionId)
+        const elapsed = Math.max(0, Math.floor(Number(elapsedSeconds) || 0))
+        set((s) => {
+          if (s.quizSubmittedAtSecondsByQuestion?.[qid] != null) return {}
+          return {
+            quizSubmittedAtSecondsByQuestion: {
+              ...(s.quizSubmittedAtSecondsByQuestion || {}),
+              [qid]: elapsed,
+            },
+          }
+        })
+      },
 
       /** Host opened question for reattempt — clear local answer and allow resubmit */
       unlockQuestionForReattempt: (questionId, { timeLimitSeconds = 0 } = {}) => {
@@ -118,12 +144,15 @@ export const useParticipantStore = create(
           }
           const openedAt = { ...(s.quizQuestionOpenedAt || {}) }
           delete openedAt[qid]
+          const submittedAt = { ...(s.quizSubmittedAtSecondsByQuestion || {}) }
+          delete submittedAt[qid]
           return {
             quizSubmittedQuestionIds: locks,
             quizExplicitSubmittedQuestionIds: explicit,
             quizResponses: responses,
             quizCountdownByQuestion: countdowns,
             quizQuestionOpenedAt: openedAt,
+            quizSubmittedAtSecondsByQuestion: submittedAt,
             quizSubmitted: false,
           }
         })
@@ -189,13 +218,28 @@ export const useParticipantStore = create(
         })
       },
 
+      /** Host-synced quiz total: always align endsAt to the shared session deadline. */
+      syncQuizSessionCountdownEndsAt: (endsAt) => {
+        const deadline = Number(endsAt)
+        if (!Number.isFinite(deadline)) return
+        const existing = get().quizSessionCountdown
+        if (existing?.frozen != null) return
+        if (existing?.endsAt === deadline) return
+        set({
+          quizSessionCountdown: {
+            endsAt: deadline,
+            frozen: null,
+          },
+        })
+      },
+
       freezeQuizSessionCountdown: () => {
         const entry = get().quizSessionCountdown
         if (!entry?.endsAt) return
         const remaining =
           entry.frozen != null
             ? entry.frozen
-            : Math.max(0, Math.ceil((entry.endsAt - Date.now()) / 1000))
+            : getRemainingQuestionSeconds(entry.endsAt)
         set({ quizSessionCountdown: { ...entry, frozen: remaining } })
       },
 
@@ -211,7 +255,7 @@ export const useParticipantStore = create(
           const remaining =
             entry.frozen != null
               ? entry.frozen
-              : Math.max(0, Math.ceil((entry.endsAt - now) / 1000))
+              : getRemainingQuestionSeconds(entry.endsAt, now)
           next[qid] = { ...entry, frozen: remaining }
           changed = true
         }
@@ -221,7 +265,7 @@ export const useParticipantStore = create(
           const remaining =
             sessionEntry.frozen != null
               ? sessionEntry.frozen
-              : Math.max(0, Math.ceil((sessionEntry.endsAt - now) / 1000))
+              : getRemainingQuestionSeconds(sessionEntry.endsAt, now)
           nextSession = { ...sessionEntry, frozen: remaining }
         }
         if (changed || nextSession !== sessionEntry) {
@@ -238,7 +282,7 @@ export const useParticipantStore = create(
         const qid = String(questionId)
         const entry = s.quizCountdownByQuestion?.[qid]
         if (!entry?.endsAt) return
-        const remaining = Math.max(0, Math.ceil((entry.endsAt - Date.now()) / 1000))
+        const remaining = getRemainingQuestionSeconds(entry.endsAt)
         set((state) => ({
           quizCountdownByQuestion: {
             ...(state.quizCountdownByQuestion || {}),
@@ -264,6 +308,7 @@ export const useParticipantStore = create(
         quizCountdownByQuestion: state.quizCountdownByQuestion,
         quizSessionCountdown: state.quizSessionCountdown,
         quizQuestionOpenedAt: state.quizQuestionOpenedAt,
+        quizSubmittedAtSecondsByQuestion: state.quizSubmittedAtSecondsByQuestion,
         quizQuestionOrder: state.quizQuestionOrder,
       }),
       migrate: (persistedState, version) => {

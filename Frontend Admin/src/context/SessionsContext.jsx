@@ -47,6 +47,7 @@ function mapApiSessionToLocal(session) {
     id: session.session_id,
     session_id: session.session_id,
     title: session.title,
+    description: session.description || '',
     session_code: session.session_code || '',
     date: session.created_at ? session.created_at.split('T')[0] : '',
     status: session.status === 'live' ? 'Live' : session.status === 'completed' ? 'Completed' : session.status === 'draft' ? 'Draft' : session.status === 'paused' ? 'Paused' : session.status,
@@ -58,7 +59,7 @@ function mapApiSessionToLocal(session) {
     settings: {
       anonymous: session.join_type === 'anonymous',
       leaderboard: session.leaderboard_enabled ?? false,
-      maxParticipants: session.max_participants ?? 300,
+      maxParticipants: session.max_participants ?? 2000,
       password: '',
     },
     quizMode: false,
@@ -70,6 +71,7 @@ function mapApiSessionToLocal(session) {
     last_activity_at: session.last_activity_at || null,
     started_at: session.started_at || null,
     updated_at: session.updated_at || null,
+    session_admin: session.session_admin || null,
   }
 }
 
@@ -108,7 +110,8 @@ export function SessionsProvider({ children }) {
       !!accessToken &&
       !!userRole &&
       userRole !== 'author' &&
-      userRole !== 'auditor',
+      userRole !== 'auditor' &&
+      userRole !== 'session_admin',
   })
 
   const [localSessions, setLocalSessions] = useState([])
@@ -136,7 +139,7 @@ export function SessionsProvider({ children }) {
         tags: [type],
         department,
         joinRequirement,
-        settings: { anonymous: joinRequirement === 'anonymous', leaderboard: false, maxParticipants: 300, password: '' },
+        settings: { anonymous: joinRequirement === 'anonymous', leaderboard: false, maxParticipants: 2000, password: '' },
         quizMode: type === 'Quiz',
         timeLimitSeconds: 30,
         questions: createDefaultQuestions(),

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Calendar, Clock3, Link2, QrCode } from 'lucide-react'
+import { Calendar, Clock3, Link2, Play, QrCode } from 'lucide-react'
 import { BrandLogoPair } from '../../components/branding/BrandLogoPair'
 import {
   buildGenericJoinUrl,
@@ -10,6 +10,7 @@ import {
   formatScheduledDateForDisplay,
   formatScheduledTimeForDisplay,
 } from '../../utils/sessionSchedule'
+import { PresentInstructionsPanel } from './PresentInstructionsPanel'
 
 function usePresentJoinInfo(session) {
   const sessionCode = normalizeSessionCode(session?.session_code)
@@ -46,17 +47,17 @@ function usePresentJoinInfo(session) {
   return { sessionCode, directJoinUrl, joinPageUrl, qrDataUrl }
 }
 
-function SessionMetaRow({ icon: Icon, label, value }) {
+export function SessionMetaRow({ icon: Icon, label, value }) {
   return (
-    <div className="flex min-w-0 items-start gap-3 rounded-2xl border border-blue-200/70 bg-white/95 px-[clamp(0.85rem,2vw,1.25rem)] py-[clamp(0.65rem,1.5vh,0.9rem)] shadow-sm shadow-navy-900/5">
-      <span className="grid size-[clamp(2.5rem,5vw,3rem)] shrink-0 place-items-center rounded-xl bg-linear-to-br from-sky-100 to-blue-100 text-sky-800">
-        <Icon className="size-[clamp(1.1rem,2.2vw,1.35rem)]" strokeWidth={2} />
+    <div className="flex min-w-0 items-start gap-2.5 rounded-2xl border border-blue-200/70 bg-white/95 px-[clamp(0.75rem,1.8vw,1.1rem)] py-[clamp(0.55rem,1.3vh,0.75rem)] shadow-sm shadow-navy-900/5">
+      <span className="grid size-[clamp(2.15rem,4.2vw,2.6rem)] shrink-0 place-items-center rounded-xl bg-linear-to-br from-sky-100 to-blue-100 text-sky-800">
+        <Icon className="size-[clamp(1rem,2vw,1.2rem)]" strokeWidth={2} />
       </span>
       <div className="min-w-0 pt-0.5">
-        <p className="text-[clamp(0.65rem,1.2vw,0.75rem)] font-semibold uppercase tracking-wider text-slate-500">
+        <p className="text-[clamp(0.6rem,1.1vw,0.7rem)] font-semibold uppercase tracking-wider text-slate-500">
           {label}
         </p>
-        <p className="mt-0.5 break-words text-[clamp(1rem,2.2vw,1.35rem)] font-bold leading-snug text-navy-900">
+        <p className="mt-0.5 break-normal text-[clamp(0.9rem,1.9vw,1.2rem)] font-bold leading-snug text-navy-900">
           {value}
         </p>
       </div>
@@ -198,8 +199,17 @@ export function PresentJoinBar({ session, placement = 'banner' }) {
 
 /**
  * Full join panel for the opening Present Mode slide.
+ * When instructions are on: left = date/time + QR/join, right = instructions panel.
  */
-export function PresentJoinPanel({ session, className = '' }) {
+export function PresentJoinPanel({
+  session,
+  className = '',
+  showInstructions = false,
+  instructions = [],
+  showActivateAll = false,
+  activateAllPending = false,
+  onActivateAll,
+}) {
   const { sessionCode, directJoinUrl, joinPageUrl, qrDataUrl } = usePresentJoinInfo(session)
   const sessionTitle = session?.title || 'Live session'
   const dateLabel =
@@ -210,12 +220,80 @@ export function PresentJoinPanel({ session, className = '' }) {
     'Not scheduled'
   const timeLabel = formatScheduledTimeForDisplay(session?.scheduled_time) || '—'
 
+  const scheduleBlock = (
+    <div className="grid min-w-0 gap-[clamp(0.65rem,1.5vh,0.85rem)] sm:grid-cols-2">
+      <SessionMetaRow icon={Calendar} label="Date" value={dateLabel} />
+      <SessionMetaRow icon={Clock3} label="Time" value={timeLabel} />
+    </div>
+  )
+
+  const joinGrid = (
+    <div className="grid min-w-0 items-stretch gap-[clamp(1rem,3vw,2rem)] lg:grid-cols-[minmax(14rem,20rem)_minmax(0,1fr)]">
+      <div className="flex flex-col items-center justify-center rounded-[2rem] border border-blue-200/70 bg-white/95 p-[clamp(1rem,2.5vw,1.75rem)] shadow-xl shadow-navy-900/10">
+        {qrDataUrl ? (
+          <img
+            src={qrDataUrl}
+            alt="QR code to join this session"
+            className="aspect-square w-full max-w-[min(100%,16rem)] rounded-2xl"
+          />
+        ) : (
+          <div className="flex aspect-square w-full max-w-[min(100%,16rem)] items-center justify-center rounded-2xl bg-slate-100 text-sm text-slate-500">
+            {sessionCode || joinPageUrl ? 'Generating QR…' : 'No code yet'}
+          </div>
+        )}
+        <p className="mt-4 text-center text-[clamp(0.75rem,1.3vw,0.9rem)] font-semibold uppercase tracking-wider text-slate-500">
+          Scan to join
+        </p>
+      </div>
+
+      <div className="flex min-w-0 flex-col justify-center gap-[clamp(0.75rem,2vh,1rem)]">
+        <div className="min-w-0 rounded-3xl border border-blue-200/70 bg-white/95 px-[clamp(1rem,2.5vw,1.75rem)] py-[clamp(0.85rem,2vh,1.25rem)] shadow-md shadow-navy-900/5">
+          <p className="flex items-center gap-1.5 text-[clamp(0.7rem,1.3vw,0.85rem)] font-semibold uppercase tracking-wider text-slate-500">
+            <Link2 className="size-3.5 shrink-0" aria-hidden />
+            Join page
+          </p>
+          <p className="mt-2 break-all text-[clamp(0.95rem,1.9vw,1.25rem)] font-semibold leading-snug text-navy-800">
+            {joinPageUrl || 'Join page unavailable'}
+          </p>
+          <p className="mt-1 text-[clamp(0.75rem,1.3vw,0.85rem)] text-slate-500">
+            No code in the URL — enter the session code below.
+          </p>
+        </div>
+
+        <div className="min-w-0 rounded-3xl border border-blue-200/70 bg-white/95 px-[clamp(1rem,2.5vw,1.75rem)] py-[clamp(0.85rem,2vh,1.25rem)] shadow-md shadow-navy-900/5">
+          <p className="text-[clamp(0.7rem,1.3vw,0.85rem)] font-semibold uppercase tracking-wider text-slate-500">
+            Session code
+          </p>
+          <p className="mt-2 font-mono text-[clamp(1.75rem,4.5vw,3rem)] font-bold tracking-[0.2em] text-navy-900">
+            {sessionCode || '—'}
+          </p>
+        </div>
+
+        <div className="min-w-0 rounded-3xl border border-blue-200/70 bg-white/95 px-[clamp(1rem,2.5vw,1.75rem)] py-[clamp(0.85rem,2vh,1.25rem)] shadow-md shadow-navy-900/5">
+          <p className="text-[clamp(0.7rem,1.3vw,0.85rem)] font-semibold uppercase tracking-wider text-slate-500">
+            Direct join link
+          </p>
+          <p className="mt-2 break-all text-[clamp(0.95rem,1.9vw,1.25rem)] font-semibold leading-snug text-navy-800">
+            {directJoinUrl || 'Direct link unavailable'}
+          </p>
+          <p className="mt-1 text-[clamp(0.75rem,1.3vw,0.85rem)] text-slate-500">
+            Opens this session without typing the code.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+
   return (
     <div
       className={`flex min-h-0 w-full min-w-0 flex-1 flex-col items-center justify-center overflow-x-hidden px-[clamp(0.5rem,2vw,1.5rem)] ${className}`}
     >
-      <div className="quiz-enter w-full min-w-0 max-w-6xl">
-        <div className="mb-[clamp(1rem,3vh,1.75rem)] text-center">
+      <div
+        className={`quiz-enter flex w-full min-w-0 flex-1 flex-col ${
+          showInstructions ? 'max-w-[min(100%,96rem)]' : 'max-w-6xl'
+        }`}
+      >
+        <div className="mb-[clamp(1rem,3vh,1.75rem)] shrink-0 text-center">
           {session?.logo_url ? (
             <BrandLogoPair
               variant="present"
@@ -235,65 +313,40 @@ export function PresentJoinPanel({ session, className = '' }) {
           </p>
         </div>
 
-        <div className="mb-[clamp(0.75rem,2vh,1.25rem)] grid min-w-0 gap-[clamp(0.65rem,1.5vh,0.85rem)] sm:grid-cols-2">
-          <SessionMetaRow icon={Calendar} label="Date" value={dateLabel} />
-          <SessionMetaRow icon={Clock3} label="Time" value={timeLabel} />
-        </div>
+        {showInstructions ? (
+          <div className="grid min-h-0 min-w-0 flex-1 items-stretch gap-[clamp(1rem,2.5vw,1.75rem)] lg:grid-cols-[minmax(26rem,32rem)_minmax(0,1fr)]">
+            <div className="flex h-full min-w-0 flex-col gap-[clamp(0.75rem,2vh,1.25rem)]">
+              {scheduleBlock}
+              {joinGrid}
+            </div>
+            <PresentInstructionsPanel
+              instructions={instructions}
+              className="h-full min-h-0"
+            />
+          </div>
+        ) : (
+          <>
+            <div className="mb-[clamp(0.75rem,2vh,1.25rem)]">{scheduleBlock}</div>
+            {joinGrid}
+          </>
+        )}
 
-        <div className="grid min-w-0 items-stretch gap-[clamp(1rem,3vw,2rem)] lg:grid-cols-[minmax(14rem,20rem)_minmax(0,1fr)]">
-          <div className="flex flex-col items-center justify-center rounded-[2rem] border border-blue-200/70 bg-white/95 p-[clamp(1rem,2.5vw,1.75rem)] shadow-xl shadow-navy-900/10">
-            {qrDataUrl ? (
-              <img
-                src={qrDataUrl}
-                alt="QR code to join this session"
-                className="aspect-square w-full max-w-[min(100%,16rem)] rounded-2xl"
-              />
-            ) : (
-              <div className="flex aspect-square w-full max-w-[min(100%,16rem)] items-center justify-center rounded-2xl bg-slate-100 text-sm text-slate-500">
-                {sessionCode || joinPageUrl ? 'Generating QR…' : 'No code yet'}
-              </div>
-            )}
-            <p className="mt-4 text-center text-[clamp(0.75rem,1.3vw,0.9rem)] font-semibold uppercase tracking-wider text-slate-500">
-              Scan to join
+        {showActivateAll ? (
+          <div className="mt-[clamp(1rem,2.5vh,1.5rem)] shrink-0 text-center">
+            <button
+              type="button"
+              disabled={activateAllPending || typeof onActivateAll !== 'function'}
+              onClick={() => onActivateAll?.()}
+              className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-[clamp(1.25rem,3vw,1.75rem)] py-[clamp(0.75rem,1.8vh,1rem)] text-[clamp(0.95rem,1.8vw,1.15rem)] font-semibold text-white shadow-lg shadow-emerald-900/25 transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Play className="size-5" aria-hidden />
+              {activateAllPending ? 'Activating…' : 'Activate All'}
+            </button>
+            <p className="mt-2 text-[clamp(0.75rem,1.3vw,0.9rem)] text-slate-500">
+              Starts the quiz for all participants and begins the quiz clock.
             </p>
           </div>
-
-          <div className="flex min-w-0 flex-col justify-center gap-[clamp(0.75rem,2vh,1rem)]">
-            <div className="min-w-0 rounded-3xl border border-blue-200/70 bg-white/95 px-[clamp(1rem,2.5vw,1.75rem)] py-[clamp(0.85rem,2vh,1.25rem)] shadow-md shadow-navy-900/5">
-              <p className="flex items-center gap-1.5 text-[clamp(0.7rem,1.3vw,0.85rem)] font-semibold uppercase tracking-wider text-slate-500">
-                <Link2 className="size-3.5 shrink-0" aria-hidden />
-                Join page
-              </p>
-              <p className="mt-2 break-all text-[clamp(0.95rem,1.9vw,1.25rem)] font-semibold leading-snug text-navy-800">
-                {joinPageUrl || 'Join page unavailable'}
-              </p>
-              <p className="mt-1 text-[clamp(0.75rem,1.3vw,0.85rem)] text-slate-500">
-                No code in the URL — enter the session code below.
-              </p>
-            </div>
-
-            <div className="min-w-0 rounded-3xl border border-blue-200/70 bg-white/95 px-[clamp(1rem,2.5vw,1.75rem)] py-[clamp(0.85rem,2vh,1.25rem)] shadow-md shadow-navy-900/5">
-              <p className="text-[clamp(0.7rem,1.3vw,0.85rem)] font-semibold uppercase tracking-wider text-slate-500">
-                Session code
-              </p>
-              <p className="mt-2 font-mono text-[clamp(1.75rem,4.5vw,3rem)] font-bold tracking-[0.2em] text-navy-900">
-                {sessionCode || '—'}
-              </p>
-            </div>
-
-            <div className="min-w-0 rounded-3xl border border-blue-200/70 bg-white/95 px-[clamp(1rem,2.5vw,1.75rem)] py-[clamp(0.85rem,2vh,1.25rem)] shadow-md shadow-navy-900/5">
-              <p className="text-[clamp(0.7rem,1.3vw,0.85rem)] font-semibold uppercase tracking-wider text-slate-500">
-                Direct join link
-              </p>
-              <p className="mt-2 break-all text-[clamp(0.95rem,1.9vw,1.25rem)] font-semibold leading-snug text-navy-800">
-                {directJoinUrl || 'Direct link unavailable'}
-              </p>
-              <p className="mt-1 text-[clamp(0.75rem,1.3vw,0.85rem)] text-slate-500">
-                Opens this session without typing the code.
-              </p>
-            </div>
-          </div>
-        </div>
+        ) : null}
       </div>
     </div>
   )

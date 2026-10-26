@@ -16,12 +16,47 @@ export function isSessionQuizTotalTimeEnabled(session) {
   )
 }
 
+/** Quiz total time on AND host opted into per-question timers alongside it. */
+export function isQuizTotalWithQuestionTimersEnabled(session) {
+  if (!isSessionQuizTotalTimeEnabled(session)) return false
+  const value = session?.quiz_total_question_timers_enabled
+  return value === true || value === 1 || value === '1'
+}
+
+/** Shared quiz clock from session started_at for all participants. */
+export function isQuizTotalTimeSynced(session) {
+  if (!isSessionQuizTotalTimeEnabled(session)) return false
+  const value = session?.quiz_total_time_synced
+  return value === true || value === 1 || value === '1'
+}
+
+/**
+ * Sync on + both timers: all participants share the same question schedule from Activate All.
+ * Requires started_at for an active lockstep clock.
+ */
+export function isSyncedQuestionLockstep(session) {
+  if (!isQuizTotalTimeSynced(session)) return false
+  if (!isQuizTotalWithQuestionTimersEnabled(session)) return false
+  return Boolean(session?.started_at)
+}
+
 /** Each participant sees questions in a shuffled order; host must activate all at once. */
 export function isSessionRandomQuestionOrderEnabled(session) {
   if (!session) return false
   const value = session.random_question_order_enabled
   const randomEnabled = value === true || value === 1 || value === '1'
   return session.participant_navigation_enabled !== false && randomEnabled
+}
+
+/** Advanced builder: each participant gets a random subset; host must activate the whole pool at once. */
+export function isAdvancedBuilderSession(session) {
+  return String(session?.builder_mode || 'normal').toLowerCase() === 'advanced'
+}
+
+/** Advanced + Random K from marked eligible — only pool_eligible questions feed assignment. */
+export function sessionUsesMarkedEligiblePool(session) {
+  if (!isAdvancedBuilderSession(session)) return false
+  return String(session?.advanced_selection_mode || '') === 'random_from_selected'
 }
 
 export function sessionHasTimedQuestions(questions = []) {

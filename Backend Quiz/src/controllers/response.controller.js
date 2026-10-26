@@ -127,11 +127,19 @@ async function participantSessionLeaderboard(req, res) {
       return errorResponse(res, "sessionId must be a number", 400);
     }
 
-    const leaderboard = await getParticipantSessionLeaderboard({
+    const result = await getParticipantSessionLeaderboard({
       sessionId,
       participant: req.participant
     });
-    return successResponse(res, { leaderboard }, "Leaderboard fetched", 200);
+    return successResponse(
+      res,
+      {
+        leaderboard: result?.leaderboard || [],
+        me: result?.me || null
+      },
+      "Leaderboard fetched",
+      200
+    );
   } catch (err) {
     return errorResponse(res, err.message, err.statusCode || 500);
   }
@@ -148,7 +156,7 @@ async function sessionLeaderboard(req, res) {
     const leaderboard = await getSessionLeaderboardForStaff({
       sessionId,
       user: req.user,
-      limit: Number.isFinite(limit) && limit > 0 ? limit : 10
+      limit: Number.isFinite(limit) && limit > 0 ? limit : null
     });
     return successResponse(res, { leaderboard }, "Leaderboard fetched", 200);
   } catch (err) {

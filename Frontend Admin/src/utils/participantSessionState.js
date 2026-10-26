@@ -8,6 +8,7 @@ export const PARTICIPANT_PROGRESS_FIELDS = [
   'quizCountdownByQuestion',
   'quizSessionCountdown',
   'quizQuestionOpenedAt',
+  'quizSubmittedAtSecondsByQuestion',
   'quizQuestionOrder',
 ]
 
@@ -27,6 +28,7 @@ export function pickParticipantProgressState(state = {}) {
     quizCountdownByQuestion: state.quizCountdownByQuestion || {},
     quizSessionCountdown: state.quizSessionCountdown ?? null,
     quizQuestionOpenedAt: state.quizQuestionOpenedAt || {},
+    quizSubmittedAtSecondsByQuestion: state.quizSubmittedAtSecondsByQuestion || {},
     quizQuestionOrder: Array.isArray(state.quizQuestionOrder)
       ? state.quizQuestionOrder.map(Number).filter((id) => Number.isFinite(id) && id > 0)
       : [],

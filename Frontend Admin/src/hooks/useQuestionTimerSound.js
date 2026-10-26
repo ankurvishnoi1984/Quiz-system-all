@@ -1,21 +1,59 @@
 import { useEffect, useRef } from 'react'
 import {
-  playTimerTick,
-  playTimerTimesUp,
-  playTimerUrgentBeep,
-  unlockTimerAudio,
-} from '../utils/timerSounds'
+  TIMER_ENDING_WINDOW_SECONDS,
+  normalizeTimerSoundStartSeconds,
+  playQuestionTimerCue,
+  stopCustomTimerAudio,
+} from '../utils/timerSoundPresets'
+import { unlockTimerAudio } from '../utils/timerSounds'
 
-const WARNING_SECONDS = 10
-const URGENT_SECONDS = 5
+const DEFAULT_URGENT_SECONDS = 5
 
 /**
- * Plays countdown ticks in the last 10s, urgent beeps in the last 5s,
+ * Plays countdown ticks in the configured ending window, urgent beeps near zero,
  * and a times-up sound when the timer reaches 0.
  * Skips the first observed value so late joiners / remounts do not blast on load.
  */
-export function useQuestionTimerSound(timer, { enabled = true } = {}) {
+export function useQuestionTimerSound(
+  timer,
+  {
+    enabled = true,
+    timerSoundKey,
+    timerSoundUrl,
+    timerEndingSoundKey,
+    timerEndingSoundUrl,
+    timerSoundStartSeconds,
+    timeLimitSeconds,
+  } = {},
+) {
   const lastPlayedRef = useRef(null)
+  const endingStartedRef = useRef(false)
+  const soundRef = useRef({
+    timerSoundKey,
+    timerSoundUrl,
+    timerEndingSoundKey,
+    timerEndingSoundUrl,
+  })
+  soundRef.current = {
+    timerSoundKey,
+    timerSoundUrl,
+    timerEndingSoundKey,
+    timerEndingSoundUrl,
+  }
+
+  const warningSeconds = (() => {
+    const limit = Number(timeLimitSeconds)
+    if (Number.isFinite(limit) && limit > 0) {
+      return (
+        normalizeTimerSoundStartSeconds(timerSoundStartSeconds, limit) ||
+        TIMER_ENDING_WINDOW_SECONDS
+      )
+    }
+    const start = Number(timerSoundStartSeconds)
+    if (Number.isFinite(start) && start >= 1) return Math.round(start)
+    return TIMER_ENDING_WINDOW_SECONDS
+  })()
+  const urgentSeconds = Math.min(DEFAULT_URGENT_SECONDS, warningSeconds)
 
   useEffect(() => {
     if (!enabled) return undefined
@@ -26,12 +64,14 @@ export function useQuestionTimerSound(timer, { enabled = true } = {}) {
     return () => {
       window.removeEventListener('pointerdown', unlock)
       window.removeEventListener('keydown', unlock)
+      stopCustomTimerAudio('ending')
     }
   }, [enabled])
 
   useEffect(() => {
     if (!enabled) {
       lastPlayedRef.current = null
+      endingStartedRef.current = false
       return
     }
 
@@ -40,24 +80,38 @@ export function useQuestionTimerSound(timer, { enabled = true } = {}) {
 
     if (lastPlayedRef.current == null) {
       lastPlayedRef.current = seconds
+      endingStartedRef.current = seconds > 0 && seconds <= warningSeconds
       return
     }
 
     const previous = lastPlayedRef.current
     lastPlayedRef.current = seconds
+    const sound = soundRef.current
 
     if (seconds === 0 && previous > 0) {
-      playTimerTimesUp()
+      endingStartedRef.current = false
+      playQuestionTimerCue('timesUp', sound)
       return
     }
 
-    if (seconds > 0 && seconds <= URGENT_SECONDS) {
-      playTimerUrgentBeep(seconds)
+    // Entering ending window (including late joins that jump into it).
+    if (seconds > 0 && seconds <= warningSeconds && !endingStartedRef.current) {
+      endingStartedRef.current = true
+      playQuestionTimerCue('endingStart', { ...sound, secondsLeft: seconds })
+    }
+
+    if (seconds > warningSeconds) {
+      endingStartedRef.current = false
+      stopCustomTimerAudio('ending')
+    }
+
+    if (seconds > 0 && seconds <= urgentSeconds) {
+      playQuestionTimerCue('urgent', { ...sound, secondsLeft: seconds })
       return
     }
 
-    if (seconds > URGENT_SECONDS && seconds <= WARNING_SECONDS) {
-      playTimerTick()
+    if (seconds > urgentSeconds && seconds <= warningSeconds) {
+      playQuestionTimerCue('tick', sound)
     }
-  }, [timer, enabled])
+  }, [timer, enabled, warningSeconds, urgentSeconds])
 }

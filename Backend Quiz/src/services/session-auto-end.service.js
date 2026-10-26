@@ -6,7 +6,8 @@ const { isSessionRandomQuestionOrderEnabled } = require("../utils/sessionFlags")
 const {
   notifySessionUpdate,
   notifySessionSettings,
-  notifyQuestionLeaderboardVisibility
+  notifyQuestionLeaderboardVisibility,
+  closeAllSessionConnections
 } = require("./websocket.service");
 
 const AUTO_END_POLL_MS = Number(process.env.SESSION_AUTO_END_POLL_MS) || 30000;
@@ -41,8 +42,11 @@ async function processDueAutoEndSessions() {
       notifySessionUpdate(ended.session_code, ended.status);
       notifySessionSettings(ended.session_code, {
         leaderboard_enabled: ended.leaderboard_enabled,
+        current_rankings_enabled: ended.current_rankings_enabled,
         survey_results_enabled: ended.survey_results_enabled,
         show_participant_count: ended.show_participant_count,
+        show_session_title: ended.show_session_title !== false,
+        show_app_logo: ended.show_app_logo !== false,
         show_question_leaderboard: ended.show_question_leaderboard,
         participant_navigation_enabled: ended.participant_navigation_enabled !== false,
         quiz_total_time_minutes: ended.quiz_total_time_minutes ?? null,
@@ -52,6 +56,7 @@ async function processDueAutoEndSessions() {
       for (const questionId of ended.hiddenQuestionResultIds || []) {
         notifyQuestionLeaderboardVisibility(ended.session_code, questionId, false);
       }
+      closeAllSessionConnections(ended.session_code, { reason: "session_ended" });
     } catch (error) {
       console.warn("[auto-end] Failed to notify session end:", error.message);
     }

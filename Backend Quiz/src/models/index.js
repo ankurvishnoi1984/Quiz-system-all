@@ -15,6 +15,7 @@ const ZoomParticipantMap = require("./zoom-participant-map.model");
 const Participant = require("./participant.model");
 const Question = require("./question.model");
 const QuestionSet = require("./question-set.model");
+const ParticipantQuestionAssignment = require("./participant-question-assignment.model");
 const QuestionOption = require("./question-option.model");
 const QuestionBankTopic = require("./question-bank-topic.model");
 const QuestionBankQuestion = require("./question-bank-question.model");
@@ -70,6 +71,8 @@ Department.hasMany(Session, { foreignKey: "dept_id" });
 Session.belongsTo(Department, { foreignKey: "dept_id" });
 User.hasMany(Session, { foreignKey: "host_id" });
 Session.belongsTo(User, { foreignKey: "host_id" });
+User.hasMany(Session, { foreignKey: "session_admin_user_id", as: "administeredSessions" });
+Session.belongsTo(User, { foreignKey: "session_admin_user_id", as: "sessionAdmin" });
 Session.hasMany(SessionEmbedToken, { foreignKey: "session_id" });
 SessionEmbedToken.belongsTo(Session, { foreignKey: "session_id" });
 User.hasOne(ZoomConnection, { foreignKey: "user_id", as: "zoomConnection" });
@@ -94,6 +97,18 @@ QuestionSet.hasMany(Question, { foreignKey: "set_id", as: "questions" });
 Question.belongsTo(QuestionSet, { foreignKey: "set_id", as: "set" });
 QuestionSet.hasMany(Participant, { foreignKey: "assigned_set_id", as: "assignedParticipants" });
 Participant.belongsTo(QuestionSet, { foreignKey: "assigned_set_id", as: "assignedSet" });
+Session.hasMany(ParticipantQuestionAssignment, { foreignKey: "session_id", as: "questionAssignments" });
+ParticipantQuestionAssignment.belongsTo(Session, { foreignKey: "session_id" });
+Participant.hasMany(ParticipantQuestionAssignment, {
+  foreignKey: "participant_id",
+  as: "questionAssignments"
+});
+ParticipantQuestionAssignment.belongsTo(Participant, { foreignKey: "participant_id" });
+Question.hasMany(ParticipantQuestionAssignment, {
+  foreignKey: "question_id",
+  as: "participantAssignments"
+});
+ParticipantQuestionAssignment.belongsTo(Question, { foreignKey: "question_id" });
 Department.hasMany(Question, { foreignKey: "dept_id" });
 Question.belongsTo(Department, { foreignKey: "dept_id" });
 Question.hasMany(QuestionOption, { foreignKey: "question_id" });
@@ -198,6 +213,7 @@ const models = {
   Participant,
   Question,
   QuestionSet,
+  ParticipantQuestionAssignment,
   QuestionOption,
   QuestionBankTopic,
   QuestionBankQuestion,

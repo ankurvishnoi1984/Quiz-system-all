@@ -189,6 +189,9 @@ function validateCreateQuestionPayload(payload) {
     }
   }
 
+  const { validateTimerSoundFields } = require("../utils/timerSound");
+  errors.push(...validateTimerSoundFields(payload));
+
   return [...new Set(errors)];
 }
 
@@ -207,8 +210,37 @@ function validateReorderPayload(payload) {
   return errors;
 }
 
+function validateSyncQuestionsPayload(payload) {
+  const errors = [];
+  if (!payload || typeof payload !== "object") {
+    return ["request body is required"];
+  }
+  if (!Array.isArray(payload.questions)) {
+    errors.push("questions must be an array");
+  } else {
+    payload.questions.forEach((question, index) => {
+      const rowErrors = validateCreateQuestionPayload(question || {});
+      rowErrors.forEach((message) => {
+        errors.push(`question ${index + 1}: ${message}`);
+      });
+    });
+  }
+  if (payload.delete_ids !== undefined && !Array.isArray(payload.delete_ids)) {
+    errors.push("delete_ids must be an array");
+  } else if (Array.isArray(payload.delete_ids)) {
+    payload.delete_ids.forEach((id, index) => {
+      const num = Number(id);
+      if (!Number.isFinite(num) || num <= 0) {
+        errors.push(`delete_ids[${index}] must be a positive number`);
+      }
+    });
+  }
+  return [...new Set(errors)];
+}
+
 module.exports = {
   validateCreateQuestionPayload,
   validateUpdateQuestionPayload,
-  validateReorderPayload
+  validateReorderPayload,
+  validateSyncQuestionsPayload
 };

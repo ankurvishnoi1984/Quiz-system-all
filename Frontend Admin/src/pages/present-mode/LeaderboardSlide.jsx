@@ -6,6 +6,8 @@ export function LeaderboardSlide({
   sessionTitle,
   sessionLogoUrl,
   leaderboard,
+  title = 'Session rankings',
+  topN = 10,
   participantCount,
   liveParticipantCount = 0,
   qaCount,
@@ -15,6 +17,10 @@ export function LeaderboardSlide({
   overallRankingsActive = false,
   onQaClick,
   readOnly = false,
+  showParticipantStats = true,
+  hasQuizCountdown = false,
+  quizTimer = 0,
+  quizTimeLimit = 0,
 }) {
   return (
     <div className="quiz-slide-in flex min-h-0 flex-1 flex-col">
@@ -30,14 +36,18 @@ export function LeaderboardSlide({
         overallRankingsActive={overallRankingsActive}
         onQaClick={onQaClick}
         readOnly={readOnly}
+        showParticipantStats={showParticipantStats}
+        hasQuizCountdown={hasQuizCountdown}
+        quizTimer={quizTimer}
+        quizTimeLimit={quizTimeLimit}
       />
 
       <div className="mb-[clamp(0.75rem,2vh,1.25rem)] flex shrink-0 flex-col items-center justify-center gap-1">
         <div className="flex items-center justify-center gap-3">
           <Trophy className="size-[clamp(2rem,5vw,3rem)] text-amber-500" aria-hidden />
-          <h2 className="text-[clamp(2rem,6vw,3.5rem)] font-bold text-navy-900">Session rankings</h2>
+          <h2 className="text-[clamp(2rem,6vw,3.5rem)] font-bold text-navy-900">{title}</h2>
         </div>
-        <p className="text-[clamp(0.85rem,1.8vw,1rem)] font-medium text-slate-500">Top 10</p>
+        <p className="text-[clamp(0.85rem,1.8vw,1rem)] font-medium text-slate-500">Top {topN}</p>
       </div>
 
       <PresentLeaderboardList

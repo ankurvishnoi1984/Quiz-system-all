@@ -24,13 +24,14 @@ export function getChoiceRevealClasses({
   if (!answerRevealed) {
     return isSelected ? selectedClass : defaultClass
   }
+  // quiz-option-reveal* locks correct/wrong colors outside participant themes
   if (isCorrectOption) {
-    return 'border-emerald-500 bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200'
+    return 'quiz-option-reveal quiz-option-reveal--correct'
   }
   if (isSelected) {
-    return 'border-red-500 bg-red-50 text-red-900 ring-1 ring-red-200'
+    return 'quiz-option-reveal quiz-option-reveal--wrong'
   }
-  return 'border-blue-200/60 bg-white text-slate-500'
+  return 'quiz-option-reveal quiz-option-reveal--muted'
 }
 
 export function isOptionCorrectForReveal(option, revealMeta) {

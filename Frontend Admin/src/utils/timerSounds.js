@@ -98,6 +98,97 @@ export function playTimerTimesUp() {
   })
 }
 
+/** Preset-aware countdown cues used by question timer sound settings. */
+export function playTimerTickPreset(presetKey = 'classic') {
+  const key = String(presetKey || 'classic')
+  if (key === 'soft') {
+    playTone({ frequency: 520, duration: 0.08, type: 'sine', volume: 0.04 })
+    return
+  }
+  if (key === 'sharp') {
+    playTone({ frequency: 1100, duration: 0.05, type: 'square', volume: 0.07 })
+    return
+  }
+  if (key === 'digital') {
+    playTone({ frequency: 880, duration: 0.04, type: 'square', volume: 0.05 })
+    playTone({ frequency: 1320, duration: 0.04, type: 'square', volume: 0.04, delay: 0.05 })
+    return
+  }
+  if (key === 'pulse') {
+    playTone({ frequency: 180, duration: 0.12, type: 'sine', volume: 0.07, slideTo: 140 })
+    return
+  }
+  playTimerTick()
+}
+
+export function playTimerUrgentPreset(presetKey = 'classic', secondsLeft) {
+  const key = String(presetKey || 'classic')
+  const n = Math.max(1, Math.min(5, Number(secondsLeft) || 1))
+  if (key === 'soft') {
+    playTone({ frequency: 640 + (5 - n) * 40, duration: 0.1, type: 'sine', volume: 0.07 })
+    return
+  }
+  if (key === 'sharp') {
+    playTone({ frequency: 1200 + (5 - n) * 100, duration: 0.1, type: 'square', volume: 0.12 })
+    return
+  }
+  if (key === 'digital') {
+    playTone({ frequency: 1000 + (5 - n) * 80, duration: 0.05, type: 'square', volume: 0.08 })
+    playTone({
+      frequency: 1400 + (5 - n) * 60,
+      duration: 0.05,
+      type: 'square',
+      volume: 0.07,
+      delay: 0.06,
+    })
+    return
+  }
+  if (key === 'pulse') {
+    playTone({
+      frequency: 220 + (5 - n) * 20,
+      duration: 0.16,
+      type: 'triangle',
+      volume: 0.1,
+      slideTo: 120,
+    })
+    return
+  }
+  playTimerUrgentBeep(secondsLeft)
+}
+
+export function playTimerTimesUpPreset(presetKey = 'classic') {
+  const key = String(presetKey || 'classic')
+  if (key === 'soft') {
+    playTone({ frequency: 480, duration: 0.22, type: 'sine', volume: 0.09, slideTo: 320 })
+    playTone({ frequency: 360, duration: 0.3, type: 'sine', volume: 0.08, delay: 0.18, slideTo: 240 })
+    return
+  }
+  if (key === 'sharp') {
+    playTone({ frequency: 980, duration: 0.12, type: 'square', volume: 0.12 })
+    playTone({ frequency: 720, duration: 0.18, type: 'square', volume: 0.11, delay: 0.12 })
+    playTone({ frequency: 480, duration: 0.28, type: 'sawtooth', volume: 0.1, delay: 0.28, slideTo: 200 })
+    return
+  }
+  if (key === 'digital') {
+    ;[880, 740, 620, 500].forEach((frequency, index) => {
+      playTone({
+        frequency,
+        duration: 0.07,
+        type: 'square',
+        volume: 0.09,
+        delay: index * 0.08,
+      })
+    })
+    return
+  }
+  if (key === 'pulse') {
+    playTone({ frequency: 160, duration: 0.35, type: 'sine', volume: 0.12, slideTo: 90 })
+    playTone({ frequency: 120, duration: 0.45, type: 'triangle', volume: 0.1, delay: 0.25, slideTo: 70 })
+    return
+  }
+  playTimerTimesUp()
+}
+
 export function playTimeExpired() {
   playTimerTimesUp()
 }
@@ -154,6 +245,37 @@ export function playLeaderboardShown() {
     playTone({ frequency: 784, duration: 0.1, type: 'sine', volume: 0.08 })
     playTone({ frequency: 988, duration: 0.1, type: 'sine', volume: 0.08, delay: 0.09 })
     playTone({ frequency: 1175, duration: 0.22, type: 'sine', volume: 0.09, delay: 0.18 })
+  })
+}
+
+/**
+ * Energetic celebration fanfare when the Top 3 podium slide opens.
+ * Always on (not gated by host-extra). ~1s layered phrase via playTone.
+ */
+export function playPodiumCelebration() {
+  unlockTimerAudio()
+  throttled('podium-celebration', 2000, () => {
+    playTone({ frequency: 392, duration: 0.06, type: 'square', volume: 0.06, delay: 0 })
+    playTone({ frequency: 494, duration: 0.06, type: 'square', volume: 0.07, delay: 0.06 })
+    playTone({ frequency: 587, duration: 0.06, type: 'triangle', volume: 0.08, delay: 0.12 })
+    playTone({ frequency: 698, duration: 0.06, type: 'triangle', volume: 0.09, delay: 0.18 })
+    playTone({ frequency: 784, duration: 0.07, type: 'triangle', volume: 0.1, delay: 0.24 })
+    playTone({ frequency: 988, duration: 0.08, type: 'triangle', volume: 0.11, delay: 0.3 })
+
+    playTone({ frequency: 523, duration: 0.18, type: 'sine', volume: 0.12, delay: 0.38 })
+    playTone({ frequency: 659, duration: 0.18, type: 'sine', volume: 0.11, delay: 0.38 })
+    playTone({ frequency: 784, duration: 0.18, type: 'triangle', volume: 0.1, delay: 0.38 })
+
+    playTone({ frequency: 659, duration: 0.08, type: 'square', volume: 0.07, delay: 0.56 })
+    playTone({ frequency: 659, duration: 0.22, type: 'sine', volume: 0.13, delay: 0.62 })
+    playTone({ frequency: 784, duration: 0.22, type: 'sine', volume: 0.12, delay: 0.62 })
+    playTone({ frequency: 1047, duration: 0.24, type: 'triangle', volume: 0.14, delay: 0.62 })
+
+    playTone({ frequency: 1319, duration: 0.28, type: 'sine', volume: 0.15, delay: 0.78 })
+    playTone({ frequency: 1047, duration: 0.2, type: 'triangle', volume: 0.08, delay: 0.8 })
+    playTone({ frequency: 1568, duration: 0.12, type: 'sine', volume: 0.09, delay: 0.88 })
+    playTone({ frequency: 2093, duration: 0.1, type: 'sine', volume: 0.07, delay: 0.96 })
+    playTone({ frequency: 1760, duration: 0.14, type: 'triangle', volume: 0.06, delay: 1.02 })
   })
 }
 

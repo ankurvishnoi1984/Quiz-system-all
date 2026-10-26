@@ -3,6 +3,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   Legend,
   Pie,
   PieChart,
@@ -11,9 +12,13 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { BarPercentLabel } from '../components/charts/BarValueLabels'
+import { ChartVisibilityToggle } from '../components/charts/ChartVisibilityToggle'
 import {
   BarChart3,
   Layers,
+  Lock,
+  LockOpen,
   MonitorPlay,
   Play,
   Presentation,
@@ -39,23 +44,39 @@ import Modal from '../components/ui/Modal'
 import { HostAlertModal } from '../components/live/HostAlertModal'
 import { HostSessionInactivityModal } from '../components/session/HostSessionInactivityModal'
 import { HostQuestionActionButton } from '../components/live/HostQuestionActionButton'
-import { canHostActivateAllQuestions, canHostCloseAllQuestions, sessionRequiresActivateAllQuestions } from '../utils/hostQuestionControls'
-import { isSessionQuizTotalTimeEnabled, isSessionRandomQuestionOrderEnabled } from '../utils/sessionFlags'
+import {
+  AdvancedSlotActivationPanel,
+  buildAdvancedSlotStats,
+} from '../components/live/AdvancedSlotActivationPanel'
+import { canHostActivateAllQuestions, canHostCloseAllQuestions, sessionRequiresActivateAllQuestions, sessionUsesAdvancedSlotActivation } from '../utils/hostQuestionControls'
+import {
+  isAdvancedBuilderSession,
+  isQuizTotalWithQuestionTimersEnabled,
+  isSessionQuizTotalTimeEnabled,
+  isSessionRandomQuestionOrderEnabled,
+  sessionUsesMarkedEligiblePool,
+} from '../utils/sessionFlags'
+import { partitionQuestionsByPoolEligibility } from '../utils/poolEligibleUi'
 import { HostNoSessionsEmpty } from '../components/layout/HostNoSessionsEmpty'
 import { useHostNavSessions, getLivePresenterSessionId } from '../hooks/useHostNavSessions'
 import { useShell } from '../context/ShellContext'
 import { HostQuestionControls } from '../components/live/HostQuestionControls'
 import { HostQuestionTimer } from '../components/live/HostQuestionTimer'
+import { HeaderQuizTimer } from './participant-session/components/HeaderQuizTimer'
+import { getQuizTotalRemainingSeconds } from '../utils/questionTimer'
 import { LiveChartViewToggle } from '../components/live/LiveChartViewToggle'
 import { RankingLiveChartPanel } from '../components/live/RankingLiveChartPanel'
 import { MatchLiveChartPanel } from '../components/live/MatchLiveChartPanel'
+import { PoolEligibleBadge } from '../components/live/PoolEligibleBadge'
 import { useHostQuestionMutations } from '../hooks/useHostQuestionMutations'
 // Q&A feature disabled — re-enable when bringing Q&A back
 // import { LiveQaPanel } from '../components/leaderboard/LiveQaPanel'
+import { LeaderboardLimitSelect } from '../components/leaderboard/LeaderboardLimitSelect'
 import { QuestionLeaderboardModal } from '../components/leaderboard/QuestionLeaderboardModal'
 import { QuestionLeaderboardPanel } from '../components/leaderboard/QuestionLeaderboardPanel'
 import { QuestionMedia } from '../components/participant-session/QuestionMedia'
 import { SessionLeaderboardModal } from '../components/leaderboard/SessionLeaderboardModal'
+import { normalizeLeaderboardTopN, SESSION_LEADERBOARD_TOP_N } from '../utils/leaderboard'
 import {
   buildQuestionLeaderboardForQuestion,
 } from '../utils/leaderboard'
@@ -70,6 +91,9 @@ import {
   getSessionResponsesApi,
   // listQaQuestionsApi,
   listSessionQuestionsApi,
+  listSessionQuestionAssignmentsApi,
+  activateAdvancedAssignmentSlotApi,
+  deactivateAdvancedAssignmentSlotApi,
   // qaModerateApi, // Q&A feature disabled
   setQuestionLiveStateApi,
   transitionSessionApi,
@@ -108,6 +132,7 @@ import {
   buildPreviewModeUrl,
   subscribePreviewFollow,
 } from '../utils/previewFollow'
+import { buildQuickViewModeUrl } from '../utils/quickView'
 
 function LivePage() {
   const [searchParams] = useSearchParams()
@@ -135,9 +160,10 @@ function LivePage() {
   const [socketStatus, setSocketStatus] = useState('disconnected')
   const [leaderboardOpen, setLeaderboardOpen] = useState(false)
   const [questionLeaderboardOpen, setQuestionLeaderboardOpen] = useState(false)
-  const [leaderboardLimit, setLeaderboardLimit] = useState(10)
+  const [leaderboardLimit, setLeaderboardLimit] = useState(SESSION_LEADERBOARD_TOP_N)
   const [shareOpen, setShareOpen] = useState(false)
   const [chartView, setChartView] = useState('bar')
+  const [liveGraphVisible, setLiveGraphVisible] = useState(false)
   const [hostAlert, setHostAlert] = useState(null)
   const [endSessionConfirmOpen, setEndSessionConfirmOpen] = useState(false)
   const [inactivityOpen, setInactivityOpen] = useState(false)
@@ -240,11 +266,124 @@ function LivePage() {
     return () => setTourPaused(false)
   }, [endSessionConfirmOpen, hostAlert, inactivityOpen, setTourPaused])
 
+  useEffect(() => {
+    if (sessionQuery.data?.leaderboard_top_n == null) return
+    setLeaderboardLimit(normalizeLeaderboardTopN(sessionQuery.data.leaderboard_top_n))
+  }, [sessionQuery.data?.leaderboard_top_n])
+
+  const persistLeaderboardTopN = useCallback(
+    async (nextLimit) => {
+      const normalized = normalizeLeaderboardTopN(nextLimit)
+      setLeaderboardLimit(normalized)
+      if (!accessToken || !sessionId) return
+      try {
+        const updated = await updateSessionApi(accessToken, sessionId, {
+          leaderboard_top_n: normalized,
+        })
+        if (updated) {
+          queryClient.setQueryData(['live-session', sessionId], (old) =>
+            old
+              ? {
+                  ...old,
+                  ...updated,
+                  leaderboard_top_n: normalizeLeaderboardTopN(
+                    updated.leaderboard_top_n ?? normalized,
+                  ),
+                }
+              : updated,
+          )
+        }
+      } catch (error) {
+        setErrorMessage(error.message || 'Unable to update rankings Top N')
+      }
+    },
+    [accessToken, sessionId, queryClient],
+  )
+
   const mappedQuestions = useMemo(
     () => mapLiveQuestions(questionsQuery.data),
     [questionsQuery.data],
   )
 
+  const advancedSlotActivation = sessionUsesAdvancedSlotActivation(sessionQuery.data)
+  const questionsPerParticipantK = Number(sessionQuery.data?.questions_per_participant)
+  const advancedKLabel =
+    Number.isFinite(questionsPerParticipantK) && questionsPerParticipantK > 0
+      ? questionsPerParticipantK
+      : null
+
+  const advancedAssignmentsQuery = useQuery({
+    queryKey: ['live-question-assignments', sessionId],
+    queryFn: () => listSessionQuestionAssignmentsApi(accessToken, sessionId),
+    enabled: Boolean(accessToken && sessionId && advancedSlotActivation),
+    refetchInterval: sessionQuery.data?.status === 'live' ? 8000 : false,
+  })
+
+  const activateAssignmentSlotMutation = useMutation({
+    mutationFn: (slot) => activateAdvancedAssignmentSlotApi(accessToken, sessionId, slot),
+    onSuccess: (result) => {
+      // Activating a slot clears Current/Overall rankings (backend + host UI).
+      const patch = {
+        advanced_active_slot:
+          result?.advanced_active_slot ?? result?.slot ?? undefined,
+        leaderboard_enabled: false,
+        current_rankings_enabled: false,
+      }
+      queryClient.setQueryData(['live-session', sessionId], (old) =>
+        old ? { ...old, ...patch } : old,
+      )
+      queryClient.setQueryData(['live-session', sessionId, 'host'], (old) =>
+        old ? { ...old, ...patch } : old,
+      )
+      queryClient.invalidateQueries({ queryKey: ['live-questions', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['live-session', sessionId, 'host'] })
+      queryClient.invalidateQueries({ queryKey: ['live-dept-sessions'] })
+    },
+    onError: (error) =>
+      setErrorMessage(error.message || 'Unable to activate this question slot.'),
+  })
+
+  const deactivateAssignmentSlotMutation = useMutation({
+    mutationFn: async () => {
+      await deactivateAdvancedAssignmentSlotApi(accessToken, sessionId)
+      // Clear participant rankings screen so they return to "Waiting for a question".
+      if (sessionQuery.data?.leaderboard_enabled || sessionQuery.data?.current_rankings_enabled) {
+        await updateSessionApi(accessToken, sessionId, {
+          leaderboard_enabled: false,
+          current_rankings_enabled: false,
+        })
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['live-questions', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['live-session', sessionId, 'host'] })
+      queryClient.invalidateQueries({ queryKey: ['live-dept-sessions'] })
+    },
+    onError: (error) =>
+      setErrorMessage(error.message || 'Unable to inactivate this question.'),
+  })
+
+  const slotControlPending =
+    activateAssignmentSlotMutation.isPending || deactivateAssignmentSlotMutation.isPending
+
+  const advancedSlotStats = useMemo(
+    () =>
+      advancedSlotActivation && advancedKLabel
+        ? buildAdvancedSlotStats({
+            kLabel: advancedKLabel,
+            assignments: advancedAssignmentsQuery.data?.assignments,
+            responses: responsesQuery.data || [],
+          })
+        : [],
+    [
+      advancedSlotActivation,
+      advancedKLabel,
+      advancedAssignmentsQuery.data?.assignments,
+      responsesQuery.data,
+    ],
+  )
 
   const activeQuestion = mappedQuestions[questionIndex] || null
 
@@ -269,7 +408,7 @@ function LivePage() {
 
   const pushCurrentPreviewFollow = useCallback(() => {
     if (!sessionId) return
-    if (sessionQuery.data?.leaderboard_enabled) {
+    if (sessionQuery.data?.leaderboard_enabled || sessionQuery.data?.current_rankings_enabled) {
       pushPreviewFollow({ screen: 'leaderboard' })
       return
     }
@@ -289,6 +428,7 @@ function LivePage() {
   }, [
     sessionId,
     sessionQuery.data?.leaderboard_enabled,
+    sessionQuery.data?.current_rankings_enabled,
     sessionQuery.data?.survey_results_enabled,
     livePreviewTarget,
     pushPreviewFollow,
@@ -318,6 +458,12 @@ function LivePage() {
     window.setTimeout(() => pushCurrentPreviewFollow(), 1400)
   }
 
+  const openQuickViewMode = () => {
+    if (!sessionId) return
+    syncAuthForNewBrowserTab()
+    window.open(buildQuickViewModeUrl(sessionId), '_blank', 'noopener,noreferrer')
+  }
+
   const questionResultsQuery = useQuery({
     queryKey: ['live-question-results', activeQuestion?.id],
     queryFn: () => getQuestionResultsApi(accessToken, activeQuestion.id),
@@ -332,6 +478,7 @@ function LivePage() {
 
   useEffect(() => {
     setChartView('bar')
+    setLiveGraphVisible(false)
   }, [activeQuestion?.id])
 
   useEffect(() => {
@@ -376,9 +523,18 @@ function LivePage() {
     const offSession = client.on('session_updated', (data) => {
       queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
       queryClient.invalidateQueries({ queryKey: ['live-dept-sessions'] })
-      if (data?.status) {
+      if (data?.status || data?.advanced_active_slot != null) {
+        const patch = {
+          ...(data?.status ? { status: data.status } : {}),
+          ...(data?.advanced_active_slot != null
+            ? { advanced_active_slot: data.advanced_active_slot }
+            : {}),
+        }
         queryClient.setQueryData(['live-session', sessionId], (old) =>
-          old ? { ...old, status: data.status } : old,
+          old ? { ...old, ...patch } : old,
+        )
+        queryClient.setQueryData(['live-session', sessionId, 'host'], (old) =>
+          old ? { ...old, ...patch } : old,
         )
       }
       if (
@@ -438,7 +594,7 @@ function LivePage() {
       if (updated) {
         const ended = variables?.action === 'end'
         const endPatch = ended
-          ? { leaderboard_enabled: false, survey_results_enabled: false }
+          ? { leaderboard_enabled: false, current_rankings_enabled: false, survey_results_enabled: false }
           : {}
         const mergeSession = (old) =>
           old
@@ -472,16 +628,19 @@ function LivePage() {
   const clearSessionEndingScreens = useCallback(async () => {
     const current = queryClient.getQueryData(['live-session', sessionId]) || sessionQuery.data
     const clearLb = Boolean(current?.leaderboard_enabled)
+    const clearCurrent = Boolean(current?.current_rankings_enabled)
     const clearSurvey = Boolean(current?.survey_results_enabled)
-    if (!clearLb && !clearSurvey) return null
+    if (!clearLb && !clearCurrent && !clearSurvey) return null
 
     const updated = await updateSessionApi(accessToken, sessionId, {
       ...(clearLb ? { leaderboard_enabled: false } : {}),
+      ...(clearCurrent ? { current_rankings_enabled: false } : {}),
       ...(clearSurvey ? { survey_results_enabled: false } : {}),
     })
     if (updated) {
       const patch = {
         leaderboard_enabled: updated.leaderboard_enabled,
+        current_rankings_enabled: updated.current_rankings_enabled,
         survey_results_enabled: updated.survey_results_enabled,
       }
       queryClient.setQueryData(['live-session', sessionId], (old) =>
@@ -506,18 +665,41 @@ function LivePage() {
   }, [accessToken, mappedQuestions, queryClient, sessionId])
 
   const sessionLeaderboardMutation = useMutation({
-    mutationFn: async (enabled) => {
-      if (enabled) await deactivateAllLiveQuestions()
-      return updateSessionApi(accessToken, sessionId, { leaderboard_enabled: enabled })
+    mutationFn: async ({ enabled, mode = 'overall' }) => {
+      if (enabled) {
+        if (advancedSlotActivation) {
+          await deactivateAdvancedAssignmentSlotApi(accessToken, sessionId)
+        } else {
+          await deactivateAllLiveQuestions()
+        }
+      }
+      if (mode === 'current') {
+        return updateSessionApi(accessToken, sessionId, {
+          current_rankings_enabled: enabled,
+          ...(enabled ? { leaderboard_enabled: false } : {}),
+        })
+      }
+      return updateSessionApi(accessToken, sessionId, {
+        leaderboard_enabled: enabled,
+        ...(enabled ? { current_rankings_enabled: false } : {}),
+      })
     },
     onSuccess: (updated) => {
       if (updated) {
+        const patch = {
+          leaderboard_enabled: updated.leaderboard_enabled,
+          current_rankings_enabled: updated.current_rankings_enabled,
+          ...(advancedSlotActivation &&
+          (updated.leaderboard_enabled || updated.current_rankings_enabled)
+            ? { advanced_active_slot: null }
+            : {}),
+        }
         queryClient.setQueryData(['live-session', sessionId], (old) =>
           old
             ? {
                 ...old,
                 ...updated,
-                leaderboard_enabled: updated.leaderboard_enabled,
+                ...patch,
               }
             : updated,
         )
@@ -526,14 +708,16 @@ function LivePage() {
             ? {
                 ...old,
                 ...updated,
-                leaderboard_enabled: updated.leaderboard_enabled,
+                ...patch,
               }
             : old,
         )
       }
       queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['live-questions', sessionId] })
       queryClient.invalidateQueries({ queryKey: ['live-dept-sessions'] })
-      if (updated?.leaderboard_enabled) {
+      if (updated?.leaderboard_enabled || updated?.current_rankings_enabled) {
+        setLeaderboardOpen(true)
         pushPreviewFollow({ screen: 'leaderboard' })
       } else if (sessionQuery.data?.survey_results_enabled) {
         pushPreviewFollow({ screen: 'surveyEnding' })
@@ -613,7 +797,10 @@ function LivePage() {
       queryClient.invalidateQueries({ queryKey: ['live-dept-sessions'] })
       if (updated?.survey_results_enabled) {
         pushPreviewFollow({ screen: 'surveyEnding' })
-      } else if (sessionQuery.data?.leaderboard_enabled) {
+      } else if (
+        sessionQuery.data?.leaderboard_enabled ||
+        sessionQuery.data?.current_rankings_enabled
+      ) {
         pushPreviewFollow({ screen: 'leaderboard' })
       } else if (livePreviewTarget?.question?.id) {
         pushPreviewFollow({
@@ -627,6 +814,26 @@ function LivePage() {
     },
     onError: (error) =>
       setErrorMessage(error.message || 'Unable to update survey results setting'),
+  })
+
+  const sessionJoinLockMutation = useMutation({
+    mutationFn: (locked) =>
+      updateSessionApi(accessToken, sessionId, { join_locked: locked }),
+    onSuccess: (updated) => {
+      if (updated) {
+        const patch = { join_locked: Boolean(updated.join_locked) }
+        queryClient.setQueryData(['live-session', sessionId], (old) =>
+          old ? { ...old, ...updated, ...patch } : updated,
+        )
+        queryClient.setQueryData(['live-session', sessionId, 'host'], (old) =>
+          old ? { ...old, ...updated, ...patch } : old,
+        )
+      }
+      queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['live-dept-sessions'] })
+    },
+    onError: (error) =>
+      setErrorMessage(error.message || 'Unable to update room lock'),
   })
 
 
@@ -644,16 +851,19 @@ function LivePage() {
     activateAllQuestions,
   } = useHostQuestionMutations(accessToken, sessionId, {
     clearEndingScreensOnActivate: clearSessionEndingScreens,
-    onQuestionLiveSuccess: (variables) => {
+    onQuestionLiveSuccess: (variables, updatedQuestion) => {
       if (!variables?.isLive || variables.questionId == null) {
         // Deactivate → pushCurrentPreviewFollow once questions cache updates.
         return
       }
       const activatedId = Number(variables.questionId)
+      const activatedAt =
+        updatedQuestion?.live_activated_at ??
+        updatedQuestion?.liveActivatedAt ??
+        null
       // Optimistic cache update so Preview follow (and Live UI) do not briefly keep the old live Q.
       queryClient.setQueryData(['live-questions', sessionId, 'host'], (old) => {
         if (!Array.isArray(old)) return old
-        const activatedAt = new Date().toISOString()
         return old.map((q) => {
           const id = Number(q.question_id)
           if (id === activatedId) {
@@ -671,7 +881,6 @@ function LivePage() {
       })
       queryClient.setQueryData(['live-questions', sessionId], (old) => {
         if (!Array.isArray(old)) return old
-        const activatedAt = new Date().toISOString()
         return old.map((q) => {
           const id = Number(q.question_id)
           if (id === activatedId) {
@@ -903,11 +1112,46 @@ function LivePage() {
     Boolean(session) && session.status !== 'completed' && session.status !== 'archived'
   const singleActiveQuestionMode = session?.participant_navigation_enabled === false
   const sessionQuizTotalTimeEnabled = isSessionQuizTotalTimeEnabled(session)
+  const quizTotalWithQuestionTimers = isQuizTotalWithQuestionTimersEnabled(session)
+  const sessionQuizTotalTimeSeconds = sessionQuizTotalTimeEnabled
+    ? Math.max(0, Number(session?.quiz_total_time_minutes) || 0) * 60
+    : 0
+  const [quizCountdownTick, setQuizCountdownTick] = useState(0)
+  useEffect(() => {
+    if (!sessionQuizTotalTimeEnabled || !session?.started_at) return undefined
+    const id = setInterval(() => setQuizCountdownTick((t) => t + 1), 1000)
+    return () => clearInterval(id)
+  }, [sessionQuizTotalTimeEnabled, session?.started_at, session?.quiz_total_time_minutes])
+  const liveQuizTimer = useMemo(() => {
+    if (!sessionQuizTotalTimeEnabled || !session?.started_at) return 0
+    void quizCountdownTick
+    return getQuizTotalRemainingSeconds(session)
+  }, [
+    sessionQuizTotalTimeEnabled,
+    session,
+    session?.started_at,
+    session?.quiz_total_time_minutes,
+    quizCountdownTick,
+  ])
+  const showLiveQuizTimer = Boolean(sessionQuizTotalTimeEnabled && session?.started_at)
   const disableSingleActivation = useMemo(
     () => sessionRequiresActivateAllQuestions(session, mappedQuestions, sessionUsesQuestionSets),
     [session, mappedQuestions],
   )
   const randomQuestionOrderEnabled = isSessionRandomQuestionOrderEnabled(session)
+  const advancedBuilderEnabled = isAdvancedBuilderSession(session)
+  const markedEligiblePoolEnabled = sessionUsesMarkedEligiblePool(session)
+  const poolEligibilitySections = useMemo(() => {
+    if (!markedEligiblePoolEnabled) {
+      return {
+        eligible: mappedQuestions.map((question, index) => ({ question, index })),
+        ineligible: [],
+        eligibleCount: mappedQuestions.length,
+        totalCount: mappedQuestions.length,
+      }
+    }
+    return partitionQuestionsByPoolEligibility(mappedQuestions)
+  }, [mappedQuestions, markedEligiblePoolEnabled])
   const showSessionControls = session?.status === 'live' || session?.status === 'paused'
   const showCloseAllQuestionsButton = useMemo(
     () =>
@@ -920,12 +1164,19 @@ function LivePage() {
 
   const showActivateAllQuestionsButton = useMemo(
     () =>
+      !advancedSlotActivation &&
       canHostActivateAllQuestions(mappedQuestions, {
         canEditLive,
         singleActiveQuestionMode,
         sessionQuizTotalTimeEnabled,
       }),
-    [mappedQuestions, canEditLive, singleActiveQuestionMode, sessionQuizTotalTimeEnabled],
+    [
+      advancedSlotActivation,
+      mappedQuestions,
+      canEditLive,
+      singleActiveQuestionMode,
+      sessionQuizTotalTimeEnabled,
+    ],
   )
 
   if (!sessionId) {
@@ -1077,7 +1328,18 @@ function LivePage() {
               Present
             </button>
           ) : null}
-          {canEditLive ? (
+          {canEditLive && advancedSlotActivation ? (
+            <button
+              type="button"
+              onClick={openQuickViewMode}
+              className="inline-flex h-11 items-center gap-2 rounded-2xl border border-emerald-300/80 bg-emerald-50/90 px-4 text-sm font-semibold text-emerald-950 shadow-sm transition hover:bg-emerald-100"
+              title="Open Quick View for screen share — activate questions and rankings from a clean control surface."
+            >
+              <MonitorPlay className="size-4" />
+              Quick View Mode
+            </button>
+          ) : null}
+          {canEditLive && !advancedSlotActivation ? (
             <button
               type="button"
               onClick={openPreviewMode}
@@ -1113,34 +1375,94 @@ function LivePage() {
           <div className="min-w-0">
             <p className="text-sm font-semibold text-navy-900">Session questions</p>
             <p className="text-xs text-slate-600">
-              {mappedQuestions.length} question{mappedQuestions.length === 1 ? '' : 's'} • select a question to control and view results
+              {markedEligiblePoolEnabled ? (
+                <>
+                  {poolEligibilitySections.eligibleCount} eligible of {mappedQuestions.length}{' '}
+                  question{mappedQuestions.length === 1 ? '' : 's'} • select a question to control and
+                  view results
+                </>
+              ) : (
+                <>
+                  {mappedQuestions.length} question{mappedQuestions.length === 1 ? '' : 's'} • select a
+                  question to control and view results
+                </>
+              )}
             </p>
+            {markedEligiblePoolEnabled ? (
+              <p className="mt-1 text-xs font-medium text-emerald-800">
+                Random pool uses marked eligible questions only. Ineligible questions stay listed for
+                monitoring but are not assigned to participants.
+              </p>
+            ) : null}
             {sessionQuizTotalTimeEnabled ? (
               <p className="mt-1 text-xs font-medium text-violet-800">
                 Quiz total time ({session?.quiz_total_time_minutes} min): all questions become
-                available when you launch the session. Participants use a personal timer.
+                available when you launch the session. Participants use a personal quiz timer
+                {quizTotalWithQuestionTimers
+                  ? ', plus each question’s own timer when a time limit is set (with that question’s audio)'
+                  : ' only (question timers are off for this session)'}
+                .
               </p>
             ) : null}
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {showLiveQuizTimer ? (
+              <HeaderQuizTimer
+                timer={liveQuizTimer}
+                timeLimit={sessionQuizTotalTimeSeconds}
+                className="shrink-0"
+              />
+            ) : null}
+            {canToggleOverallLeaderboard && showSessionControls ? (
+              <LeaderboardLimitSelect
+                id="live-rankings-top-n"
+                value={leaderboardLimit}
+                onChange={persistLeaderboardTopN}
+              />
+            ) : null}
             {canToggleOverallLeaderboard && showSessionControls ? (
               <HostQuestionActionButton
                 disabled={sessionLeaderboardMutation.isPending}
                 icon={Trophy}
                 label={
-                  sessionLeaderboardMutation.isPending
-                    ? 'Updating…'
-                    : 'Overall rankings'
+                  sessionLeaderboardMutation.isPending ? 'Updating…' : 'Current rankings'
+                }
+                title={
+                  session?.current_rankings_enabled
+                    ? 'Hide current rankings from participants'
+                    : 'Show current rankings for questions attempted so far and close the live question'
+                }
+                active={Boolean(session?.current_rankings_enabled)}
+                tone="amber"
+                onClick={() =>
+                  sessionLeaderboardMutation.mutate({
+                    enabled: !session?.current_rankings_enabled,
+                    mode: 'current',
+                  })
+                }
+              />
+            ) : null}
+            {canToggleOverallLeaderboard && showSessionControls ? (
+              <HostQuestionActionButton
+                disabled={sessionLeaderboardMutation.isPending}
+                icon={Trophy}
+                label={
+                  sessionLeaderboardMutation.isPending ? 'Updating…' : 'Overall rankings'
                 }
                 title={
                   session?.leaderboard_enabled
-                    ? 'Hide session-wide rankings from participants'
-                    : 'Show session-wide rankings to participants on its own tab'
+                    ? 'Hide overall rankings from participants'
+                    : advancedSlotActivation
+                      ? 'Show overall rankings and close the live question'
+                      : 'Show session-wide rankings to participants on its own tab'
                 }
                 active={Boolean(session?.leaderboard_enabled)}
                 tone="amber"
                 onClick={() =>
-                  sessionLeaderboardMutation.mutate(!session?.leaderboard_enabled)
+                  sessionLeaderboardMutation.mutate({
+                    enabled: !session?.leaderboard_enabled,
+                    mode: 'overall',
+                  })
                 }
               />
             ) : null}
@@ -1160,6 +1482,29 @@ function LivePage() {
                 tone="sky"
                 onClick={() =>
                   sessionSurveyResultsMutation.mutate(!session?.survey_results_enabled)
+                }
+              />
+            ) : null}
+            {showSessionControls ? (
+              <HostQuestionActionButton
+                disabled={sessionJoinLockMutation.isPending}
+                icon={session?.join_locked ? Lock : LockOpen}
+                label={
+                  sessionJoinLockMutation.isPending
+                    ? 'Updating…'
+                    : session?.join_locked
+                      ? 'Room locked'
+                      : 'Lock room'
+                }
+                title={
+                  session?.join_locked
+                    ? 'Unlock room so new participants can join again'
+                    : 'Lock room — block new participants from joining (existing can still rejoin)'
+                }
+                active={Boolean(session?.join_locked)}
+                tone="slate"
+                onClick={() =>
+                  sessionJoinLockMutation.mutate(!session?.join_locked)
                 }
               />
             ) : null}
@@ -1194,7 +1539,11 @@ function LivePage() {
                 label={
                   activateAllQuestionsMutation.isPending ? 'Activating…' : 'Activate all questions'
                 }
-                title="Make all questions live at once (timed questions share the same start time)"
+                title={
+                  advancedBuilderEnabled
+                    ? 'Activate the full pool at once — each participant only sees their random subset'
+                    : 'Make all questions live at once (timed questions share the same start time)'
+                }
                 tone="emerald"
                 onClick={activateAllQuestions}
               />
@@ -1217,84 +1566,177 @@ function LivePage() {
             Add questions in Builder first.
           </div>
         ) : (
+          <>
+          {advancedSlotActivation ? (
+            <div className="mt-4">
+              <AdvancedSlotActivationPanel
+                compact
+                slotStats={advancedSlotStats}
+                activeAssignmentSlot={Number(session?.advanced_active_slot) || 0}
+                isSessionLive={session?.status === 'live'}
+                onActivateAssignmentSlot={
+                  canEditLive ? (slot) => activateAssignmentSlotMutation.mutate(slot) : undefined
+                }
+                onDeactivateAssignmentSlot={
+                  canEditLive ? () => deactivateAssignmentSlotMutation.mutate() : undefined
+                }
+                slotActivationPending={slotControlPending}
+                assignmentsLoading={advancedAssignmentsQuery.isLoading}
+              />
+            </div>
+          ) : null}
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             <div className="space-y-3">
               <div className="max-h-[min(75vh,900px)] space-y-2 overflow-y-auto pr-1">
-              {mappedQuestions.map((q, idx) => {
-                const isSelected = questionIndex === idx
-                const respCount = responseCountByQuestionId[Number(q.id)] || 0
-                return (
-                  <button
-                    key={q.id}
-                    type="button"
-                    onClick={() => {
-                      setQuestionIndex(idx)
-                      // Preview only follows active (live) questions; otherwise keep/share join slide.
-                      if (q.isLive) {
-                        pushPreviewFollow({
-                          screen: 'question',
-                          questionId: q.id,
-                          questionIndex: idx,
-                        })
-                      } else if (!mappedQuestions.some((item) => item.isLive)) {
-                        pushPreviewFollow({ screen: 'join' })
-                      }
-                    }}
-                    className={`w-full rounded-2xl border p-3 text-left transition ${
-                      isSelected
-                        ? 'border-navy-600 bg-linear-to-r from-navy-900 via-navy-800 to-navy-700 text-white shadow-md shadow-navy-900/20'
-                        : 'border-blue-200/70 bg-white hover:border-blue-300 hover:bg-blue-50/60'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                            isSelected ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-700'
+              {(markedEligiblePoolEnabled
+                ? [
+                    {
+                      key: 'eligible',
+                      label:
+                        poolEligibilitySections.ineligible.length > 0
+                          ? 'In random pool'
+                          : null,
+                      items: poolEligibilitySections.eligible,
+                    },
+                    {
+                      key: 'ineligible',
+                      label: 'Not in random pool',
+                      items: poolEligibilitySections.ineligible,
+                    },
+                  ]
+                : [
+                    {
+                      key: 'all',
+                      label: null,
+                      items: poolEligibilitySections.eligible,
+                    },
+                  ]
+              ).map((section) =>
+                section.items.length === 0 ? null : (
+                  <div key={section.key} className="space-y-2">
+                    {section.label ? (
+                      <p
+                        className={`sticky top-0 z-10 px-1 py-1 text-[11px] font-semibold uppercase tracking-wide backdrop-blur-sm ${
+                          section.key === 'ineligible'
+                            ? 'bg-slate-50/95 text-slate-500'
+                            : 'bg-emerald-50/95 text-emerald-800'
+                        }`}
+                      >
+                        {section.label}
+                        <span className="ml-1 font-medium normal-case tracking-normal text-slate-400">
+                          ({section.items.length})
+                        </span>
+                      </p>
+                    ) : null}
+                    {section.items.map(({ question: q, index: idx }) => {
+                      const isSelected = questionIndex === idx
+                      const respCount = responseCountByQuestionId[Number(q.id)] || 0
+                      const showPoolBadge = markedEligiblePoolEnabled
+                      const ineligible = showPoolBadge && q.poolEligible === false
+                      return (
+                        <button
+                          key={q.id}
+                          type="button"
+                          onClick={() => {
+                            setQuestionIndex(idx)
+                            if (q.isLive) {
+                              pushPreviewFollow({
+                                screen: 'question',
+                                questionId: q.id,
+                                questionIndex: idx,
+                              })
+                            } else if (!mappedQuestions.some((item) => item.isLive)) {
+                              pushPreviewFollow({ screen: 'join' })
+                            }
+                          }}
+                          className={`w-full rounded-2xl border p-3 text-left transition ${
+                            isSelected
+                              ? 'border-navy-600 bg-linear-to-r from-navy-900 via-navy-800 to-navy-700 text-white shadow-md shadow-navy-900/20'
+                              : ineligible
+                                ? 'border-slate-200/80 bg-slate-50/80 opacity-70 hover:border-slate-300 hover:bg-slate-50 hover:opacity-90'
+                                : 'border-blue-200/70 bg-white hover:border-blue-300 hover:bg-blue-50/60'
                           }`}
                         >
-                          Q{idx + 1}
-                        </span>
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                            isSelected ? 'bg-white/15 text-white' : 'bg-blue-50 text-navy-700'
-                          }`}
-                        >
-                          {q.type}
-                        </span>
-                        {q.setName ? (
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                              isSelected ? 'bg-white/15 text-white' : 'bg-indigo-50 text-indigo-800'
-                            }`}
-                          >
-                            {q.setName}
-                          </span>
-                        ) : null}
-                        {q.isLive ? (
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                              isSelected ? 'bg-emerald-400/30 text-emerald-100' : 'bg-emerald-50 text-emerald-700'
-                            }`}
-                          >
-                            Live
-                          </span>
-                        ) : null}
-                      </div>
-                      <span className={`text-xs font-semibold ${isSelected ? 'text-blue-100' : 'text-slate-500'}`}>
-                        {respCount} resp.
-                      </span>
-                    </div>
-                    <p
-                      className={`mt-2 line-clamp-2 text-sm font-semibold ${
-                        isSelected ? 'text-white' : 'text-navy-900'
-                      }`}
-                    >
-                      {q.text || 'Untitled question'}
-                    </p>
-                  </button>
-                )
-              })}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                                  isSelected
+                                    ? 'bg-white/15 text-white'
+                                    : 'bg-slate-100 text-slate-700'
+                                }`}
+                              >
+                                Q{idx + 1}
+                              </span>
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                                  isSelected
+                                    ? 'bg-white/15 text-white'
+                                    : 'bg-blue-50 text-navy-700'
+                                }`}
+                              >
+                                {q.type}
+                              </span>
+                              {q.setName ? (
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                                    isSelected
+                                      ? 'bg-white/15 text-white'
+                                      : 'bg-indigo-50 text-indigo-800'
+                                  }`}
+                                >
+                                  {q.setName}
+                                </span>
+                              ) : null}
+                              {showPoolBadge ? (
+                                <PoolEligibleBadge
+                                  eligible={q.poolEligible !== false}
+                                  selected={isSelected}
+                                />
+                              ) : null}
+                              {q.isLive ? (
+                                <span
+                                  className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                                    isSelected
+                                      ? 'bg-emerald-400/30 text-emerald-100'
+                                      : 'bg-emerald-50 text-emerald-700'
+                                  }`}
+                                >
+                                  Live
+                                </span>
+                              ) : null}
+                            </div>
+                            <span
+                              className={`text-xs font-semibold ${
+                                isSelected ? 'text-blue-100' : 'text-slate-500'
+                              }`}
+                            >
+                              {respCount} resp.
+                            </span>
+                          </div>
+                          {!advancedSlotActivation ? (
+                            <p
+                              className={`mt-2 line-clamp-2 text-sm font-semibold ${
+                                isSelected ? 'text-white' : 'text-navy-900'
+                              }`}
+                            >
+                              {q.text || 'Untitled question'}
+                            </p>
+                          ) : (
+                            <p
+                              className={`mt-2 text-sm font-semibold ${
+                                isSelected ? 'text-blue-100' : 'text-slate-500'
+                              }`}
+                            >
+                              Pool item — text hidden
+                            </p>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                ),
+              )}
               </div>
 
               {activeQuestion?.media?.url ? (
@@ -1314,8 +1756,16 @@ function LivePage() {
               >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">Current question</p>
-              <h3 className="mt-1 text-xl font-bold text-navy-900">{activeQuestion?.text || 'No question selected'}</h3>
+              <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">
+                {advancedSlotActivation ? 'Pool monitoring' : 'Current question'}
+              </p>
+              <h3 className="mt-1 text-xl font-bold text-navy-900">
+                {advancedSlotActivation
+                  ? activeQuestion
+                    ? `Pool item ${questionIndex + 1}`
+                    : 'No pool item selected'
+                  : activeQuestion?.text || 'No question selected'}
+              </h3>
               <p className="text-sm text-slate-600">
                 {activeQuestion ? `${questionIndex + 1} / ${mappedQuestions.length} • ${activeQuestion.type}` : '—'}
               </p>
@@ -1336,7 +1786,13 @@ function LivePage() {
                   other live question.
                 </p>
               ) : null}
-              {canEditLive && randomQuestionOrderEnabled ? (
+              {canEditLive && advancedBuilderEnabled ? (
+                <p className="mb-3 rounded-xl border border-emerald-200/80 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-900">
+                  Advanced pool: use the Question 1, 2, … controls above (or Present mode). Each
+                  participant only sees their assignment for the active step.
+                </p>
+              ) : null}
+              {canEditLive && randomQuestionOrderEnabled && !advancedBuilderEnabled ? (
                 <p className="mb-3 rounded-xl border border-indigo-200/80 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-900">
                   Random question order: use Activate all questions. Each participant sees questions
                   in a different sequence.
@@ -1344,8 +1800,9 @@ function LivePage() {
               ) : null}
               {canEditLive && sessionQuizTotalTimeEnabled ? (
                 <p className="mb-3 rounded-xl border border-violet-200/80 bg-violet-50 px-3 py-2 text-xs font-medium text-violet-900">
-                  Quiz total time: all questions are available to participants. Use reveal,
-                  results, and close controls per question as needed.
+                  {quizTotalWithQuestionTimers
+                    ? 'Quiz total + question timers: all questions are available. Participants run a quiz clock and any per-question timers together. Use reveal, results, and close controls per question as needed (Close all still requires untimed questions).'
+                    : 'Quiz total time: all questions are available to participants. Use reveal, results, and close controls per question as needed.'}
                 </p>
               ) : null}
               <HostQuestionControls
@@ -1463,23 +1920,32 @@ function LivePage() {
                   </p>
                 )}
               </div>
-              {(showOptionBreakdown ||
-                showRatingBreakdown ||
-                showRankingBreakdown ||
-                (showMatchBreakdown && hasMatchPairs)) && (
-                <LiveChartViewToggle
-                  view={chartView}
-                  onChange={setChartView}
-                  modes={
-                    showMatchBreakdown
-                      ? ['table', 'bar']
-                      : showRankingBreakdown
-                        ? ['table', 'bar', 'pie']
-                        : ['bar', 'pie']
-                  }
+              <div className="flex flex-wrap items-center gap-2">
+                <ChartVisibilityToggle
+                  visible={liveGraphVisible}
+                  onToggle={() => setLiveGraphVisible((prev) => !prev)}
+                  size="md"
                 />
-              )}
+                {liveGraphVisible &&
+                  (showOptionBreakdown ||
+                    showRatingBreakdown ||
+                    showRankingBreakdown ||
+                    (showMatchBreakdown && hasMatchPairs)) && (
+                    <LiveChartViewToggle
+                      view={chartView}
+                      onChange={setChartView}
+                      modes={
+                        showMatchBreakdown
+                          ? ['table', 'bar']
+                          : showRankingBreakdown
+                            ? ['table', 'bar', 'pie']
+                            : ['bar', 'pie']
+                      }
+                    />
+                  )}
+              </div>
             </div>
+            {liveGraphVisible ? (
             <div className="mt-3 h-[300px] rounded-2xl border border-blue-200 bg-white p-3">
               {showEmojiReaction ? (
                 <EmojiBarChart rows={emojiBarData.rows} total={emojiBarData.total} size="md" className="h-full" />
@@ -1499,14 +1965,19 @@ function LivePage() {
                   <ResponsiveContainer width="100%" height="100%">
                     {showOptionBreakdown || showRatingBreakdown ? (
                     chartView === 'bar' ? (
-                      <BarChart data={chartBreakdownData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+                      <BarChart data={chartBreakdownData} margin={{ top: 28, right: 12, left: 0, bottom: 4 }}>
                         <CartesianGrid strokeDasharray="4 4" stroke="#e2e8f0" vertical={false} />
                         <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
                         <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
                         <Tooltip
                           cursor={{ fill: 'rgba(79, 70, 229, 0.06)' }}
                           contentStyle={CHART_TOOLTIP_STYLE}
-                          formatter={(value) => [`${value} responses`, 'Count']}
+                          formatter={(value) => {
+                            const pct = optionTotal
+                              ? Math.round((Number(value) / optionTotal) * 100)
+                              : 0
+                            return [`${value} (${pct}%)`, 'Count']
+                          }}
                         />
                         <Bar dataKey="value" radius={[8, 8, 0, 0]} maxBarSize={56}>
                           {chartBreakdownData.map((entry, idx) => (
@@ -1515,6 +1986,16 @@ function LivePage() {
                               fill={getChartColor(entry.name, idx, chartRawType)}
                             />
                           ))}
+                          <LabelList
+                            valueAccessor={(entry) => entry?.payload ?? null}
+                            content={(labelProps) => (
+                              <BarPercentLabel
+                                {...labelProps}
+                                total={optionTotal}
+                                fontSize={11}
+                              />
+                            )}
+                          />
                         </Bar>
                       </BarChart>
                     ) : (
@@ -1569,7 +2050,14 @@ function LivePage() {
                   </ResponsiveContainer>
                 )}
             </div>
-            {showWordCloud && !wordCloudWords.length && (
+            ) : (
+              <div className="mt-3 flex h-[120px] items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/80">
+                <p className="text-sm font-semibold text-slate-500">
+                  Graph hidden — use Show graph to display results.
+                </p>
+              </div>
+            )}
+            {liveGraphVisible && showWordCloud && !wordCloudWords.length && (
               <p className="mt-2 text-center text-xs text-slate-500">Waiting for participants to submit words…</p>
             )}
             {(showOptionBreakdown || showRatingBreakdown) && !optionTotal && (
@@ -1623,6 +2111,7 @@ function LivePage() {
           />
             </div>
           </div>
+          </>
         )}
       </div>
 
@@ -1684,7 +2173,7 @@ function LivePage() {
         onClose={() => setLeaderboardOpen(false)}
         entries={leaderboard}
         limit={leaderboardLimit}
-        onLimitChange={setLeaderboardLimit}
+        onLimitChange={persistLeaderboardTopN}
       />
 
       <QuestionLeaderboardModal
@@ -1695,7 +2184,7 @@ function LivePage() {
         entries={activeQuestionLeaderboard}
         isQuizQuestion={Boolean(activeQuestion?.isQuizMode)}
         limit={leaderboardLimit}
-        onLimitChange={setLeaderboardLimit}
+        onLimitChange={persistLeaderboardTopN}
       />
 
       <HostSessionInactivityModal

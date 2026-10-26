@@ -5,18 +5,21 @@ import { resolveQuestionMediaUrl } from '../../utils/questionMedia'
  * Portal + optional session logo for participant and present surfaces.
  * Custom session logo is shown whenever `sessionLogoUrl` is set.
  * @param {'hero' | 'header' | 'present'} variant
+ * @param {boolean} [showAppLogo=true] When false, hide High Voltage /log5.png (participant toggle).
  */
 export function BrandLogoPair({
   sessionLogoUrl,
   sessionTitle = 'Session',
   variant = 'hero',
   className = '',
+  showAppLogo = true,
 }) {
   const customSrc = resolveQuestionMediaUrl(sessionLogoUrl)
   const showCustom = Boolean(customSrc)
+  const showPortal = showAppLogo !== false
 
   if (variant === 'present') {
-    // Present Mode: custom logo when available; otherwise portal mark
+    // Present Mode: custom logo when available; otherwise portal mark (ignore showAppLogo — host present)
     if (showCustom) {
       return (
         <div className={`flex min-w-0 items-center gap-3 ${className}`}>
@@ -40,20 +43,25 @@ export function BrandLogoPair({
   }
 
   if (variant === 'header') {
+    if (!showPortal && !showCustom) return null
     return (
       <div className={`flex min-w-0 items-center gap-2.5 ${className}`}>
-        <img
-          src={APP_LOGO_SRC}
-          alt={APP_LOGO_ALT}
-          className="h-7 w-auto max-w-[5.5rem] object-contain object-left"
-        />
+        {showPortal ? (
+          <img
+            src={APP_LOGO_SRC}
+            alt={APP_LOGO_ALT}
+            className="h-9 w-auto max-w-[7rem] object-contain object-left sm:h-10 sm:max-w-[8rem]"
+          />
+        ) : null}
         {showCustom ? (
           <>
-            <span className="h-6 w-px shrink-0 bg-blue-200/80" aria-hidden />
+            {showPortal ? (
+              <span className="h-8 w-px shrink-0 bg-blue-200/80 sm:h-10" aria-hidden />
+            ) : null}
             <img
               src={customSrc}
               alt={`${sessionTitle} logo`}
-              className="h-8 w-auto max-w-[6.5rem] object-contain object-left"
+              className="h-12 w-auto max-w-[14rem] object-contain object-left sm:h-14 sm:max-w-[16rem]"
             />
           </>
         ) : null}
@@ -61,13 +69,27 @@ export function BrandLogoPair({
     )
   }
 
-  // hero — join / waiting: portal always; custom beside it when set
+  // hero — join / waiting
+  if (!showPortal && !showCustom) return null
+
   if (!showCustom) {
     return (
       <div className={`mx-auto mb-4 flex justify-center ${className}`}>
         <img
           src={APP_LOGO_SRC}
           alt={APP_LOGO_ALT}
+          className="h-14 w-auto max-w-[11rem] object-contain"
+        />
+      </div>
+    )
+  }
+
+  if (!showPortal) {
+    return (
+      <div className={`mx-auto mb-4 flex justify-center ${className}`}>
+        <img
+          src={customSrc}
+          alt={`${sessionTitle} logo`}
           className="h-14 w-auto max-w-[11rem] object-contain"
         />
       </div>
@@ -85,7 +107,6 @@ export function BrandLogoPair({
               className="h-10 w-auto max-w-full object-contain"
             />
           </div>
-         
         </div>
 
         <span className="hidden h-10 w-px shrink-0 bg-blue-200/80 sm:block" aria-hidden />
@@ -98,7 +119,6 @@ export function BrandLogoPair({
               className="h-10 w-auto max-w-full object-contain"
             />
           </div>
-        
         </div>
       </div>
     </div>

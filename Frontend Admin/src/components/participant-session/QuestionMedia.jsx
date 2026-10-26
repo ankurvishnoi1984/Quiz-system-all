@@ -35,7 +35,7 @@ export function QuestionMedia({ media, className = '', maxHeightClass = 'max-h-8
     <img
       src={src}
       alt="Question media"
-      className={`${baseClassName} object-contain`}
+      className={`${maxHeightClass} mx-auto block w-auto max-w-full rounded-2xl border border-blue-100 object-contain ${className}`.trim()}
     />
   )
 }

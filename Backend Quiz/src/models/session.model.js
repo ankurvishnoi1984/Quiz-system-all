@@ -17,6 +17,15 @@ const Session = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false
     },
+    session_admin_user_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    session_admin_password_is_default: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true
+    },
     title: {
       type: DataTypes.STRING(255),
       allowNull: false
@@ -66,6 +75,31 @@ const Session = sequelize.define(
       allowNull: false,
       defaultValue: true
     },
+    join_allowlist_enabled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+    join_allowlist: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: null
+    },
+    customer_match_enabled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+    customer_match_wc_code: {
+      type: DataTypes.STRING(32),
+      allowNull: true,
+      defaultValue: null
+    },
+    customer_match_zones: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: null
+    },
     password_hash: {
       type: DataTypes.TEXT,
       allowNull: true
@@ -73,7 +107,7 @@ const Session = sequelize.define(
     max_participants: {
       type: DataTypes.INTEGER,
       allowNull: true,
-      defaultValue: 500
+      defaultValue: 2000
     },
     show_results_to_participants: {
       type: DataTypes.BOOLEAN,
@@ -85,10 +119,25 @@ const Session = sequelize.define(
       allowNull: true,
       defaultValue: false
     },
+    join_locked: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
     leaderboard_enabled: {
       type: DataTypes.BOOLEAN,
       allowNull: true,
       defaultValue: false
+    },
+    current_rankings_enabled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+    leaderboard_top_n: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 10
     },
     survey_results_enabled: {
       type: DataTypes.BOOLEAN,
@@ -99,6 +148,16 @@ const Session = sequelize.define(
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false
+    },
+    show_session_title: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true
+    },
+    show_app_logo: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true
     },
     show_question_leaderboard: {
       type: DataTypes.BOOLEAN,
@@ -115,10 +174,55 @@ const Session = sequelize.define(
       allowNull: true,
       defaultValue: null
     },
+    quiz_total_question_timers_enabled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+    quiz_total_time_synced: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
     random_question_order_enabled: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false
+    },
+    builder_mode: {
+      type: DataTypes.ENUM("normal", "advanced"),
+      allowNull: false,
+      defaultValue: "normal"
+    },
+    questions_per_participant: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: null
+    },
+    advanced_selection_mode: {
+      type: DataTypes.ENUM("random_all", "random_from_selected"),
+      allowNull: false,
+      defaultValue: "random_all"
+    },
+    response_time_score_bands: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: null
+    },
+    advanced_active_slot: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: null
+    },
+    participant_theme: {
+      type: DataTypes.STRING(32),
+      allowNull: false,
+      defaultValue: "default"
+    },
+    participant_theme_custom: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: null
     },
     qr_code_url: {
       type: DataTypes.TEXT,
@@ -127,6 +231,23 @@ const Session = sequelize.define(
     logo_url: {
       type: DataTypes.TEXT,
       allowNull: true
+    },
+    waiting_screen_image_url: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    waiting_screen_media_type: {
+      type: DataTypes.STRING(32),
+      allowNull: true
+    },
+    thanks_screen_image_url: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    present_mode_settings: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: null
     },
     last_activity_at: {
       type: DataTypes.DATE,

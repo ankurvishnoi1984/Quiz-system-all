@@ -37,7 +37,7 @@ export function HostQuestionControls({
   onCloseQuestion,
   singleActiveQuestionMode = false,
   sessionQuizTotalTimeEnabled = false,
-  /** Sessions using question sets: questions go live together via "Activate all questions". */
+  /** Sessions using question sets / Advanced pool: questions go live together via "Activate all questions". */
   disableSingleActivation = false,
 }) {
   if (!question) return null

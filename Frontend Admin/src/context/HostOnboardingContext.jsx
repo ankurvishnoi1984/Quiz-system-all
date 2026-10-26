@@ -51,7 +51,8 @@ export function HostOnboardingProvider({ children }) {
   const isBootstrapping = useAuthStore((state) => state.isBootstrapping)
   const setHintsCompleted = useAuthStore((state) => state.setHintsCompleted)
   const userId = user?.user_id || user?.email
-  const questionBankOnly = user?.role === 'author' || user?.role === 'auditor'
+  const questionBankOnly =
+    user?.role === 'author' || user?.role === 'auditor' || user?.role === 'session_admin'
   const hintsCompleted = isUserHintsCompleted(user)
   const navigate = useNavigate()
   const location = useLocation()

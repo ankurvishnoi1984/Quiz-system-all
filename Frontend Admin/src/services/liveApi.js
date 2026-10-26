@@ -53,6 +53,15 @@ export async function listSessionParticipantsApi(accessToken, sessionId) {
   return data?.participants || []
 }
 
+export async function listSessionQuestionAssignmentsApi(accessToken, sessionId) {
+  const data = await authRequest(`/sessions/${sessionId}/question-assignments`, accessToken)
+  return {
+    builder_mode: data?.builder_mode || 'normal',
+    questions_per_participant: data?.questions_per_participant ?? null,
+    assignments: data?.assignments || [],
+  }
+}
+
 export async function listQaQuestionsApi(accessToken, sessionId) {
   const data = await authRequest(`/qa/${sessionId}/questions`, accessToken)
   return data?.questions || []
@@ -109,6 +118,24 @@ export async function activateAllQuestionsApi(accessToken, sessionId) {
   return data
 }
 
+export async function activateAdvancedAssignmentSlotApi(accessToken, sessionId, slot) {
+  const data = await authRequest(`/sessions/${sessionId}/activate-assignment-slot`, accessToken, {
+    method: 'POST',
+    body: JSON.stringify({ slot: Number(slot) }),
+  })
+  return data
+}
+
+/** Turn off the active Advanced slot (participants return to waiting). */
+export async function deactivateAdvancedAssignmentSlotApi(accessToken, sessionId) {
+  // Same route as activate — body `{ deactivate: true }` — so it works as soon as
+  // the activate-assignment-slot handler is updated (no separate route required).
+  return authRequest(`/sessions/${sessionId}/activate-assignment-slot`, accessToken, {
+    method: 'POST',
+    body: JSON.stringify({ deactivate: true, slot: null }),
+  })
+}
+
 export async function qaModerateApi(accessToken, qaId, action, body = null) {
   const data = await authRequest(`/qa/${qaId}/${action}`, accessToken, {
     method: 'PUT',
@@ -117,12 +144,17 @@ export async function qaModerateApi(accessToken, qaId, action, body = null) {
   return data?.qa_question || null
 }
 
-export async function setPresentSlideApi(accessToken, sessionId, { slideIndex, slideTotal }) {
+export async function setPresentSlideApi(
+  accessToken,
+  sessionId,
+  { slideIndex, slideTotal, slideType },
+) {
   return authRequest(`/sessions/${sessionId}/present-slide`, accessToken, {
     method: 'PUT',
     body: JSON.stringify({
       slide_index: slideIndex,
       slide_total: slideTotal,
+      ...(slideType != null ? { slide_type: slideType } : {}),
     }),
   })
 }

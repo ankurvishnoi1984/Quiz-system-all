@@ -8,12 +8,79 @@ const { isIpBlocked } = require("./blocked-ip.service");
 
 const ADMIN_CLOSE_CODE = 4008;
 const ADMIN_CLOSE_REASON = "Closed by administrator";
+/** Same code as admin close so clients skip auto-reconnect. */
+const SESSION_TERMINATED_CODE = 4008;
 const IP_BLOCKED_CODE = 4009;
 const IP_BLOCKED_REASON = "IP address blocked";
+
+const TERMINAL_SESSION_STATUSES = new Set(["completed", "archived"]);
+const SESSION_STATUS_CACHE_TTL_MS = 5000;
+/** @type {Map<string, { status: string|null, expiresAt: number }>} */
+const sessionStatusCache = new Map();
 
 const activeConnections = new Map();
 
 const WS_LOG = process.env.WS_DEBUG === "true" || process.env.NODE_ENV !== "production";
+
+function normalizeSessionCodeKey(sessionCode) {
+  return String(sessionCode || "")
+    .trim()
+    .toUpperCase();
+}
+
+function invalidateSessionStatusCache(sessionCode) {
+  const code = normalizeSessionCodeKey(sessionCode);
+  if (code) sessionStatusCache.delete(code);
+}
+
+function setSessionStatusCache(sessionCode, status) {
+  const code = normalizeSessionCodeKey(sessionCode);
+  if (!code) return;
+  sessionStatusCache.set(code, {
+    status: status == null ? null : String(status),
+    expiresAt: Date.now() + SESSION_STATUS_CACHE_TTL_MS
+  });
+}
+
+/**
+ * Resolve session status for WS handshake (short TTL cache).
+ * @returns {Promise<{ code: string, status: string|null, missing: boolean }>}
+ */
+async function resolveSessionStatusForWs(sessionCode) {
+  const code = normalizeSessionCodeKey(sessionCode);
+  if (!code) return { code: "", status: null, missing: true };
+
+  const cached = sessionStatusCache.get(code);
+  if (cached && cached.expiresAt > Date.now()) {
+    return { code, status: cached.status, missing: cached.status == null };
+  }
+
+  const { Session } = require("../models");
+  let row;
+  try {
+    row = await Session.findOne({
+      where: { session_code: code },
+      attributes: ["session_code", "status"]
+    });
+  } catch (error) {
+    // Fail open: do not poison the cache as "missing" on a DB blip.
+    wsLog("error", "handshake_session_lookup_failed", {
+      session: code,
+      message: error.message
+    });
+    return { code, status: "live", missing: false, lookupError: true };
+  }
+  const status = row?.status ?? null;
+  // Only cache null when findOne actually returned no row.
+  setSessionStatusCache(code, status);
+  return { code, status, missing: !row };
+}
+
+function sessionTerminationMessage(reason) {
+  if (reason === "session_archived") return "This session has been archived.";
+  if (reason === "session_not_found") return "This session was not found.";
+  return "This session has ended.";
+}
 
 function wsLog(level, message, meta = {}) {
   if (!WS_LOG && level === "debug") return;
@@ -78,6 +145,91 @@ function setupWebSocketServer(server) {
         return;
       }
 
+      sessionCode = normalizeSessionCodeKey(sessionCode);
+
+      // Gate: reject missing / completed / archived before joining a room.
+      resolveSessionStatusForWs(sessionCode)
+        .then((gate) => {
+          if (
+            gate.missing ||
+            TERMINAL_SESSION_STATUSES.has(String(gate.status || "").toLowerCase())
+          ) {
+            const reason = gate.missing
+              ? "session_not_found"
+              : gate.status === "archived"
+                ? "session_archived"
+                : "session_ended";
+            const message = sessionTerminationMessage(reason);
+            wsLog("warn", "handshake_rejected", {
+              remote,
+              session: sessionCode,
+              role,
+              reason,
+              status: gate.status,
+              code: SESSION_TERMINATED_CODE
+            });
+            try {
+              send(ws, {
+                type: "connection_closed_by_admin",
+                reason,
+                session: sessionCode,
+                role,
+                message
+              });
+            } catch {
+              // ignore
+            }
+            try {
+              ws.close(SESSION_TERMINATED_CODE, message);
+            } catch {
+              // ignore
+            }
+            return;
+          }
+          continueHandshakeAfterSessionGate({
+            ws,
+            req,
+            remote,
+            sessionCode,
+            role,
+            token
+          });
+        })
+        .catch((error) => {
+          wsLog("error", "handshake_session_gate_failed", {
+            remote,
+            session: sessionCode,
+            role,
+            message: error.message
+          });
+          try {
+            ws.close(1011, "Handshake failed");
+          } catch {
+            // ignore
+          }
+        });
+    } catch (error) {
+      wsLog("error", "handshake_exception", {
+        remote,
+        session: sessionCode,
+        role,
+        message: error.message,
+        stack: error.stack
+      });
+      try {
+        ws.close(1011, "Handshake failed");
+      } catch {
+        // ignore
+      }
+    }
+  });
+
+  wsLog("info", "server_listening", { path: "/ws" });
+  return wss;
+}
+
+function continueHandshakeAfterSessionGate({ ws, req, remote, sessionCode, role, token }) {
+  try {
       let decoded = null;
       let authStatus = "anonymous";
 
@@ -277,24 +429,20 @@ function setupWebSocketServer(server) {
           message: error.message
         });
       });
-    } catch (error) {
-      wsLog("error", "handshake_exception", {
-        remote,
-        session: sessionCode,
-        role,
-        message: error.message,
-        stack: error.stack
-      });
-      try {
-        ws.close(1011, "Handshake failed");
-      } catch {
-        // ignore
-      }
+  } catch (error) {
+    wsLog("error", "handshake_exception", {
+      remote,
+      session: sessionCode,
+      role,
+      message: error.message,
+      stack: error.stack
+    });
+    try {
+      ws.close(1011, "Handshake failed");
+    } catch {
+      // ignore
     }
-  });
-
-  wsLog("info", "server_listening", { path: "/ws" });
-  return wss;
+  }
 }
 
 function send(ws, data) {
@@ -542,6 +690,7 @@ function notifyMatchResponseSubmitted(sessionCode, payload) {
 }
 
 function notifySessionSettings(sessionCode, settings) {
+  const { resolveLeaderboardTopN } = require("../utils/leaderboardTopN");
   broadcastToSession(sessionCode, {
     type: "session_settings_updated",
     leaderboard_enabled: Boolean(
@@ -549,6 +698,12 @@ function notifySessionSettings(sessionCode, settings) {
         settings.leaderboard_enabled === 1 ||
         settings.leaderboard_enabled === "1"
     ),
+    current_rankings_enabled: Boolean(
+      settings.current_rankings_enabled === true ||
+        settings.current_rankings_enabled === 1 ||
+        settings.current_rankings_enabled === "1"
+    ),
+    leaderboard_top_n: resolveLeaderboardTopN(settings),
     survey_results_enabled: Boolean(
       settings.survey_results_enabled === true ||
         settings.survey_results_enabled === 1 ||
@@ -565,10 +720,27 @@ function notifySessionSettings(sessionCode, settings) {
           Buffer.isBuffer(settings.show_participant_count) &&
           settings.show_participant_count[0])
     ),
+    show_session_title: settings.show_session_title !== false,
+    show_app_logo: settings.show_app_logo !== false,
     show_question_leaderboard: Boolean(settings.show_question_leaderboard),
     participant_navigation_enabled: settings.participant_navigation_enabled !== false,
     random_question_order_enabled: Boolean(settings.random_question_order_enabled),
-    allow_late_join: Boolean(settings.allow_late_join)
+    allow_late_join: Boolean(settings.allow_late_join),
+    join_locked: Boolean(settings.join_locked),
+    join_blocked:
+      settings.join_blocked !== undefined ? Boolean(settings.join_blocked) : undefined,
+    join_blocked_message:
+      settings.join_blocked_message !== undefined ? settings.join_blocked_message : undefined,
+    join_blocked_reason:
+      settings.join_blocked_reason !== undefined ? settings.join_blocked_reason : undefined,
+    quiz_total_time_minutes: settings.quiz_total_time_minutes ?? null,
+    quiz_total_question_timers_enabled: Boolean(
+      settings.quiz_total_question_timers_enabled
+    ),
+    quiz_total_time_synced: Boolean(settings.quiz_total_time_synced),
+    present_mode_settings: settings.present_mode_settings ?? null,
+    participant_theme: settings.participant_theme || "default",
+    participant_theme_custom: settings.participant_theme_custom ?? null
   });
 }
 
@@ -639,7 +811,9 @@ function notifyPresentSlideChanged(sessionCode, payload) {
   broadcastToSession(sessionCode, {
     type: "present_slide_changed",
     session_id: payload?.session_id ?? null,
-    slide_index: payload?.slide_index ?? 0
+    slide_index: payload?.slide_index ?? 0,
+    slide_type: payload?.slide_type ?? null,
+    slide_total: payload?.slide_total ?? null
   });
 }
 
@@ -749,6 +923,84 @@ function closeMatchingConnections({ sessionCode, role, connectionId } = {}) {
   });
 
   return closed;
+}
+
+/**
+ * Close every open socket for a session code (all roles).
+ * Used when a session ends or is archived so the connection monitor clears.
+ */
+function closeAllSessionConnections(sessionCode, { reason = "session_ended", message } = {}) {
+  const wantedCode = normalizeSessionCodeKey(sessionCode);
+  if (!wantedCode) return [];
+
+  const closeReason = reason || "session_ended";
+  const closeMessage = message || sessionTerminationMessage(closeReason);
+  const closed = [];
+
+  for (const [bucketKey, connSet] of activeConnections.entries()) {
+    const parsed = parseConnectionBucketKey(bucketKey);
+    if (normalizeSessionCodeKey(parsed.sessionCode) !== wantedCode) continue;
+
+    for (const ws of [...connSet]) {
+      if (ws.readyState !== WS_OPEN) continue;
+      try {
+        send(ws, {
+          type: "connection_closed_by_admin",
+          reason: closeReason,
+          session: wantedCode,
+          role: parsed.role,
+          message: closeMessage
+        });
+      } catch {
+        // ignore
+      }
+      try {
+        ws.close(SESSION_TERMINATED_CODE, closeMessage);
+      } catch {
+        // ignore
+      }
+      closed.push({
+        connection_id: ws.connectionId || null,
+        session_code: wantedCode,
+        role: parsed.role
+      });
+    }
+  }
+
+  if (closeReason === "session_archived") {
+    setSessionStatusCache(wantedCode, "archived");
+  } else if (closeReason === "session_not_found") {
+    setSessionStatusCache(wantedCode, null);
+  } else {
+    setSessionStatusCache(wantedCode, "completed");
+  }
+
+  wsLog("info", "session_connections_terminated", {
+    session: wantedCode,
+    reason: closeReason,
+    closed: closed.length
+  });
+
+  return closed;
+}
+
+/**
+ * Notify clients of terminal status, then permanently close all sockets for the session.
+ */
+function terminateSessionRealtime(session, { status } = {}) {
+  const code = normalizeSessionCodeKey(session?.session_code);
+  if (!code) return { closed: [] };
+
+  const finalStatus = status || session.status || "completed";
+  notifySessionUpdate(code, finalStatus);
+  const reason =
+    finalStatus === "archived"
+      ? "session_archived"
+      : finalStatus === "completed"
+        ? "session_ended"
+        : "session_ended";
+  const closed = closeAllSessionConnections(code, { reason });
+  return { closed, status: finalStatus };
 }
 
 function getConnectionCount(sessionCode) {
@@ -900,8 +1152,13 @@ module.exports = {
   getSessionProgress,
   getConnectionCount,
   closeMatchingConnections,
+  closeAllSessionConnections,
   closeConnectionsByIp,
+  terminateSessionRealtime,
+  invalidateSessionStatusCache,
+  resolveSessionStatusForWs,
   ADMIN_CLOSE_CODE,
+  SESSION_TERMINATED_CODE,
   IP_BLOCKED_CODE,
   countLiveUniqueParticipantsForSessionCode,
   getLiveUniqueParticipantIdsForSessionCode,

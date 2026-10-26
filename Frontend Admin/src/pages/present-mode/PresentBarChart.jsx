@@ -10,7 +10,8 @@ import {
 } from 'recharts'
 import { useElementSize } from '../../hooks/useElementSize'
 import { CHART_TOOLTIP_STYLE } from '../../utils/chartColors'
-import { CORRECT_STROKE, PresentCorrectBarLabel, PresentXAxisTick } from './PresentAnswerReveal'
+import { BarCorrectTickLabel, BarPercentLabel } from '../../components/charts/BarValueLabels'
+import { PresentXAxisTick, CORRECT_STROKE } from './PresentAnswerReveal'
 import { getPresentOptionColor } from '../../utils/livePresentation'
 
 const CHART_MIN_HEIGHT = 320
@@ -19,7 +20,12 @@ export function PresentBarChart({ data, rawType, answerRevealed, compact = false
   const minHeight = compact ? 180 : CHART_MIN_HEIGHT
   const { ref, width, height, ready } = useElementSize(minHeight)
   const total = data.reduce((sum, row) => sum + row.value, 0)
-  const margin = { top: answerRevealed ? 32 : 16, right: 24, left: 8, bottom: 4 }
+  const margin = {
+    top: answerRevealed ? 52 : 40,
+    right: 24,
+    left: 8,
+    bottom: 4,
+  }
 
   return (
     <div
@@ -80,12 +86,22 @@ export function PresentBarChart({ data, rawType, answerRevealed, compact = false
                 strokeWidth={entry.isCorrect && answerRevealed ? 3 : 0}
               />
             ))}
+            <LabelList
+              valueAccessor={(entry) => entry?.payload ?? null}
+              content={(labelProps) => (
+                <BarPercentLabel
+                  {...labelProps}
+                  total={total}
+                  fontSize={compact ? 12 : 14}
+                  answerRevealed={answerRevealed}
+                />
+              )}
+            />
             {answerRevealed ? (
               <LabelList
-                // Recharts 3 strips `payload` from Label props; pass the row via value instead.
                 valueAccessor={(entry) => entry?.payload ?? null}
                 content={(labelProps) => (
-                  <PresentCorrectBarLabel
+                  <BarCorrectTickLabel
                     {...labelProps}
                     answerRevealed={answerRevealed}
                   />
