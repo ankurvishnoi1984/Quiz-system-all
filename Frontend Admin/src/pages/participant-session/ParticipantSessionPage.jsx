@@ -3267,7 +3267,9 @@ function ParticipantSessionPage({ embed = false }) {
           />
         ) : (
           <>
-            {step === 'active' && isSessionEnded ? <SessionEndedPanel /> : null}
+            {step === 'active' && isSessionEnded ? (
+              <SessionEndedPanel thanksImageUrl={session?.thanks_screen_image_url || ''} />
+            ) : null}
 
             {step === 'active' &&
               !question &&

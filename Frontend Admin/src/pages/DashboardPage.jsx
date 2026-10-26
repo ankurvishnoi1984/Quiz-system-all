@@ -575,18 +575,11 @@ function DashboardPage() {
         auto_end_date: values.autoEndEnabled ? values.autoEndDate || null : null,
         auto_end_time: values.autoEndEnabled ? values.autoEndTime || null : null,
         logo_url: values.logoUrl || null,
-        waiting_screen_image_url:
-          values.enableNavigation && values.quizTotalTimeEnabled
-            ? values.waitingScreenImageUrl || null
-            : null,
-        waiting_screen_media_type:
-          values.enableNavigation && values.quizTotalTimeEnabled && values.waitingScreenImageUrl
-            ? values.waitingScreenMediaType || 'image'
-            : null,
-        thanks_screen_image_url:
-          values.enableNavigation && values.quizTotalTimeEnabled
-            ? values.thanksScreenImageUrl || null
-            : null,
+        waiting_screen_image_url: values.waitingScreenImageUrl || null,
+        waiting_screen_media_type: values.waitingScreenImageUrl
+          ? values.waitingScreenMediaType || 'image'
+          : null,
+        thanks_screen_image_url: values.thanksScreenImageUrl || null,
         participant_theme: values.participantTheme || 'default',
         participant_theme_custom: values.participantThemeCustom || null,
         builder_mode: values.builderMode === 'advanced' ? 'advanced' : 'normal',

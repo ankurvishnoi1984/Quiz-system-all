@@ -668,20 +668,15 @@ function SessionFormModal({
       logoUrl: logoUrl
         ? normalizeQuestionMediaUrlForStorage(logoUrl) || logoUrl
         : null,
-      waitingScreenImageUrl:
-        enableNavigation && quizTotalTimeEnabled && waitingScreenImageUrl
-          ? normalizeQuestionMediaUrlForStorage(waitingScreenImageUrl) ||
-            waitingScreenImageUrl
-          : null,
-      waitingScreenMediaType:
-        enableNavigation && quizTotalTimeEnabled && waitingScreenImageUrl
-          ? waitingScreenMediaType || 'image'
-          : null,
-      thanksScreenImageUrl:
-        enableNavigation && quizTotalTimeEnabled && thanksScreenImageUrl
-          ? normalizeQuestionMediaUrlForStorage(thanksScreenImageUrl) ||
-            thanksScreenImageUrl
-          : null,
+      waitingScreenImageUrl: waitingScreenImageUrl
+        ? normalizeQuestionMediaUrlForStorage(waitingScreenImageUrl) || waitingScreenImageUrl
+        : null,
+      waitingScreenMediaType: waitingScreenImageUrl
+        ? waitingScreenMediaType || 'image'
+        : null,
+      thanksScreenImageUrl: thanksScreenImageUrl
+        ? normalizeQuestionMediaUrlForStorage(thanksScreenImageUrl) || thanksScreenImageUrl
+        : null,
       participantTheme: normalizeParticipantTheme(participantTheme),
       participantThemeCustom: toCustomThemeColorsApi(participantThemeCustom),
       builderMode: liveSettingsOnly ? undefined : builderMode,
@@ -1251,11 +1246,6 @@ function SessionFormModal({
                         if (!enabled) {
                           setQuizTotalQuestionTimersEnabled(false)
                           setQuizTotalTimeSynced(false)
-                          setWaitingScreenImageUrl('')
-                          setWaitingScreenMediaType(null)
-                          setWaitingImageError('')
-                          setThanksScreenImageUrl('')
-                          setThanksImageError('')
                         }
                       }}
                       className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
@@ -1266,9 +1256,6 @@ function SessionFormModal({
                     <p className="mt-1 text-xs text-slate-500">
                       Limit how long participants have to complete the full quiz in multiple-question
                       mode. Question timers stay off unless you enable both below.
-                      {quizTotalTimeEnabled
-                        ? ' You can upload waiting screen media and a thank-you image below.'
-                        : ''}
                     </p>
                   </div>
                   {quizTotalTimeEnabled ? (
@@ -1277,174 +1264,6 @@ function SessionFormModal({
                         After Launch, use <span className="font-semibold">Activate All</span> on the
                         lobby (or Live page) to start the quiz for everyone.
                       </p>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-700">Waiting screen media</p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          Shown to participants after Launch, before you click Activate All.
-                          Images: {QUESTION_MEDIA_BANNER.images} · Videos:{' '}
-                          {QUESTION_MEDIA_BANNER.videos} · Audio: {QUESTION_MEDIA_BANNER.audio}.{' '}
-                          {QUESTION_MEDIA_BANNER.maxSize}.
-                        </p>
-                        <div className="mt-2 flex flex-wrap items-center gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
-                          <div className="flex h-16 w-28 items-center justify-center overflow-hidden rounded-lg border border-blue-100 bg-slate-50">
-                            {waitingImagePreviewSrc ? (
-                              waitingMediaKind === 'video' ? (
-                                <video
-                                  src={waitingImagePreviewSrc}
-                                  className="max-h-full max-w-full object-contain"
-                                  muted
-                                />
-                              ) : waitingMediaKind === 'audio' ? (
-                                <span className="px-2 text-center text-[0.7rem] font-semibold text-slate-500">
-                                  Audio
-                                </span>
-                              ) : (
-                                <img
-                                  src={waitingImagePreviewSrc}
-                                  alt="Waiting screen preview"
-                                  className="max-h-full max-w-full object-contain p-1.5"
-                                />
-                              )
-                            ) : (
-                              <span className="px-2 text-center text-[0.7rem] text-slate-400">
-                                No media
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                            <input
-                              ref={waitingImageInputRef}
-                              type="file"
-                              accept={QUESTION_MEDIA_ACCEPT}
-                              className="hidden"
-                              onChange={(event) => {
-                                const file = event.target.files?.[0]
-                                if (file) void handleWaitingMediaUpload(file)
-                              }}
-                            />
-                            <button
-                              type="button"
-                              disabled={waitingImageUploading || !uploadDeptId}
-                              onClick={() => waitingImageInputRef.current?.click()}
-                              className="inline-flex h-10 items-center gap-2 rounded-xl border border-blue-200/70 bg-white px-3 text-sm font-semibold text-navy-800 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {waitingImageUploading ? (
-                                <Loader2 className="size-4 animate-spin" />
-                              ) : (
-                                <FileUp className="size-4" />
-                              )}
-                              {waitingImageUploading
-                                ? 'Uploading…'
-                                : waitingImagePreviewSrc
-                                  ? 'Replace media'
-                                  : 'Upload media'}
-                            </button>
-                            {waitingImagePreviewSrc ? (
-                              <button
-                                type="button"
-                                disabled={waitingImageUploading}
-                                onClick={() => {
-                                  setWaitingScreenImageUrl('')
-                                  setWaitingScreenMediaType(null)
-                                  setWaitingImageError('')
-                                }}
-                                className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
-                              >
-                                <X className="size-4" />
-                                Remove
-                              </button>
-                            ) : null}
-                          </div>
-                        </div>
-                        {waitingImagePreviewSrc && waitingMediaKind === 'audio' ? (
-                          <div className="mt-2 rounded-xl border border-blue-100 bg-slate-50 px-3 py-2">
-                            <audio src={waitingImagePreviewSrc} controls className="w-full" />
-                          </div>
-                        ) : null}
-                        {waitingImagePreviewSrc && waitingMediaKind === 'video' ? (
-                          <div className="mt-2 overflow-hidden rounded-xl border border-blue-100 bg-slate-50">
-                            <video
-                              src={waitingImagePreviewSrc}
-                              controls
-                              className="max-h-48 w-full"
-                            />
-                          </div>
-                        ) : null}
-                        {waitingImageError ? (
-                          <p className="mt-1.5 text-xs font-semibold text-red-700">
-                            {waitingImageError}
-                          </p>
-                        ) : null}
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-slate-700">Thank you image</p>
-                        <p className="mt-1 text-xs text-slate-500">
-                          Shown instead of the thank-you message when the quiz total timer ends.
-                        </p>
-                        <div className="mt-2 flex flex-wrap items-center gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
-                          <div className="flex h-16 w-28 items-center justify-center overflow-hidden rounded-lg border border-blue-100 bg-slate-50">
-                            {thanksImagePreviewSrc ? (
-                              <img
-                                src={thanksImagePreviewSrc}
-                                alt="Thank you screen preview"
-                                className="max-h-full max-w-full object-contain p-1.5"
-                              />
-                            ) : (
-                              <span className="px-2 text-center text-[0.7rem] text-slate-400">
-                                No image
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                            <input
-                              ref={thanksImageInputRef}
-                              type="file"
-                              accept={LOGO_ACCEPT}
-                              className="hidden"
-                              onChange={(event) => {
-                                const file = event.target.files?.[0]
-                                if (file) void handleThanksImageUpload(file)
-                              }}
-                            />
-                            <button
-                              type="button"
-                              disabled={thanksImageUploading || !uploadDeptId}
-                              onClick={() => thanksImageInputRef.current?.click()}
-                              className="inline-flex h-10 items-center gap-2 rounded-xl border border-blue-200/70 bg-white px-3 text-sm font-semibold text-navy-800 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {thanksImageUploading ? (
-                                <Loader2 className="size-4 animate-spin" />
-                              ) : (
-                                <FileUp className="size-4" />
-                              )}
-                              {thanksImageUploading
-                                ? 'Uploading…'
-                                : thanksImagePreviewSrc
-                                  ? 'Replace image'
-                                  : 'Upload image'}
-                            </button>
-                            {thanksImagePreviewSrc ? (
-                              <button
-                                type="button"
-                                disabled={thanksImageUploading}
-                                onClick={() => {
-                                  setThanksScreenImageUrl('')
-                                  setThanksImageError('')
-                                }}
-                                className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
-                              >
-                                <X className="size-4" />
-                                Remove
-                              </button>
-                            ) : null}
-                          </div>
-                        </div>
-                        {thanksImageError ? (
-                          <p className="mt-1.5 text-xs font-semibold text-red-700">
-                            {thanksImageError}
-                          </p>
-                        ) : null}
-                      </div>
                       <label className="flex items-start justify-between gap-3 rounded-xl border border-blue-100 bg-slate-50/80 px-3 py-2.5">
                         <div>
                           <p className="text-sm font-semibold text-slate-700">
@@ -1591,6 +1410,179 @@ function SessionFormModal({
                   </div>
                 </>
               ) : null}
+              <div className="md:col-span-2 space-y-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">Waiting screen media</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Shown after Launch while participants wait for a live question
+                    {quizTotalTimeEnabled
+                      ? ' (or before Activate All when quiz total time is on)'
+                      : ''}
+                    . Videos play automatically with sound (looping, no controls). Images:{' '}
+                    {QUESTION_MEDIA_BANNER.images} · Videos: {QUESTION_MEDIA_BANNER.videos} · Audio:{' '}
+                    {QUESTION_MEDIA_BANNER.audio}. {QUESTION_MEDIA_BANNER.maxSize}.
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
+                    <div className="flex h-16 w-28 items-center justify-center overflow-hidden rounded-lg border border-blue-100 bg-slate-50">
+                      {waitingImagePreviewSrc ? (
+                        waitingMediaKind === 'video' ? (
+                          <video
+                            src={waitingImagePreviewSrc}
+                            className="max-h-full max-w-full object-contain"
+                            autoPlay
+                            loop
+                            playsInline
+                          />
+                        ) : waitingMediaKind === 'audio' ? (
+                          <span className="px-2 text-center text-[0.7rem] font-semibold text-slate-500">
+                            Audio
+                          </span>
+                        ) : (
+                          <img
+                            src={waitingImagePreviewSrc}
+                            alt="Waiting screen preview"
+                            className="max-h-full max-w-full object-contain p-1.5"
+                          />
+                        )
+                      ) : (
+                        <span className="px-2 text-center text-[0.7rem] text-slate-400">
+                          No media
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                      <input
+                        ref={waitingImageInputRef}
+                        type="file"
+                        accept={QUESTION_MEDIA_ACCEPT}
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0]
+                          if (file) void handleWaitingMediaUpload(file)
+                        }}
+                      />
+                      <button
+                        type="button"
+                        disabled={waitingImageUploading || !uploadDeptId}
+                        onClick={() => waitingImageInputRef.current?.click()}
+                        className="inline-flex h-10 items-center gap-2 rounded-xl border border-blue-200/70 bg-white px-3 text-sm font-semibold text-navy-800 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {waitingImageUploading ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <FileUp className="size-4" />
+                        )}
+                        {waitingImageUploading
+                          ? 'Uploading…'
+                          : waitingImagePreviewSrc
+                            ? 'Replace media'
+                            : 'Upload media'}
+                      </button>
+                      {waitingImagePreviewSrc ? (
+                        <button
+                          type="button"
+                          disabled={waitingImageUploading}
+                          onClick={() => {
+                            setWaitingScreenImageUrl('')
+                            setWaitingScreenMediaType(null)
+                            setWaitingImageError('')
+                          }}
+                          className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
+                        >
+                          <X className="size-4" />
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  {waitingImagePreviewSrc && waitingMediaKind === 'audio' ? (
+                    <div className="mt-2 rounded-xl border border-blue-100 bg-slate-50 px-3 py-2">
+                      <audio src={waitingImagePreviewSrc} controls className="w-full" />
+                    </div>
+                  ) : null}
+                  {waitingImagePreviewSrc && waitingMediaKind === 'video' ? (
+                    <div className="mt-2 overflow-hidden rounded-xl border border-blue-100 bg-slate-50">
+                      <video
+                        src={waitingImagePreviewSrc}
+                        autoPlay
+                        loop
+                        playsInline
+                        className="max-h-48 w-full"
+                      />
+                    </div>
+                  ) : null}
+                  {waitingImageError ? (
+                    <p className="mt-1.5 text-xs font-semibold text-red-700">{waitingImageError}</p>
+                  ) : null}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">Thank you image</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Shown when the quiz total timer ends, or when the host ends the session.
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
+                    <div className="flex h-16 w-28 items-center justify-center overflow-hidden rounded-lg border border-blue-100 bg-slate-50">
+                      {thanksImagePreviewSrc ? (
+                        <img
+                          src={thanksImagePreviewSrc}
+                          alt="Thank you screen preview"
+                          className="max-h-full max-w-full object-contain p-1.5"
+                        />
+                      ) : (
+                        <span className="px-2 text-center text-[0.7rem] text-slate-400">
+                          No image
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                      <input
+                        ref={thanksImageInputRef}
+                        type="file"
+                        accept={LOGO_ACCEPT}
+                        className="hidden"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0]
+                          if (file) void handleThanksImageUpload(file)
+                        }}
+                      />
+                      <button
+                        type="button"
+                        disabled={thanksImageUploading || !uploadDeptId}
+                        onClick={() => thanksImageInputRef.current?.click()}
+                        className="inline-flex h-10 items-center gap-2 rounded-xl border border-blue-200/70 bg-white px-3 text-sm font-semibold text-navy-800 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {thanksImageUploading ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <FileUp className="size-4" />
+                        )}
+                        {thanksImageUploading
+                          ? 'Uploading…'
+                          : thanksImagePreviewSrc
+                            ? 'Replace image'
+                            : 'Upload image'}
+                      </button>
+                      {thanksImagePreviewSrc ? (
+                        <button
+                          type="button"
+                          disabled={thanksImageUploading}
+                          onClick={() => {
+                            setThanksScreenImageUrl('')
+                            setThanksImageError('')
+                          }}
+                          className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
+                        >
+                          <X className="size-4" />
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                  {thanksImageError ? (
+                    <p className="mt-1.5 text-xs font-semibold text-red-700">{thanksImageError}</p>
+                  ) : null}
+                </div>
+              </div>
           </div>
           <div
             className="col-span-full grid gap-4 md:grid-cols-2"
