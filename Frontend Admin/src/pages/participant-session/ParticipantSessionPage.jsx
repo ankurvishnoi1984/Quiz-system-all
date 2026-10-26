@@ -3279,6 +3279,11 @@ function ParticipantSessionPage({ embed = false }) {
                 <WaitingForQuestion
                   quizTotalWaiting={Boolean(sessionQuizTotalTimeEnabled)}
                   waitingImageUrl={session?.waiting_screen_image_url || ''}
+                  waitingMediaType={
+                    session?.waiting_screen_image_url
+                      ? session?.waiting_screen_media_type || 'image'
+                      : null
+                  }
                 />
               )}
 

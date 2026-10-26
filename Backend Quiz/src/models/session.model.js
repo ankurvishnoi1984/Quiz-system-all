@@ -236,6 +236,10 @@ const Session = sequelize.define(
       type: DataTypes.TEXT,
       allowNull: true
     },
+    waiting_screen_media_type: {
+      type: DataTypes.STRING(32),
+      allowNull: true
+    },
     thanks_screen_image_url: {
       type: DataTypes.TEXT,
       allowNull: true

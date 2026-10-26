@@ -1,289 +1,109 @@
-# Quiz System - Backend
+# Quiz System — Backend
 
-An Express.js REST API for live polling and quiz sessions. Uses MySQL with Sequelize ORM.
+Express.js REST API and WebSocket server for live quizzes, polls, and surveys. MySQL via Sequelize.
 
 ## Tech Stack
 
-- **Express.js** - Web framework
-- **Sequelize** - ORM for MySQL
-- **MySQL** - Database
-- **JWT** - Authentication
-- **bcryptjs** - Password hashing
-- **Multer** - File uploads
-- **Sharp** - Image processing
-- **Helmet** - Security headers
-- **ws** - WebSocket server
+- **Express.js**, **Sequelize**, **MySQL**
+- **JWT** + **bcryptjs** — auth
+- **Multer** + **Sharp** — uploads / images
+- **ws** — WebSocket
+- **Helmet**, **cors**, **dotenv**
+- **nodemailer**, **firebase-admin** (OTP / notifications as configured)
+- **node-cron** — scheduled jobs
 
 ## Project Structure
 
 ```
-backend/src/
-├── server.js                 # Entry point, starts HTTP server
-├── app.js                  # Express app configuration
-├── config/
-│   ├── database.js         # Sequelize connection
-│   ├── env.js           # Environment variables
-│   └── multer.js        # File upload config
-├── models/
-│   ├── index.js          # Model setup & associations
-│   ├── user.model.js    # Host/admin users
-│   ├── client.model.js  # Client/organization
-│   ├── department.model.js  # Department
-│   ├── session.model.js  # Quiz/poll session
-│   ├── participant.model.js  # Session participants
-│   ├── question.model.js  # Questions
-│   ├── question-option.model.js  # MCQ options
-│   ├── response.model.js  # Participant responses
-│   ├── qa-question.model.js  # Q&A questions
-│   ├── qa-upvote.model.js  # Q&A upvotes
-│   └── media-asset.model.js  # Uploaded media
-├── routes/
-│   ├── index.js          # Route aggregator
-│   ├── auth.routes.js    # Authentication
-│   ├── client.routes.js  # Client management
-│   ├── department.routes.js  # Department management
-│   ├── session.routes.js  # Session CRUD
-│   ├── question.routes.js  # Question CRUD
-│   ├── response.routes.js  # Response handling
-│   ├── qa.routes.js    # Q&A functionality
-│   ├── media.routes.js  # Media uploads
-│   └── analytics.routes.js  # Analytics data
+Backend Quiz/src/
+├── server.js / app.js
+├── config/          # database, env, multer, user-rights, data-scope
+├── models/          # Sequelize models (source of truth for fields)
+├── routes/          # HTTP route modules
 ├── controllers/
-│   ├── auth.controller.js
-│   ├── client.controller.js
-│   ├── department.controller.js
-│   ├── session.controller.js
-│   ├── question.controller.js
-│   ├── response.controller.js
-│   ├── qa.controller.js
-│   ├── media.controller.js
-│   └── analytics.controller.js
-├── services/
-│   ├── auth.service.js
-│   ├── client.service.js
-│   ├── department.service.js
-│   ├── session.service.js
-│   ├── question.service.js
-│   ├── response.service.js
-│   ├── qa.service.js
-│   ├── media.service.js
-│   ├── analytics.service.js
-│   └── websocket.service.js    # WebSocket handling
-├── middlewares/
-│   ├── auth.middleware.js      # JWT verification
-│   ├── role.middleware.js     # Role checks
-│   ├── participant-auth.middleware.js  # Participant auth
-│   └── qa-access.middleware.js    # Q&A access
+├── services/        # Business logic + websocket.service.js
+├── middlewares/     # auth, roles, rights, participant, rate limits
 ├── validators/
-│   ├── auth.validator.js
-│   ├── client.validator.js
-│   ├── department.validator.js
-│   ├── session.validator.js
-│   ├── question.validator.js
-│   ├── response.validator.js
-│   ├── qa.validator.js
-│   └── media.validator.js
+├── migrations/      # DB migrations (run locally with sequelize-cli)
 └── utils/
-    ├── response.js        # Response helpers
-    ├── jwt.js         # JWT helpers
-    └── media.js       # Media helpers
 ```
 
-## Database Models
+Do not treat older field lists as authoritative — open `src/models` and `src/routes`.
 
-### User
-- `user_id` (PK)
-- `client_id` (FK)
-- `dept_id` (FK, nullable)
-- `email` - Unique
-- `password` - Hashed
-- `name`
-- `role` - admin, host
-- `created_at`, `updated_at`
+## Roles
 
-### Client
-- `client_id` (PK)
-- `name`
-- `domain`
-- `created_at`, `updated_at`
+Configured in `src/config/user-rights.js`:
 
-### Department
-- `dept_id` (PK)
-- `client_id` (FK)
-- `name`
-- `created_at`, `updated_at`
+| Role | Typical use |
+|------|-------------|
+| `super_admin` | Platform |
+| `sub_admin` | Platform helper |
+| `client_admin` | Organisation |
+| `dept_admin` | Department |
+| `host` | Create and run sessions |
+| `author` | Question bank / authoring |
+| `auditor` | Review |
+| `session_admin` | Read-only access to one assigned session (reports, live view) |
 
-### Session
-- `session_id` (PK)
-- `session_code` - Unique 6-char code for joining
-- `host_id` (FK -> User)
-- `dept_id` (FK -> Department)
-- `title`
-- `description`
-- `status` - draft, live, paused, completed, archived
-- `is_anonymous_default`
-- `max_participants`
-- `show_results_to_participants`
-- `allow_late_join`
-- `leaderboard_enabled`
-- `started_at`, `ended_at`
-- `created_at`, `updated_at`
+Data scope for `session_admin` is the session whose `session_admin_user_id` matches the user.
 
-### Participant
-- `participant_id` (PK)
-- `session_id` (FK)
-- `dept_id` (FK)
-- `name`
-- `email`
-- `total_score`
-- `created_at`, `updated_at`
+## Core domain (high level)
 
-### Question
-- `question_id` (PK)
-- `session_id` (FK)
-- `dept_id` (FK)
-- `question_type` - mcq, word_cloud, rating, open_text, true_false, ranking
-- `question_text`
-- `is_quiz_mode`
-- `points_value`
-- `time_limit_seconds`
-- `allow_multiple_select`
-- `display_order`
-- `created_at`, `updated_at`
+- **Org:** clients, departments, users, plans, teams / seat add-ons
+- **Session:** code, status (`draft` / `live` / `paused` / `completed` / `archived`), join type, OTP / allowlist / customer match, quiz total time, navigation, themes, present settings, Session Admin link
+- **Questions:** `mcq`, `poll`, `survey`, `word_cloud`, `rating`, `open_text`, `true_false`, `ranking`, `fill_blank`, `emoji_reaction`, `match` (+ options / match sides)
+- **Participants & responses** — join identity, scores, timers
+- **Q&A** — pending / approved / rejected / answered / pinned + upvotes
+- **Question bank** — topics, packs, reviews, import
+- **Analytics / reports** — session summary, participants, questions; department / client analytics
+- **Embeds** — session embed tokens for display / controls / participant
 
-### QuestionOption
-- `option_id` (PK)
-- `question_id` (FK)
-- `option_text`
-- `is_correct`
-- `display_order`
+## Route groups (`/api/v1`)
 
-### Response
-- `response_id` (PK)
-- `session_id` (FK)
-- `participant_id` (FK)
-- `question_id` (FK)
-- `option_id` (FK, nullable)
-- `text_response`
-- `score`
-- `created_at`
+Registered from `src/routes/index.js` (names map to files under `src/routes/`):
 
-### QaQuestion
-- `qa_id` (PK)
-- `session_id` (FK)
-- `dept_id` (FK)
-- `participant_id` (FK)
-- `question_text`
-- `moderation_status` - pending, approved, rejected
-- `answer_text`
-- `answered_by` (FK -> User)
-- `is_pinned`
-- `created_at`, `updated_at`
+| Area | Module |
+|------|--------|
+| Auth | `auth.routes.js` |
+| Users / plans / payments | `user.routes.js`, `plan.routes.js`, `payment.routes.js` |
+| Clients / departments | `client.routes.js`, `department.routes.js` |
+| Sessions / questions / responses | `session.routes.js`, `question.routes.js`, `response.routes.js` |
+| Participants | `participant.routes.js` |
+| Q&A / media / AI | `qa.routes.js`, `media.routes.js`, `ai.routes.js` |
+| Analytics | `analytics.routes.js` |
+| Session Admin | `session-admin.routes.js` |
+| Question bank | `question-bank.routes.js` |
+| Present view | `present-view.routes.js` |
+| Teams / roles / sub-admins | `team.routes.js`, `admin-team.routes.js`, `role.routes.js`, `sub-admin.routes.js` |
+| Ops | `websocket-monitor.routes.js`, `audit-log.routes.js` |
 
-### QaUpvote
-- `upvote_id` (PK)
-- `qa_id` (FK)
-- `participant_id` (FK)
-- `created_at`
+Example session report paths (host or Session Admin with `reports` right):
 
-### MediaAsset
-- `media_id` (PK)
-- `dept_id` (FK)
-- `uploaded_by` (FK -> User)
-- `file_url`
-- `file_type`
-- `file_size`
-- `created_at`
+- `GET /sessions/:sessionId/report/summary`
+- `GET /sessions/:sessionId/report/participants`
+- `GET /sessions/:sessionId/report/questions`
 
-## API Endpoints
+## Main flows
 
-### Authentication (`/api/v1/auth`)
-- `POST /login` - Login with email/password
-- `POST /refresh` - Refresh access token
-- `GET /me` - Get current user
-
-### Clients (`/api/v1/clients`)
-- `GET /` - List clients
-- `POST /` - Create client
-- `GET /:id` - Get client
-- `PUT /:id` - Update client
-- `DELETE /:id` - Delete client
-
-### Departments (`/api/v1/departments`)
-- `GET /` - List departments
-- `POST /` - Create department
-- `GET /:id` - Get department
-- `PUT /:id` - Update department
-- `DELETE /:id` - Delete department
-
-### Sessions (`/api/v1/sessions`)
-- `GET /` - List sessions
-- `POST /` - Create session
-- `GET /:id` - Get session
-- `PUT /:id` - Update session
-- `DELETE /:id` - Delete session
-- `POST /:id/start` - Start session
-- `POST /:id/pause` - Pause session
-- `POST /:id/end` - End session
-- `GET /:id/qr` - Get session QR
-
-### Questions (`/api/v1/questions`)
-- `GET /session/:sessionId` - List questions for session
-- `POST /` - Create question
-- `PUT /:id` - Update question
-- `DELETE /:id` - Delete question
-- `PUT /reorder` - Reorder questions
-
-### Responses (`/api/v1/responses`)
-- `POST /` - Submit response
-- `GET /session/:sessionId` - Get session responses
-
-### Q&A (`/api/v1/qa`)
-- `GET /session/:sessionId` - Get Q&A questions
-- `POST /` - Submit Q&A question
-- `PUT /:id` - Update Q&A (answer)
-- `POST /:id/upvote` - Upvote Q&A
-- `DELETE /:id/upvote` - Remove upvote
-
-### Media (`/api/v1/media`)
-- `POST /` - Upload media
-- `GET /:id` - Get media info
-- `DELETE /:id` - Delete media
-
-### Analytics (`/api/v1/analytics`)
-- `GET /dashboard` - Dashboard stats
-- `GET /session/:sessionId` - Session analytics
+1. **Host auth** — email/password → JWT access + refresh; rights from role.
+2. **Create session** — join rules, timers, themes, optional Session Admin user auto-created.
+3. **Builder** — CRUD questions (including match pairs); bank import; AI generate where enabled.
+4. **Join** — public join by code; identity / OTP / allowlist / customer match as configured.
+5. **Live** — activate / close / reopen; WebSocket broadcasts; optional quiz total clock.
+6. **Reports** — summary + participants + responses for Excel/PDF on the frontend.
 
 ## Authentication
 
-### Host Authentication (JWT)
-1. Login with email/password
-2. Receive access_token (15min) + refresh_token (7 days)
-3. Include `Authorization: Bearer <token>` in requests
-4. Use refresh_token to get new access_token
+- **Staff:** `Authorization: Bearer <access_token>`; refresh via auth routes.
+- **Participants:** participant token after join (`participant-auth.middleware.js`).
+- **Rights:** `authorizeRights` / `authorizeAnyRight` from role permissions.
 
-### Participant Authentication
-- Anonymous sessions: auto-generate participant on join
-- Name only: require name
-- Name + email: require name + email
-- Session-specific token generated
+## Media
 
-## Middleware
+- Uploads under `uploads/` (images / video / audio as configured).
+- Sharp for image processing. Prefer current multer config over outdated size notes in old docs.
 
-- `auth.middleware.js` - Verifies JWT, attaches user to req
-- `role.middleware.js` - Checks user roles (admin/host)
-- `participant-auth.middleware.js` - Verifies participant token
-- `qa-access.middleware.js` - Checks Q&A permissions
-
-## Media Uploads
-
-- Stored in `backend/uploads/`
-- Subdirectories: `images/`, `videos/`
-- Max file size: 50MB
-- Supported: images, videos, audio
-- Sharp used for image resizing/processing
-
-## Environment Variables
+## Environment (common)
 
 ```
 NODE_ENV=development
@@ -295,111 +115,44 @@ DB_NAME=quiz_db
 DB_USER=root
 DB_PASSWORD=
 
-# Sequelize connection pool (defaults shown)
 DB_POOL_MAX=30
 DB_POOL_MIN=5
 DB_POOL_ACQUIRE=30000
 DB_POOL_IDLE=10000
 
-JWT_SECRET=
+JWT_ACCESS_SECRET=
+JWT_ACCESS_EXPIRY=1h
 JWT_REFRESH_SECRET=
+JWT_REFRESH_EXPIRY=7d
+
+RATE_LIMIT_ENABLED=true
+# SMS / mail / Firebase vars as needed for OTP and mail
 ```
+
+See `src/config/env.js` for the full set.
 
 ## Commands
 
 ```bash
-npm install      # Install dependencies
-npm run dev     # Start dev server with nodemon
-npm start       # Start production server
+npm install
+npm run dev    # nodemon
+npm start
+# Optional focused tests:
+npm run test:tenant-question-bank
+npm run test:join-identity-token
 ```
 
-## Live Result Dashboard
+Apply DB migrations with your local Sequelize CLI setup before testing new features (e.g. Session Admin).
 
-The system supports real-time result dashboards during live sessions.
+## WebSocket
 
-### Dashboard Metrics (Per Active Question)
-- Total responses received
-- Response rate: responses / total joined participants
-- Live updating - new responses animate in real time
-- Time elapsed since question went live
+- Endpoint: `/ws` with query params such as `session`, `token`, `role`
+- Implementation: `src/services/websocket.service.js`
+- Used for live responses, session/question updates, leaderboards, participant presence
 
-### Chart Types
-- **Pie chart** - ideal for MCQ with fewer than 6 options
-- **Horizontal bar chart** - default for MCQ, shows option label + count + %
-- **Word cloud** - for open word submissions
-- **Live feed** - scrolling list for open text responses
-- **Number gauge / donut** - for NPS / rating average
-- **Leaderboard card** - top 10 participants by score
+## Related docs
 
-### Session Summary Overlay (End of Session)
-- Total participants who joined
-- Total questions answered
-- Average response rate across all questions
-- Final leaderboard (top 10)
-- Most popular response per question
-
-## WebSocket Server
-
-The backend includes a WebSocket server for real-time communication during live sessions.
-
-### Connection URL
-- WebSocket endpoint: `/ws`
-- Query parameters: `session` (required), `token` (optional), `role` (optional)
-
-### Connection Example
-```javascript
-const ws = new WebSocket("ws://localhost:5000/ws?session=ABC123&role=host")
-```
-
-### Server Events (Broadcast)
-
-| Event | Description |
-|-------|-------------|
-| `connected` | Connection established confirmation |
-| `response_received` | New participant response with live results |
-| `session_updated` | Session status changed (live/paused/completed) |
-| `question_changed` | Current question changed |
-| `leaderboard_update` | Leaderboard rankings updated |
-
-### Client Messages
-
-| Message | Description |
-|--------|-------------|
-| `ping` | Heartbeat |
-| `submit_answer` | Submit answer (participant) |
-
-### Live Results Data
-
-When `response_received` is broadcast, the payload includes:
-
-```javascript
-{
-  type: "response_received",
-  response: {
-    question_id: 1,
-    participant_id: 5,
-    option_id: 2,
-    text_response: null
-  },
-  results: {
-    question_id: 1,
-    question_type: "mcq",
-    total_responses: 25,
-    by_option: { "1": 10, "2": 15 },
-    text_responses: [],
-    average_rating: null
-  }
-}
-```
-
-### Implementation
-
-See `src/services/websocket.service.js` for the WebSocket implementation. The service:
-- Manages active connections by session code
-- Handles reconnection on disconnect
-- Broadcasts events to all clients in a session
-- Integrates with response submission for real-time updates
-
-## Database
-
-SQL schema available in `quiz_db.sql` at project root.
+- Product guide (plain language): `../Quiz-Platform-Guide.html`
+- Quiz config playbook (settings recipes): `../Quiz-Config-Playbook.html`
+- Product vs Vevox: `../Vevox-Feature-Extraction.md`, `../Vevox-Comparison.html`
+- Frontend: `../Frontend Admin/README.md`

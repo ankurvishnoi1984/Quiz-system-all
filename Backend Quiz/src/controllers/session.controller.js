@@ -362,6 +362,9 @@ async function lookupByCode(req, res) {
           customer_match_enabled: Boolean(session.customer_match_enabled),
           logo_url: session.logo_url || null,
           waiting_screen_image_url: session.waiting_screen_image_url || null,
+          waiting_screen_media_type: session.waiting_screen_image_url
+            ? session.waiting_screen_media_type || "image"
+            : null,
           thanks_screen_image_url: session.thanks_screen_image_url || null,
           leaderboard_enabled: Boolean(session.leaderboard_enabled),
           current_rankings_enabled: Boolean(session.current_rankings_enabled),

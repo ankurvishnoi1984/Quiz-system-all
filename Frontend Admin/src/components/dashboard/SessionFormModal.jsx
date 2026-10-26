@@ -4,9 +4,14 @@ import Modal from '../ui/Modal'
 import { uploadQuestionMediaApi } from '../../services/mediaApi'
 import { compressQuestionImage } from '../../utils/compressQuestionImage'
 import {
+  QUESTION_MEDIA_ACCEPT,
+  QUESTION_MEDIA_BANNER,
   QUESTION_MEDIA_SUPPORTED_IMAGE_TYPES,
+  getQuestionMediaKindFromApiType,
+  mapMimeToQuestionMediaType,
   normalizeQuestionMediaUrlForStorage,
   resolveQuestionMediaUrl,
+  validateQuestionMediaFile,
 } from '../../utils/questionMedia'
 
 import {
@@ -130,6 +135,7 @@ const defaultInitial = {
   showAppLogo: true,
   logoUrl: '',
   waitingScreenImageUrl: '',
+  waitingScreenMediaType: null,
   thanksScreenImageUrl: '',
   participantTheme: DEFAULT_PARTICIPANT_THEME,
   participantThemeCustom: { ...DEFAULT_CUSTOM_THEME_COLORS },
@@ -222,6 +228,7 @@ function SessionFormModal({
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoError, setLogoError] = useState('')
   const [waitingScreenImageUrl, setWaitingScreenImageUrl] = useState('')
+  const [waitingScreenMediaType, setWaitingScreenMediaType] = useState(null)
   const [waitingImageUploading, setWaitingImageUploading] = useState(false)
   const [waitingImageError, setWaitingImageError] = useState('')
   const [thanksScreenImageUrl, setThanksScreenImageUrl] = useState('')
@@ -319,6 +326,11 @@ function SessionFormModal({
     setLogoError('')
     setLogoUploading(false)
     setWaitingScreenImageUrl(initialValues.waitingScreenImageUrl || '')
+    setWaitingScreenMediaType(
+      initialValues.waitingScreenImageUrl
+        ? initialValues.waitingScreenMediaType || 'image'
+        : null,
+    )
     setWaitingImageError('')
     setWaitingImageUploading(false)
     setThanksScreenImageUrl(initialValues.thanksScreenImageUrl || '')
@@ -417,16 +429,36 @@ function SessionFormModal({
     })
   }
 
-  const handleWaitingImageUpload = async (file) => {
-    await uploadSessionImage({
-      file,
-      uploading: waitingImageUploading,
-      setUploading: setWaitingImageUploading,
-      setError: setWaitingImageError,
-      setUrl: setWaitingScreenImageUrl,
-      inputRef: waitingImageInputRef,
-      label: 'waiting screen image',
-    })
+  const handleWaitingMediaUpload = async (file) => {
+    if (!file || waitingImageUploading) return
+
+    const validationError = validateQuestionMediaFile(file)
+    if (validationError) {
+      setWaitingImageError(validationError)
+      return
+    }
+    if (!uploadDeptId) {
+      setWaitingImageError('Select a department before uploading waiting screen media.')
+      return
+    }
+
+    setWaitingImageError('')
+    setWaitingImageUploading(true)
+    try {
+      const prepared =
+        file.type.startsWith('image/') && file.type !== 'image/gif'
+          ? await compressQuestionImage(file)
+          : file
+      const { fileUrl } = await uploadQuestionMediaApi(uploadDeptId, prepared)
+      if (!fileUrl) throw new Error('Upload succeeded but no file URL was returned')
+      setWaitingScreenImageUrl(normalizeQuestionMediaUrlForStorage(fileUrl) || fileUrl)
+      setWaitingScreenMediaType(mapMimeToQuestionMediaType(prepared.type) || 'image')
+    } catch (err) {
+      setWaitingImageError(err.message || 'Failed to upload waiting screen media')
+    } finally {
+      setWaitingImageUploading(false)
+      if (waitingImageInputRef.current) waitingImageInputRef.current.value = ''
+    }
   }
 
   const handleThanksImageUpload = async (file) => {
@@ -641,6 +673,10 @@ function SessionFormModal({
           ? normalizeQuestionMediaUrlForStorage(waitingScreenImageUrl) ||
             waitingScreenImageUrl
           : null,
+      waitingScreenMediaType:
+        enableNavigation && quizTotalTimeEnabled && waitingScreenImageUrl
+          ? waitingScreenMediaType || 'image'
+          : null,
       thanksScreenImageUrl:
         enableNavigation && quizTotalTimeEnabled && thanksScreenImageUrl
           ? normalizeQuestionMediaUrlForStorage(thanksScreenImageUrl) ||
@@ -663,6 +699,7 @@ function SessionFormModal({
 
   const logoPreviewSrc = resolveQuestionMediaUrl(logoUrl)
   const waitingImagePreviewSrc = resolveQuestionMediaUrl(waitingScreenImageUrl)
+  const waitingMediaKind = getQuestionMediaKindFromApiType(waitingScreenMediaType || 'image')
   const thanksImagePreviewSrc = resolveQuestionMediaUrl(thanksScreenImageUrl)
 
   return (
@@ -1214,6 +1251,11 @@ function SessionFormModal({
                         if (!enabled) {
                           setQuizTotalQuestionTimersEnabled(false)
                           setQuizTotalTimeSynced(false)
+                          setWaitingScreenImageUrl('')
+                          setWaitingScreenMediaType(null)
+                          setWaitingImageError('')
+                          setThanksScreenImageUrl('')
+                          setThanksImageError('')
                         }
                       }}
                       className="mt-1 h-11 w-full rounded-xl border border-blue-200/70 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/15"
@@ -1225,7 +1267,7 @@ function SessionFormModal({
                       Limit how long participants have to complete the full quiz in multiple-question
                       mode. Question timers stay off unless you enable both below.
                       {quizTotalTimeEnabled
-                        ? ' You can upload a waiting screen and thank-you image below.'
+                        ? ' You can upload waiting screen media and a thank-you image below.'
                         : ''}
                     </p>
                   </div>
@@ -1236,21 +1278,36 @@ function SessionFormModal({
                         lobby (or Live page) to start the quiz for everyone.
                       </p>
                       <div>
-                        <p className="text-sm font-semibold text-slate-700">Waiting screen image</p>
+                        <p className="text-sm font-semibold text-slate-700">Waiting screen media</p>
                         <p className="mt-1 text-xs text-slate-500">
                           Shown to participants after Launch, before you click Activate All.
+                          Images: {QUESTION_MEDIA_BANNER.images} · Videos:{' '}
+                          {QUESTION_MEDIA_BANNER.videos} · Audio: {QUESTION_MEDIA_BANNER.audio}.{' '}
+                          {QUESTION_MEDIA_BANNER.maxSize}.
                         </p>
                         <div className="mt-2 flex flex-wrap items-center gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
                           <div className="flex h-16 w-28 items-center justify-center overflow-hidden rounded-lg border border-blue-100 bg-slate-50">
                             {waitingImagePreviewSrc ? (
-                              <img
-                                src={waitingImagePreviewSrc}
-                                alt="Waiting screen preview"
-                                className="max-h-full max-w-full object-contain p-1.5"
-                              />
+                              waitingMediaKind === 'video' ? (
+                                <video
+                                  src={waitingImagePreviewSrc}
+                                  className="max-h-full max-w-full object-contain"
+                                  muted
+                                />
+                              ) : waitingMediaKind === 'audio' ? (
+                                <span className="px-2 text-center text-[0.7rem] font-semibold text-slate-500">
+                                  Audio
+                                </span>
+                              ) : (
+                                <img
+                                  src={waitingImagePreviewSrc}
+                                  alt="Waiting screen preview"
+                                  className="max-h-full max-w-full object-contain p-1.5"
+                                />
+                              )
                             ) : (
                               <span className="px-2 text-center text-[0.7rem] text-slate-400">
-                                No image
+                                No media
                               </span>
                             )}
                           </div>
@@ -1258,11 +1315,11 @@ function SessionFormModal({
                             <input
                               ref={waitingImageInputRef}
                               type="file"
-                              accept={LOGO_ACCEPT}
+                              accept={QUESTION_MEDIA_ACCEPT}
                               className="hidden"
                               onChange={(event) => {
                                 const file = event.target.files?.[0]
-                                if (file) void handleWaitingImageUpload(file)
+                                if (file) void handleWaitingMediaUpload(file)
                               }}
                             />
                             <button
@@ -1279,8 +1336,8 @@ function SessionFormModal({
                               {waitingImageUploading
                                 ? 'Uploading…'
                                 : waitingImagePreviewSrc
-                                  ? 'Replace image'
-                                  : 'Upload image'}
+                                  ? 'Replace media'
+                                  : 'Upload media'}
                             </button>
                             {waitingImagePreviewSrc ? (
                               <button
@@ -1288,6 +1345,7 @@ function SessionFormModal({
                                 disabled={waitingImageUploading}
                                 onClick={() => {
                                   setWaitingScreenImageUrl('')
+                                  setWaitingScreenMediaType(null)
                                   setWaitingImageError('')
                                 }}
                                 className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 text-sm font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
@@ -1298,6 +1356,20 @@ function SessionFormModal({
                             ) : null}
                           </div>
                         </div>
+                        {waitingImagePreviewSrc && waitingMediaKind === 'audio' ? (
+                          <div className="mt-2 rounded-xl border border-blue-100 bg-slate-50 px-3 py-2">
+                            <audio src={waitingImagePreviewSrc} controls className="w-full" />
+                          </div>
+                        ) : null}
+                        {waitingImagePreviewSrc && waitingMediaKind === 'video' ? (
+                          <div className="mt-2 overflow-hidden rounded-xl border border-blue-100 bg-slate-50">
+                            <video
+                              src={waitingImagePreviewSrc}
+                              controls
+                              className="max-h-48 w-full"
+                            />
+                          </div>
+                        ) : null}
                         {waitingImageError ? (
                           <p className="mt-1.5 text-xs font-semibold text-red-700">
                             {waitingImageError}

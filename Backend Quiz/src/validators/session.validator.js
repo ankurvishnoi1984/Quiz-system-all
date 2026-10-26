@@ -241,6 +241,47 @@ function validateQuizTotalTimeSynced(payload, { requireQuizTotalInPayload = fals
   return null;
 }
 
+const WAITING_SCREEN_MEDIA_TYPES = new Set([
+  "image",
+  "gif",
+  "video_file",
+  "audio_file"
+]);
+
+function validateWaitingScreenMediaType(payload, errors) {
+  if (payload?.waiting_screen_media_type === undefined) return;
+
+  if (
+    payload.waiting_screen_media_type === null ||
+    payload.waiting_screen_media_type === ""
+  ) {
+    payload.waiting_screen_media_type = null;
+    return;
+  }
+
+  if (typeof payload.waiting_screen_media_type !== "string") {
+    errors.push("waiting_screen_media_type must be a string or null");
+    return;
+  }
+
+  const normalized = payload.waiting_screen_media_type.trim();
+  if (!WAITING_SCREEN_MEDIA_TYPES.has(normalized)) {
+    errors.push(
+      `waiting_screen_media_type must be one of: ${[...WAITING_SCREEN_MEDIA_TYPES].join(", ")}`
+    );
+    return;
+  }
+
+  payload.waiting_screen_media_type = normalized;
+
+  if (
+    payload.waiting_screen_image_url === null ||
+    payload.waiting_screen_image_url === ""
+  ) {
+    payload.waiting_screen_media_type = null;
+  }
+}
+
 const CONTACT_JOIN_TYPES = new Set([
   "name_email",
   "name_mobile",
@@ -392,6 +433,7 @@ function validateCreateSessionPayload(payload) {
       errors.push("waiting_screen_image_url must be a non-empty string or null");
     }
   }
+  validateWaitingScreenMediaType(payload, errors);
   if (
     payload?.thanks_screen_image_url !== undefined &&
     payload.thanks_screen_image_url !== null &&
@@ -475,6 +517,7 @@ function validateUpdateSessionPayload(payload) {
     "auto_end_time",
     "logo_url",
     "waiting_screen_image_url",
+    "waiting_screen_media_type",
     "thanks_screen_image_url",
     "present_mode_settings",
     "participant_theme",
@@ -565,6 +608,7 @@ function validateUpdateSessionPayload(payload) {
       errors.push("waiting_screen_image_url must be a non-empty string or null");
     }
   }
+  validateWaitingScreenMediaType(payload, errors);
   if (
     payload?.thanks_screen_image_url !== undefined &&
     payload.thanks_screen_image_url !== null &&

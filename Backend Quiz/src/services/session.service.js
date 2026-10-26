@@ -302,6 +302,20 @@ async function createSession({ deptId, input, user }) {
        String(input.waiting_screen_image_url).trim()
          ? String(input.waiting_screen_image_url).trim()
          : null,
+     waiting_screen_media_type: (() => {
+       const url =
+         input.waiting_screen_image_url != null &&
+         String(input.waiting_screen_image_url).trim()
+           ? String(input.waiting_screen_image_url).trim()
+           : null;
+       if (!url) return null;
+       const type =
+         input.waiting_screen_media_type != null &&
+         String(input.waiting_screen_media_type).trim()
+           ? String(input.waiting_screen_media_type).trim()
+           : null;
+       return type || "image";
+     })(),
      thanks_screen_image_url:
        input.thanks_screen_image_url != null &&
        String(input.thanks_screen_image_url).trim()
@@ -448,6 +462,9 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
         qr_code_url: null,
         logo_url: source.logo_url || null,
         waiting_screen_image_url: source.waiting_screen_image_url || null,
+        waiting_screen_media_type: source.waiting_screen_image_url
+          ? source.waiting_screen_media_type || "image"
+          : null,
         thanks_screen_image_url: source.thanks_screen_image_url || null,
         participant_theme: normalizeParticipantTheme(source.participant_theme),
         participant_theme_custom:
@@ -609,6 +626,7 @@ async function updateSession({ sessionId, input, user }) {
     "title",
     "logo_url",
     "waiting_screen_image_url",
+    "waiting_screen_media_type",
     "thanks_screen_image_url",
     "present_mode_settings",
     "participant_theme",
@@ -849,6 +867,23 @@ async function updateSession({ sessionId, input, user }) {
           ? String(input.waiting_screen_image_url).trim()
           : null
         : session.waiting_screen_image_url,
+    waiting_screen_media_type: (() => {
+      const nextUrl =
+        input.waiting_screen_image_url !== undefined
+          ? input.waiting_screen_image_url != null &&
+            String(input.waiting_screen_image_url).trim()
+            ? String(input.waiting_screen_image_url).trim()
+            : null
+          : session.waiting_screen_image_url;
+      if (!nextUrl) return null;
+      if (input.waiting_screen_media_type !== undefined) {
+        return input.waiting_screen_media_type != null &&
+          String(input.waiting_screen_media_type).trim()
+          ? String(input.waiting_screen_media_type).trim()
+          : "image";
+      }
+      return session.waiting_screen_media_type || "image";
+    })(),
     thanks_screen_image_url:
       input.thanks_screen_image_url !== undefined
         ? input.thanks_screen_image_url != null &&

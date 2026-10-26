@@ -579,6 +579,10 @@ function DashboardPage() {
           values.enableNavigation && values.quizTotalTimeEnabled
             ? values.waitingScreenImageUrl || null
             : null,
+        waiting_screen_media_type:
+          values.enableNavigation && values.quizTotalTimeEnabled && values.waitingScreenImageUrl
+            ? values.waitingScreenMediaType || 'image'
+            : null,
         thanks_screen_image_url:
           values.enableNavigation && values.quizTotalTimeEnabled
             ? values.thanksScreenImageUrl || null
@@ -647,6 +651,9 @@ function DashboardPage() {
       autoEndTime: toTimeInputValue(editSession.auto_end_time),
       logoUrl: editSession.logo_url || '',
       waitingScreenImageUrl: editSession.waiting_screen_image_url || '',
+      waitingScreenMediaType: editSession.waiting_screen_image_url
+        ? editSession.waiting_screen_media_type || 'image'
+        : null,
       thanksScreenImageUrl: editSession.thanks_screen_image_url || '',
       participantTheme: editSession.participant_theme || 'default',
       participantThemeCustom: editSession.participant_theme_custom || null,
@@ -699,6 +706,9 @@ function DashboardPage() {
       leaderboard_enabled: values.overallLeaderboard,
       logo_url: values.logoUrl || null,
       waiting_screen_image_url: values.waitingScreenImageUrl || null,
+      waiting_screen_media_type: values.waitingScreenImageUrl
+        ? values.waitingScreenMediaType || 'image'
+        : null,
       thanks_screen_image_url: values.thanksScreenImageUrl || null,
       participant_theme: values.participantTheme || 'default',
       participant_theme_custom: values.participantThemeCustom || null,
