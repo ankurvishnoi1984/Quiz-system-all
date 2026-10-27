@@ -90,7 +90,9 @@ function FeaturesPage() {
           {CORE_FEATURES.map((feature) => (
             <article key={feature.title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <Sparkles className="size-5 text-navy-700" />
-              <h2 className="mt-4 text-lg font-semibold text-navy-900">{feature.title}</h2>
+              <h2 className="mt-4 font-[family-name:var(--font-display)] text-lg font-extrabold text-navy-900">
+                {feature.title}
+              </h2>
               <p className="mt-2 text-sm leading-relaxed text-slate-600">{feature.description}</p>
             </article>
           ))}
@@ -111,7 +113,9 @@ function FeaturesPage() {
                   <div className="inline-flex rounded-xl bg-navy-800 p-3 text-white">
                     <Icon className="size-6" />
                   </div>
-                  <h2 className="mt-5 text-2xl font-bold text-navy-950">{section.title}</h2>
+                  <h2 className="mt-5 font-[family-name:var(--font-display)] text-2xl font-extrabold text-navy-950">
+                    {section.title}
+                  </h2>
                   {section.paragraphs.map((paragraph) => (
                     <p key={paragraph} className="mt-4 text-sm leading-relaxed text-slate-600 sm:text-base">
                       {paragraph}

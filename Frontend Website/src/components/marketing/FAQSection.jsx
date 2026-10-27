@@ -24,7 +24,9 @@ function FAQSection({ items = FAQ_ITEMS, title = 'Frequently asked questions' })
                   onClick={() => setOpenIndex(isOpen ? -1 : index)}
                   aria-expanded={isOpen}
                 >
-                  <span className="font-semibold text-navy-900">{item.question}</span>
+                  <span className="font-[family-name:var(--font-display)] font-semibold text-navy-900">
+                    {item.question}
+                  </span>
                   <ChevronDown
                     className={`size-5 shrink-0 text-slate-500 transition ${isOpen ? 'rotate-180' : ''}`}
                   />
