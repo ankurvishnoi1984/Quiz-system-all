@@ -182,7 +182,7 @@ function PricingPage() {
                     to={`/register?plan=${plan.plan_id}`}
                     className={`inline-flex w-full items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold transition ${
                       isFeatured
-                        ? 'bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 text-white shadow-lg shadow-navy-900/20 hover:brightness-110'
+                        ? 'bg-navy-800 text-white hover:bg-navy-950'
                         : 'border border-navy-700 text-navy-800 hover:bg-navy-50'
                     }`}
                   >

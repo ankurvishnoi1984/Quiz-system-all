@@ -81,7 +81,9 @@ function AboutPage() {
               return (
                 <article key={item.title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                   <Icon className="size-6 text-navy-700" />
-                  <h3 className="mt-4 text-lg font-semibold text-navy-900">{item.title}</h3>
+                  <h3 className="mt-4 font-[family-name:var(--font-display)] text-lg font-extrabold text-navy-900">
+                    {item.title}
+                  </h3>
                   <p className="mt-2 text-sm leading-relaxed text-slate-600">{item.description}</p>
                 </article>
               )

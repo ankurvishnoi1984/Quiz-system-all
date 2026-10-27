@@ -1,67 +1,97 @@
 import { Link } from 'react-router-dom'
 import { getAdminPortalUrl } from '../../utils/adminPortal'
 import { LOGO_ALT, LOGO_SRC } from '../../constants/branding'
-import { SUPPORT_EMAIL } from '../../constants/siteContent'
+import { SITE_NAME, SUPPORT_EMAIL } from '../../constants/siteContent'
+import {
+  FOOTER_LEGAL_LINKS,
+  FOOTER_PRODUCT_LINKS,
+  FOOTER_RESOURCE_LINKS,
+  FOOTER_SOLUTION_LINKS,
+} from '../../constants/marketingPages'
 
 function MarketingFooter() {
   return (
     <footer className="border-t border-slate-200 bg-navy-950 text-slate-300">
-      <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-4 lg:px-8">
-        <div className="lg:col-span-2">
-          <div className="mb-5 inline-flex rounded-2xl bg-white px-5 py-4 shadow-sm ring-1 ring-white/10">
-            <img src={LOGO_SRC} alt={LOGO_ALT} className="h-12 w-auto max-w-[220px] object-contain" />
+      <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-2 lg:grid-cols-5 lg:px-8">
+        <div className="lg:col-span-1">
+          <div className="mb-5 inline-flex rounded-2xl bg-white px-4 py-3">
+            <img src={LOGO_SRC} alt={LOGO_ALT} className="h-10 w-auto max-w-[200px] object-contain" />
           </div>
-          <p className="max-w-md text-sm leading-relaxed text-slate-400">
-            Run interactive quizzes, polls, and surveys for events, training, and meetings — with a
-            dedicated host portal for session management and analytics.
+          <p className="max-w-xs text-sm leading-relaxed text-slate-400">
+            {SITE_NAME} helps hosts run live quizzes, polls, and surveys with present mode and reporting —
+            built by Netcast Services.
           </p>
           <p className="mt-4 text-sm">
-            <span className="text-slate-500">Need help? </span>
-            <a href={`mailto:${SUPPORT_EMAIL}`} className="text-white hover:underline">
+            <a href={`mailto:${SUPPORT_EMAIL}`} className="text-navy-400 hover:text-white">
               {SUPPORT_EMAIL}
             </a>
           </p>
         </div>
 
         <div>
-          <p className="mb-4 text-sm font-semibold uppercase tracking-wider text-white">Product</p>
+          <p className="mb-4 text-xs font-bold uppercase tracking-[0.18em] text-white">Product</p>
           <ul className="space-y-3 text-sm">
-            <li>
-              <Link to="/features" className="hover:text-white">
-                Features
-              </Link>
-            </li>
-            <li>
-              <Link to="/pricing" className="hover:text-white">
-                Pricing
-              </Link>
-            </li>
-            <li>
-              <Link to="/register" className="hover:text-white">
-                Register
-              </Link>
-            </li>
+            {FOOTER_PRODUCT_LINKS.map((item) => (
+              <li key={item.to}>
+                <Link to={item.to} className="hover:text-white">
+                  {item.label}
+                </Link>
+              </li>
+            ))}
           </ul>
         </div>
 
         <div>
-          <p className="mb-4 text-sm font-semibold uppercase tracking-wider text-white">Host portal</p>
+          <p className="mb-4 text-xs font-bold uppercase tracking-[0.18em] text-white">Solutions</p>
+          <ul className="space-y-3 text-sm">
+            {FOOTER_SOLUTION_LINKS.map((item) => (
+              <li key={item.to}>
+                <Link to={item.to} className="hover:text-white">
+                  {item.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div>
+          <p className="mb-4 text-xs font-bold uppercase tracking-[0.18em] text-white">Resources</p>
+          <ul className="space-y-3 text-sm">
+            {FOOTER_RESOURCE_LINKS.map((item) => (
+              <li key={item.to}>
+                <Link to={item.to} className="hover:text-white">
+                  {item.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div>
+          <p className="mb-4 text-xs font-bold uppercase tracking-[0.18em] text-white">Host portal</p>
           <ul className="space-y-3 text-sm">
             <li>
               <a href={getAdminPortalUrl('/login')} className="hover:text-white">
-                Sign in
+                Login
               </a>
             </li>
             <li>
-              <a href={getAdminPortalUrl('/forgot-password')} className="hover:text-white">
-                Forgot password
-              </a>
-            </li>
-            <li>
-              <Link to="/about" className="hover:text-white">
-                About us
+              <Link to="/register" className="hover:text-white">
+                Sign up
               </Link>
             </li>
+            <li>
+              <a href={getAdminPortalUrl('/join')} className="hover:text-white">
+                Join a session
+              </a>
+            </li>
+            {FOOTER_LEGAL_LINKS.map((item) => (
+              <li key={item.to}>
+                <Link to={item.to} className="hover:text-white">
+                  {item.label}
+                </Link>
+              </li>
+            ))}
           </ul>
         </div>
       </div>
