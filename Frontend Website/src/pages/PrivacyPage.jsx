@@ -11,8 +11,8 @@ function PrivacyPage() {
       />
       <section className="mx-auto max-w-3xl space-y-6 px-4 py-16 text-sm leading-relaxed text-slate-700 sm:px-6 lg:px-8">
         <p>
-          Netcast Services operates High Voltage. We collect information needed to create host accounts,
-          run live sessions, provide support, and improve the product.
+          High Voltage collects information needed to create host accounts, run live sessions, provide
+          support, and improve the product.
         </p>
         <h2 className="font-[family-name:var(--font-display)] text-xl font-extrabold text-navy-950">
           Information we process

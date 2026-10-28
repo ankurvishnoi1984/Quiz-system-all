@@ -86,10 +86,34 @@ export function formatPlanQuestionLimitShort(maxQuestions) {
 }
 
 export const HERO_STATS = [
-  { value: 'Live', label: 'Concurrent participant limits' },
-  { value: 'Real-time', label: 'Live results & leaderboards' },
-  { value: '5 min', label: 'Average setup time' },
-  { value: '99.9%', label: 'Platform uptime target' },
+  {
+    value: '10K+',
+    label: 'Live participants supported',
+    countTo: 10,
+    suffix: 'K+',
+    decimals: 0,
+  },
+  {
+    value: '4+',
+    label: 'Live formats hosts run daily',
+    countTo: 4,
+    suffix: '+',
+    decimals: 0,
+  },
+  {
+    value: '5 min',
+    label: 'Average setup time',
+    countTo: 5,
+    suffix: ' min',
+    decimals: 0,
+  },
+  {
+    value: '99.9%',
+    label: 'Platform uptime target',
+    countTo: 99.9,
+    suffix: '%',
+    decimals: 1,
+  },
 ]
 
 export const CORE_FEATURES = [

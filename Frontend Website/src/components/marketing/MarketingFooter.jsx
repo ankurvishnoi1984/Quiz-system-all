@@ -18,8 +18,7 @@ function MarketingFooter() {
             <img src={LOGO_SRC} alt={LOGO_ALT} className="h-10 w-auto max-w-[200px] object-contain" />
           </div>
           <p className="max-w-xs text-sm leading-relaxed text-slate-400">
-            {SITE_NAME} helps hosts run live quizzes, polls, and surveys with present mode and reporting —
-            built by Netcast Services.
+            {SITE_NAME} helps hosts run live quizzes, polls, and surveys with present mode and reporting.
           </p>
           <p className="mt-4 text-sm">
             <a href={`mailto:${SUPPORT_EMAIL}`} className="text-navy-400 hover:text-white">
@@ -97,7 +96,7 @@ function MarketingFooter() {
       </div>
 
       <div className="border-t border-white/10 py-5 text-center text-xs text-slate-500">
-        © {new Date().getFullYear()} Netcast Services. All rights reserved.
+        © {new Date().getFullYear()} High Voltage. All rights reserved.
       </div>
     </footer>
   )
