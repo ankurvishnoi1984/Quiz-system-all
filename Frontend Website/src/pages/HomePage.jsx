@@ -1,15 +1,11 @@
-import {
-  ArrowRight,
-  BarChart3,
-  ClipboardList,
-  MessageSquare,
-  Presentation,
-  Sparkles,
-} from 'lucide-react'
+import { ArrowRight, MessageSquare } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import StatsBar from '../components/marketing/StatsBar'
 import CTASection from '../components/marketing/CTASection'
 import FAQSection from '../components/marketing/FAQSection'
+import Reveal from '../components/marketing/Reveal'
+import MarqueeStrip from '../components/marketing/MarqueeStrip'
+import HeroProductVisual from '../components/marketing/HeroProductVisual'
 import { CORE_FEATURES, HOW_IT_WORKS, SITE_NAME } from '../constants/siteContent'
 import {
   HOME_CONTENT_BLOCKS,
@@ -168,52 +164,13 @@ function FeatureVisual({ type }) {
   )
 }
 
-function HeroProductVisual() {
-  const tiles = [
-    { icon: Sparkles, label: 'Quizzes', detail: 'Leaderboards', chip: 'chip-amber' },
-    { icon: ClipboardList, label: 'Polls', detail: 'Live charts', chip: 'chip-sky' },
-    { icon: Presentation, label: 'Present', detail: 'QR join', chip: 'chip-coral' },
-    { icon: BarChart3, label: 'Reports', detail: 'PDF & Excel', chip: 'chip-emerald' },
-  ]
-
-  return (
-    <div className="anim-float relative mx-auto w-full max-w-lg">
-      <div className="absolute -inset-8 rounded-[2.5rem] bg-[radial-gradient(circle_at_30%_20%,rgba(200,35,44,0.22),transparent_45%),radial-gradient(circle_at_80%_70%,rgba(31,143,191,0.28),transparent_50%)] blur-2xl" />
-      <div className="relative overflow-hidden rounded-[2rem] bg-linear-to-br from-navy-900 via-navy-800 to-navy-700 p-4 shadow-2xl shadow-navy-900/30 sm:p-6">
-        <div className="rounded-3xl bg-white p-4 text-navy-900 sm:p-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-sky">Live session</p>
-              <p className="mt-1 font-[family-name:var(--font-display)] text-lg font-extrabold">
-                Training pulse check
-              </p>
-            </div>
-            <span className="rounded-full bg-accent-soft px-3 py-1 text-xs font-bold text-accent">
-              86 online
-            </span>
-          </div>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            {tiles.map(({ icon: Icon, label, detail, chip }) => (
-              <div key={label} className={`p-3.5 ${chip}`}>
-                <Icon className="size-5" />
-                <p className="mt-2 text-sm font-bold text-navy-950">{label}</p>
-                <p className="text-xs opacity-80">{detail}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function HomePage() {
   return (
     <div>
-      <section className="surface-warm relative overflow-hidden">
+      <section id="home-hero" className="surface-warm relative overflow-hidden">
         <div className="relative mx-auto grid max-w-7xl items-center gap-12 px-4 pb-16 pt-12 sm:px-6 sm:pb-20 sm:pt-16 lg:grid-cols-2 lg:gap-16 lg:px-8 lg:pt-20">
           <div className="space-y-7">
-            <p className="anim-fade-up eyebrow">{SITE_NAME} by Netcast Services</p>
+            {/* <p className="anim-fade-up eyebrow">{SITE_NAME}</p> */}
             <h1 className="anim-fade-up-delay font-[family-name:var(--font-display)] text-4xl font-black leading-[1.08] tracking-tight text-navy-950 sm:text-5xl lg:text-[3.35rem]">
               Live quizzes and polls that keep every audience{' '}
               <span className="hero-underline">engaged</span>.
@@ -237,75 +194,55 @@ function HomePage() {
             </p>
           </div>
 
-          <HeroProductVisual />
+          <Reveal delay={120} y={28}>
+            <HeroProductVisual />
+          </Reveal>
         </div>
       </section>
 
-      <section className="surface-band border-y border-navy-100/80 py-10">
-        <div className="mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8">
-          <p className="font-[family-name:var(--font-display)] text-base font-semibold text-navy-800">
-            Built for teams that present to real audiences
-          </p>
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-            {[
-              { label: 'Training', chip: 'chip-sky' },
-              { label: 'Education', chip: 'chip-emerald' },
-              { label: 'Events', chip: 'chip-amber' },
-              { label: 'Town halls', chip: 'chip-coral' },
-              { label: 'Hybrid meetings', chip: 'chip-navy' },
-            ].map((item) => (
-              <span
-                key={item.label}
-                className={`px-4 py-1.5 text-xs font-bold uppercase tracking-wider ${item.chip}`}
-              >
-                {item.label}
-              </span>
-            ))}
-          </div>
-        </div>
-      </section>
-
+      <MarqueeStrip />
       <StatsBar />
 
       <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-3xl text-center">
+        <Reveal className="mx-auto max-w-3xl text-center">
           <p className="eyebrow">Product</p>
           <h2 className="section-heading mt-3">Everything you need to run interactive live sessions</h2>
           <p className="section-subheading">
             From the first join to the final export — designed for facilitators who need reliability at
             scale.
           </p>
-        </div>
+        </Reveal>
 
         <div className="mt-16 space-y-20">
           {featureShowcases.map((feature, index) => {
             const reverse = index % 2 === 1
             return (
-              <div
-                key={feature.title}
-                className={`grid items-center gap-10 lg:grid-cols-2 lg:gap-16 ${reverse ? 'lg:[&>*:first-child]:order-2' : ''}`}
-              >
-                <div>
-                  <p className="eyebrow">{feature.eyebrow}</p>
-                  <h3 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-extrabold text-navy-950">
-                    {feature.title}
-                  </h3>
-                  <p className="mt-4 text-base leading-relaxed text-slate-600">{feature.description}</p>
-                  <ul className="mt-5 space-y-2">
-                    {feature.points.map((point) => (
-                      <li key={point} className="flex items-center gap-2 text-sm text-navy-800">
-                        <span className="size-1.5 rounded-full bg-accent" />
-                        {point}
-                      </li>
-                    ))}
-                  </ul>
-                  <Link to="/features" className="btn-link mt-6">
-                    Explore features
-                    <ArrowRight className="size-4" />
-                  </Link>
+              <Reveal key={feature.title} delay={index * 40}>
+                <div
+                  className={`grid items-center gap-10 lg:grid-cols-2 lg:gap-16 ${reverse ? 'lg:[&>*:first-child]:order-2' : ''}`}
+                >
+                  <div>
+                    <p className="eyebrow">{feature.eyebrow}</p>
+                    <h3 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-extrabold text-navy-950">
+                      {feature.title}
+                    </h3>
+                    <p className="mt-4 text-base leading-relaxed text-slate-600">{feature.description}</p>
+                    <ul className="mt-5 space-y-2">
+                      {feature.points.map((point) => (
+                        <li key={point} className="flex items-center gap-2 text-sm text-navy-800">
+                          <span className="size-1.5 rounded-full bg-accent" />
+                          {point}
+                        </li>
+                      ))}
+                    </ul>
+                    <Link to="/features" className="btn-link mt-6">
+                      Explore features
+                      <ArrowRight className="size-4" />
+                    </Link>
+                  </div>
+                  <FeatureVisual type={feature.visual} />
                 </div>
-                <FeatureVisual type={feature.visual} />
-              </div>
+              </Reveal>
             )
           })}
         </div>
@@ -313,30 +250,31 @@ function HomePage() {
 
       <section className="bg-linear-to-b from-sky-soft/40 via-white to-accent-soft/30 py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-2xl text-center">
+          <Reveal className="mx-auto max-w-2xl text-center">
             <p className="eyebrow">Use cases</p>
             <h2 className="section-heading mt-3">One platform across your formats</h2>
-          </div>
+          </Reveal>
           <div className="mt-12 grid gap-6 md:grid-cols-2">
             {USE_CASE_PAGES.map((item, index) => {
               const chips = ['chip-sky', 'chip-emerald', 'chip-amber', 'chip-coral']
               return (
-              <Link
-                key={item.slug}
-                to={`/use-cases#${item.slug}`}
-                className="rounded-3xl border border-white bg-white/90 p-7 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg"
-              >
-                <div className={`mb-4 inline-flex p-3 ${chips[index % chips.length]}`}>
-                  <MessageSquare className="size-5" />
-                </div>
-                <h3 className="font-[family-name:var(--font-display)] text-xl font-extrabold text-navy-950">
-                  {item.title}
-                </h3>
-                <p className="mt-3 text-sm leading-relaxed text-slate-600">{item.description}</p>
-                <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Ideal for: {item.audience}
-                </p>
-              </Link>
+                <Reveal key={item.slug} delay={index * 80}>
+                  <Link
+                    to={`/use-cases#${item.slug}`}
+                    className="card-lift block rounded-3xl border border-white bg-white/90 p-7 shadow-sm"
+                  >
+                    <div className={`mb-4 inline-flex p-3 ${chips[index % chips.length]}`}>
+                      <MessageSquare className="size-5" />
+                    </div>
+                    <h3 className="font-[family-name:var(--font-display)] text-xl font-extrabold text-navy-950">
+                      {item.title}
+                    </h3>
+                    <p className="mt-3 text-sm leading-relaxed text-slate-600">{item.description}</p>
+                    <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Ideal for: {item.audience}
+                    </p>
+                  </Link>
+                </Reveal>
               )
             })}
           </div>
@@ -350,23 +288,27 @@ function HomePage() {
       </section>
 
       <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-2xl text-center">
+        <Reveal className="mx-auto max-w-2xl text-center">
           <p className="eyebrow">How it works</p>
           <h2 className="section-heading mt-3">From signup to live session in four steps</h2>
-        </div>
+        </Reveal>
         <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
           {HOW_IT_WORKS.map((item, index) => {
             const tones = ['text-sky', 'text-emerald', 'text-amber', 'text-accent']
             return (
-            <article key={item.step} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-              <p className={`font-[family-name:var(--font-display)] text-3xl font-black ${tones[index % tones.length]}`}>
-                {item.step}
-              </p>
-              <h3 className="mt-4 font-[family-name:var(--font-display)] text-lg font-extrabold text-navy-950">
-                {item.title}
-              </h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-600">{item.description}</p>
-            </article>
+              <Reveal key={item.step} delay={index * 90}>
+                <article className="card-lift h-full rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <p
+                    className={`font-[family-name:var(--font-display)] text-3xl font-black ${tones[index % tones.length]}`}
+                  >
+                    {item.step}
+                  </p>
+                  <h3 className="mt-4 font-[family-name:var(--font-display)] text-lg font-extrabold text-navy-950">
+                    {item.title}
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-600">{item.description}</p>
+                </article>
+              </Reveal>
             )
           })}
         </div>
@@ -374,21 +316,23 @@ function HomePage() {
 
       <section className="border-y border-slate-200 bg-linear-to-br from-navy-50 via-white to-amber-soft/40 py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-2xl text-center">
+          <Reveal className="mx-auto max-w-2xl text-center">
             <p className="eyebrow">Capabilities</p>
             <h2 className="section-heading mt-3">What hosts get in one product</h2>
-          </div>
+          </Reveal>
           <div className="mt-12 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
             {CORE_FEATURES.map((feature, index) => {
               const bars = ['bg-sky', 'bg-accent', 'bg-emerald', 'bg-amber', 'bg-coral', 'bg-navy-600']
               return (
-              <article key={feature.title} className="overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-                <span className={`mb-4 block h-1.5 w-12 rounded-full ${bars[index % bars.length]}`} />
-                <h3 className="font-[family-name:var(--font-display)] text-lg font-extrabold text-navy-950">
-                  {feature.title}
-                </h3>
-                <p className="mt-3 text-sm leading-relaxed text-slate-600">{feature.description}</p>
-              </article>
+                <Reveal key={feature.title} delay={(index % 3) * 80}>
+                  <article className="card-lift h-full overflow-hidden rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <span className={`mb-4 block h-1.5 w-12 rounded-full ${bars[index % bars.length]}`} />
+                    <h3 className="font-[family-name:var(--font-display)] text-lg font-extrabold text-navy-950">
+                      {feature.title}
+                    </h3>
+                    <p className="mt-3 text-sm leading-relaxed text-slate-600">{feature.description}</p>
+                  </article>
+                </Reveal>
               )
             })}
           </div>
@@ -409,36 +353,46 @@ function HomePage() {
 
       <section className="bg-navy-950 py-20 text-white">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-2xl text-center">
+          <Reveal className="mx-auto max-w-2xl text-center">
             <p className="text-sm font-semibold text-amber">More than a poll button</p>
             <h2 className="mt-3 font-[family-name:var(--font-display)] text-3xl font-extrabold sm:text-4xl">
               Depth for hosts. Simplicity for audiences.
             </h2>
-          </div>
+          </Reveal>
           <div className="mt-12 grid gap-6 lg:grid-cols-2">
-            {HOME_CONTENT_BLOCKS.map((block) => (
-              <article key={block.title} className="rounded-3xl border border-white/10 bg-white/5 p-8">
-                <h3 className="font-[family-name:var(--font-display)] text-2xl font-extrabold">{block.title}</h3>
-                <p className="mt-3 text-sm leading-relaxed text-slate-300">{block.body}</p>
-                <ul className="mt-5 space-y-2">
-                  {block.points.map((point) => (
-                    <li key={point} className="flex items-center gap-2 text-sm text-slate-200">
-                      <span className="size-1.5 rounded-full bg-accent" />
-                      {point}
-                    </li>
-                  ))}
-                </ul>
-              </article>
+            {HOME_CONTENT_BLOCKS.map((block, index) => (
+              <Reveal key={block.title} delay={index * 100}>
+                <article className="h-full rounded-3xl border border-white/10 bg-white/5 p-8">
+                  <h3 className="font-[family-name:var(--font-display)] text-2xl font-extrabold">
+                    {block.title}
+                  </h3>
+                  <p className="mt-3 text-sm leading-relaxed text-slate-300">{block.body}</p>
+                  <ul className="mt-5 space-y-2">
+                    {block.points.map((point) => (
+                      <li key={point} className="flex items-center gap-2 text-sm text-slate-200">
+                        <span className="size-1.5 rounded-full bg-accent" />
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              </Reveal>
             ))}
           </div>
           <div className="mt-10 flex flex-wrap justify-center gap-4">
             <Link to="/how-it-works" className="btn-accent">
               How it works
             </Link>
-            <Link to="/product-tour" className="btn-secondary border-white/30 bg-transparent text-white hover:bg-white/10">
+            <Link
+              to="/product-tour"
+              className="btn-secondary border-white/30 bg-transparent text-white hover:bg-white/10"
+            >
               Product tour
             </Link>
-            <Link to="/security" className="btn-secondary border-white/30 bg-transparent text-white hover:bg-white/10">
+            <Link
+              to="/security"
+              className="btn-secondary border-white/30 bg-transparent text-white hover:bg-white/10"
+            >
               Security & trust
             </Link>
           </div>
@@ -446,20 +400,22 @@ function HomePage() {
       </section>
 
       <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-2xl text-center">
+        <Reveal className="mx-auto max-w-2xl text-center">
           <p className="eyebrow">Stories</p>
           <h2 className="section-heading mt-3">Outcomes teams talk about</h2>
-        </div>
+        </Reveal>
         <div className="mt-12 grid gap-6 md:grid-cols-3">
-          {STORY_ITEMS.slice(0, 3).map((story) => (
-            <article key={story.title} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-              <p className="text-xs font-bold uppercase tracking-wider text-navy-600">{story.sector}</p>
-              <h3 className="mt-3 font-[family-name:var(--font-display)] text-lg font-extrabold text-navy-950">
-                {story.title}
-              </h3>
-              <p className="mt-3 text-sm leading-relaxed text-slate-600">&ldquo;{story.quote}&rdquo;</p>
-              <p className="mt-4 text-sm font-semibold text-accent">{story.outcome}</p>
-            </article>
+          {STORY_ITEMS.slice(0, 3).map((story, index) => (
+            <Reveal key={story.title} delay={index * 90}>
+              <article className="card-lift h-full rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                <p className="text-xs font-bold uppercase tracking-wider text-navy-600">{story.sector}</p>
+                <h3 className="mt-3 font-[family-name:var(--font-display)] text-lg font-extrabold text-navy-950">
+                  {story.title}
+                </h3>
+                <p className="mt-3 text-sm leading-relaxed text-slate-600">&ldquo;{story.quote}&rdquo;</p>
+                <p className="mt-4 text-sm font-semibold text-accent">{story.outcome}</p>
+              </article>
+            </Reveal>
           ))}
         </div>
         <div className="mt-8 text-center">
@@ -472,22 +428,23 @@ function HomePage() {
 
       <section className="border-y border-slate-200 bg-linear-to-r from-sky-soft via-white to-amber-soft py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mx-auto max-w-2xl text-center">
+          <Reveal className="mx-auto max-w-2xl text-center">
             <p className="eyebrow">Resources</p>
             <h2 className="section-heading mt-3">Keep exploring</h2>
-          </div>
+          </Reveal>
           <div className="mt-10 grid gap-5 md:grid-cols-3">
-            {TIP_ARTICLES.map((article) => (
-              <Link
-                key={article.slug}
-                to={article.href}
-                className="rounded-3xl border border-white bg-white/90 p-6 shadow-sm transition hover:shadow-md"
-              >
-                <h3 className="font-[family-name:var(--font-display)] text-lg font-extrabold text-navy-950">
-                  {article.title}
-                </h3>
-                <p className="mt-3 text-sm text-slate-600">{article.summary}</p>
-              </Link>
+            {TIP_ARTICLES.map((article, index) => (
+              <Reveal key={article.slug} delay={index * 80}>
+                <Link
+                  to={article.href}
+                  className="card-lift block h-full rounded-3xl border border-white bg-white/90 p-6 shadow-sm"
+                >
+                  <h3 className="font-[family-name:var(--font-display)] text-lg font-extrabold text-navy-950">
+                    {article.title}
+                  </h3>
+                  <p className="mt-3 text-sm text-slate-600">{article.summary}</p>
+                </Link>
+              </Reveal>
             ))}
           </div>
           <div className="mt-8 flex flex-wrap justify-center gap-4">

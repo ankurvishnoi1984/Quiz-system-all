@@ -68,7 +68,7 @@ function ContactPage() {
               <ul className="mt-4 space-y-2 text-sm text-slate-600">
                 <li className="flex gap-2">
                   <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-navy-700" />
-                  Peak concurrent audience size
+                  Typical audience size
                 </li>
                 <li className="flex gap-2">
                   <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-navy-700" />

@@ -11,8 +11,8 @@ function TermsPage() {
       />
       <section className="mx-auto max-w-3xl space-y-6 px-4 py-16 text-sm leading-relaxed text-slate-700 sm:px-6 lg:px-8">
         <p>
-          By accessing High Voltage websites or services operated by Netcast Services, you agree to use the
-          platform lawfully and respect other participants, hosts, and system integrity.
+          By accessing High Voltage websites or services, you agree to use the platform lawfully and
+          respect other participants, hosts, and system integrity.
         </p>
         <h2 className="font-[family-name:var(--font-display)] text-xl font-extrabold text-navy-950">
           Accounts &amp; acceptable use

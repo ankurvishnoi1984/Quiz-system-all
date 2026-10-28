@@ -1,4 +1,6 @@
 import { HERO_STATS } from '../../constants/siteContent'
+import AnimatedCounter from './AnimatedCounter'
+import Reveal from './Reveal'
 
 const tones = [
   { value: 'text-sky', bar: 'bg-sky' },
@@ -14,16 +16,26 @@ function StatsBar() {
         {HERO_STATS.map((stat, index) => {
           const tone = tones[index % tones.length]
           return (
-            <div
-              key={stat.label}
-              className="rounded-2xl border border-slate-100 bg-linear-to-b from-white to-slate-50 px-4 py-5 text-center shadow-sm"
-            >
-              <span className={`mx-auto mb-3 block h-1 w-10 rounded-full ${tone.bar}`} />
-              <p className={`font-[family-name:var(--font-display)] text-2xl font-extrabold sm:text-3xl ${tone.value}`}>
-                {stat.value}
-              </p>
-              <p className="mt-2 text-sm text-slate-600">{stat.label}</p>
-            </div>
+            <Reveal key={stat.label} delay={index * 90} className="h-full">
+              <div className="card-lift h-full rounded-2xl border border-slate-100 bg-linear-to-b from-white to-slate-50 px-4 py-5 text-center shadow-sm">
+                <span className={`mx-auto mb-3 block h-1 w-10 rounded-full ${tone.bar}`} />
+                <p
+                  className={`font-[family-name:var(--font-display)] text-2xl font-extrabold sm:text-3xl ${tone.value}`}
+                >
+                  {typeof stat.countTo === 'number' ? (
+                    <AnimatedCounter
+                      to={stat.countTo}
+                      decimals={stat.decimals || 0}
+                      suffix={stat.suffix || ''}
+                      prefix={stat.prefix || ''}
+                    />
+                  ) : (
+                    stat.value
+                  )}
+                </p>
+                <p className="mt-2 text-sm text-slate-600">{stat.label}</p>
+              </div>
+            </Reveal>
           )
         })}
       </div>

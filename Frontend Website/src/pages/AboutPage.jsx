@@ -35,8 +35,8 @@ function AboutPage() {
             <p className="eyebrow">About</p>
             <h1 className="section-heading mt-3">Helping presenters create memorable moments</h1>
             <p className="section-subheading">
-              {SITE_NAME} is developed by Netcast Services to give facilitators, trainers, and event teams a
-              professional alternative to generic polling tools — with deeper session control and reporting.
+              {SITE_NAME} gives facilitators, trainers, and event teams a professional alternative to
+              generic polling tools — with deeper session control and reporting.
             </p>
           </div>
         </div>
