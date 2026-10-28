@@ -10,7 +10,12 @@ import {
   getSessionEmbedLinkApi,
   mintJoinIdentityTokenApi,
 } from '../../services/embedApi'
-import { getZoomStatusApi } from '../../services/zoomApi'
+import {
+  disconnectZoomApi,
+  getMyZoomStatusApi,
+  getZoomStatusApi,
+  startZoomOAuthApi,
+} from '../../services/zoomApi'
 import { isIntegrationsEnabled, isZoomAppEnabled } from '../../utils/integrations'
 import {
   buildGenericJoinUrl,
@@ -218,6 +223,8 @@ export default function ShareSessionPanel({
   const [signedJoinExpiresIn, setSignedJoinExpiresIn] = useState(null)
   const [zoomStatus, setZoomStatus] = useState(null)
   const [zoomStatusError, setZoomStatusError] = useState('')
+  const [zoomOAuthBusy, setZoomOAuthBusy] = useState(false)
+  const [zoomOAuthError, setZoomOAuthError] = useState('')
   const [sessionAdmin, setSessionAdmin] = useState(session?.session_admin || null)
 
   const resolvedSessionDbId = sessionDbId ?? session?.session_id ?? session?.id
@@ -244,14 +251,31 @@ export default function ShareSessionPanel({
     return `${zoomAppUrl}?mockMeetingUuid=dev-${sessionCode}&mockRole=participant&mockDisplayName=Guest`
   }, [zoomAppUrl, sessionCode])
 
+  const refreshZoomStatus = useCallback(async () => {
+    setZoomStatusError('')
+    try {
+      const data = accessToken
+        ? await getMyZoomStatusApi(accessToken)
+        : await getZoomStatusApi()
+      setZoomStatus(data)
+    } catch (err) {
+      setZoomStatus(null)
+      setZoomStatusError(err?.message || 'Could not load Zoom status')
+    }
+  }, [accessToken])
+
   useEffect(() => {
     if (!ZOOM_APP_ENABLED || shareTab !== 'zoom') return undefined
     let cancelled = false
     ;(async () => {
-      setZoomStatusError('')
       try {
-        const data = await getZoomStatusApi()
-        if (!cancelled) setZoomStatus(data)
+        const data = accessToken
+          ? await getMyZoomStatusApi(accessToken)
+          : await getZoomStatusApi()
+        if (!cancelled) {
+          setZoomStatus(data)
+          setZoomStatusError('')
+        }
       } catch (err) {
         if (!cancelled) {
           setZoomStatus(null)
@@ -262,7 +286,36 @@ export default function ShareSessionPanel({
     return () => {
       cancelled = true
     }
-  }, [shareTab])
+  }, [shareTab, accessToken])
+
+  const handleConnectZoom = async () => {
+    if (!accessToken || zoomOAuthBusy) return
+    setZoomOAuthBusy(true)
+    setZoomOAuthError('')
+    try {
+      const data = await startZoomOAuthApi(accessToken)
+      const authorizeUrl = data?.authorize_url
+      if (!authorizeUrl) throw new Error('Zoom did not return an authorize URL')
+      window.location.assign(authorizeUrl)
+    } catch (err) {
+      setZoomOAuthError(err?.message || 'Could not start Zoom connect')
+      setZoomOAuthBusy(false)
+    }
+  }
+
+  const handleDisconnectZoom = async () => {
+    if (!accessToken || zoomOAuthBusy) return
+    setZoomOAuthBusy(true)
+    setZoomOAuthError('')
+    try {
+      await disconnectZoomApi(accessToken)
+      await refreshZoomStatus()
+    } catch (err) {
+      setZoomOAuthError(err?.message || 'Could not disconnect Zoom')
+    } finally {
+      setZoomOAuthBusy(false)
+    }
+  }
   const genericJoinUrl = buildGenericJoinUrl()
   const sessionDescription = session?.description || ''
   const scheduledLabel = formatScheduledSessionForDisplay(
@@ -849,6 +902,58 @@ export default function ShareSessionPanel({
                   ? ' — local mock testing still works.'
                   : null}
               </p>
+              {accessToken ? (
+                <div className="mt-2 space-y-2">
+                  {zoomStatus?.connection ? (
+                    <>
+                      <p>
+                        Connected as{' '}
+                        <span className="font-semibold">
+                          {zoomStatus.connection.zoom_email ||
+                            zoomStatus.connection.zoom_user_id ||
+                            'Zoom account'}
+                        </span>
+                      </p>
+                      <button
+                        type="button"
+                        disabled={zoomOAuthBusy}
+                        onClick={() => void handleDisconnectZoom()}
+                        className="h-9 rounded-lg border border-red-200 bg-white px-3 text-xs font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-50"
+                      >
+                        {zoomOAuthBusy ? 'Disconnecting…' : 'Disconnect Zoom'}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p>
+                        Connect your Zoom account so Marketplace OAuth is linked to this host.
+                        Linking a meeting still uses quiz sign-in inside the Zoom app.
+                      </p>
+                      <button
+                        type="button"
+                        disabled={zoomOAuthBusy || !zoomStatus?.configured}
+                        onClick={() => void handleConnectZoom()}
+                        className="h-9 rounded-lg border border-blue-200 bg-white px-3 text-xs font-semibold text-navy-800 transition hover:bg-blue-50 disabled:opacity-50"
+                      >
+                        {zoomOAuthBusy ? 'Opening Zoom…' : 'Connect Zoom'}
+                      </button>
+                      {!zoomStatus?.configured ? (
+                        <p className="text-[11px] text-slate-500">
+                          Set ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET, and ZOOM_REDIRECT_URI on the API
+                          first.
+                        </p>
+                      ) : null}
+                    </>
+                  )}
+                  {zoomOAuthError ? (
+                    <p className="font-semibold text-red-700">{zoomOAuthError}</p>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="mt-2 text-[11px] text-slate-500">
+                  Sign in as a host to connect or disconnect Zoom OAuth.
+                </p>
+              )}
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-navy-700">
