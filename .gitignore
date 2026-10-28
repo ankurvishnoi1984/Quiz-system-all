@@ -12,3 +12,10 @@ quiz_db.sql
 *.zip
 dist
 *.sql
+*.xlsx
+*.jpg
+*.md
+*.pptx
+*.pdf
+*.png
+docs
