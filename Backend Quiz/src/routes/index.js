@@ -22,7 +22,6 @@ const websocketMonitorRoutes = require("./websocket-monitor.routes");
 const auditLogRoutes = require("./audit-log.routes");
 const aiRoutes = require("./ai.routes");
 const questionBankRoutes = require("./question-bank.routes");
-const zoomRoutes = require("./zoom.routes");
 const sessionAdminRoutes = require("./session-admin.routes");
 const zoomRoutes = require("./zoom.routes");
 
@@ -51,8 +50,8 @@ router.use("/", mediaRoutes);
 router.use("/", participantRoutes);
 router.use("/", presentViewRoutes);
 router.use("/", analyticsRoutes);
+router.use("/", zoomRoutes);
 router.use("/", websocketMonitorRoutes);
 router.use("/", aiRoutes);
-router.use("/", zoomRoutes);
 
 module.exports = router;

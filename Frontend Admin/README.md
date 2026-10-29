@@ -121,6 +121,11 @@ npm run preview
 ## Related docs
 
 - Product guide (plain language): `../Quiz-Platform-Guide.html`
-- Quiz config playbook (settings recipes): `../Quiz-Config-Playbook.html`
+- Quiz features (simple list): `../docs/Quiz-Features-Simple.html`
+- Quiz features (section list): `../docs/Quiz-Features-Flow.html`
+- Quiz features (documentation): `../docs/Quiz-Features-Guide.html`
+- Quiz config playbook (detailed PDF): `../Quiz config playbook — detailed handbook.pdf`
+- Zoom integration: `../docs/Zoom-Integration-Guide.html`
+- Zoom Marketplace (Zoom portal only): `../docs/Zoom-Marketplace-Setup.html`
 - Product vs Vevox: `../Vevox-Feature-Extraction.md` and `../Vevox-Comparison.html`
 - Backend API: `../Backend Quiz/README.md`

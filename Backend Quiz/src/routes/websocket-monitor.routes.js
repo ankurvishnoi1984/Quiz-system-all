@@ -8,7 +8,9 @@ const requireAdminActionOtp = require("../middlewares/admin-action-otp.middlewar
 const router = express.Router();
 const platformManagers = authorizeRoles("super_admin", "sub_admin");
 
-router.use(authMiddleware);
+// Scope auth to /monitor only — this router is mounted at "/", so a bare
+// router.use(authMiddleware) would 401 every unmatched API path (including Zoom).
+router.use("/monitor", authMiddleware);
 
 router.get(
   "/monitor/websockets",
