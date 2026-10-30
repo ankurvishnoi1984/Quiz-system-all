@@ -256,6 +256,11 @@ function SessionFormModal({
     ? SESSION_FORM_TABS.filter((tab) => tab.id === 'basics' || tab.id === 'look')
     : SESSION_FORM_TABS
   const effectiveTab = visibleTabs.some((tab) => tab.id === activeTab) ? activeTab : 'basics'
+  const currentTabIndex = visibleTabs.findIndex((tab) => tab.id === effectiveTab)
+  const nextTab =
+    currentTabIndex >= 0 && currentTabIndex < visibleTabs.length - 1
+      ? visibleTabs[currentTabIndex + 1]
+      : null
 
   const uploadDeptId = useWorkspaceDepartment
     ? String(defaultDepartmentId || '')
@@ -1826,7 +1831,7 @@ function SessionFormModal({
           </div>
           </div>
         </div>
-        <div className="mt-4 flex shrink-0 items-end gap-2 border-t border-blue-100/80 pt-4 md:justify-end">
+        <div className="mt-4 flex shrink-0 flex-wrap items-end gap-2 border-t border-blue-100/80 pt-4 md:justify-end">
           <button
             type="button"
             onClick={onClose}
@@ -1834,14 +1839,32 @@ function SessionFormModal({
           >
             Cancel
           </button>
-          <button
-            type="submit"
-            data-tour="create-session-submit"
-            disabled={isSubmitting || logoUploading}
-            className="h-11 rounded-xl bg-navy-900 px-4 text-sm font-semibold text-white transition hover:bg-navy-800 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isSubmitting ? 'Saving…' : mode === 'create' ? 'Create session' : 'Save changes'}
-          </button>
+          {nextTab ? (
+            <button
+              type="button"
+              data-tour="session-form-next"
+              onClick={(event) => {
+                event.preventDefault()
+                event.stopPropagation()
+                const tabId = nextTab.id
+                // Defer tab change so this click cannot land on the Create/Save
+                // submit button that replaces Next on the last step.
+                window.setTimeout(() => setActiveTab(tabId), 0)
+              }}
+              className="h-11 rounded-xl border border-navy-900/20 bg-white px-4 text-sm font-semibold text-navy-900 transition hover:bg-blue-50"
+            >
+              Next
+            </button>
+          ) : (
+            <button
+              type="submit"
+              data-tour="create-session-submit"
+              disabled={isSubmitting || logoUploading}
+              className="h-11 rounded-xl bg-navy-900 px-4 text-sm font-semibold text-white transition hover:bg-navy-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSubmitting ? 'Saving…' : mode === 'create' ? 'Create session' : 'Save changes'}
+            </button>
+          )}
         </div>
       </form>
     </Modal>

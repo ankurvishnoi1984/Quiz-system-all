@@ -6,7 +6,6 @@ import { useHostOnboarding } from '../../context/HostOnboardingContext'
 import { useAuthStore } from '../../store/authStore'
 import { canSwitchShellDepartment } from '../../utils/adminRoles'
 import { isShellFilterDisabled } from '../../utils/shellFilterPaths'
-import { isWebsiteSignupHost } from '../../utils/websiteSignupHost'
 
 const pageTitles = {
   '/dashboard': 'Admin Dashboard',
@@ -40,7 +39,10 @@ function Navbar() {
   const { restart } = useHostOnboarding()
   const shellFiltersDisabled = isShellFilterDisabled(pathname)
   const canSwitchDepartment = canSwitchShellDepartment(user)
-  const hideDepartment = isWebsiteSignupHost({ user, departments, departmentId })
+  // Department filter hidden in Host Workspace for now.
+  // Restore: import isWebsiteSignupHost from '../../utils/websiteSignupHost' and use:
+  // const hideDepartment = isWebsiteSignupHost({ user, departments, departmentId })
+  const hideDepartment = true
   const departmentLabel =
     departments.find((d) => String(d.dept_id) === String(departmentId))?.name ||
     department ||
