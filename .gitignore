@@ -12,3 +12,7 @@ quiz_db.sql
 *.zip
 dist
 *.sql
+docs
+reports
+uploads
+.cursor/

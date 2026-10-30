@@ -8,6 +8,7 @@ import {
   LoaderCircle,
   Play,
   Radio,
+  Square,
   Users,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -32,6 +33,7 @@ import {
 import { listSessionQuestionsApi, getSessionResponsesApi } from '../services/liveApi'
 import {
   activateAllSessionAdminQuestionsApi,
+  deactivateAllSessionAdminQuestionsApi,
   getSessionAdminDashboardApi,
 } from '../services/sessionAdminApi'
 import { useAuthStore } from '../store/authStore'
@@ -42,10 +44,7 @@ import {
 } from '../utils/analyticsQuestions'
 import { buildEmojiBarData } from '../utils/emojiReaction'
 import { exportCombinedSessionReportExcel } from '../utils/combinedSessionReportExcelExport'
-import {
-  canHostActivateAllQuestions,
-  sessionUsesAdvancedSlotActivation,
-} from '../utils/hostQuestionControls'
+import { sessionUsesAdvancedSlotActivation } from '../utils/hostQuestionControls'
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -113,13 +112,17 @@ function SessionAdminPage() {
   const canEditLive = session?.status === 'live'
   const singleActiveQuestionMode = session?.participant_navigation_enabled === false
   const advancedSlotActivation = sessionUsesAdvancedSlotActivation(session)
-  const showActivateAllQuestionsButton = useMemo(() => {
-    if (advancedSlotActivation) return false
-    return canHostActivateAllQuestions(
-      (questions || []).map((q) => ({ isLive: Boolean(q.is_live) })),
-      { canEditLive, singleActiveQuestionMode },
-    )
-  }, [advancedSlotActivation, questions, canEditLive, singleActiveQuestionMode])
+  const multiActiveControlsEligible = useMemo(() => {
+    if (!canEditLive || advancedSlotActivation || singleActiveQuestionMode) return false
+    return (questions || []).length > 0
+  }, [canEditLive, advancedSlotActivation, singleActiveQuestionMode, questions])
+  const hasLiveQuestion = useMemo(
+    () => (questions || []).some((q) => Boolean(q.is_live)),
+    [questions],
+  )
+  const showActivateButton = multiActiveControlsEligible && !hasLiveQuestion
+  const showDeactivateButton = multiActiveControlsEligible && hasLiveQuestion
+  const showLiveToggleHint = showActivateButton || showDeactivateButton
 
   const activateAllQuestionsMutation = useMutation({
     mutationFn: () => activateAllSessionAdminQuestionsApi(accessToken),
@@ -132,31 +135,71 @@ function SessionAdminPage() {
         message:
           typeof count === 'number'
             ? `${count} question${count === 1 ? '' : 's'} are now live for participants.`
-            : 'All inactive questions are now live for participants.',
+            : 'All questions are now live for participants.',
         confirmLabel: 'OK',
       })
     },
     onError: (error) => {
       setHostAlert({
         variant: 'error',
-        title: 'Could not activate all questions',
+        title: 'Could not activate questions',
         message: error?.message || 'Something went wrong. Please try again.',
         confirmLabel: 'OK',
       })
     },
   })
 
-  const requestActivateAllQuestions = () => {
+  const deactivateAllQuestionsMutation = useMutation({
+    mutationFn: () => deactivateAllSessionAdminQuestionsApi(accessToken),
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ['session-admin-dashboard'] })
+      const cleared = data?.responses_cleared
+      setHostAlert({
+        variant: 'success',
+        title: 'Questions deactivated',
+        message:
+          typeof cleared === 'number'
+            ? `Questions are off and ${cleared} response${cleared === 1 ? '' : 's'} cleared. You can Activate again to start from the beginning.`
+            : 'Questions are off and responses cleared. You can Activate again to start from the beginning.',
+        confirmLabel: 'OK',
+      })
+    },
+    onError: (error) => {
+      setHostAlert({
+        variant: 'error',
+        title: 'Could not deactivate questions',
+        message: error?.message || 'Something went wrong. Please try again.',
+        confirmLabel: 'OK',
+      })
+    },
+  })
+
+  const requestActivateQuestions = () => {
     setHostAlert({
       variant: 'warning',
-      title: 'Activate all questions?',
+      title: 'Activate questions?',
       message:
-        'This will make every inactive question live for participants at once. Timed questions will share the same start time.',
+        'This will make every question live for participants at once. Timed questions will share the same start time.',
       confirmLabel: 'Cancel',
       secondaryLabel: activateAllQuestionsMutation.isPending ? 'Activating…' : 'Activate',
       onSecondary: () => {
         if (activateAllQuestionsMutation.isPending) return
         activateAllQuestionsMutation.mutate()
+      },
+    })
+  }
+
+  const requestDeactivateQuestions = () => {
+    setHostAlert({
+      variant: 'warning',
+      title: 'Deactivate questions?',
+      message:
+        'This turns all questions off and clears every response so the quiz can be started again from the beginning. Participants stay joined.',
+      confirmLabel: 'Cancel',
+      secondaryLabel: deactivateAllQuestionsMutation.isPending ? 'Deactivating…' : 'Deactivate',
+      onSecondary: () => {
+        if (deactivateAllQuestionsMutation.isPending) return
+        deactivateAllQuestionsMutation.mutate()
       },
     })
   }
@@ -342,7 +385,8 @@ function SessionAdminPage() {
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-cyan-50/90 sm:text-base">
                 Watch live participation and open reports. Building, presenting, and going live stay
-                with the host. When multiple questions can be active, you can Activate All here.
+                with the host. When multiple questions can be active, you can Activate or Deactivate
+                here.
               </p>
             </div>
           </div>
@@ -447,15 +491,17 @@ function SessionAdminPage() {
               <div>
                 <h2 className="text-lg font-bold text-teal-950">Questions</h2>
                 <p className="text-sm text-slate-600">
-                  {showActivateAllQuestionsButton
-                    ? 'Live-style list · Activate All available'
+                  {showLiveToggleHint
+                    ? showDeactivateButton
+                      ? 'Live-style list · Deactivate available'
+                      : 'Live-style list · Activate available'
                     : 'Live-style list · view only'}
                 </p>
               </div>
-              {showActivateAllQuestionsButton ? (
+              {showActivateButton ? (
                 <button
                   type="button"
-                  onClick={requestActivateAllQuestions}
+                  onClick={requestActivateQuestions}
                   disabled={activateAllQuestionsMutation.isPending}
                   title="Make all questions live at once (timed questions share the same start time)"
                   className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
@@ -465,9 +511,23 @@ function SessionAdminPage() {
                   ) : (
                     <Play className="size-4 fill-current" />
                   )}
-                  {activateAllQuestionsMutation.isPending
-                    ? 'Activating…'
-                    : 'Activate all questions'}
+                  {activateAllQuestionsMutation.isPending ? 'Activating…' : 'Activate'}
+                </button>
+              ) : null}
+              {showDeactivateButton ? (
+                <button
+                  type="button"
+                  onClick={requestDeactivateQuestions}
+                  disabled={deactivateAllQuestionsMutation.isPending}
+                  title="Turn questions off and clear responses so the quiz can start again"
+                  className="inline-flex h-11 items-center gap-2 rounded-xl border border-rose-300 bg-white px-4 text-sm font-bold text-rose-700 shadow-sm transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {deactivateAllQuestionsMutation.isPending ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Square className="size-3.5 fill-current" />
+                  )}
+                  {deactivateAllQuestionsMutation.isPending ? 'Deactivating…' : 'Deactivate'}
                 </button>
               ) : null}
             </div>

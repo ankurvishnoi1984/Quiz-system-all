@@ -22,6 +22,12 @@ router.post(
 );
 
 router.post(
+  "/deactivate-all-questions",
+  authorizeRoles("session_admin"),
+  sessionAdminController.deactivateAllQuestions
+);
+
+router.post(
   "/sessions/:sessionId/password",
   authorizeStaff,
   authorizeRights("sessions"),

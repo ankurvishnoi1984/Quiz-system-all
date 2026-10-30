@@ -994,7 +994,13 @@ function ParticipantSessionPage({ embed = false }) {
     })
 
     const offSession = client.on(RealtimeEvent.SESSION_UPDATED, (data) => {
-      if (data?.status || data?.advanced_active_slot != null || data?.started_at) {
+      const hasStartedAtPatch = data != null && Object.prototype.hasOwnProperty.call(data, 'started_at')
+      if (
+        data?.status ||
+        data?.advanced_active_slot != null ||
+        hasStartedAtPatch ||
+        data?.quiz_reset
+      ) {
         const ended = data.status === 'completed' || data.status === 'archived'
         queryClient.setQueryData(['participant-session', effectiveSessionCode], (old) =>
           old
@@ -1004,7 +1010,7 @@ function ParticipantSessionPage({ embed = false }) {
                 ...(data?.advanced_active_slot != null
                   ? { advanced_active_slot: data.advanced_active_slot }
                   : {}),
-                ...(data?.started_at ? { started_at: data.started_at } : {}),
+                ...(hasStartedAtPatch ? { started_at: data.started_at ?? null } : {}),
                 // Match backend clearParticipantFacingDisplaysOnEnd before settings WS lands.
                 ...(ended
                   ? {
@@ -1016,6 +1022,14 @@ function ParticipantSessionPage({ embed = false }) {
               }
             : old,
         )
+      }
+      if (data?.quiz_reset === true) {
+        resetQuizProgress()
+        setAnswerRevealByQuestion({})
+        setAllQuestionsClosedByHost(false)
+        closedNoticeShownRef.current.clear()
+        allQuestionsClosedNoticeShownRef.current = false
+        pendingActivatedQuestionIdRef.current = null
       }
       // Only refetch public lookup when the event has no status to apply locally.
       if (!data?.status) {
@@ -1508,6 +1522,7 @@ function ParticipantSessionPage({ embed = false }) {
     showClosedByHostNotice,
     showAllQuestionsClosedNotice,
     navigationEnabled,
+    resetQuizProgress,
   ])
 
   useEffect(() => {

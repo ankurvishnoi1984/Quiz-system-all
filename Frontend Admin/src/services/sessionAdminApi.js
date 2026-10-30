@@ -29,3 +29,9 @@ export async function activateAllSessionAdminQuestionsApi(accessToken) {
     method: 'POST',
   })
 }
+
+export async function deactivateAllSessionAdminQuestionsApi(accessToken) {
+  return authRequest('/session-admin/deactivate-all-questions', accessToken, {
+    method: 'POST',
+  })
+}
