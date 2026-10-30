@@ -61,7 +61,7 @@ async function ensureUniqueUsername(baseUsername, { transaction } = {}) {
 
 function buildLoginUrl() {
   const base = String(getFrontendPublicUrl() || "").replace(/\/$/, "");
-  return `${base}/login`;
+  return `${base}/session-admin/login`;
 }
 
 function toSessionAdminCredentials(session, adminUser) {

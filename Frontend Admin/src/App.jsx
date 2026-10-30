@@ -7,6 +7,7 @@ import { RequireRight } from './components/auth/RequireRight'
 import DepartmentAnalyticsPage from './pages/DepartmentAnalyticsPage'
 import ClientAnalyticsPage from './pages/ClientAnalyticsPage'
 import LoginPage from './pages/LoginPage'
+import SessionAdminLoginPage from './pages/SessionAdminLoginPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import ForceChangePasswordPage from './pages/ForceChangePasswordPage'
 import DashboardPage from './pages/DashboardPage'
@@ -66,6 +67,7 @@ function isPublicAppPath(pathname) {
     (INTEGRATIONS_ENABLED && pathname.startsWith('/embed/display')) ||
     (INTEGRATIONS_ENABLED && pathname.startsWith('/embed/participant')) ||
     pathname === '/login' ||
+    pathname === '/session-admin/login' ||
     pathname === '/forgot-password' ||
     pathname === '/verify-email'
   )
@@ -161,6 +163,19 @@ function App() {
           <Route
             path="/login"
             element={user ? <Navigate to={postLoginPath} replace /> : <LoginPage />}
+          />
+          <Route
+            path="/session-admin/login"
+            element={
+              user ? (
+                <Navigate
+                  to={user.role === 'session_admin' ? '/session-admin' : postLoginPath}
+                  replace
+                />
+              ) : (
+                <SessionAdminLoginPage />
+              )
+            }
           />
           <Route
             path="/forgot-password"

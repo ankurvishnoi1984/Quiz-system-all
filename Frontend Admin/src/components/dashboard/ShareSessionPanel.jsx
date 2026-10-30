@@ -15,10 +15,16 @@ import {
   buildGenericJoinUrl,
   buildParticipantEmbedUrl,
   buildSessionJoinUrl,
+  getPublicAppOrigin,
   normalizeSessionCode,
   resolveSessionJoinUrl,
 } from '../../utils/joinUrl'
 import { formatScheduledSessionForDisplay } from '../../utils/sessionSchedule'
+
+function buildSessionAdminLoginUrl() {
+  const origin = getPublicAppOrigin()
+  return origin ? `${origin}/session-admin/login` : '/session-admin/login'
+}
 
 const INTEGRATIONS_ENABLED = isIntegrationsEnabled()
 
@@ -241,6 +247,8 @@ export default function ShareSessionPanel({
       }),
     [session?.title, sessionDescription, scheduledLabel, shareJoinUrl],
   )
+
+  const sessionAdminLoginUrl = useMemo(() => buildSessionAdminLoginUrl(), [])
 
   const presentViewShareText = useMemo(
     () =>
@@ -497,6 +505,57 @@ export default function ShareSessionPanel({
           <p className="text-xs text-slate-500">
             Use Copy link on the field for the URL only, or Copy all for session details plus the join link.
           </p>
+
+          {sessionAdmin?.username ? (
+            <div className="space-y-3 rounded-2xl border border-teal-200/80 bg-teal-50/50 p-4">
+              <div className="flex items-start gap-3">
+                <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-teal-600 text-white">
+                  <Shield className="size-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold uppercase tracking-[0.16em] text-teal-700">
+                    Session Admin
+                  </p>
+                  <p className="mt-0.5 text-sm text-teal-900/80">
+                    Separate login for watching this session and reports.
+                  </p>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-teal-700">
+                  Session Admin login link
+                </p>
+                <div className="mt-1 flex overflow-hidden rounded-xl border border-teal-200/80 bg-white">
+                  <input
+                    readOnly
+                    value={sessionAdminLoginUrl}
+                    className="h-11 min-w-0 flex-1 border-0 bg-transparent px-3 text-sm text-slate-700 outline-none"
+                    aria-label="Session Admin login link"
+                  />
+                  <CopyIconButton value={sessionAdminLoginUrl} attached showLabel />
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <a
+                  href={sessionAdminLoginUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-teal-300 bg-white px-3 text-sm font-semibold text-teal-800 transition hover:bg-teal-50"
+                >
+                  <Link2 className="size-4" />
+                  Open Session Admin login
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setShareTab('admin')}
+                  className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-teal-700 px-3 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800"
+                >
+                  <Shield className="size-4" />
+                  View credentials
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
 
