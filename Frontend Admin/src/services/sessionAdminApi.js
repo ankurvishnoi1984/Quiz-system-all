@@ -23,3 +23,9 @@ export async function changeOwnSessionAdminPasswordApi(accessToken, newPassword)
   })
   return data?.session_admin || null
 }
+
+export async function activateAllSessionAdminQuestionsApi(accessToken) {
+  return authRequest('/session-admin/activate-all-questions', accessToken, {
+    method: 'POST',
+  })
+}

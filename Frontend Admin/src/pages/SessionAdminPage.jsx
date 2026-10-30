@@ -6,11 +6,12 @@ import {
   LayoutDashboard,
   Loader2,
   LoaderCircle,
+  Play,
   Radio,
   Users,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Area,
   AreaChart,
@@ -22,13 +23,17 @@ import {
 } from 'recharts'
 import { SessionSummaryReportCard } from '../components/analytics/SessionSummaryReportCard'
 import { QuestionBreakdownTables } from '../components/analytics/QuestionBreakdownTables'
+import { HostAlertModal } from '../components/live/HostAlertModal'
 import { SESSION_REPORT_VIEWS } from '../constants/sessionReportTypes'
 import {
   getSessionParticipantsReportApi,
   getSessionSummaryReportApi,
 } from '../services/analyticsApi'
 import { listSessionQuestionsApi, getSessionResponsesApi } from '../services/liveApi'
-import { getSessionAdminDashboardApi } from '../services/sessionAdminApi'
+import {
+  activateAllSessionAdminQuestionsApi,
+  getSessionAdminDashboardApi,
+} from '../services/sessionAdminApi'
 import { useAuthStore } from '../store/authStore'
 import {
   apiQuestionTypeToUi,
@@ -37,6 +42,10 @@ import {
 } from '../utils/analyticsQuestions'
 import { buildEmojiBarData } from '../utils/emojiReaction'
 import { exportCombinedSessionReportExcel } from '../utils/combinedSessionReportExcelExport'
+import {
+  canHostActivateAllQuestions,
+  sessionUsesAdvancedSlotActivation,
+} from '../utils/hostQuestionControls'
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -81,9 +90,11 @@ function StatCard({ icon: Icon, label, value, hint, tone = 'teal' }) {
 
 function SessionAdminPage() {
   const accessToken = useAuthStore((s) => s.accessToken)
+  const queryClient = useQueryClient()
   const [nav, setNav] = useState('dashboard')
   const [reportView, setReportView] = useState('summary')
   const [exportingReport, setExportingReport] = useState(false)
+  const [hostAlert, setHostAlert] = useState(null)
 
   const dashboardQuery = useQuery({
     queryKey: ['session-admin-dashboard'],
@@ -98,6 +109,57 @@ function SessionAdminPage() {
   const live = dashboardQuery.data?.live || { connected_now: 0, total_joined: 0 }
   const timeline = dashboardQuery.data?.join_timeline || []
   const reportsEnabled = Boolean(accessToken && sessionId && nav === 'reports')
+
+  const canEditLive = session?.status === 'live'
+  const singleActiveQuestionMode = session?.participant_navigation_enabled === false
+  const advancedSlotActivation = sessionUsesAdvancedSlotActivation(session)
+  const showActivateAllQuestionsButton = useMemo(() => {
+    if (advancedSlotActivation) return false
+    return canHostActivateAllQuestions(
+      (questions || []).map((q) => ({ isLive: Boolean(q.is_live) })),
+      { canEditLive, singleActiveQuestionMode },
+    )
+  }, [advancedSlotActivation, questions, canEditLive, singleActiveQuestionMode])
+
+  const activateAllQuestionsMutation = useMutation({
+    mutationFn: () => activateAllSessionAdminQuestionsApi(accessToken),
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ['session-admin-dashboard'] })
+      const count = data?.activated_count
+      setHostAlert({
+        variant: 'success',
+        title: 'Questions activated',
+        message:
+          typeof count === 'number'
+            ? `${count} question${count === 1 ? '' : 's'} are now live for participants.`
+            : 'All inactive questions are now live for participants.',
+        confirmLabel: 'OK',
+      })
+    },
+    onError: (error) => {
+      setHostAlert({
+        variant: 'error',
+        title: 'Could not activate all questions',
+        message: error?.message || 'Something went wrong. Please try again.',
+        confirmLabel: 'OK',
+      })
+    },
+  })
+
+  const requestActivateAllQuestions = () => {
+    setHostAlert({
+      variant: 'warning',
+      title: 'Activate all questions?',
+      message:
+        'This will make every inactive question live for participants at once. Timed questions will share the same start time.',
+      confirmLabel: 'Cancel',
+      secondaryLabel: activateAllQuestionsMutation.isPending ? 'Activating…' : 'Activate',
+      onSecondary: () => {
+        if (activateAllQuestionsMutation.isPending) return
+        activateAllQuestionsMutation.mutate()
+      },
+    })
+  }
 
   const summaryQuery = useQuery({
     queryKey: ['session-admin-summary', sessionId],
@@ -273,14 +335,14 @@ function SessionAdminPage() {
             </span>
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-100">
-                Session Admin workspace · Read only
+                Session Admin workspace
               </p>
               <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
                 {session?.title || 'Assigned session'}
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-cyan-50/90 sm:text-base">
-                Watch live participation and open reports for this session. Controls for building,
-                presenting, and going live stay with the host.
+                Watch live participation and open reports. Building, presenting, and going live stay
+                with the host. When multiple questions can be active, you can Activate All here.
               </p>
             </div>
           </div>
@@ -381,9 +443,33 @@ function SessionAdminPage() {
           </div>
 
           <div className="rounded-3xl border border-teal-200/70 bg-white/90 shadow-sm">
-            <div className="border-b border-teal-100 px-5 py-4">
-              <h2 className="text-lg font-bold text-teal-950">Questions</h2>
-              <p className="text-sm text-slate-600">Live-style list · view only</p>
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-teal-100 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-bold text-teal-950">Questions</h2>
+                <p className="text-sm text-slate-600">
+                  {showActivateAllQuestionsButton
+                    ? 'Live-style list · Activate All available'
+                    : 'Live-style list · view only'}
+                </p>
+              </div>
+              {showActivateAllQuestionsButton ? (
+                <button
+                  type="button"
+                  onClick={requestActivateAllQuestions}
+                  disabled={activateAllQuestionsMutation.isPending}
+                  title="Make all questions live at once (timed questions share the same start time)"
+                  className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {activateAllQuestionsMutation.isPending ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Play className="size-4 fill-current" />
+                  )}
+                  {activateAllQuestionsMutation.isPending
+                    ? 'Activating…'
+                    : 'Activate all questions'}
+                </button>
+              ) : null}
             </div>
             {!questions.length ? (
               <div className="px-5 py-10 text-center text-sm text-slate-600">
@@ -479,6 +565,17 @@ function SessionAdminPage() {
           )}
         </div>
       )}
+
+      <HostAlertModal
+        open={Boolean(hostAlert)}
+        variant={hostAlert?.variant ?? 'success'}
+        title={hostAlert?.title ?? ''}
+        message={hostAlert?.message ?? ''}
+        confirmLabel={hostAlert?.confirmLabel ?? 'OK'}
+        secondaryLabel={hostAlert?.secondaryLabel}
+        onSecondary={hostAlert?.onSecondary}
+        onClose={() => setHostAlert(null)}
+      />
     </section>
   )
 }
