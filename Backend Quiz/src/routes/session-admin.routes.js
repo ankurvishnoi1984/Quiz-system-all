@@ -16,6 +16,12 @@ router.get(
 );
 
 router.post(
+  "/activate-all-questions",
+  authorizeRoles("session_admin"),
+  sessionAdminController.activateAllQuestions
+);
+
+router.post(
   "/sessions/:sessionId/password",
   authorizeStaff,
   authorizeRights("sessions"),

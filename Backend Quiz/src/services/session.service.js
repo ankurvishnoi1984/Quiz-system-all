@@ -186,7 +186,8 @@ async function listDepartmentSessions({ deptId, status, user }) {
         ...session.toJSON(),
         participants_count: participantsCount,
         completed_participants: completedParticipants,
-        completion_progress: completionProgress
+        completion_progress: completionProgress,
+        question_count: questionCount
       };
       return attachSessionAdminCredentials(plain);
     })
@@ -1063,6 +1064,16 @@ async function transitionSessionStatus({ sessionId, user, action }) {
   }
 
   if (action === "start") {
+    const questionCount = await Question.count({
+      where: { session_id: session.session_id }
+    });
+    if (!questionCount) {
+      const error = new Error(
+        "Add at least one question before launching this session"
+      );
+      error.statusCode = 400;
+      throw error;
+    }
     const { assertAdvancedSessionReadyToStart } = require("./advanced-assignment.service");
     await assertAdvancedSessionReadyToStart(session);
   }
