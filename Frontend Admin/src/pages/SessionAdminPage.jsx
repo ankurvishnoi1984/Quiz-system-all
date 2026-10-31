@@ -67,6 +67,11 @@ function formatCountdown(totalSeconds) {
   return `${mins}:${String(secs).padStart(2, '0')}`
 }
 
+function optionLabel(index) {
+  if (index < 26) return String.fromCharCode(65 + index)
+  return String(index + 1)
+}
+
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'reports', label: 'Reports', icon: FileBarChart2 },
@@ -684,6 +689,7 @@ function SessionAdminPage() {
                     syncedQuestionLockstep &&
                     currentSyncedQuestion &&
                     Number(question.question_id) === Number(currentSyncedQuestion.question_id)
+                  const options = Array.isArray(question.options) ? question.options : []
                   return (
                     <li
                       key={question.question_id}
@@ -703,13 +709,33 @@ function SessionAdminPage() {
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold text-slate-900">{question.question_text}</p>
                         <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
-                          {String(question.question_type || '').replaceAll('_', ' ')} ·{' '}
-                          {question.response_count} response
-                          {question.response_count === 1 ? '' : 's'}
+                          {String(question.question_type || '').replaceAll('_', ' ')}
                           {Number(question.time_limit_seconds) > 0
                             ? ` · ${question.time_limit_seconds}s`
                             : ''}
                         </p>
+                        {options.length ? (
+                          <ul className="mt-3 space-y-1.5">
+                            {options.map((option, optionIndex) => (
+                              <li
+                                key={option.option_id || `${question.question_id}-${optionIndex}`}
+                                className="flex items-start gap-2 text-sm text-slate-700"
+                              >
+                                <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-md bg-slate-100 text-[11px] font-bold text-slate-600">
+                                  {optionLabel(optionIndex)}
+                                </span>
+                                <span className="min-w-0 leading-snug">
+                                  {option.option_text}
+                                  {option.match_side ? (
+                                    <span className="ml-1 text-xs font-medium uppercase tracking-wide text-slate-400">
+                                      ({option.match_side})
+                                    </span>
+                                  ) : null}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         {isCurrent ? (

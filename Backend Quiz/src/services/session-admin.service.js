@@ -8,7 +8,7 @@ const {
   Client,
   Participant,
   Question,
-  Response
+  QuestionOption
 } = require("../models");
 const { assertSessionWriteAccess } = require("../config/data-scope");
 const { getFrontendPublicUrl } = require("../config/publicAppUrl");
@@ -219,7 +219,7 @@ async function getSessionAdminDashboard({ user }) {
   const session = await getAssignedSessionForAdmin(user);
   const sessionId = session.session_id;
 
-  const [participants, questions, responseRows, participantsCount] = await Promise.all([
+  const [participants, questions, participantsCount] = await Promise.all([
     Participant.findAll({
       where: { session_id: sessionId },
       attributes: ["participant_id", "joined_at"],
@@ -240,24 +240,24 @@ async function getSessionAdminDashboard({ user }) {
         "is_quiz_mode",
         "time_limit_seconds"
       ],
+      include: [
+        {
+          model: QuestionOption,
+          attributes: ["option_id", "option_text", "display_order", "match_side"],
+          separate: true,
+          order: [
+            ["display_order", "ASC"],
+            ["option_id", "ASC"]
+          ]
+        }
+      ],
       order: [
         ["display_order", "ASC"],
         ["question_id", "ASC"]
       ]
     }),
-    Response.findAll({
-      where: { session_id: sessionId },
-      attributes: ["question_id", "participant_id"],
-      paranoid: true
-    }),
     Participant.count({ where: { session_id: sessionId } })
   ]);
-
-  const responsesByQuestion = new Map();
-  for (const row of responseRows) {
-    const qid = Number(row.question_id);
-    responsesByQuestion.set(qid, (responsesByQuestion.get(qid) || 0) + 1);
-  }
 
   const liveIds = getLiveUniqueParticipantIdsForSessionCode(session.session_code);
   const liveConnected =
@@ -278,7 +278,7 @@ async function getSessionAdminDashboard({ user }) {
     join_timeline: bucketJoinTimeline(participants),
     questions: questions.map((question, index) => {
       const q = typeof question.toJSON === "function" ? question.toJSON() : question;
-      const responseCount = responsesByQuestion.get(Number(q.question_id)) || 0;
+      const rawOptions = q.question_options || q.QuestionOptions || [];
       let state = "waiting";
       if (q.submissions_closed) state = "closed";
       else if (q.is_live) state = "live";
@@ -294,7 +294,15 @@ async function getSessionAdminDashboard({ user }) {
         submissions_closed: Boolean(q.submissions_closed),
         is_quiz_mode: Boolean(q.is_quiz_mode),
         time_limit_seconds: Number(q.time_limit_seconds) || 0,
-        response_count: responseCount,
+        options: rawOptions.map((opt) => {
+          const o = typeof opt.toJSON === "function" ? opt.toJSON() : opt;
+          return {
+            option_id: o.option_id,
+            option_text: o.option_text,
+            display_order: o.display_order,
+            match_side: o.match_side || null
+          };
+        }),
         state
       };
     })
