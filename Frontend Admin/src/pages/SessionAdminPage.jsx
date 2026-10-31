@@ -460,10 +460,8 @@ function SessionAdminPage() {
               <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
                 {session?.title || 'Assigned session'}
               </h1>
-              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-cyan-50/90 sm:text-base">
-                Watch live participation and open reports. Building, presenting, and going live stay
-                with the host. When multiple questions can be active, you can Activate or Deactivate
-                here.
+              <p className="mt-2 max-w-xl text-sm leading-relaxed text-cyan-50/90 sm:text-base">
+                Watch the live quiz and open reports — host controls stay with the host.
               </p>
             </div>
           </div>
@@ -524,15 +522,232 @@ function SessionAdminPage() {
             />
           </div>
 
-          <div className="rounded-3xl border border-teal-200/70 bg-white/90 p-5 shadow-sm">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-bold text-teal-950">Participation over time</h2>
-                <p className="text-sm text-slate-600">Joins by hour during the session</p>
+          {syncedQuestionLockstep && currentSyncedQuestion && quizStarted ? (
+            <div className="overflow-hidden rounded-3xl border border-emerald-200/80 bg-linear-to-br from-emerald-50 via-white to-cyan-50/50 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-100/80 bg-white/50 px-5 py-3.5">
+                <div className="flex items-center gap-3">
+                  <span className="grid size-10 place-items-center rounded-xl bg-emerald-600 text-sm font-bold text-white shadow-sm">
+                    Q{currentSyncedQuestion.order}
+                  </span>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
+                      Current question
+                    </p>
+                    <p className="text-xs font-medium text-emerald-900/70">
+                      {String(currentSyncedQuestion.question_type || '').replaceAll('_', ' ')}
+                      {Number(currentSyncedQuestion.time_limit_seconds) > 0
+                        ? ` · ${currentSyncedQuestion.time_limit_seconds}s limit`
+                        : ''}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-stretch gap-2">
+                  <div className="rounded-xl border border-teal-200 bg-teal-50/90 px-3.5 py-2 text-right">
+                    <p className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.14em] text-teal-700">
+                      <Clock3 className="size-3" />
+                      Quiz
+                    </p>
+                    <p className="font-mono text-xl font-bold tracking-tight text-teal-950">
+                      {formatCountdown(quizRemainingSeconds)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-cyan-200 bg-white px-3.5 py-2 text-right shadow-sm">
+                    <p className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-700">
+                      <Timer className="size-3" />
+                      Question
+                    </p>
+                    <p className="font-mono text-xl font-bold tracking-tight text-cyan-950">
+                      {formatCountdown(questionRemainingSeconds)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-5 py-5">
+                <p className="text-xl font-bold leading-snug text-slate-900">
+                  {currentSyncedQuestion.question_text}
+                </p>
+
+                {Array.isArray(currentSyncedQuestion.options) &&
+                currentSyncedQuestion.options.length ? (
+                  <ul className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {currentSyncedQuestion.options.map((option, optionIndex) => (
+                      <li
+                        key={
+                          option.option_id ||
+                          `${currentSyncedQuestion.question_id}-${optionIndex}`
+                        }
+                        className="flex items-start gap-2.5 rounded-xl border border-emerald-100/90 bg-white/90 px-3 py-2.5 text-sm text-slate-800 shadow-sm"
+                      >
+                        <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-lg bg-emerald-100 text-xs font-bold text-emerald-800">
+                          {optionLabel(optionIndex)}
+                        </span>
+                        <span className="min-w-0 leading-snug">
+                          {option.option_text}
+                          {option.match_side ? (
+                            <span className="ml-1 text-xs font-medium uppercase tracking-wide text-slate-400">
+                              ({option.match_side})
+                            </span>
+                          ) : null}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
             </div>
+          ) : showQuizTimerCard ? (
+            <div className="rounded-3xl border border-teal-200/70 bg-white/90 p-5 shadow-sm">
+              <div className="mb-3">
+                <h2 className="text-lg font-bold text-teal-950">Live quiz clocks</h2>
+                <p className="text-sm text-slate-600">
+                  {syncAndBothConfigured
+                    ? 'Synced lockstep · shared quiz and question timers'
+                    : applyBothTimers
+                      ? 'Quiz total + personal question timers'
+                      : quizTotalSynced
+                        ? 'Synced quiz total time'
+                        : 'Quiz total time'}
+                </p>
+              </div>
+
+              {!quizStarted ? (
+                <div className="rounded-2xl border border-dashed border-amber-200 bg-amber-50/70 px-4 py-5 text-center text-sm font-medium text-amber-900">
+                  Waiting for Activate All — clocks start when questions are activated.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="inline-flex min-w-[9.5rem] flex-col rounded-2xl border border-teal-200 bg-teal-50/60 px-4 py-3">
+                    <p className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-teal-700">
+                      <Clock3 className="size-3.5" />
+                      Quiz time
+                    </p>
+                    <p className="mt-1.5 font-mono text-3xl font-bold tracking-tight text-teal-950">
+                      {formatCountdown(quizRemainingSeconds)}
+                    </p>
+                  </div>
+                  {applyBothTimers && !quizTotalSynced ? (
+                    <p className="text-xs text-slate-600">
+                      Question timers are personal for each participant, so a shared question clock
+                      is not shown here.
+                    </p>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          <div className="rounded-3xl border border-teal-200/70 bg-white/90 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-teal-100 px-5 py-3.5">
+              <div>
+                <h2 className="text-lg font-bold text-teal-950">Questions</h2>
+                <p className="text-sm text-slate-600">
+                  {showLiveToggleHint
+                    ? showDeactivateButton
+                      ? 'Compact list · Deactivate available'
+                      : 'Compact list · Activate available'
+                    : 'Compact list · view only'}
+                </p>
+              </div>
+              {showActivateButton ? (
+                <button
+                  type="button"
+                  onClick={requestActivateQuestions}
+                  disabled={activateAllQuestionsMutation.isPending}
+                  title="Make all questions live at once (timed questions share the same start time)"
+                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {activateAllQuestionsMutation.isPending ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Play className="size-4 fill-current" />
+                  )}
+                  {activateAllQuestionsMutation.isPending ? 'Activating…' : 'Activate'}
+                </button>
+              ) : null}
+              {showDeactivateButton ? (
+                <button
+                  type="button"
+                  onClick={requestDeactivateQuestions}
+                  disabled={deactivateAllQuestionsMutation.isPending}
+                  title="Turn questions off and clear responses so the quiz can start again"
+                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-rose-300 bg-white px-4 text-sm font-bold text-rose-700 shadow-sm transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {deactivateAllQuestionsMutation.isPending ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Square className="size-3.5 fill-current" />
+                  )}
+                  {deactivateAllQuestionsMutation.isPending ? 'Deactivating…' : 'Deactivate'}
+                </button>
+              ) : null}
+            </div>
+            {!questions.length ? (
+              <div className="px-5 py-10 text-center text-sm text-slate-600">
+                No questions in this session yet.
+              </div>
+            ) : (
+              <ul className="divide-y divide-teal-50">
+                {questions.map((question) => {
+                  const isCurrent =
+                    syncedQuestionLockstep &&
+                    currentSyncedQuestion &&
+                    Number(question.question_id) === Number(currentSyncedQuestion.question_id)
+                  return (
+                    <li
+                      key={question.question_id}
+                      className={`flex flex-wrap items-center gap-3 px-5 py-3 ${
+                        isCurrent ? 'bg-emerald-50/80 ring-1 ring-inset ring-emerald-200' : ''
+                      }`}
+                    >
+                      <span
+                        className={`grid size-8 shrink-0 place-items-center rounded-lg text-sm font-bold ${
+                          isCurrent
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-teal-100 text-teal-900'
+                        }`}
+                      >
+                        {question.order}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-semibold text-slate-900">
+                          {question.question_text}
+                        </p>
+                        <p className="mt-0.5 text-xs font-medium uppercase tracking-wide text-slate-500">
+                          {String(question.question_type || '').replaceAll('_', ' ')}
+                          {Number(question.time_limit_seconds) > 0
+                            ? ` · ${question.time_limit_seconds}s`
+                            : ''}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {isCurrent ? (
+                          <span className="rounded-full bg-emerald-600 px-2.5 py-0.5 text-xs font-bold text-white">
+                            Current
+                          </span>
+                        ) : null}
+                        <span
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-bold ring-1 ${
+                            QUESTION_STATE_STYLE[question.state] || QUESTION_STATE_STYLE.waiting
+                          }`}
+                        >
+                          {question.state}
+                        </span>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+
+          <div className="rounded-3xl border border-teal-200/70 bg-white/90 p-5 shadow-sm">
+            <div className="mb-4">
+              <h2 className="text-lg font-bold text-teal-950">Participation over time</h2>
+              <p className="text-sm text-slate-600">Joins by hour during the session</p>
+            </div>
             {chartData.length ? (
-              <div className="h-64 w-full">
+              <div className="h-56 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={chartData}>
                     <defs>
@@ -557,204 +772,9 @@ function SessionAdminPage() {
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="rounded-2xl border border-dashed border-teal-200 bg-teal-50/40 px-4 py-10 text-center text-sm text-teal-800">
+              <div className="rounded-2xl border border-dashed border-teal-200 bg-teal-50/40 px-4 py-8 text-center text-sm text-teal-800">
                 No participant joins yet. The chart updates as people enter the session.
               </div>
-            )}
-          </div>
-
-          {showQuizTimerCard ? (
-            <div className="rounded-3xl border border-teal-200/70 bg-white/90 p-5 shadow-sm">
-              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-bold text-teal-950">Live quiz clocks</h2>
-                  <p className="text-sm text-slate-600">
-                    {syncAndBothConfigured
-                      ? 'Synced lockstep · shared quiz and question timers'
-                      : applyBothTimers
-                        ? 'Quiz total + personal question timers'
-                        : quizTotalSynced
-                          ? 'Synced quiz total time'
-                          : 'Quiz total time'}
-                  </p>
-                </div>
-              </div>
-
-              {!quizStarted ? (
-                <div className="rounded-2xl border border-dashed border-amber-200 bg-amber-50/70 px-4 py-6 text-center text-sm font-medium text-amber-900">
-                  Waiting for Activate All — clocks start when questions are activated.
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-2xl border border-teal-200 bg-teal-50/60 px-4 py-3">
-                      <p className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-teal-700">
-                        <Clock3 className="size-3.5" />
-                        Quiz time
-                      </p>
-                      <p className="mt-2 font-mono text-3xl font-bold tracking-tight text-teal-950">
-                        {formatCountdown(quizRemainingSeconds)}
-                      </p>
-                      <p className="mt-1 text-xs text-teal-800/80">Shared remaining time</p>
-                    </div>
-                    {syncedQuestionLockstep ? (
-                      <div className="rounded-2xl border border-cyan-200 bg-cyan-50/60 px-4 py-3">
-                        <p className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-cyan-700">
-                          <Timer className="size-3.5" />
-                          Question time
-                        </p>
-                        <p className="mt-2 font-mono text-3xl font-bold tracking-tight text-cyan-950">
-                          {formatCountdown(questionRemainingSeconds)}
-                        </p>
-                        <p className="mt-1 text-xs text-cyan-800/80">Current lockstep question</p>
-                      </div>
-                    ) : null}
-                  </div>
-
-                  {syncedQuestionLockstep && currentSyncedQuestion ? (
-                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3">
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-700">
-                        Now on
-                      </p>
-                      <p className="mt-1 text-base font-bold text-emerald-950">
-                        Q{currentSyncedQuestion.order} · {currentSyncedQuestion.question_text}
-                      </p>
-                    </div>
-                  ) : null}
-
-                  {applyBothTimers && !quizTotalSynced ? (
-                    <p className="text-xs text-slate-600">
-                      Question timers are personal for each participant, so a shared question clock
-                      is not shown here.
-                    </p>
-                  ) : null}
-                </div>
-              )}
-            </div>
-          ) : null}
-
-          <div className="rounded-3xl border border-teal-200/70 bg-white/90 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-teal-100 px-5 py-4">
-              <div>
-                <h2 className="text-lg font-bold text-teal-950">Questions</h2>
-                <p className="text-sm text-slate-600">
-                  {showLiveToggleHint
-                    ? showDeactivateButton
-                      ? 'Live-style list · Deactivate available'
-                      : 'Live-style list · Activate available'
-                    : 'Live-style list · view only'}
-                </p>
-              </div>
-              {showActivateButton ? (
-                <button
-                  type="button"
-                  onClick={requestActivateQuestions}
-                  disabled={activateAllQuestionsMutation.isPending}
-                  title="Make all questions live at once (timed questions share the same start time)"
-                  className="inline-flex h-11 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {activateAllQuestionsMutation.isPending ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Play className="size-4 fill-current" />
-                  )}
-                  {activateAllQuestionsMutation.isPending ? 'Activating…' : 'Activate'}
-                </button>
-              ) : null}
-              {showDeactivateButton ? (
-                <button
-                  type="button"
-                  onClick={requestDeactivateQuestions}
-                  disabled={deactivateAllQuestionsMutation.isPending}
-                  title="Turn questions off and clear responses so the quiz can start again"
-                  className="inline-flex h-11 items-center gap-2 rounded-xl border border-rose-300 bg-white px-4 text-sm font-bold text-rose-700 shadow-sm transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {deactivateAllQuestionsMutation.isPending ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Square className="size-3.5 fill-current" />
-                  )}
-                  {deactivateAllQuestionsMutation.isPending ? 'Deactivating…' : 'Deactivate'}
-                </button>
-              ) : null}
-            </div>
-            {!questions.length ? (
-              <div className="px-5 py-10 text-center text-sm text-slate-600">
-                No questions in this session yet.
-              </div>
-            ) : (
-              <ul className="divide-y divide-teal-50">
-                {questions.map((question) => {
-                  const isCurrent =
-                    syncedQuestionLockstep &&
-                    currentSyncedQuestion &&
-                    Number(question.question_id) === Number(currentSyncedQuestion.question_id)
-                  const options = Array.isArray(question.options) ? question.options : []
-                  return (
-                    <li
-                      key={question.question_id}
-                      className={`flex flex-wrap items-start gap-3 px-5 py-4 ${
-                        isCurrent ? 'bg-emerald-50/80 ring-1 ring-inset ring-emerald-200' : ''
-                      }`}
-                    >
-                      <span
-                        className={`grid size-9 shrink-0 place-items-center rounded-xl text-sm font-bold ${
-                          isCurrent
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-teal-100 text-teal-900'
-                        }`}
-                      >
-                        {question.order}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-slate-900">{question.question_text}</p>
-                        <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
-                          {String(question.question_type || '').replaceAll('_', ' ')}
-                          {Number(question.time_limit_seconds) > 0
-                            ? ` · ${question.time_limit_seconds}s`
-                            : ''}
-                        </p>
-                        {options.length ? (
-                          <ul className="mt-3 space-y-1.5">
-                            {options.map((option, optionIndex) => (
-                              <li
-                                key={option.option_id || `${question.question_id}-${optionIndex}`}
-                                className="flex items-start gap-2 text-sm text-slate-700"
-                              >
-                                <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-md bg-slate-100 text-[11px] font-bold text-slate-600">
-                                  {optionLabel(optionIndex)}
-                                </span>
-                                <span className="min-w-0 leading-snug">
-                                  {option.option_text}
-                                  {option.match_side ? (
-                                    <span className="ml-1 text-xs font-medium uppercase tracking-wide text-slate-400">
-                                      ({option.match_side})
-                                    </span>
-                                  ) : null}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {isCurrent ? (
-                          <span className="rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white">
-                            Current
-                          </span>
-                        ) : null}
-                        <span
-                          className={`rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${
-                            QUESTION_STATE_STYLE[question.state] || QUESTION_STATE_STYLE.waiting
-                          }`}
-                        >
-                          {question.state}
-                        </span>
-                      </div>
-                    </li>
-                  )
-                })}
-              </ul>
             )}
           </div>
         </div>
