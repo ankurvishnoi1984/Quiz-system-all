@@ -1,6 +1,6 @@
 import { ChevronDown, CircleHelp, CreditCard, LogOut } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useShell } from '../../context/ShellContext'
 import { useHostOnboarding } from '../../context/HostOnboardingContext'
 import { useAuthStore } from '../../store/authStore'
@@ -33,9 +33,17 @@ function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef(null)
   const { pathname } = useLocation()
+  const navigate = useNavigate()
   const { setClient, clientId, setClientId, department, setDepartment, departmentId, setDepartmentId, clients, departments, isSuperAdmin, clientsLoading, departmentsLoading } = useShell()
   const user = useAuthStore((state) => state.user)
   const logout = useAuthStore((state) => state.logout)
+
+  const handleLogout = () => {
+    const wasSessionAdmin = user?.role === 'session_admin'
+    setMenuOpen(false)
+    logout()
+    navigate(wasSessionAdmin ? '/session-admin/login' : '/login', { replace: true })
+  }
   const { restart } = useHostOnboarding()
   const shellFiltersDisabled = isShellFilterDisabled(pathname)
   const canSwitchDepartment = canSwitchShellDepartment(user)
@@ -188,7 +196,7 @@ function Navbar() {
             ) : null}
             <button
               type="button"
-              onClick={logout}
+              onClick={handleLogout}
               className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-600 transition hover:bg-red-50"
             >
               <LogOut className="size-4" />

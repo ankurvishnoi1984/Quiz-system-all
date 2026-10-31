@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AdminOnlyRoute } from './components/auth/AdminOnlyRoute'
 import { SuperAdminOnlyRoute } from './components/auth/SuperAdminOnlyRoute'
 import { RequireActivePlan } from './components/auth/RequireActivePlan'
@@ -71,6 +71,16 @@ function isPublicAppPath(pathname) {
     pathname === '/forgot-password' ||
     pathname === '/verify-email'
   )
+}
+
+/** After logout (or expired auth) on Session Admin routes, return to SA login — not Host Portal. */
+function UnauthenticatedRedirect() {
+  const { pathname } = useLocation()
+  const to =
+    pathname === '/session-admin' || pathname.startsWith('/session-admin/')
+      ? '/session-admin/login'
+      : '/login'
+  return <Navigate to={to} replace />
 }
 
 function App() {
@@ -207,7 +217,7 @@ function App() {
                   <HostLayout />
                 )
               ) : (
-                <Navigate to="/login" replace />
+                <UnauthenticatedRedirect />
               )
             }
           >
@@ -229,8 +239,10 @@ function App() {
               element={
                 user?.role === 'session_admin' ? (
                   <SessionAdminPage />
-                ) : (
+                ) : user ? (
                   <Navigate to={postLoginPath} replace />
+                ) : (
+                  <Navigate to="/session-admin/login" replace />
                 )
               }
             />
