@@ -1,6 +1,7 @@
 import {
   Activity,
   BarChart3,
+  Clock3,
   Download,
   FileBarChart2,
   LayoutDashboard,
@@ -9,9 +10,10 @@ import {
   Play,
   Radio,
   Square,
+  Timer,
   Users,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Area,
@@ -45,6 +47,25 @@ import {
 import { buildEmojiBarData } from '../utils/emojiReaction'
 import { exportCombinedSessionReportExcel } from '../utils/combinedSessionReportExcelExport'
 import { sessionUsesAdvancedSlotActivation } from '../utils/hostQuestionControls'
+import {
+  buildSyncedQuestionSchedule,
+  getQuizTotalRemainingSeconds,
+  getSyncedQuestionIndex,
+  getSyncedSlotRemainingSeconds,
+} from '../utils/questionTimer'
+import {
+  isQuizTotalTimeSynced,
+  isQuizTotalWithQuestionTimersEnabled,
+  isSessionQuizTotalTimeEnabled,
+  isSyncedQuestionLockstep,
+} from '../utils/sessionFlags'
+
+function formatCountdown(totalSeconds) {
+  const seconds = Math.max(0, Math.floor(Number(totalSeconds) || 0))
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${mins}:${String(secs).padStart(2, '0')}`
+}
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -94,6 +115,7 @@ function SessionAdminPage() {
   const [reportView, setReportView] = useState('summary')
   const [exportingReport, setExportingReport] = useState(false)
   const [hostAlert, setHostAlert] = useState(null)
+  const [timerTick, setTimerTick] = useState(0)
 
   const dashboardQuery = useQuery({
     queryKey: ['session-admin-dashboard'],
@@ -108,6 +130,56 @@ function SessionAdminPage() {
   const live = dashboardQuery.data?.live || { connected_now: 0, total_joined: 0 }
   const timeline = dashboardQuery.data?.join_timeline || []
   const reportsEnabled = Boolean(accessToken && sessionId && nav === 'reports')
+
+  const sessionQuizTotalTimeEnabled = isSessionQuizTotalTimeEnabled(session)
+  const applyBothTimers = isQuizTotalWithQuestionTimersEnabled(session)
+  const quizTotalSynced = isQuizTotalTimeSynced(session)
+  const syncAndBothConfigured = quizTotalSynced && applyBothTimers
+  const syncedQuestionLockstep = isSyncedQuestionLockstep(session)
+
+  useEffect(() => {
+    if (!sessionQuizTotalTimeEnabled) return undefined
+    const id = setInterval(() => setTimerTick((t) => t + 1), 1000)
+    return () => clearInterval(id)
+  }, [sessionQuizTotalTimeEnabled, session?.started_at, session?.quiz_total_time_minutes])
+
+  const quizRemainingSeconds = useMemo(() => {
+    if (!sessionQuizTotalTimeEnabled) return 0
+    void timerTick
+    return getQuizTotalRemainingSeconds(session)
+  }, [
+    sessionQuizTotalTimeEnabled,
+    session,
+    session?.started_at,
+    session?.quiz_total_time_minutes,
+    timerTick,
+  ])
+
+  const syncedQuestionSchedule = useMemo(() => {
+    if (!syncedQuestionLockstep) return []
+    return buildSyncedQuestionSchedule(questions, session?.started_at)
+  }, [syncedQuestionLockstep, questions, session?.started_at])
+
+  const syncedScheduleIndex = useMemo(() => {
+    if (!syncedQuestionSchedule.length) return 0
+    void timerTick
+    return getSyncedQuestionIndex(syncedQuestionSchedule, Date.now())
+  }, [syncedQuestionSchedule, timerTick])
+
+  const currentSyncedQuestion = useMemo(() => {
+    if (!syncedQuestionLockstep || !questions.length) return null
+    return questions[syncedScheduleIndex] || questions[questions.length - 1] || null
+  }, [syncedQuestionLockstep, questions, syncedScheduleIndex])
+
+  const questionRemainingSeconds = useMemo(() => {
+    if (!syncedQuestionLockstep || !syncedQuestionSchedule.length) return 0
+    void timerTick
+    const slot = syncedQuestionSchedule[syncedScheduleIndex]
+    return getSyncedSlotRemainingSeconds(slot, Date.now())
+  }, [syncedQuestionLockstep, syncedQuestionSchedule, syncedScheduleIndex, timerTick])
+
+  const showQuizTimerCard = sessionQuizTotalTimeEnabled
+  const quizStarted = Boolean(session?.started_at)
 
   const canEditLive = session?.status === 'live'
   const singleActiveQuestionMode = session?.participant_navigation_enabled === false
@@ -486,6 +558,76 @@ function SessionAdminPage() {
             )}
           </div>
 
+          {showQuizTimerCard ? (
+            <div className="rounded-3xl border border-teal-200/70 bg-white/90 p-5 shadow-sm">
+              <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold text-teal-950">Live quiz clocks</h2>
+                  <p className="text-sm text-slate-600">
+                    {syncAndBothConfigured
+                      ? 'Synced lockstep · shared quiz and question timers'
+                      : applyBothTimers
+                        ? 'Quiz total + personal question timers'
+                        : quizTotalSynced
+                          ? 'Synced quiz total time'
+                          : 'Quiz total time'}
+                  </p>
+                </div>
+              </div>
+
+              {!quizStarted ? (
+                <div className="rounded-2xl border border-dashed border-amber-200 bg-amber-50/70 px-4 py-6 text-center text-sm font-medium text-amber-900">
+                  Waiting for Activate All — clocks start when questions are activated.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-teal-200 bg-teal-50/60 px-4 py-3">
+                      <p className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-teal-700">
+                        <Clock3 className="size-3.5" />
+                        Quiz time
+                      </p>
+                      <p className="mt-2 font-mono text-3xl font-bold tracking-tight text-teal-950">
+                        {formatCountdown(quizRemainingSeconds)}
+                      </p>
+                      <p className="mt-1 text-xs text-teal-800/80">Shared remaining time</p>
+                    </div>
+                    {syncedQuestionLockstep ? (
+                      <div className="rounded-2xl border border-cyan-200 bg-cyan-50/60 px-4 py-3">
+                        <p className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-cyan-700">
+                          <Timer className="size-3.5" />
+                          Question time
+                        </p>
+                        <p className="mt-2 font-mono text-3xl font-bold tracking-tight text-cyan-950">
+                          {formatCountdown(questionRemainingSeconds)}
+                        </p>
+                        <p className="mt-1 text-xs text-cyan-800/80">Current lockstep question</p>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {syncedQuestionLockstep && currentSyncedQuestion ? (
+                    <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3">
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-700">
+                        Now on
+                      </p>
+                      <p className="mt-1 text-base font-bold text-emerald-950">
+                        Q{currentSyncedQuestion.order} · {currentSyncedQuestion.question_text}
+                      </p>
+                    </div>
+                  ) : null}
+
+                  {applyBothTimers && !quizTotalSynced ? (
+                    <p className="text-xs text-slate-600">
+                      Question timers are personal for each participant, so a shared question clock
+                      is not shown here.
+                    </p>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          ) : null}
+
           <div className="rounded-3xl border border-teal-200/70 bg-white/90 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-teal-100 px-5 py-4">
               <div>
@@ -537,31 +679,55 @@ function SessionAdminPage() {
               </div>
             ) : (
               <ul className="divide-y divide-teal-50">
-                {questions.map((question) => (
-                  <li
-                    key={question.question_id}
-                    className="flex flex-wrap items-start gap-3 px-5 py-4"
-                  >
-                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-teal-100 text-sm font-bold text-teal-900">
-                      {question.order}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-slate-900">{question.question_text}</p>
-                      <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
-                        {String(question.question_type || '').replaceAll('_', ' ')} ·{' '}
-                        {question.response_count} response
-                        {question.response_count === 1 ? '' : 's'}
-                      </p>
-                    </div>
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${
-                        QUESTION_STATE_STYLE[question.state] || QUESTION_STATE_STYLE.waiting
+                {questions.map((question) => {
+                  const isCurrent =
+                    syncedQuestionLockstep &&
+                    currentSyncedQuestion &&
+                    Number(question.question_id) === Number(currentSyncedQuestion.question_id)
+                  return (
+                    <li
+                      key={question.question_id}
+                      className={`flex flex-wrap items-start gap-3 px-5 py-4 ${
+                        isCurrent ? 'bg-emerald-50/80 ring-1 ring-inset ring-emerald-200' : ''
                       }`}
                     >
-                      {question.state}
-                    </span>
-                  </li>
-                ))}
+                      <span
+                        className={`grid size-9 shrink-0 place-items-center rounded-xl text-sm font-bold ${
+                          isCurrent
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-teal-100 text-teal-900'
+                        }`}
+                      >
+                        {question.order}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-slate-900">{question.question_text}</p>
+                        <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
+                          {String(question.question_type || '').replaceAll('_', ' ')} ·{' '}
+                          {question.response_count} response
+                          {question.response_count === 1 ? '' : 's'}
+                          {Number(question.time_limit_seconds) > 0
+                            ? ` · ${question.time_limit_seconds}s`
+                            : ''}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {isCurrent ? (
+                          <span className="rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white">
+                            Current
+                          </span>
+                        ) : null}
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${
+                            QUESTION_STATE_STYLE[question.state] || QUESTION_STATE_STYLE.waiting
+                          }`}
+                        >
+                          {question.state}
+                        </span>
+                      </div>
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>

@@ -237,7 +237,8 @@ async function getSessionAdminDashboard({ user }) {
         "live_activated_at",
         "answer_revealed",
         "submissions_closed",
-        "is_quiz_mode"
+        "is_quiz_mode",
+        "time_limit_seconds"
       ],
       order: [
         ["display_order", "ASC"],
@@ -292,6 +293,7 @@ async function getSessionAdminDashboard({ user }) {
         answer_revealed: Boolean(q.answer_revealed),
         submissions_closed: Boolean(q.submissions_closed),
         is_quiz_mode: Boolean(q.is_quiz_mode),
+        time_limit_seconds: Number(q.time_limit_seconds) || 0,
         response_count: responseCount,
         state
       };
