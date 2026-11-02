@@ -37,11 +37,18 @@ export async function getMyZoomStatusApi(accessToken) {
 }
 
 export async function startZoomOAuthApi(accessToken) {
-  return hostAuthRequest('/integrations/zoom/oauth/start', accessToken, { method: 'POST' })
+  // Empty JSON body so IIS/ARR always gets Content-Length (empty POST can 411 / mis-route).
+  return hostAuthRequest('/integrations/zoom/oauth/start', accessToken, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  })
 }
 
 export async function disconnectZoomApi(accessToken) {
-  return hostAuthRequest('/integrations/zoom/oauth/disconnect', accessToken, { method: 'POST' })
+  return hostAuthRequest('/integrations/zoom/oauth/disconnect', accessToken, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  })
 }
 
 export async function getZoomMeetingSessionApi(meetingUuid) {

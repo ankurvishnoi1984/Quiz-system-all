@@ -26,7 +26,10 @@ function statusPayload() {
     enabled: isZoomAppEnabled(),
     configured: config.configured,
     oauth_ready: config.configured,
-    has_webhook_secret: Boolean(config.webhookSecret)
+    has_webhook_secret: Boolean(config.webhookSecret),
+    // Non-secret: helps operators match Marketplace scopes / redirect target
+    oauth_scopes: config.oauthScopes || null,
+    redirect_uri: config.redirectUri || null
   };
 }
 

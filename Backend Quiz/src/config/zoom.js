@@ -12,12 +12,26 @@ function parseFlag(value, defaultValue = false) {
   return defaultValue;
 }
 
+/** Granular scopes for GET /users/me after Connect Zoom. Override with ZOOM_OAUTH_SCOPES. */
+const DEFAULT_OAUTH_SCOPES = "user:read:user";
+
+function getOAuthScopes() {
+  const raw = (process.env.ZOOM_OAUTH_SCOPES || DEFAULT_OAUTH_SCOPES).trim();
+  // Normalize commas to spaces; collapse whitespace for Zoom authorize URL.
+  return raw
+    .split(/[\s,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
 function getZoomConfig() {
   const clientId = (process.env.ZOOM_CLIENT_ID || "").trim();
   const clientSecret = (process.env.ZOOM_CLIENT_SECRET || "").trim();
   const redirectUri = (process.env.ZOOM_REDIRECT_URI || "").trim();
   const webhookSecret = (process.env.ZOOM_WEBHOOK_SECRET || "").trim();
   const enabled = parseFlag(process.env.ZOOM_APP_ENABLED, true);
+  const oauthScopes = getOAuthScopes();
 
   return {
     enabled,
@@ -25,6 +39,7 @@ function getZoomConfig() {
     clientSecret,
     redirectUri,
     webhookSecret,
+    oauthScopes,
     oauthAuthorizeUrl: "https://zoom.us/oauth/authorize",
     oauthTokenUrl: "https://zoom.us/oauth/token",
     apiBaseUrl: "https://api.zoom.us/v2",

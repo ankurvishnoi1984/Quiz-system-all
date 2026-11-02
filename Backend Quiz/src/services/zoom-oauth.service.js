@@ -16,6 +16,9 @@ function buildAuthorizeUrl({ state } = {}) {
     client_id: config.clientId,
     redirect_uri: config.redirectUri
   });
+  if (config.oauthScopes) {
+    params.set("scope", config.oauthScopes);
+  }
   if (state) params.set("state", state);
 
   return `${config.oauthAuthorizeUrl}?${params.toString()}`;
