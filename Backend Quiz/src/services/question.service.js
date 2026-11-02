@@ -1259,6 +1259,105 @@ async function activateAllQuestionsForSession({ sessionId, user }) {
 }
 
 /**
+ * Session Admin: deactivate every question, hard-delete responses, clear
+ * participant session_state + started_at so the quiz can be activated again
+ * from the beginning. Participants stay joined.
+ */
+async function deactivateAllQuestionsAndResetResponsesForSession({ sessionId, user }) {
+  const session = await getSessionForQuestionFlow(sessionId);
+  assertScopeAccess(user, session);
+
+  if (session.status !== "live" && session.status !== "paused") {
+    const error = new Error("Questions can be deactivated only while the session is live");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (isAdvancedBuilderSession(session)) {
+    const error = new Error(
+      "Deactivate all is not available for Advanced sessions"
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!isParticipantNavigationEnabled(session)) {
+    const error = new Error(
+      "Deactivate all questions is only available in multiple active question mode"
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const sessionQuestions = await Question.findAll({
+    where: { session_id: sessionId },
+    attributes: ["question_id", "is_live"]
+  });
+
+  if (!sessionQuestions.length) {
+    const error = new Error("No questions in this session");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const liveQuestions = sessionQuestions.filter((q) => q.is_live);
+  if (!liveQuestions.length) {
+    const error = new Error("No live questions to deactivate");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const result = await sequelize.transaction(async (transaction) => {
+    // Hard-delete so unique (question, participant, option) does not block resubmit.
+    const responsesCleared = await Response.destroy({
+      where: { session_id: sessionId },
+      force: true,
+      transaction
+    });
+
+    await Participant.update(
+      { session_state: null },
+      { where: { session_id: sessionId }, transaction }
+    );
+
+    await Question.update(
+      {
+        is_live: false,
+        open_for_reattempt: false,
+        answer_revealed: false,
+        show_leaderboard: false,
+        live_activated_at: null,
+        submissions_closed: false
+      },
+      {
+        where: { session_id: sessionId },
+        transaction
+      }
+    );
+
+    session.started_at = null;
+    await session.save({ transaction });
+
+    return {
+      deactivated_count: liveQuestions.length,
+      responses_cleared: responsesCleared,
+      started_at: null
+    };
+  });
+
+  const questions = await Question.findAll({
+    where: { session_id: sessionId },
+    include: [{ model: QuestionOption, order: [["display_order", "ASC"]] }],
+    order: [
+      ["display_order", "ASC"],
+      ["question_id", "ASC"]
+    ]
+  });
+
+  return { ...result, questions };
+}
+
+/**
  * Advanced Present: host activates participant slot N (1..K). Each participant sees
  * their assigned question for that slot; only those pool questions go live.
  */
@@ -1599,6 +1698,7 @@ module.exports = {
   closeQuestionSubmissions,
   closeAllQuestionSubmissionsForSession,
   activateAllQuestionsForSession,
+  deactivateAllQuestionsAndResetResponsesForSession,
   activateAdvancedAssignmentSlot,
   deactivateAdvancedAssignmentSlot,
   ensureAllQuestionsLiveForQuizTotalTimeSession,

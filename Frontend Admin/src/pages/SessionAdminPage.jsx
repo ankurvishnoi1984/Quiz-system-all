@@ -1,16 +1,20 @@
 import {
   Activity,
   BarChart3,
+  Clock3,
   Download,
   FileBarChart2,
   LayoutDashboard,
   Loader2,
   LoaderCircle,
+  Play,
   Radio,
+  Square,
+  Timer,
   Users,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Area,
   AreaChart,
@@ -22,13 +26,18 @@ import {
 } from 'recharts'
 import { SessionSummaryReportCard } from '../components/analytics/SessionSummaryReportCard'
 import { QuestionBreakdownTables } from '../components/analytics/QuestionBreakdownTables'
+import { HostAlertModal } from '../components/live/HostAlertModal'
 import { SESSION_REPORT_VIEWS } from '../constants/sessionReportTypes'
 import {
   getSessionParticipantsReportApi,
   getSessionSummaryReportApi,
 } from '../services/analyticsApi'
 import { listSessionQuestionsApi, getSessionResponsesApi } from '../services/liveApi'
-import { getSessionAdminDashboardApi } from '../services/sessionAdminApi'
+import {
+  activateAllSessionAdminQuestionsApi,
+  deactivateAllSessionAdminQuestionsApi,
+  getSessionAdminDashboardApi,
+} from '../services/sessionAdminApi'
 import { useAuthStore } from '../store/authStore'
 import {
   apiQuestionTypeToUi,
@@ -37,6 +46,31 @@ import {
 } from '../utils/analyticsQuestions'
 import { buildEmojiBarData } from '../utils/emojiReaction'
 import { exportCombinedSessionReportExcel } from '../utils/combinedSessionReportExcelExport'
+import { sessionUsesAdvancedSlotActivation } from '../utils/hostQuestionControls'
+import {
+  buildSyncedQuestionSchedule,
+  getQuizTotalRemainingSeconds,
+  getSyncedQuestionIndex,
+  getSyncedSlotRemainingSeconds,
+} from '../utils/questionTimer'
+import {
+  isQuizTotalTimeSynced,
+  isQuizTotalWithQuestionTimersEnabled,
+  isSessionQuizTotalTimeEnabled,
+  isSyncedQuestionLockstep,
+} from '../utils/sessionFlags'
+
+function formatCountdown(totalSeconds) {
+  const seconds = Math.max(0, Math.floor(Number(totalSeconds) || 0))
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${mins}:${String(secs).padStart(2, '0')}`
+}
+
+function optionLabel(index) {
+  if (index < 26) return String.fromCharCode(65 + index)
+  return String(index + 1)
+}
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -81,9 +115,12 @@ function StatCard({ icon: Icon, label, value, hint, tone = 'teal' }) {
 
 function SessionAdminPage() {
   const accessToken = useAuthStore((s) => s.accessToken)
+  const queryClient = useQueryClient()
   const [nav, setNav] = useState('dashboard')
   const [reportView, setReportView] = useState('summary')
   const [exportingReport, setExportingReport] = useState(false)
+  const [hostAlert, setHostAlert] = useState(null)
+  const [timerTick, setTimerTick] = useState(0)
 
   const dashboardQuery = useQuery({
     queryKey: ['session-admin-dashboard'],
@@ -98,6 +135,151 @@ function SessionAdminPage() {
   const live = dashboardQuery.data?.live || { connected_now: 0, total_joined: 0 }
   const timeline = dashboardQuery.data?.join_timeline || []
   const reportsEnabled = Boolean(accessToken && sessionId && nav === 'reports')
+
+  const sessionQuizTotalTimeEnabled = isSessionQuizTotalTimeEnabled(session)
+  const applyBothTimers = isQuizTotalWithQuestionTimersEnabled(session)
+  const quizTotalSynced = isQuizTotalTimeSynced(session)
+  const syncAndBothConfigured = quizTotalSynced && applyBothTimers
+  const syncedQuestionLockstep = isSyncedQuestionLockstep(session)
+
+  useEffect(() => {
+    if (!sessionQuizTotalTimeEnabled) return undefined
+    const id = setInterval(() => setTimerTick((t) => t + 1), 1000)
+    return () => clearInterval(id)
+  }, [sessionQuizTotalTimeEnabled, session?.started_at, session?.quiz_total_time_minutes])
+
+  const quizRemainingSeconds = useMemo(() => {
+    if (!sessionQuizTotalTimeEnabled) return 0
+    void timerTick
+    return getQuizTotalRemainingSeconds(session)
+  }, [
+    sessionQuizTotalTimeEnabled,
+    session,
+    session?.started_at,
+    session?.quiz_total_time_minutes,
+    timerTick,
+  ])
+
+  const syncedQuestionSchedule = useMemo(() => {
+    if (!syncedQuestionLockstep) return []
+    return buildSyncedQuestionSchedule(questions, session?.started_at)
+  }, [syncedQuestionLockstep, questions, session?.started_at])
+
+  const syncedScheduleIndex = useMemo(() => {
+    if (!syncedQuestionSchedule.length) return 0
+    void timerTick
+    return getSyncedQuestionIndex(syncedQuestionSchedule, Date.now())
+  }, [syncedQuestionSchedule, timerTick])
+
+  const currentSyncedQuestion = useMemo(() => {
+    if (!syncedQuestionLockstep || !questions.length) return null
+    return questions[syncedScheduleIndex] || questions[questions.length - 1] || null
+  }, [syncedQuestionLockstep, questions, syncedScheduleIndex])
+
+  const questionRemainingSeconds = useMemo(() => {
+    if (!syncedQuestionLockstep || !syncedQuestionSchedule.length) return 0
+    void timerTick
+    const slot = syncedQuestionSchedule[syncedScheduleIndex]
+    return getSyncedSlotRemainingSeconds(slot, Date.now())
+  }, [syncedQuestionLockstep, syncedQuestionSchedule, syncedScheduleIndex, timerTick])
+
+  const showQuizTimerCard = sessionQuizTotalTimeEnabled
+  const quizStarted = Boolean(session?.started_at)
+
+  const canEditLive = session?.status === 'live'
+  const singleActiveQuestionMode = session?.participant_navigation_enabled === false
+  const advancedSlotActivation = sessionUsesAdvancedSlotActivation(session)
+  const multiActiveControlsEligible = useMemo(() => {
+    if (!canEditLive || advancedSlotActivation || singleActiveQuestionMode) return false
+    return (questions || []).length > 0
+  }, [canEditLive, advancedSlotActivation, singleActiveQuestionMode, questions])
+  const hasLiveQuestion = useMemo(
+    () => (questions || []).some((q) => Boolean(q.is_live)),
+    [questions],
+  )
+  const showActivateButton = multiActiveControlsEligible && !hasLiveQuestion
+  const showDeactivateButton = multiActiveControlsEligible && hasLiveQuestion
+  const showLiveToggleHint = showActivateButton || showDeactivateButton
+
+  const activateAllQuestionsMutation = useMutation({
+    mutationFn: () => activateAllSessionAdminQuestionsApi(accessToken),
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ['session-admin-dashboard'] })
+      const count = data?.activated_count
+      setHostAlert({
+        variant: 'success',
+        title: 'Questions activated',
+        message:
+          typeof count === 'number'
+            ? `${count} question${count === 1 ? '' : 's'} are now live for participants.`
+            : 'All questions are now live for participants.',
+        confirmLabel: 'OK',
+      })
+    },
+    onError: (error) => {
+      setHostAlert({
+        variant: 'error',
+        title: 'Could not activate questions',
+        message: error?.message || 'Something went wrong. Please try again.',
+        confirmLabel: 'OK',
+      })
+    },
+  })
+
+  const deactivateAllQuestionsMutation = useMutation({
+    mutationFn: () => deactivateAllSessionAdminQuestionsApi(accessToken),
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ['session-admin-dashboard'] })
+      const cleared = data?.responses_cleared
+      setHostAlert({
+        variant: 'success',
+        title: 'Questions deactivated',
+        message:
+          typeof cleared === 'number'
+            ? `Questions are off and ${cleared} response${cleared === 1 ? '' : 's'} cleared. You can Activate again to start from the beginning.`
+            : 'Questions are off and responses cleared. You can Activate again to start from the beginning.',
+        confirmLabel: 'OK',
+      })
+    },
+    onError: (error) => {
+      setHostAlert({
+        variant: 'error',
+        title: 'Could not deactivate questions',
+        message: error?.message || 'Something went wrong. Please try again.',
+        confirmLabel: 'OK',
+      })
+    },
+  })
+
+  const requestActivateQuestions = () => {
+    setHostAlert({
+      variant: 'warning',
+      title: 'Activate questions?',
+      message:
+        'This will make every question live for participants at once. Timed questions will share the same start time.',
+      confirmLabel: 'Cancel',
+      secondaryLabel: activateAllQuestionsMutation.isPending ? 'Activating…' : 'Activate',
+      onSecondary: () => {
+        if (activateAllQuestionsMutation.isPending) return
+        activateAllQuestionsMutation.mutate()
+      },
+    })
+  }
+
+  const requestDeactivateQuestions = () => {
+    setHostAlert({
+      variant: 'warning',
+      title: 'Deactivate questions?',
+      message:
+        'This turns all questions off and clears every response so the quiz can be started again from the beginning. Participants stay joined.',
+      confirmLabel: 'Cancel',
+      secondaryLabel: deactivateAllQuestionsMutation.isPending ? 'Deactivating…' : 'Deactivate',
+      onSecondary: () => {
+        if (deactivateAllQuestionsMutation.isPending) return
+        deactivateAllQuestionsMutation.mutate()
+      },
+    })
+  }
 
   const summaryQuery = useQuery({
     queryKey: ['session-admin-summary', sessionId],
@@ -273,14 +455,13 @@ function SessionAdminPage() {
             </span>
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-100">
-                Session Admin workspace · Read only
+                Session Admin workspace
               </p>
               <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">
                 {session?.title || 'Assigned session'}
               </h1>
-              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-cyan-50/90 sm:text-base">
-                Watch live participation and open reports for this session. Controls for building,
-                presenting, and going live stay with the host.
+              <p className="mt-2 max-w-xl text-sm leading-relaxed text-cyan-50/90 sm:text-base">
+                Watch the live quiz and open reports — host controls stay with the host.
               </p>
             </div>
           </div>
@@ -341,15 +522,232 @@ function SessionAdminPage() {
             />
           </div>
 
-          <div className="rounded-3xl border border-teal-200/70 bg-white/90 p-5 shadow-sm">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-bold text-teal-950">Participation over time</h2>
-                <p className="text-sm text-slate-600">Joins by hour during the session</p>
+          {syncedQuestionLockstep && currentSyncedQuestion && quizStarted ? (
+            <div className="overflow-hidden rounded-3xl border border-emerald-200/80 bg-linear-to-br from-emerald-50 via-white to-cyan-50/50 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-100/80 bg-white/50 px-5 py-3.5">
+                <div className="flex items-center gap-3">
+                  <span className="grid size-10 place-items-center rounded-xl bg-emerald-600 text-sm font-bold text-white shadow-sm">
+                    Q{currentSyncedQuestion.order}
+                  </span>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
+                      Current question
+                    </p>
+                    <p className="text-xs font-medium text-emerald-900/70">
+                      {String(currentSyncedQuestion.question_type || '').replaceAll('_', ' ')}
+                      {Number(currentSyncedQuestion.time_limit_seconds) > 0
+                        ? ` · ${currentSyncedQuestion.time_limit_seconds}s limit`
+                        : ''}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-stretch gap-2">
+                  <div className="rounded-xl border border-teal-200 bg-teal-50/90 px-3.5 py-2 text-right">
+                    <p className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.14em] text-teal-700">
+                      <Clock3 className="size-3" />
+                      Quiz
+                    </p>
+                    <p className="font-mono text-xl font-bold tracking-tight text-teal-950">
+                      {formatCountdown(quizRemainingSeconds)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-cyan-200 bg-white px-3.5 py-2 text-right shadow-sm">
+                    <p className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-700">
+                      <Timer className="size-3" />
+                      Question
+                    </p>
+                    <p className="font-mono text-xl font-bold tracking-tight text-cyan-950">
+                      {formatCountdown(questionRemainingSeconds)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-5 py-5">
+                <p className="text-xl font-bold leading-snug text-slate-900">
+                  {currentSyncedQuestion.question_text}
+                </p>
+
+                {Array.isArray(currentSyncedQuestion.options) &&
+                currentSyncedQuestion.options.length ? (
+                  <ul className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {currentSyncedQuestion.options.map((option, optionIndex) => (
+                      <li
+                        key={
+                          option.option_id ||
+                          `${currentSyncedQuestion.question_id}-${optionIndex}`
+                        }
+                        className="flex items-start gap-2.5 rounded-xl border border-emerald-100/90 bg-white/90 px-3 py-2.5 text-sm text-slate-800 shadow-sm"
+                      >
+                        <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-lg bg-emerald-100 text-xs font-bold text-emerald-800">
+                          {optionLabel(optionIndex)}
+                        </span>
+                        <span className="min-w-0 leading-snug">
+                          {option.option_text}
+                          {option.match_side ? (
+                            <span className="ml-1 text-xs font-medium uppercase tracking-wide text-slate-400">
+                              ({option.match_side})
+                            </span>
+                          ) : null}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
             </div>
+          ) : showQuizTimerCard ? (
+            <div className="rounded-3xl border border-teal-200/70 bg-white/90 p-5 shadow-sm">
+              <div className="mb-3">
+                <h2 className="text-lg font-bold text-teal-950">Live quiz clocks</h2>
+                <p className="text-sm text-slate-600">
+                  {syncAndBothConfigured
+                    ? 'Synced lockstep · shared quiz and question timers'
+                    : applyBothTimers
+                      ? 'Quiz total + personal question timers'
+                      : quizTotalSynced
+                        ? 'Synced quiz total time'
+                        : 'Quiz total time'}
+                </p>
+              </div>
+
+              {!quizStarted ? (
+                <div className="rounded-2xl border border-dashed border-amber-200 bg-amber-50/70 px-4 py-5 text-center text-sm font-medium text-amber-900">
+                  Waiting for Activate All — clocks start when questions are activated.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="inline-flex min-w-[9.5rem] flex-col rounded-2xl border border-teal-200 bg-teal-50/60 px-4 py-3">
+                    <p className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.14em] text-teal-700">
+                      <Clock3 className="size-3.5" />
+                      Quiz time
+                    </p>
+                    <p className="mt-1.5 font-mono text-3xl font-bold tracking-tight text-teal-950">
+                      {formatCountdown(quizRemainingSeconds)}
+                    </p>
+                  </div>
+                  {applyBothTimers && !quizTotalSynced ? (
+                    <p className="text-xs text-slate-600">
+                      Question timers are personal for each participant, so a shared question clock
+                      is not shown here.
+                    </p>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          <div className="rounded-3xl border border-teal-200/70 bg-white/90 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-teal-100 px-5 py-3.5">
+              <div>
+                <h2 className="text-lg font-bold text-teal-950">Questions</h2>
+                <p className="text-sm text-slate-600">
+                  {showLiveToggleHint
+                    ? showDeactivateButton
+                      ? 'Compact list · Deactivate available'
+                      : 'Compact list · Activate available'
+                    : 'Compact list · view only'}
+                </p>
+              </div>
+              {showActivateButton ? (
+                <button
+                  type="button"
+                  onClick={requestActivateQuestions}
+                  disabled={activateAllQuestionsMutation.isPending}
+                  title="Make all questions live at once (timed questions share the same start time)"
+                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-sm transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {activateAllQuestionsMutation.isPending ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Play className="size-4 fill-current" />
+                  )}
+                  {activateAllQuestionsMutation.isPending ? 'Activating…' : 'Activate'}
+                </button>
+              ) : null}
+              {showDeactivateButton ? (
+                <button
+                  type="button"
+                  onClick={requestDeactivateQuestions}
+                  disabled={deactivateAllQuestionsMutation.isPending}
+                  title="Turn questions off and clear responses so the quiz can start again"
+                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-rose-300 bg-white px-4 text-sm font-bold text-rose-700 shadow-sm transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {deactivateAllQuestionsMutation.isPending ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Square className="size-3.5 fill-current" />
+                  )}
+                  {deactivateAllQuestionsMutation.isPending ? 'Deactivating…' : 'Deactivate'}
+                </button>
+              ) : null}
+            </div>
+            {!questions.length ? (
+              <div className="px-5 py-10 text-center text-sm text-slate-600">
+                No questions in this session yet.
+              </div>
+            ) : (
+              <ul className="divide-y divide-teal-50">
+                {questions.map((question) => {
+                  const isCurrent =
+                    syncedQuestionLockstep &&
+                    currentSyncedQuestion &&
+                    Number(question.question_id) === Number(currentSyncedQuestion.question_id)
+                  return (
+                    <li
+                      key={question.question_id}
+                      className={`flex flex-wrap items-center gap-3 px-5 py-3 ${
+                        isCurrent ? 'bg-emerald-50/80 ring-1 ring-inset ring-emerald-200' : ''
+                      }`}
+                    >
+                      <span
+                        className={`grid size-8 shrink-0 place-items-center rounded-lg text-sm font-bold ${
+                          isCurrent
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-teal-100 text-teal-900'
+                        }`}
+                      >
+                        {question.order}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-semibold text-slate-900">
+                          {question.question_text}
+                        </p>
+                        <p className="mt-0.5 text-xs font-medium uppercase tracking-wide text-slate-500">
+                          {String(question.question_type || '').replaceAll('_', ' ')}
+                          {Number(question.time_limit_seconds) > 0
+                            ? ` · ${question.time_limit_seconds}s`
+                            : ''}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {isCurrent ? (
+                          <span className="rounded-full bg-emerald-600 px-2.5 py-0.5 text-xs font-bold text-white">
+                            Current
+                          </span>
+                        ) : null}
+                        <span
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-bold ring-1 ${
+                            QUESTION_STATE_STYLE[question.state] || QUESTION_STATE_STYLE.waiting
+                          }`}
+                        >
+                          {question.state}
+                        </span>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+
+          <div className="rounded-3xl border border-teal-200/70 bg-white/90 p-5 shadow-sm">
+            <div className="mb-4">
+              <h2 className="text-lg font-bold text-teal-950">Participation over time</h2>
+              <p className="text-sm text-slate-600">Joins by hour during the session</p>
+            </div>
             {chartData.length ? (
-              <div className="h-64 w-full">
+              <div className="h-56 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={chartData}>
                     <defs>
@@ -374,49 +772,9 @@ function SessionAdminPage() {
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="rounded-2xl border border-dashed border-teal-200 bg-teal-50/40 px-4 py-10 text-center text-sm text-teal-800">
+              <div className="rounded-2xl border border-dashed border-teal-200 bg-teal-50/40 px-4 py-8 text-center text-sm text-teal-800">
                 No participant joins yet. The chart updates as people enter the session.
               </div>
-            )}
-          </div>
-
-          <div className="rounded-3xl border border-teal-200/70 bg-white/90 shadow-sm">
-            <div className="border-b border-teal-100 px-5 py-4">
-              <h2 className="text-lg font-bold text-teal-950">Questions</h2>
-              <p className="text-sm text-slate-600">Live-style list · view only</p>
-            </div>
-            {!questions.length ? (
-              <div className="px-5 py-10 text-center text-sm text-slate-600">
-                No questions in this session yet.
-              </div>
-            ) : (
-              <ul className="divide-y divide-teal-50">
-                {questions.map((question) => (
-                  <li
-                    key={question.question_id}
-                    className="flex flex-wrap items-start gap-3 px-5 py-4"
-                  >
-                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-teal-100 text-sm font-bold text-teal-900">
-                      {question.order}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-slate-900">{question.question_text}</p>
-                      <p className="mt-1 text-xs font-medium uppercase tracking-wide text-slate-500">
-                        {String(question.question_type || '').replaceAll('_', ' ')} ·{' '}
-                        {question.response_count} response
-                        {question.response_count === 1 ? '' : 's'}
-                      </p>
-                    </div>
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${
-                        QUESTION_STATE_STYLE[question.state] || QUESTION_STATE_STYLE.waiting
-                      }`}
-                    >
-                      {question.state}
-                    </span>
-                  </li>
-                ))}
-              </ul>
             )}
           </div>
         </div>
@@ -479,6 +837,17 @@ function SessionAdminPage() {
           )}
         </div>
       )}
+
+      <HostAlertModal
+        open={Boolean(hostAlert)}
+        variant={hostAlert?.variant ?? 'success'}
+        title={hostAlert?.title ?? ''}
+        message={hostAlert?.message ?? ''}
+        confirmLabel={hostAlert?.confirmLabel ?? 'OK'}
+        secondaryLabel={hostAlert?.secondaryLabel}
+        onSecondary={hostAlert?.onSecondary}
+        onClose={() => setHostAlert(null)}
+      />
     </section>
   )
 }

@@ -1,6 +1,23 @@
 import { Check, Copy, KeyRound, Link2, LoaderCircle, Shield } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { changeSessionAdminPasswordApi } from '../../services/sessionAdminApi'
+import { getPublicAppOrigin } from '../../utils/joinUrl'
+
+function buildSessionAdminLoginUrl(apiLoginUrl) {
+  const origin = getPublicAppOrigin()
+  const preferred = origin ? `${origin}/session-admin/login` : '/session-admin/login'
+  if (!apiLoginUrl) return preferred
+  try {
+    const parsed = new URL(String(apiLoginUrl), origin || undefined)
+    // Prefer dedicated SA login even if an older API payload still points at /login.
+    if (parsed.pathname === '/login' || parsed.pathname.endsWith('/login')) {
+      return preferred
+    }
+    return parsed.toString()
+  } catch {
+    return preferred
+  }
+}
 
 function CopyField({ label, value, mono = false }) {
   const [copied, setCopied] = useState(false)
@@ -51,6 +68,11 @@ export default function SessionAdminCredentialsCard({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+
+  const loginUrl = useMemo(
+    () => buildSessionAdminLoginUrl(sessionAdmin?.login_url),
+    [sessionAdmin?.login_url],
+  )
 
   if (!sessionAdmin?.username) {
     return (
@@ -112,7 +134,7 @@ export default function SessionAdminCredentialsCard({
       </div>
 
       <div className="mt-4 space-y-3">
-        <CopyField label="Sign-in link" value={sessionAdmin.login_url} />
+        <CopyField label="Session Admin login link" value={loginUrl} />
         <CopyField label="Username" value={sessionAdmin.username} mono />
         {sessionAdmin.password_is_default && sessionAdmin.password ? (
           <CopyField label="Password" value={sessionAdmin.password} mono />
@@ -128,13 +150,13 @@ export default function SessionAdminCredentialsCard({
 
       <div className="mt-4 flex flex-wrap gap-2">
         <a
-          href={sessionAdmin.login_url}
+          href={loginUrl}
           target="_blank"
           rel="noreferrer"
           className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-teal-300 bg-white px-3 text-sm font-semibold text-teal-800 transition hover:bg-teal-50"
         >
           <Link2 className="size-4" />
-          Open login
+          Open Session Admin login
         </a>
         <button
           type="button"

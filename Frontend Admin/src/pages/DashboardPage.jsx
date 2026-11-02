@@ -382,6 +382,7 @@ function DashboardPage() {
       date: (session.created_at || '').slice(0, 10),
       status: statusLabel[session.status] || 'Draft',
       participants: liveSessionMetrics[session.session_id]?.participants_count ?? session.participants_count ?? 0,
+      questionCount: Number(session.question_count ?? 0),
       progress:
         session.status === 'completed'
           ? 100
@@ -456,6 +457,16 @@ function DashboardPage() {
       const goLive = () => navigate(`/live?session=${encodeURIComponent(session.id)}`)
       if (session.status === 'Draft') {
         if (!canManageSessions) return
+        if (Number(session.questionCount ?? session.question_count ?? 0) <= 0) {
+          setSessionAlert({
+            variant: 'warning',
+            title: 'Add questions first',
+            message:
+              'This session has no questions yet. Open the builder and add at least one question before launching.',
+            confirmLabel: 'Got it',
+          })
+          return
+        }
         transitionMutation.mutate(
           { sessionId: session.id, action: 'start' },
           {

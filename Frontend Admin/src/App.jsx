@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AdminOnlyRoute } from './components/auth/AdminOnlyRoute'
 import { SuperAdminOnlyRoute } from './components/auth/SuperAdminOnlyRoute'
 import { RequireActivePlan } from './components/auth/RequireActivePlan'
@@ -7,6 +7,7 @@ import { RequireRight } from './components/auth/RequireRight'
 import DepartmentAnalyticsPage from './pages/DepartmentAnalyticsPage'
 import ClientAnalyticsPage from './pages/ClientAnalyticsPage'
 import LoginPage from './pages/LoginPage'
+import SessionAdminLoginPage from './pages/SessionAdminLoginPage'
 import ForgotPasswordPage from './pages/ForgotPasswordPage'
 import ForceChangePasswordPage from './pages/ForceChangePasswordPage'
 import DashboardPage from './pages/DashboardPage'
@@ -69,9 +70,20 @@ function isPublicAppPath(pathname) {
     (INTEGRATIONS_ENABLED && pathname.startsWith('/embed/participant')) ||
     (ZOOM_APP_ENABLED && pathname.startsWith('/zoom/')) ||
     pathname === '/login' ||
+    pathname === '/session-admin/login' ||
     pathname === '/forgot-password' ||
     pathname === '/verify-email'
   )
+}
+
+/** After logout (or expired auth) on Session Admin routes, return to SA login — not Host Portal. */
+function UnauthenticatedRedirect() {
+  const { pathname } = useLocation()
+  const to =
+    pathname === '/session-admin' || pathname.startsWith('/session-admin/')
+      ? '/session-admin/login'
+      : '/login'
+  return <Navigate to={to} replace />
 }
 
 function App() {
@@ -167,6 +179,19 @@ function App() {
             element={user ? <Navigate to={postLoginPath} replace /> : <LoginPage />}
           />
           <Route
+            path="/session-admin/login"
+            element={
+              user ? (
+                <Navigate
+                  to={user.role === 'session_admin' ? '/session-admin' : postLoginPath}
+                  replace
+                />
+              ) : (
+                <SessionAdminLoginPage />
+              )
+            }
+          />
+          <Route
             path="/forgot-password"
             element={user ? <Navigate to={postLoginPath} replace /> : <ForgotPasswordPage />}
           />
@@ -196,7 +221,7 @@ function App() {
                   <HostLayout />
                 )
               ) : (
-                <Navigate to="/login" replace />
+                <UnauthenticatedRedirect />
               )
             }
           >
@@ -218,8 +243,10 @@ function App() {
               element={
                 user?.role === 'session_admin' ? (
                   <SessionAdminPage />
-                ) : (
+                ) : user ? (
                   <Navigate to={postLoginPath} replace />
+                ) : (
+                  <Navigate to="/session-admin/login" replace />
                 )
               }
             />

@@ -1282,6 +1282,16 @@ function LivePage() {
                   })
                   return
                 }
+                if (!mappedQuestions.length) {
+                  setHostAlert({
+                    variant: 'warning',
+                    title: 'Add questions first',
+                    message:
+                      'This session has no questions yet. Open the builder and add at least one question before launching.',
+                    confirmLabel: 'Got it',
+                  })
+                  return
+                }
                 transitionMutation.mutate(
                   { action: 'start' },
                   {
