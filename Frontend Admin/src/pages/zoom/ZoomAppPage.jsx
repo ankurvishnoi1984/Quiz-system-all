@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { isHostLikeRole, resolveZoomMeetingContext } from '../../utils/zoomContext'
+import {
+  applyUserContextChange,
+  isHostLikeRole,
+  resolveZoomMeetingContext,
+  subscribeMyUserContextChange,
+} from '../../utils/zoomContext'
 import { EmbedShell } from '../embed/EmbedControlsPage'
 import ZoomHostPanel from './ZoomHostPanel'
 import ZoomParticipantPanel from './ZoomParticipantPanel'
@@ -51,6 +56,27 @@ export default function ZoomAppPage() {
     }
   }, [searchParams, forceRole])
 
+  const isSdkContext = context?.source === 'sdk'
+
+  // Guest ↔ authenticated ↔ authorized can change while the app stays open.
+  useEffect(() => {
+    if (!isSdkContext) return undefined
+    return subscribeMyUserContextChange((event) => {
+      setContext((prev) => {
+        if (!prev) return prev
+        const next = applyUserContextChange(prev, event)
+        if (forceRole === 'host' || forceRole === 'participant') {
+          return { ...next, role: forceRole === 'host' ? 'host' : 'participant' }
+        }
+        // Unsigned Zoom guests stay on the participant path.
+        if (next.status === 'unauthenticated') {
+          return { ...next, role: 'participant' }
+        }
+        return next
+      })
+    })
+  }, [isSdkContext, forceRole])
+
   if (loading) {
     return (
       <EmbedShell>
@@ -68,9 +94,13 @@ export default function ZoomAppPage() {
           <p className="font-semibold">Zoom context unavailable</p>
           <p className="mt-1 text-xs leading-relaxed">{error}</p>
           <p className="mt-3 text-[11px] text-amber-800">
-            Dev example:{' '}
+            Dev examples:{' '}
             <code className="rounded bg-white/70 px-1">
               /zoom/app?mockMeetingUuid=dev-1&amp;mockRole=host
+            </code>
+            {' · '}
+            <code className="rounded bg-white/70 px-1">
+              mockRole=participant&amp;mockGuest=1
             </code>
           </p>
         </div>
@@ -78,7 +108,9 @@ export default function ZoomAppPage() {
     )
   }
 
-  if (isHostLikeRole(context.role)) {
+  // Meeting hosts/co-hosts who are signed into Zoom use the host console.
+  // Unsigned Zoom guests always use the participant join path (no quiz host login).
+  if (isHostLikeRole(context.role) && context.status !== 'unauthenticated') {
     return <ZoomHostPanel context={context} />
   }
 

@@ -2,13 +2,28 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { joinZoomMeetingSessionApi, getZoomMeetingSessionApi } from '../../services/zoomApi'
 import { useParticipantStore } from '../../store/participantStore'
+import { buildZoomDeviceFingerprint } from '../../utils/zoomContext'
 import { EmbedShell } from '../embed/EmbedControlsPage'
 
 const UNBOUND_POLL_MS = 4000
 
+function GuestModeBanner({ context }) {
+  if (!context?.isGuest) return null
+  return (
+    <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-950">
+      <p className="font-semibold">You’re in as Guest</p>
+      <p className="mt-0.5 leading-relaxed text-violet-900/80">
+        You can take the quiz without signing in to Zoom. Ask the host to link a session and tap{' '}
+        <span className="font-semibold">Open for everyone</span> if this screen stays on waiting.
+      </p>
+    </div>
+  )
+}
+
 /**
  * Resolves the quiz session bound to this Zoom meeting, joins when possible,
  * then hands off to the existing /join/:code participant experience.
+ * Works for authorized participants and Zoom Guest Mode (unsigned / not-added app).
  */
 export default function ZoomParticipantPanel({ context }) {
   const setParticipant = useParticipantStore((state) => state.setParticipant)
@@ -20,6 +35,12 @@ export default function ZoomParticipantPanel({ context }) {
   const [mobile, setMobile] = useState('')
   const [joinResult, setJoinResult] = useState(null)
   const joiningRef = useRef(false)
+
+  useEffect(() => {
+    if (context.displayName && !nickname) {
+      setNickname(context.displayName)
+    }
+  }, [context.displayName, nickname])
 
   const joinType = binding?.session?.join_type || 'anonymous'
 
@@ -40,12 +61,12 @@ export default function ZoomParticipantPanel({ context }) {
       try {
         const data = await joinZoomMeetingSessionApi({
           meeting_uuid: context.meetingUuid,
-          zoom_user_id: context.zoomUserId,
-          display_name: context.displayName,
-          nickname: fields.nickname || nickname || context.displayName,
+          zoom_user_id: context.zoomUserId || undefined,
+          display_name: context.displayName || undefined,
+          nickname: fields.nickname || nickname || context.displayName || undefined,
           email: fields.email || email || undefined,
           mobile: fields.mobile || mobile || undefined,
-          device_fingerprint: context.zoomUserId ? `zoom:${context.zoomUserId}` : undefined,
+          device_fingerprint: buildZoomDeviceFingerprint(context),
         })
 
         const participant = data?.participant
@@ -82,9 +103,7 @@ export default function ZoomParticipantPanel({ context }) {
       }
     },
     [
-      context.displayName,
-      context.meetingUuid,
-      context.zoomUserId,
+      context,
       email,
       mobile,
       needsContactFields,
@@ -161,6 +180,7 @@ export default function ZoomParticipantPanel({ context }) {
   if (phase === 'loading') {
     return (
       <EmbedShell>
+        <GuestModeBanner context={context} />
         <p className="rounded-xl border border-blue-200/70 bg-white p-4 text-sm text-slate-600">
           Joining the quiz for this Zoom meeting…
         </p>
@@ -171,6 +191,7 @@ export default function ZoomParticipantPanel({ context }) {
   if (phase === 'unbound') {
     return (
       <EmbedShell>
+        <GuestModeBanner context={context} />
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
           <p className="font-semibold">Waiting for the host</p>
           <p className="mt-1 text-xs leading-relaxed text-amber-900/80">
@@ -188,6 +209,7 @@ export default function ZoomParticipantPanel({ context }) {
   if (phase === 'error') {
     return (
       <EmbedShell>
+        <GuestModeBanner context={context} />
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
           <p className="font-semibold">Could not join</p>
           <p className="mt-1 text-xs">{error}</p>
@@ -198,6 +220,7 @@ export default function ZoomParticipantPanel({ context }) {
 
   return (
     <EmbedShell>
+      <GuestModeBanner context={context} />
       <form
         className="space-y-3 rounded-xl border border-blue-200/70 bg-white p-4 shadow-sm"
         onSubmit={(event) => {

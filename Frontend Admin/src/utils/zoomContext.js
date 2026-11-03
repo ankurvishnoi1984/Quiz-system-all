@@ -1,6 +1,8 @@
 import { isZoomMockContextEnabled } from '../utils/integrations'
 
 /**
+ * @typedef {'unauthenticated'|'authenticated'|'authorized'|null} ZoomUserStatus
+ *
  * @typedef {object} ZoomMeetingContext
  * @property {string} meetingUuid
  * @property {string|null} meetingId
@@ -8,6 +10,8 @@ import { isZoomMockContextEnabled } from '../utils/integrations'
  * @property {string|null} zoomUserId
  * @property {string|null} displayName
  * @property {'sdk'|'mock'|'query'} source
+ * @property {ZoomUserStatus} status Zoom Apps user status from getUserContext
+ * @property {boolean} isGuest True when Zoom Guest Mode (not fully authorized)
  */
 
 /** Capabilities must also be allow-listed on the Marketplace Zoom App SDK feature list. */
@@ -23,6 +27,7 @@ export const ZOOM_SDK_CAPABILITIES = [
   'joinCollaborate',
   'leaveCollaborate',
   'onCollaborateChange',
+  'onMyUserContextChange',
   'sendAppInvitation',
   'sendAppInvitationToAllParticipants',
   'showAppInvitationDialog',
@@ -40,6 +45,44 @@ function normalizeRole(raw) {
   return 'unknown'
 }
 
+function normalizeStatus(raw) {
+  const value = String(raw || '')
+    .trim()
+    .toLowerCase()
+  if (value === 'unauthenticated' || value === 'authenticated' || value === 'authorized') {
+    return value
+  }
+  return null
+}
+
+/**
+ * Guest Mode: Zoom signed-out users are unauthenticated; signed-in users who have
+ * not added the app are authenticated. Only authorized users completed in-client OAuth.
+ */
+export function isZoomGuestStatus(status) {
+  return status === 'unauthenticated' || status === 'authenticated'
+}
+
+function withGuestFields(context, { status = null, forceGuest = false } = {}) {
+  const normalizedStatus = normalizeStatus(status)
+  const isGuest = forceGuest || isZoomGuestStatus(normalizedStatus)
+  let role = context.role
+
+  // Unsigned Zoom users (true guests) never get the host console.
+  if (normalizedStatus === 'unauthenticated' || (forceGuest && !isHostLikeRole(role))) {
+    role = 'participant'
+  } else if (isGuest && role === 'unknown') {
+    role = 'participant'
+  }
+
+  return {
+    ...context,
+    role,
+    status: normalizedStatus,
+    isGuest,
+  }
+}
+
 function contextFromSearchParams(searchParams) {
   const meetingUuid =
     searchParams.get('mockMeetingUuid') ||
@@ -47,14 +90,26 @@ function contextFromSearchParams(searchParams) {
     searchParams.get('meeting_uuid')
   if (!meetingUuid) return null
 
-  return {
-    meetingUuid: String(meetingUuid).trim(),
-    meetingId: searchParams.get('meetingId') || searchParams.get('meeting_id') || null,
-    role: normalizeRole(searchParams.get('mockRole') || searchParams.get('role') || 'participant'),
-    zoomUserId: searchParams.get('mockZoomUserId') || searchParams.get('zoomUserId') || null,
-    displayName: searchParams.get('mockDisplayName') || searchParams.get('displayName') || null,
-    source: searchParams.get('mockMeetingUuid') ? 'mock' : 'query',
-  }
+  const forceGuest =
+    searchParams.get('mockGuest') === '1' ||
+    searchParams.get('mockGuest') === 'true' ||
+    normalizeStatus(searchParams.get('mockStatus')) === 'unauthenticated'
+
+  const status =
+    normalizeStatus(searchParams.get('mockStatus')) ||
+    (forceGuest ? 'unauthenticated' : null)
+
+  return withGuestFields(
+    {
+      meetingUuid: String(meetingUuid).trim(),
+      meetingId: searchParams.get('meetingId') || searchParams.get('meeting_id') || null,
+      role: normalizeRole(searchParams.get('mockRole') || searchParams.get('role') || 'participant'),
+      zoomUserId: searchParams.get('mockZoomUserId') || searchParams.get('zoomUserId') || null,
+      displayName: searchParams.get('mockDisplayName') || searchParams.get('displayName') || null,
+      source: searchParams.get('mockMeetingUuid') ? 'mock' : 'query',
+    },
+    { status, forceGuest },
+  )
 }
 
 /**
@@ -83,6 +138,26 @@ export async function getZoomSdk() {
   return configuredSdkPromise
 }
 
+async function resolveMeetingUuid(zoomSdk, meeting) {
+  const fromMeeting = meeting?.meetingUUID || meeting?.meetingUuid || null
+  if (fromMeeting) return String(fromMeeting)
+
+  if (typeof zoomSdk.getMeetingUUID === 'function') {
+    try {
+      const result = await zoomSdk.getMeetingUUID()
+      const uuid =
+        result?.meetingUUID ||
+        result?.meetingUuid ||
+        (typeof result === 'string' ? result : null)
+      if (uuid) return String(uuid)
+    } catch {
+      // Guests / restricted contexts may lack this API.
+    }
+  }
+
+  return null
+}
+
 async function tryLoadZoomSdkContext() {
   try {
     const zoomSdk = await getZoomSdk()
@@ -93,18 +168,23 @@ async function tryLoadZoomSdkContext() {
       zoomSdk.getUserContext().catch(() => null),
     ])
 
-    const meetingUuid = meeting?.meetingUUID || meeting?.meetingUuid || null
+    const meetingUuid = await resolveMeetingUuid(zoomSdk, meeting)
     if (!meetingUuid) return null
 
+    const status = normalizeStatus(user?.status)
     const role = normalizeRole(user?.role || meeting?.role)
-    return {
-      meetingUuid: String(meetingUuid),
-      meetingId: meeting?.meetingID || meeting?.meetingId || null,
-      role,
-      zoomUserId: user?.participantUUID || user?.userId || user?.participantId || null,
-      displayName: user?.screenName || user?.displayName || null,
-      source: 'sdk',
-    }
+
+    return withGuestFields(
+      {
+        meetingUuid,
+        meetingId: meeting?.meetingID || meeting?.meetingId || null,
+        role,
+        zoomUserId: user?.participantUUID || user?.userId || user?.participantId || null,
+        displayName: user?.screenName || user?.displayName || null,
+        source: 'sdk',
+      },
+      { status },
+    )
   } catch {
     return null
   }
@@ -127,14 +207,17 @@ export async function resolveZoomMeetingContext(searchParams) {
   if (fromQuery) return fromQuery
 
   if (isZoomMockContextEnabled()) {
-    return {
-      meetingUuid: 'dev-meeting-local',
-      meetingId: null,
-      role: 'host',
-      zoomUserId: 'dev-host-1',
-      displayName: 'Dev Host',
-      source: 'mock',
-    }
+    return withGuestFields(
+      {
+        meetingUuid: 'dev-meeting-local',
+        meetingId: null,
+        role: 'host',
+        zoomUserId: 'dev-host-1',
+        displayName: 'Dev Host',
+        source: 'mock',
+      },
+      { status: 'authorized' },
+    )
   }
 
   return null
@@ -142,6 +225,27 @@ export async function resolveZoomMeetingContext(searchParams) {
 
 export function isHostLikeRole(role) {
   return role === 'host' || role === 'coHost'
+}
+
+/**
+ * Stable-ish fingerprint for join APIs when Zoom user id is missing (common for guests).
+ * @param {ZoomMeetingContext} context
+ */
+export function buildZoomDeviceFingerprint(context) {
+  if (context?.zoomUserId) return `zoom:${context.zoomUserId}`
+  if (context?.isGuest && context?.meetingUuid) {
+    const key = `zoom-guest-fp:${context.meetingUuid}`
+    try {
+      const existing = sessionStorage.getItem(key)
+      if (existing) return existing
+      const created = `zoom-guest:${context.meetingUuid}:${Math.random().toString(36).slice(2, 10)}`
+      sessionStorage.setItem(key, created)
+      return created
+    } catch {
+      return `zoom-guest:${context.meetingUuid}:ephemeral`
+    }
+  }
+  return undefined
 }
 
 /**
@@ -232,10 +336,61 @@ export function subscribeCollaborateChange(handler) {
   }
 }
 
+/**
+ * Subscribe to Zoom user context changes (guest ↔ authenticated ↔ authorized).
+ * @param {(event: object) => void} handler
+ * @returns {() => void} unsubscribe
+ */
+export function subscribeMyUserContextChange(handler) {
+  let cancelled = false
+  let zoomSdk = null
+
+  const listener = (event) => {
+    if (!cancelled) handler(event)
+  }
+
+  ;(async () => {
+    zoomSdk = await getZoomSdk()
+    if (cancelled || !zoomSdk?.addEventListener) return
+    zoomSdk.addEventListener('onMyUserContextChange', listener)
+  })()
+
+  return () => {
+    cancelled = true
+    if (zoomSdk?.removeEventListener) {
+      zoomSdk.removeEventListener('onMyUserContextChange', listener)
+    }
+  }
+}
+
 export function isCollaborateActiveFromEvent(event) {
   const action = String(event?.action || event?.collaborateAction || '').toLowerCase()
   if (['start', 'started', 'join', 'joined'].includes(action)) return true
   if (['end', 'ended', 'leave', 'left'].includes(action)) return false
   if (typeof event?.collaborate === 'boolean') return event.collaborate
   return Boolean(event)
+}
+
+/**
+ * Merge a getUserContext / onMyUserContextChange payload into an existing context.
+ * @param {ZoomMeetingContext} context
+ * @param {object} userEvent
+ */
+export function applyUserContextChange(context, userEvent) {
+  if (!context) return context
+  const status = normalizeStatus(userEvent?.status) || context.status
+  const role = normalizeRole(userEvent?.role || context.role)
+  return withGuestFields(
+    {
+      ...context,
+      role,
+      zoomUserId:
+        userEvent?.participantUUID ||
+        userEvent?.userId ||
+        userEvent?.participantId ||
+        context.zoomUserId,
+      displayName: userEvent?.screenName || userEvent?.displayName || context.displayName,
+    },
+    { status },
+  )
 }
