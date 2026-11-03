@@ -84,10 +84,15 @@ export function InFrameSignIn({ bare = false }) {
   return <EmbedShell>{card}</EmbedShell>
 }
 
-export function SessionCodePrompt({ onResolved, bare = false }) {
-  const [code, setCode] = useState('')
+export function SessionCodePrompt({ onResolved, bare = false, initialCode = '' }) {
+  const [code, setCode] = useState(() => String(initialCode || '').trim().toUpperCase())
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    const next = String(initialCode || '').trim().toUpperCase()
+    if (next) setCode(next)
+  }, [initialCode])
 
   const submit = async (event) => {
     event.preventDefault()

@@ -13,9 +13,16 @@ export function isZoomAppEnabled() {
   return true
 }
 
+/**
+ * Default mock meeting when /zoom/app is opened outside Zoom.
+ * Dev: on. Production builds: off (explicit ?mockMeetingUuid=… still works).
+ * Override with VITE_ZOOM_MOCK_CONTEXT=true|false.
+ */
 export function isZoomMockContextEnabled() {
   const raw = import.meta.env.VITE_ZOOM_MOCK_CONTEXT
-  if (raw == null || raw === '') return true
+  if (raw == null || raw === '') {
+    return !import.meta.env.PROD
+  }
   const normalized = String(raw).trim().toLowerCase()
   if (['0', 'false', 'off', 'no', 'disabled'].includes(normalized)) return false
   return true

@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
+import { lookupSessionByCodeApi } from '../../services/embedApi'
 import {
   bindZoomMeetingSessionApi,
   getZoomMeetingSessionApi,
@@ -58,8 +60,8 @@ function OpenForEveryoneCard({
     <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-3 text-xs text-emerald-950">
       <p className="font-semibold text-sm text-navy-900">Open for everyone</p>
       <p className="mt-1 leading-relaxed text-emerald-900/80">
-        Participants will not see the Quiz app until you invite them (like Slido). This starts
-        Collaborate mode and invites everyone in the meeting.
+        Participants will not see the quiz until you tap this (like Slido). It starts Collaborate
+        mode and invites everyone in the meeting to open the Quiz app.
       </p>
       {mockMode ? (
         <p className="mt-2 text-[11px] text-amber-800">
@@ -90,7 +92,30 @@ function OpenForEveryoneCard({
   )
 }
 
+function SuggestedSessionCard({ sessionCode, busy, onLink }) {
+  if (!sessionCode) return null
+  return (
+    <div className="rounded-xl border border-sky-200 bg-white px-3 py-3 text-xs text-slate-700 shadow-sm">
+      <p className="font-semibold text-sm text-navy-900">Suggested from Share</p>
+      <p className="mt-1 leading-relaxed text-slate-600">
+        Link session{' '}
+        <span className="font-mono font-semibold tracking-widest">{sessionCode}</span> to this
+        meeting in one tap.
+      </p>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={onLink}
+        className="mt-3 h-10 w-full rounded-lg bg-navy-800 text-sm font-semibold text-white transition hover:bg-navy-900 disabled:opacity-60"
+      >
+        {busy ? 'Linking…' : `Link ${sessionCode}`}
+      </button>
+    </div>
+  )
+}
+
 export default function ZoomHostPanel({ context }) {
+  const [searchParams] = useSearchParams()
   const user = useAuthStore((state) => state.user)
   const accessToken = useAuthStore((state) => state.accessToken)
   const [binding, setBinding] = useState(null)
@@ -98,8 +123,18 @@ export default function ZoomHostPanel({ context }) {
   const [error, setError] = useState('')
   const [unbindBusy, setUnbindBusy] = useState(false)
   const [openBusy, setOpenBusy] = useState(false)
+  const [suggestBusy, setSuggestBusy] = useState(false)
   const [collaborateActive, setCollaborateActive] = useState(false)
   const [openResult, setOpenResult] = useState(null)
+
+  const suggestedCode = useMemo(() => {
+    const raw =
+      searchParams.get('sessionCode') ||
+      searchParams.get('suggestSession') ||
+      searchParams.get('code') ||
+      ''
+    return String(raw).trim().toUpperCase()
+  }, [searchParams])
 
   const refreshBinding = useCallback(async () => {
     setLoading(true)
@@ -141,12 +176,23 @@ export default function ZoomHostPanel({ context }) {
     }
   }
 
-  const onSessionResolved = async (sessionId) => {
+  const onCodeResolved = async (sessionId) => {
     await bindSession(sessionId)
   }
 
-  const onCodeResolved = async (sessionId) => {
-    await onSessionResolved(sessionId)
+  const handleLinkSuggested = async () => {
+    if (!suggestedCode || suggestBusy) return
+    setSuggestBusy(true)
+    setError('')
+    try {
+      const session = await lookupSessionByCodeApi(suggestedCode)
+      if (!session?.session_id) throw new Error('Session code not found')
+      await onCodeResolved(String(session.session_id))
+    } catch (err) {
+      setError(err?.message || 'Could not link suggested session')
+    } finally {
+      setSuggestBusy(false)
+    }
   }
 
   const handleUnbind = async () => {
@@ -183,6 +229,12 @@ export default function ZoomHostPanel({ context }) {
       <EmbedShell>
         <div className="rounded-xl border border-blue-200/70 bg-white p-3 text-xs text-slate-600">
           Sign in to control the quiz for this Zoom meeting.
+          {suggestedCode ? (
+            <span className="mt-1 block text-[11px] text-slate-500">
+              After sign-in you can link session{' '}
+              <span className="font-mono font-semibold">{suggestedCode}</span>.
+            </span>
+          ) : null}
           {context.source === 'mock' ? (
             <span className="mt-1 block text-[11px] text-amber-700">
               Running in mock Zoom context ({context.meetingUuid}).
@@ -217,12 +269,17 @@ export default function ZoomHostPanel({ context }) {
           </p>
         ) : null}
         <p className="rounded-xl border border-blue-200/70 bg-white p-3 text-xs text-slate-600">
-          Pick a quiz session to run in this meeting. After it is linked, tap{' '}
-          <span className="font-semibold">Open for everyone</span> so participants get invited into
-          the Quiz app.
+          Link a quiz session to this meeting. Participants will not see the quiz until you tap{' '}
+          <span className="font-semibold">Open for everyone</span> afterward.
         </p>
+        <SuggestedSessionCard
+          sessionCode={suggestedCode}
+          busy={suggestBusy}
+          onLink={handleLinkSuggested}
+        />
         <SessionCodePrompt
           bare
+          initialCode={suggestedCode}
           onResolved={async (resolvedId) => {
             try {
               await onCodeResolved(resolvedId)
@@ -250,6 +307,12 @@ export default function ZoomHostPanel({ context }) {
         onUnbind={handleUnbind}
         unbindBusy={unbindBusy}
       />
+      {!collaborateActive && !openResult ? (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+          Participants will not see the quiz until you tap{' '}
+          <span className="font-semibold">Open for everyone</span>.
+        </p>
+      ) : null}
       <OpenForEveryoneCard
         enabled={Boolean(sessionId)}
         busy={openBusy}

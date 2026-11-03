@@ -248,13 +248,27 @@ export default function ShareSessionPanel({
   }, [])
 
   const zoomMockHostUrl = useMemo(() => {
-    if (!sessionCode) return `${zoomAppUrl}?mockMeetingUuid=dev-meeting-1&mockRole=host`
-    return `${zoomAppUrl}?mockMeetingUuid=dev-${sessionCode}&mockRole=host`
+    if (!sessionCode) {
+      return `${zoomAppUrl}?mockMeetingUuid=dev-meeting-1&mockRole=host`
+    }
+    const qs = new URLSearchParams({
+      mockMeetingUuid: `dev-${sessionCode}`,
+      mockRole: 'host',
+      sessionCode,
+    })
+    return `${zoomAppUrl}?${qs.toString()}`
   }, [zoomAppUrl, sessionCode])
 
   const zoomMockParticipantUrl = useMemo(() => {
-    if (!sessionCode) return `${zoomAppUrl}?mockMeetingUuid=dev-meeting-1&mockRole=participant`
-    return `${zoomAppUrl}?mockMeetingUuid=dev-${sessionCode}&mockRole=participant&mockDisplayName=Guest`
+    if (!sessionCode) {
+      return `${zoomAppUrl}?mockMeetingUuid=dev-meeting-1&mockRole=participant&mockDisplayName=Guest`
+    }
+    const qs = new URLSearchParams({
+      mockMeetingUuid: `dev-${sessionCode}`,
+      mockRole: 'participant',
+      mockDisplayName: 'Guest',
+    })
+    return `${zoomAppUrl}?${qs.toString()}`
   }, [zoomAppUrl, sessionCode])
 
   const refreshZoomStatus = useCallback(async () => {
@@ -925,8 +939,10 @@ export default function ShareSessionPanel({
         <div className="space-y-3">
           <label className="text-sm font-semibold text-slate-700">Zoom Apps</label>
           <p className="text-xs leading-relaxed text-slate-600">
-            Hosts and participants open the Quiz app inside a Zoom meeting. The host links this
-            session to the meeting; everyone else joins automatically.
+            In a real Zoom meeting: open the Quiz app → sign in → link this session → tap{' '}
+            <span className="font-semibold">Open for everyone</span>. Participants will not see the
+            quiz until that invite (like Slido). Use the local mock links below only for browser
+            testing without Zoom.
           </p>
           {zoomStatusError ? (
             <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -1039,9 +1055,10 @@ export default function ShareSessionPanel({
                 </div>
               </div>
               <p className="mt-1 text-xs text-slate-500">
-                Open host mock first, sign in, enter session code{' '}
-                <span className="font-mono font-semibold">{sessionCode || '…'}</span>, then open the
-                participant mock in another window.
+                Open host mock first → sign in → tap{' '}
+                <span className="font-semibold">Link {sessionCode || '…'}</span> (prefilled) → then
+                open the participant mock in another window with the same meeting id. Mock cannot
+                send real Zoom invites.
               </p>
             </div>
           </div>

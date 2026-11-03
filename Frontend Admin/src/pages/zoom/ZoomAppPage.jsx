@@ -31,7 +31,7 @@ export default function ZoomAppPage() {
         if (cancelled) return
         if (!resolved) {
           setError(
-            'Open this app from a Zoom meeting, or use mockMeetingUuid / mockRole query params for local testing.',
+            'Open this app from a Zoom meeting. For browser-only testing, use a Share → Zoom local mock link (?mockMeetingUuid=…).',
           )
           setContext(null)
         } else {
@@ -94,13 +94,9 @@ export default function ZoomAppPage() {
           <p className="font-semibold">Zoom context unavailable</p>
           <p className="mt-1 text-xs leading-relaxed">{error}</p>
           <p className="mt-3 text-[11px] text-amber-800">
-            Dev examples:{' '}
+            Local mock example:{' '}
             <code className="rounded bg-white/70 px-1">
-              /zoom/app?mockMeetingUuid=dev-1&amp;mockRole=host
-            </code>
-            {' · '}
-            <code className="rounded bg-white/70 px-1">
-              mockRole=participant&amp;mockGuest=1
+              /zoom/app?mockMeetingUuid=dev-1&amp;mockRole=host&amp;sessionCode=ABC123
             </code>
           </p>
         </div>
