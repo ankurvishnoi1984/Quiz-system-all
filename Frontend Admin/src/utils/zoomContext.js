@@ -10,6 +10,26 @@ import { isZoomMockContextEnabled } from '../utils/integrations'
  * @property {'sdk'|'mock'|'query'} source
  */
 
+/** Capabilities must also be allow-listed on the Marketplace Zoom App SDK feature list. */
+export const ZOOM_SDK_CAPABILITIES = [
+  'getMeetingContext',
+  'getUserContext',
+  'getRunningContext',
+  'openUrl',
+  'getMeetingUUID',
+  'getSupportedJsApis',
+  'startCollaborate',
+  'endCollaborate',
+  'joinCollaborate',
+  'leaveCollaborate',
+  'onCollaborateChange',
+  'sendAppInvitation',
+  'sendAppInvitationToAllParticipants',
+  'showAppInvitationDialog',
+]
+
+let configuredSdkPromise = null
+
 function normalizeRole(raw) {
   const value = String(raw || '')
     .trim()
@@ -37,20 +57,36 @@ function contextFromSearchParams(searchParams) {
   }
 }
 
+/**
+ * Lazily load and config the Zoom Apps SDK once per page.
+ * @returns {Promise<object|null>}
+ */
+export async function getZoomSdk() {
+  if (configuredSdkPromise) return configuredSdkPromise
+
+  configuredSdkPromise = (async () => {
+    try {
+      const mod = await import('@zoom/appssdk')
+      const zoomSdk = mod?.default || mod?.zoomSdk || mod
+      if (!zoomSdk?.config) return null
+
+      await zoomSdk.config({
+        capabilities: ZOOM_SDK_CAPABILITIES,
+      })
+      return zoomSdk
+    } catch {
+      configuredSdkPromise = null
+      return null
+    }
+  })()
+
+  return configuredSdkPromise
+}
+
 async function tryLoadZoomSdkContext() {
   try {
-    const mod = await import('@zoom/appssdk')
-    const zoomSdk = mod?.default || mod?.zoomSdk || mod
-    if (!zoomSdk?.config) return null
-
-    await zoomSdk.config({
-      capabilities: [
-        'getMeetingContext',
-        'getUserContext',
-        'getRunningContext',
-        'openUrl',
-      ],
-    })
+    const zoomSdk = await getZoomSdk()
+    if (!zoomSdk) return null
 
     const [meeting, user] = await Promise.all([
       zoomSdk.getMeetingContext().catch(() => null),
@@ -106,4 +142,100 @@ export async function resolveZoomMeetingContext(searchParams) {
 
 export function isHostLikeRole(role) {
   return role === 'host' || role === 'coHost'
+}
+
+/**
+ * Slido-like: start Collaborate, then invite everyone so participants open the app.
+ * Falls back to invitation dialog if collaborate/invite-all are unavailable.
+ * @returns {Promise<{ collaborate: boolean, invite: boolean }>}
+ */
+export async function openQuizForEveryone() {
+  const zoomSdk = await getZoomSdk()
+  if (!zoomSdk) {
+    const err = new Error('Open this app from a Zoom meeting to invite participants.')
+    err.code = 'ZOOM_SDK_UNAVAILABLE'
+    throw err
+  }
+
+  let collaborate = false
+  let invite = false
+  const errors = []
+
+  if (typeof zoomSdk.startCollaborate === 'function') {
+    try {
+      await zoomSdk.startCollaborate({ shareScreen: true })
+      collaborate = true
+    } catch (err) {
+      errors.push(err?.message || 'Could not start Collaborate mode')
+    }
+  }
+
+  if (typeof zoomSdk.sendAppInvitationToAllParticipants === 'function') {
+    try {
+      await zoomSdk.sendAppInvitationToAllParticipants()
+      invite = true
+    } catch (err) {
+      errors.push(err?.message || 'Could not invite all participants')
+    }
+  }
+
+  if (!invite && typeof zoomSdk.showAppInvitationDialog === 'function') {
+    try {
+      await zoomSdk.showAppInvitationDialog({
+        dialogHeading: 'Join the quiz',
+        messageText: 'Open the Quiz app to take part in this meeting.',
+        dialogButtonText: 'Invite',
+        primaryButtonText: 'Open',
+      })
+      invite = true
+    } catch (err) {
+      errors.push(err?.message || 'Could not open the invite dialog')
+    }
+  }
+
+  if (!collaborate && !invite) {
+    const err = new Error(
+      errors.filter(Boolean).join(' ') ||
+        'Could not open the quiz for participants. Enable Collaborate Mode and invitation APIs on the Zoom app.',
+    )
+    err.code = 'ZOOM_OPEN_EVERYONE_FAILED'
+    throw err
+  }
+
+  return { collaborate, invite }
+}
+
+/**
+ * Subscribe to Collaborate mode changes. No-op outside Zoom client.
+ * @param {(event: object) => void} handler
+ * @returns {() => void} unsubscribe
+ */
+export function subscribeCollaborateChange(handler) {
+  let cancelled = false
+  let zoomSdk = null
+
+  const listener = (event) => {
+    if (!cancelled) handler(event)
+  }
+
+  ;(async () => {
+    zoomSdk = await getZoomSdk()
+    if (cancelled || !zoomSdk?.addEventListener) return
+    zoomSdk.addEventListener('onCollaborateChange', listener)
+  })()
+
+  return () => {
+    cancelled = true
+    if (zoomSdk?.removeEventListener) {
+      zoomSdk.removeEventListener('onCollaborateChange', listener)
+    }
+  }
+}
+
+export function isCollaborateActiveFromEvent(event) {
+  const action = String(event?.action || event?.collaborateAction || '').toLowerCase()
+  if (['start', 'started', 'join', 'joined'].includes(action)) return true
+  if (['end', 'ended', 'leave', 'left'].includes(action)) return false
+  if (typeof event?.collaborate === 'boolean') return event.collaborate
+  return Boolean(event)
 }

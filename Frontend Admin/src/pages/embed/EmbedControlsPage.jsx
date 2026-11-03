@@ -26,7 +26,7 @@ export function EmbedShell({ children }) {
   )
 }
 
-export function InFrameSignIn() {
+export function InFrameSignIn({ bare = false }) {
   const login = useAuthStore((state) => state.login)
   const isLoading = useAuthStore((state) => state.isLoading)
   const [email, setEmail] = useState('')
@@ -43,47 +43,48 @@ export function InFrameSignIn() {
     }
   }
 
-  return (
-    <EmbedShell>
-      <div className="rounded-xl border border-blue-200/70 bg-white p-4 shadow-sm">
-        <h1 className="text-base font-bold text-navy-900">Sign in to control the session</h1>
-        <p className="mt-1 text-xs leading-relaxed text-slate-600">
-          This panel runs in its own sandbox, so it needs a separate sign in from your browser tab.
-        </p>
-        <form className="mt-3 space-y-2" onSubmit={submit}>
-          <input
-            type="email"
-            required
-            autoComplete="username"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder="Work email"
-            className="h-10 w-full rounded-lg border border-blue-200 bg-white px-3 text-sm outline-none focus:border-sky-400"
-          />
-          <input
-            type="password"
-            required
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder="Password"
-            className="h-10 w-full rounded-lg border border-blue-200 bg-white px-3 text-sm outline-none focus:border-sky-400"
-          />
-          {error ? <p className="text-xs font-semibold text-red-700">{error}</p> : null}
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="h-10 w-full rounded-lg bg-navy-800 text-sm font-semibold text-white transition hover:bg-navy-900 disabled:opacity-60"
-          >
-            {isLoading ? 'Signing in…' : 'Sign in'}
-          </button>
-        </form>
-      </div>
-    </EmbedShell>
+  const card = (
+    <div className="rounded-xl border border-blue-200/70 bg-white p-4 shadow-sm">
+      <h1 className="text-base font-bold text-navy-900">Sign in to control the session</h1>
+      <p className="mt-1 text-xs leading-relaxed text-slate-600">
+        This panel runs in its own sandbox, so it needs a separate sign in from your browser tab.
+      </p>
+      <form className="mt-3 space-y-2" onSubmit={submit}>
+        <input
+          type="email"
+          required
+          autoComplete="username"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          placeholder="Work email"
+          className="h-10 w-full rounded-lg border border-blue-200 bg-white px-3 text-sm outline-none focus:border-sky-400"
+        />
+        <input
+          type="password"
+          required
+          autoComplete="current-password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          placeholder="Password"
+          className="h-10 w-full rounded-lg border border-blue-200 bg-white px-3 text-sm outline-none focus:border-sky-400"
+        />
+        {error ? <p className="text-xs font-semibold text-red-700">{error}</p> : null}
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="h-10 w-full rounded-lg bg-navy-800 text-sm font-semibold text-white transition hover:bg-navy-900 disabled:opacity-60"
+        >
+          {isLoading ? 'Signing in…' : 'Sign in'}
+        </button>
+      </form>
+    </div>
   )
+
+  if (bare) return card
+  return <EmbedShell>{card}</EmbedShell>
 }
 
-export function SessionCodePrompt({ onResolved }) {
+export function SessionCodePrompt({ onResolved, bare = false }) {
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -103,37 +104,38 @@ export function SessionCodePrompt({ onResolved }) {
     }
   }
 
-  return (
-    <EmbedShell>
-      <form
-        onSubmit={submit}
-        className="rounded-xl border border-blue-200/70 bg-white p-4 shadow-sm"
+  const form = (
+    <form
+      onSubmit={submit}
+      className="rounded-xl border border-blue-200/70 bg-white p-4 shadow-sm"
+    >
+      <h1 className="text-base font-bold text-navy-900">Pick a session</h1>
+      <p className="mt-1 text-xs leading-relaxed text-slate-600">
+        Enter the 6-character session code shown on your dashboard.
+      </p>
+      <input
+        value={code}
+        onChange={(event) => setCode(event.target.value)}
+        placeholder="ABC123"
+        maxLength={6}
+        className="mt-3 h-10 w-full rounded-lg border border-blue-200 bg-white px-3 font-mono text-sm font-semibold uppercase tracking-widest outline-none focus:border-sky-400"
+      />
+      {error ? <p className="mt-2 text-xs font-semibold text-red-700">{error}</p> : null}
+      <button
+        type="submit"
+        disabled={busy || code.trim().length < 4}
+        className="mt-3 h-10 w-full rounded-lg bg-navy-800 text-sm font-semibold text-white transition hover:bg-navy-900 disabled:opacity-60"
       >
-        <h1 className="text-base font-bold text-navy-900">Pick a session</h1>
-        <p className="mt-1 text-xs leading-relaxed text-slate-600">
-          Enter the 6-character session code shown on your dashboard.
-        </p>
-        <input
-          value={code}
-          onChange={(event) => setCode(event.target.value)}
-          placeholder="ABC123"
-          maxLength={6}
-          className="mt-3 h-10 w-full rounded-lg border border-blue-200 bg-white px-3 font-mono text-sm font-semibold uppercase tracking-widest outline-none focus:border-sky-400"
-        />
-        {error ? <p className="mt-2 text-xs font-semibold text-red-700">{error}</p> : null}
-        <button
-          type="submit"
-          disabled={busy || code.trim().length < 4}
-          className="mt-3 h-10 w-full rounded-lg bg-navy-800 text-sm font-semibold text-white transition hover:bg-navy-900 disabled:opacity-60"
-        >
-          {busy ? 'Looking up…' : 'Continue'}
-        </button>
-      </form>
-    </EmbedShell>
+        {busy ? 'Looking up…' : 'Continue'}
+      </button>
+    </form>
   )
+
+  if (bare) return form
+  return <EmbedShell>{form}</EmbedShell>
 }
 
-export function EmbedControls({ sessionId }) {
+export function EmbedControls({ sessionId, bare = false }) {
   const accessToken = useAuthStore((state) => state.accessToken)
   const logout = useAuthStore((state) => state.logout)
   const queryClient = useQueryClient()
@@ -184,18 +186,18 @@ export function EmbedControls({ sessionId }) {
     return () => clearTimeout(timer)
   }, [error])
 
+  const wrap = (node) => (bare ? node : <EmbedShell>{node}</EmbedShell>)
+
   if (!session) {
-    return (
-      <EmbedShell>
-        <p className="rounded-xl border border-blue-200/70 bg-white p-4 text-sm text-slate-600">
-          Loading session…
-        </p>
-      </EmbedShell>
+    return wrap(
+      <p className="rounded-xl border border-blue-200/70 bg-white p-4 text-sm text-slate-600">
+        Loading session…
+      </p>,
     )
   }
 
-  return (
-    <EmbedShell>
+  return wrap(
+    <>
       <div className="rounded-xl border border-blue-200/70 bg-white p-3 shadow-sm">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -290,7 +292,7 @@ export function EmbedControls({ sessionId }) {
           />
         </div>
       ) : null}
-    </EmbedShell>
+    </>,
   )
 }
 
