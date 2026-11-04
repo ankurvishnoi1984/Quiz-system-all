@@ -13,6 +13,7 @@ import { isZoomMockContextEnabled } from '../utils/integrations'
  * @property {ZoomUserStatus} status Zoom Apps user status from getUserContext
  * @property {boolean} isGuest True when Zoom Guest Mode (not fully authorized)
  * @property {string|null} [runningContext]
+ * @property {boolean} [browserDemo] True when opened outside Zoom and SDK was unavailable
  */
 
 /** Core APIs needed to boot the app. Must be allow-listed on Marketplace. */
@@ -53,6 +54,9 @@ export const ZOOM_SDK_CAPABILITIES = [
   ...ZOOM_SDK_OPTIONAL_INVITE_APIS,
 ]
 
+/** Short boot timeout — browsers hang on config(); fail over to demo quickly. */
+const BOOT_SDK_TIMEOUT_MS = 2000
+/** Longer timeout for in-meeting Collaborate / invite calls. */
 const SDK_TIMEOUT_MS = 5000
 const IN_MEETING_CONTEXTS = new Set(['inMeeting', 'inWebinar'])
 
@@ -204,6 +208,8 @@ export async function getZoomSdk(options = {}) {
     return configuredSdkPromise
   }
 
+  const bootTimeoutMs = includeCollaborate ? SDK_TIMEOUT_MS : BOOT_SDK_TIMEOUT_MS
+
   const run = withTimeout(
     (async () => {
       const zoomSdk = configuredSdk || (await loadZoomSdkModule())
@@ -224,7 +230,7 @@ export async function getZoomSdk(options = {}) {
         try {
           const running = await withTimeout(
             zoomSdk.getRunningContext(),
-            2000,
+            1500,
             'Timed out reading Zoom running context.',
             'ZOOM_SDK_TIMEOUT',
           )
@@ -240,7 +246,7 @@ export async function getZoomSdk(options = {}) {
       if (includeCollaborate) collaborateConfigured = true
       return zoomSdk
     })(),
-    SDK_TIMEOUT_MS,
+    bootTimeoutMs,
     'Zoom Apps SDK took too long to start. Close and reopen the app from inside a meeting, or update the Zoom client.',
     'ZOOM_SDK_TIMEOUT',
   ).catch((err) => {
@@ -350,12 +356,38 @@ async function tryLoadZoomSdkContext() {
 }
 
 /**
- * Resolve Zoom meeting context from Apps SDK, then query/mock fallbacks.
+ * Browser / web-demo host context when Zoom SDK is unavailable.
+ * @returns {ZoomMeetingContext}
+ */
+export function createBrowserDemoContext() {
+  return withGuestFields(
+    {
+      meetingUuid: 'dev-meeting-local',
+      meetingId: null,
+      role: 'host',
+      zoomUserId: 'dev-host-1',
+      displayName: 'Dev Host',
+      source: 'mock',
+      runningContext: null,
+      browserDemo: true,
+    },
+    { status: 'authorized' },
+  )
+}
+
+/** True when /zoom/app fell back to demo because we are not inside Zoom. */
+export function isBrowserDemoContext(context) {
+  return Boolean(context?.browserDemo)
+}
+
+/**
+ * Resolve Zoom meeting context from Apps SDK, then query/mock/browser-demo fallbacks.
  * @param {URLSearchParams} searchParams
  * @returns {Promise<ZoomMeetingContext|null>}
  */
 export async function resolveZoomMeetingContext(searchParams) {
   const fromQuery = contextFromSearchParams(searchParams)
+  // Explicit mockMeetingUuid (Share local mock) — never wait on SDK.
   if (fromQuery?.source === 'mock' || (fromQuery && !isZoomMockContextEnabled())) {
     return fromQuery
   }
@@ -364,29 +396,24 @@ export async function resolveZoomMeetingContext(searchParams) {
     const fromSdk = await tryLoadZoomSdkContext()
     if (fromSdk) return fromSdk
   } catch (err) {
-    if (err?.code === 'ZOOM_SDK_TIMEOUT' || err?.code === 'ZOOM_OUT_OF_MEETING') {
+    // Real Zoom main client with known runningContext — keep the out-of-meeting message.
+    if (err?.code === 'ZOOM_OUT_OF_MEETING') {
       throw err
     }
+    // Browser / unsupported client: SDK throw or timeout → web demo instead of fatal error.
+    if (fromQuery) return fromQuery
+    return createBrowserDemoContext()
   }
 
   if (fromQuery) return fromQuery
 
+  // SDK returned null without throwing (no meeting uuid, etc.)
   if (isZoomMockContextEnabled()) {
-    return withGuestFields(
-      {
-        meetingUuid: 'dev-meeting-local',
-        meetingId: null,
-        role: 'host',
-        zoomUserId: 'dev-host-1',
-        displayName: 'Dev Host',
-        source: 'mock',
-        runningContext: null,
-      },
-      { status: 'authorized' },
-    )
+    return createBrowserDemoContext()
   }
 
-  return null
+  // Production with mock flag off: still offer browser demo when SDK did not configure.
+  return createBrowserDemoContext()
 }
 
 /**

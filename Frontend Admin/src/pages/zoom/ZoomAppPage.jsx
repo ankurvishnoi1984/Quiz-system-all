@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   applyUserContextChange,
+  isBrowserDemoContext,
   isHostLikeRole,
   resetZoomSdkForRetry,
   resolveZoomMeetingContext,
@@ -26,6 +27,19 @@ function messageForResolveError(err) {
     )
   }
   return err?.message || 'Failed to load Zoom context'
+}
+
+function BrowserDemoBanner() {
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
+      <p className="font-semibold">Browser demo</p>
+      <p className="mt-0.5 leading-relaxed text-amber-900/80">
+        Not inside Zoom. You can sign in and link a session here for local testing. For the real
+        Slido-like flow, start a meeting → bottom toolbar <span className="font-semibold">Apps</span>{' '}
+        (or More → Apps) → open this app.
+      </p>
+    </div>
+  )
 }
 
 /**
@@ -70,17 +84,18 @@ export default function ZoomAppPage() {
     setContext(null)
     setElapsedSec(0)
 
-    // Hard UI watchdog — always leaves Starting… even if Zoom CEF swallows promise races.
+    // Only fires if resolve never settles (should be rare now — browser demo returns fast).
     const watchdog = setTimeout(() => {
+      if (cancelled || settled) return
       finishError(
         'ZOOM_SDK_TIMEOUT',
-        'Zoom took too long to start the app. Start a meeting, then open this app from the in-meeting Apps button (or More → Apps).',
+        'Zoom took too long to start the app. Start a meeting, then open this app from the in-meeting Apps button (or More → Apps). Or use a Share → Zoom local mock link in the browser.',
       )
       resetZoomSdkForRetry()
     }, ZOOM_RESOLVE_WATCHDOG_MS)
 
     const tick = setInterval(() => {
-      if (!cancelled) setElapsedSec((value) => value + 1)
+      if (!cancelled && !settled) setElapsedSec((value) => value + 1)
     }, 1000)
 
     ;(async () => {
@@ -102,6 +117,7 @@ export default function ZoomAppPage() {
             : resolved.role
         finishOk({ ...resolved, role })
       } catch (err) {
+        if (cancelled || settled) return
         finishError(err?.code || 'ZOOM_RESOLVE_FAILED', messageForResolveError(err))
       } finally {
         clearTimeout(watchdog)
@@ -122,6 +138,7 @@ export default function ZoomAppPage() {
   }
 
   const isSdkContext = context?.source === 'sdk'
+  const showBrowserDemoBanner = isBrowserDemoContext(context)
 
   useEffect(() => {
     if (!isSdkContext) return undefined
@@ -147,11 +164,7 @@ export default function ZoomAppPage() {
           Starting Zoom Quiz app…
         </p>
         <p className="text-[11px] text-slate-500">
-          Waiting {elapsedSec}s — will stop automatically if Zoom does not respond.
-        </p>
-        <p className="text-[11px] text-slate-500">
-          Tip: open this from a <span className="font-semibold">live meeting</span> toolbar → Apps
-          (or More → Apps), not the main Apps tab.
+          Waiting {elapsedSec}s — browser demo starts automatically if Zoom SDK is unavailable.
         </p>
       </EmbedShell>
     )
@@ -186,7 +199,7 @@ export default function ZoomAppPage() {
             Try again
           </button>
           <p className="mt-3 text-[11px] text-amber-800">
-            Local mock example:{' '}
+            Or open in the browser:{' '}
             <code className="rounded bg-white/70 px-1">
               /zoom/app?mockMeetingUuid=dev-1&amp;mockRole=host&amp;sessionCode=ABC123
             </code>
@@ -196,9 +209,21 @@ export default function ZoomAppPage() {
     )
   }
 
-  if (isHostLikeRole(context.role) && context.status !== 'unauthenticated') {
-    return <ZoomHostPanel context={context} />
-  }
+  const panel = isHostLikeRole(context.role) && context.status !== 'unauthenticated' ? (
+    <ZoomHostPanel context={context} />
+  ) : (
+    <ZoomParticipantPanel context={context} />
+  )
 
-  return <ZoomParticipantPanel context={context} />
+  if (!showBrowserDemoBanner) return panel
+
+  // Banner only — do not wrap another min-h-dvh EmbedShell above the host/participant panel.
+  return (
+    <div className="bg-slate-50">
+      <div className="mx-auto max-w-md space-y-3 px-3 pt-3">
+        <BrowserDemoBanner />
+      </div>
+      {panel}
+    </div>
+  )
 }
