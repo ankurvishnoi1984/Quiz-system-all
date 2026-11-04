@@ -12,28 +12,81 @@ import { isZoomMockContextEnabled } from '../utils/integrations'
  * @property {'sdk'|'mock'|'query'} source
  * @property {ZoomUserStatus} status Zoom Apps user status from getUserContext
  * @property {boolean} isGuest True when Zoom Guest Mode (not fully authorized)
+ * @property {string|null} [runningContext]
  */
 
-/** Capabilities must also be allow-listed on the Marketplace Zoom App SDK feature list. */
-export const ZOOM_SDK_CAPABILITIES = [
+/** Core APIs needed to boot the app. Must be allow-listed on Marketplace. */
+export const ZOOM_SDK_CORE_CAPABILITIES = [
+  'getRunningContext',
   'getMeetingContext',
   'getUserContext',
-  'getRunningContext',
-  'openUrl',
   'getMeetingUUID',
   'getSupportedJsApis',
+  'openUrl',
+  'onMyUserContextChange',
+]
+
+/**
+ * Collaborate APIs for Open for everyone.
+ * Do NOT include sendAppInvitation / sendAppInvitationToAllParticipants here —
+ * some Marketplace apps cannot add those; we call them only if present on zoomSdk.
+ */
+export const ZOOM_SDK_COLLABORATE_CAPABILITIES = [
   'startCollaborate',
   'endCollaborate',
   'joinCollaborate',
   'leaveCollaborate',
   'onCollaborateChange',
-  'onMyUserContextChange',
-  'sendAppInvitation',
-  'sendAppInvitationToAllParticipants',
   'showAppInvitationDialog',
 ]
 
+/** Optional invite APIs — used only when Zoom exposes them after config. */
+export const ZOOM_SDK_OPTIONAL_INVITE_APIS = [
+  'sendAppInvitation',
+  'sendAppInvitationToAllParticipants',
+]
+
+/** Full list (docs / Marketplace checklist). */
+export const ZOOM_SDK_CAPABILITIES = [
+  ...ZOOM_SDK_CORE_CAPABILITIES,
+  ...ZOOM_SDK_COLLABORATE_CAPABILITIES,
+  ...ZOOM_SDK_OPTIONAL_INVITE_APIS,
+]
+
+const SDK_TIMEOUT_MS = 5000
+const IN_MEETING_CONTEXTS = new Set(['inMeeting', 'inWebinar'])
+
 let configuredSdkPromise = null
+let configuredSdk = null
+let collaborateConfigured = false
+let lastRunningContext = null
+
+function withTimeout(promise, ms, message, code) {
+  let timer
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => {
+      const err = new Error(message)
+      err.code = code
+      reject(err)
+    }, ms)
+  })
+  return Promise.race([Promise.resolve(promise), timeout]).finally(() => {
+    clearTimeout(timer)
+  })
+}
+
+function zoomError(message, code) {
+  const err = new Error(message)
+  err.code = code
+  return err
+}
+
+function resetSdkCache() {
+  configuredSdkPromise = null
+  configuredSdk = null
+  collaborateConfigured = false
+  lastRunningContext = null
+}
 
 function normalizeRole(raw) {
   const value = String(raw || '')
@@ -63,12 +116,15 @@ export function isZoomGuestStatus(status) {
   return status === 'unauthenticated' || status === 'authenticated'
 }
 
+export function isHostLikeRole(role) {
+  return role === 'host' || role === 'coHost'
+}
+
 function withGuestFields(context, { status = null, forceGuest = false } = {}) {
   const normalizedStatus = normalizeStatus(status)
   const isGuest = forceGuest || isZoomGuestStatus(normalizedStatus)
   let role = context.role
 
-  // Unsigned Zoom users (true guests) never get the host console.
   if (normalizedStatus === 'unauthenticated' || (forceGuest && !isHostLikeRole(role))) {
     role = 'participant'
   } else if (isGuest && role === 'unknown') {
@@ -107,35 +163,101 @@ function contextFromSearchParams(searchParams) {
       zoomUserId: searchParams.get('mockZoomUserId') || searchParams.get('zoomUserId') || null,
       displayName: searchParams.get('mockDisplayName') || searchParams.get('displayName') || null,
       source: searchParams.get('mockMeetingUuid') ? 'mock' : 'query',
+      runningContext: null,
     },
     { status, forceGuest },
   )
 }
 
+async function loadZoomSdkModule() {
+  const mod = await import('@zoom/appssdk')
+  return mod?.default || mod?.zoomSdk || mod
+}
+
+function isInMeetingRunningContext(runningContext) {
+  return IN_MEETING_CONTEXTS.has(String(runningContext || ''))
+}
+
+function assertInMeetingOrThrow(runningContext) {
+  if (runningContext && !isInMeetingRunningContext(runningContext)) {
+    throw zoomError(
+      'Open the Quiz app from inside a Zoom meeting (Apps during the call), not only from the main Apps tab.',
+      'ZOOM_OUT_OF_MEETING',
+    )
+  }
+}
+
 /**
- * Lazily load and config the Zoom Apps SDK once per page.
+ * Configure Zoom Apps SDK with core capabilities.
+ * Entire bootstrap (import + config) is wrapped in a timeout so a hung CEF import cannot block forever.
+ * @param {{ includeCollaborate?: boolean }} [options]
  * @returns {Promise<object|null>}
  */
-export async function getZoomSdk() {
-  if (configuredSdkPromise) return configuredSdkPromise
+export async function getZoomSdk(options = {}) {
+  const includeCollaborate = Boolean(options.includeCollaborate)
 
-  configuredSdkPromise = (async () => {
-    try {
-      const mod = await import('@zoom/appssdk')
-      const zoomSdk = mod?.default || mod?.zoomSdk || mod
+  if (configuredSdk && (!includeCollaborate || collaborateConfigured)) {
+    return configuredSdk
+  }
+
+  if (configuredSdkPromise && !includeCollaborate) {
+    return configuredSdkPromise
+  }
+
+  const run = withTimeout(
+    (async () => {
+      const zoomSdk = configuredSdk || (await loadZoomSdkModule())
       if (!zoomSdk?.config) return null
 
-      await zoomSdk.config({
-        capabilities: ZOOM_SDK_CAPABILITIES,
-      })
-      return zoomSdk
-    } catch {
-      configuredSdkPromise = null
-      return null
-    }
-  })()
+      const capabilities = includeCollaborate
+        ? [...ZOOM_SDK_CORE_CAPABILITIES, ...ZOOM_SDK_COLLABORATE_CAPABILITIES]
+        : [...ZOOM_SDK_CORE_CAPABILITIES]
 
-  return configuredSdkPromise
+      const configResponse = await zoomSdk.config({ capabilities })
+
+      lastRunningContext = configResponse?.runningContext || lastRunningContext
+
+      // Fail fast when opened from main Apps tab (not in a meeting).
+      assertInMeetingOrThrow(lastRunningContext)
+
+      if (!lastRunningContext && typeof zoomSdk.getRunningContext === 'function') {
+        try {
+          const running = await withTimeout(
+            zoomSdk.getRunningContext(),
+            2000,
+            'Timed out reading Zoom running context.',
+            'ZOOM_SDK_TIMEOUT',
+          )
+          lastRunningContext =
+            typeof running === 'string' ? running : running?.runningContext || lastRunningContext
+          assertInMeetingOrThrow(lastRunningContext)
+        } catch (err) {
+          if (err?.code === 'ZOOM_OUT_OF_MEETING' || err?.code === 'ZOOM_SDK_TIMEOUT') throw err
+        }
+      }
+
+      configuredSdk = zoomSdk
+      if (includeCollaborate) collaborateConfigured = true
+      return zoomSdk
+    })(),
+    SDK_TIMEOUT_MS,
+    'Zoom Apps SDK took too long to start. Close and reopen the app from inside a meeting, or update the Zoom client.',
+    'ZOOM_SDK_TIMEOUT',
+  ).catch((err) => {
+    resetSdkCache()
+    throw err
+  })
+
+  if (!includeCollaborate) {
+    configuredSdkPromise = run
+    return configuredSdkPromise
+  }
+
+  return run
+}
+
+async function ensureCollaborateCapabilities() {
+  return getZoomSdk({ includeCollaborate: true })
 }
 
 async function resolveMeetingUuid(zoomSdk, meeting) {
@@ -144,14 +266,19 @@ async function resolveMeetingUuid(zoomSdk, meeting) {
 
   if (typeof zoomSdk.getMeetingUUID === 'function') {
     try {
-      const result = await zoomSdk.getMeetingUUID()
+      const result = await withTimeout(
+        zoomSdk.getMeetingUUID(),
+        SDK_TIMEOUT_MS,
+        'Timed out reading Zoom meeting id.',
+        'ZOOM_SDK_TIMEOUT',
+      )
       const uuid =
         result?.meetingUUID ||
         result?.meetingUuid ||
         (typeof result === 'string' ? result : null)
       if (uuid) return String(uuid)
-    } catch {
-      // Guests / restricted contexts may lack this API.
+    } catch (err) {
+      if (err?.code === 'ZOOM_SDK_TIMEOUT') throw err
     }
   }
 
@@ -159,35 +286,67 @@ async function resolveMeetingUuid(zoomSdk, meeting) {
 }
 
 async function tryLoadZoomSdkContext() {
-  try {
-    const zoomSdk = await getZoomSdk()
-    if (!zoomSdk) return null
+  const zoomSdk = await getZoomSdk()
+  if (!zoomSdk) return null
 
-    const [meeting, user] = await Promise.all([
-      zoomSdk.getMeetingContext().catch(() => null),
-      zoomSdk.getUserContext().catch(() => null),
-    ])
+  assertInMeetingOrThrow(lastRunningContext)
 
-    const meetingUuid = await resolveMeetingUuid(zoomSdk, meeting)
-    if (!meetingUuid) return null
-
-    const status = normalizeStatus(user?.status)
-    const role = normalizeRole(user?.role || meeting?.role)
-
-    return withGuestFields(
-      {
-        meetingUuid,
-        meetingId: meeting?.meetingID || meeting?.meetingId || null,
-        role,
-        zoomUserId: user?.participantUUID || user?.userId || user?.participantId || null,
-        displayName: user?.screenName || user?.displayName || null,
-        source: 'sdk',
-      },
-      { status },
-    )
-  } catch {
-    return null
+  if (!lastRunningContext && typeof zoomSdk.getRunningContext === 'function') {
+    try {
+      const running = await withTimeout(
+        zoomSdk.getRunningContext(),
+        2000,
+        'Timed out reading Zoom running context.',
+        'ZOOM_SDK_TIMEOUT',
+      )
+      const ctx = typeof running === 'string' ? running : running?.runningContext
+      if (ctx) {
+        lastRunningContext = ctx
+        assertInMeetingOrThrow(ctx)
+      }
+    } catch (err) {
+      if (err?.code === 'ZOOM_OUT_OF_MEETING' || err?.code === 'ZOOM_SDK_TIMEOUT') throw err
+    }
   }
+
+  const [meeting, user] = await Promise.all([
+    withTimeout(
+      zoomSdk.getMeetingContext().catch(() => null),
+      SDK_TIMEOUT_MS,
+      'Timed out reading Zoom meeting context. Start or join a meeting, then reopen the Quiz app.',
+      'ZOOM_SDK_TIMEOUT',
+    ),
+    withTimeout(
+      zoomSdk.getUserContext().catch(() => null),
+      SDK_TIMEOUT_MS,
+      'Timed out reading Zoom user context.',
+      'ZOOM_SDK_TIMEOUT',
+    ),
+  ])
+
+  const meetingUuid = await resolveMeetingUuid(zoomSdk, meeting)
+  if (!meetingUuid) {
+    throw zoomError(
+      'Open the Quiz app from inside a Zoom meeting (Apps during the call), not only from the main Apps tab.',
+      'ZOOM_OUT_OF_MEETING',
+    )
+  }
+
+  const status = normalizeStatus(user?.status)
+  const role = normalizeRole(user?.role || meeting?.role)
+
+  return withGuestFields(
+    {
+      meetingUuid,
+      meetingId: meeting?.meetingID || meeting?.meetingId || null,
+      role,
+      zoomUserId: user?.participantUUID || user?.userId || user?.participantId || null,
+      displayName: user?.screenName || user?.displayName || null,
+      source: 'sdk',
+      runningContext: lastRunningContext,
+    },
+    { status },
+  )
 }
 
 /**
@@ -201,8 +360,14 @@ export async function resolveZoomMeetingContext(searchParams) {
     return fromQuery
   }
 
-  const fromSdk = await tryLoadZoomSdkContext()
-  if (fromSdk) return fromSdk
+  try {
+    const fromSdk = await tryLoadZoomSdkContext()
+    if (fromSdk) return fromSdk
+  } catch (err) {
+    if (err?.code === 'ZOOM_SDK_TIMEOUT' || err?.code === 'ZOOM_OUT_OF_MEETING') {
+      throw err
+    }
+  }
 
   if (fromQuery) return fromQuery
 
@@ -215,16 +380,13 @@ export async function resolveZoomMeetingContext(searchParams) {
         zoomUserId: 'dev-host-1',
         displayName: 'Dev Host',
         source: 'mock',
+        runningContext: null,
       },
       { status: 'authorized' },
     )
   }
 
   return null
-}
-
-export function isHostLikeRole(role) {
-  return role === 'host' || role === 'coHost'
 }
 
 /**
@@ -249,16 +411,24 @@ export function buildZoomDeviceFingerprint(context) {
 }
 
 /**
- * Slido-like: start Collaborate, then invite everyone so participants open the app.
- * Falls back to invitation dialog if collaborate/invite-all are unavailable.
+ * Slido-like: Collaborate first, then Zoom invite dialog.
+ * sendAppInvitation* only if the client exposes them (optional Marketplace APIs).
  * @returns {Promise<{ collaborate: boolean, invite: boolean }>}
  */
 export async function openQuizForEveryone() {
-  const zoomSdk = await getZoomSdk()
+  let zoomSdk
+  try {
+    zoomSdk = await ensureCollaborateCapabilities()
+  } catch (err) {
+    if (err?.code === 'ZOOM_SDK_TIMEOUT' || err?.code === 'ZOOM_OUT_OF_MEETING') throw err
+    zoomSdk = null
+  }
+
   if (!zoomSdk) {
-    const err = new Error('Open this app from a Zoom meeting to invite participants.')
-    err.code = 'ZOOM_SDK_UNAVAILABLE'
-    throw err
+    throw zoomError(
+      'Open this app from a Zoom meeting to invite participants.',
+      'ZOOM_SDK_UNAVAILABLE',
+    )
   }
 
   let collaborate = false
@@ -267,43 +437,58 @@ export async function openQuizForEveryone() {
 
   if (typeof zoomSdk.startCollaborate === 'function') {
     try {
-      await zoomSdk.startCollaborate({ shareScreen: true })
+      await withTimeout(
+        zoomSdk.startCollaborate({ shareScreen: true }),
+        SDK_TIMEOUT_MS,
+        'Timed out starting Collaborate mode.',
+        'ZOOM_SDK_TIMEOUT',
+      )
       collaborate = true
     } catch (err) {
       errors.push(err?.message || 'Could not start Collaborate mode')
     }
   }
 
-  if (typeof zoomSdk.sendAppInvitationToAllParticipants === 'function') {
+  // Prefer Zoom's built-in invite dialog (available in more Marketplace apps).
+  if (typeof zoomSdk.showAppInvitationDialog === 'function') {
     try {
-      await zoomSdk.sendAppInvitationToAllParticipants()
-      invite = true
-    } catch (err) {
-      errors.push(err?.message || 'Could not invite all participants')
-    }
-  }
-
-  if (!invite && typeof zoomSdk.showAppInvitationDialog === 'function') {
-    try {
-      await zoomSdk.showAppInvitationDialog({
-        dialogHeading: 'Join the quiz',
-        messageText: 'Open the Quiz app to take part in this meeting.',
-        dialogButtonText: 'Invite',
-        primaryButtonText: 'Open',
-      })
+      await withTimeout(
+        zoomSdk.showAppInvitationDialog({
+          dialogHeading: 'Join the quiz',
+          messageText: 'Open the Quiz app to take part in this meeting.',
+          dialogButtonText: 'Invite',
+          primaryButtonText: 'Open',
+        }),
+        SDK_TIMEOUT_MS,
+        'Timed out opening the invite dialog.',
+        'ZOOM_SDK_TIMEOUT',
+      )
       invite = true
     } catch (err) {
       errors.push(err?.message || 'Could not open the invite dialog')
     }
   }
 
+  if (!invite && typeof zoomSdk.sendAppInvitationToAllParticipants === 'function') {
+    try {
+      await withTimeout(
+        zoomSdk.sendAppInvitationToAllParticipants(),
+        SDK_TIMEOUT_MS,
+        'Timed out inviting participants.',
+        'ZOOM_SDK_TIMEOUT',
+      )
+      invite = true
+    } catch (err) {
+      errors.push(err?.message || 'Could not invite all participants')
+    }
+  }
+
   if (!collaborate && !invite) {
-    const err = new Error(
+    throw zoomError(
       errors.filter(Boolean).join(' ') ||
-        'Could not open the quiz for participants. Enable Collaborate Mode and invitation APIs on the Zoom app.',
+        'Could not open the quiz for participants. Enable Collaborate Mode and showAppInvitationDialog on the Zoom app.',
+      'ZOOM_OPEN_EVERYONE_FAILED',
     )
-    err.code = 'ZOOM_OPEN_EVERYONE_FAILED'
-    throw err
   }
 
   return { collaborate, invite }
@@ -323,7 +508,11 @@ export function subscribeCollaborateChange(handler) {
   }
 
   ;(async () => {
-    zoomSdk = await getZoomSdk()
+    try {
+      zoomSdk = await ensureCollaborateCapabilities()
+    } catch {
+      return
+    }
     if (cancelled || !zoomSdk?.addEventListener) return
     zoomSdk.addEventListener('onCollaborateChange', listener)
   })()
@@ -350,7 +539,11 @@ export function subscribeMyUserContextChange(handler) {
   }
 
   ;(async () => {
-    zoomSdk = await getZoomSdk()
+    try {
+      zoomSdk = await getZoomSdk()
+    } catch {
+      return
+    }
     if (cancelled || !zoomSdk?.addEventListener) return
     zoomSdk.addEventListener('onMyUserContextChange', listener)
   })()
@@ -394,3 +587,15 @@ export function applyUserContextChange(context, userEvent) {
     { status },
   )
 }
+
+/** Clear cached SDK so Try again can re-run config. */
+export function resetZoomSdkForRetry() {
+  resetSdkCache()
+}
+
+export function getLastZoomRunningContext() {
+  return lastRunningContext
+}
+
+/** Absolute UI deadline so Starting… cannot stick even if Zoom CEF ignores promise races. */
+export const ZOOM_RESOLVE_WATCHDOG_MS = 6500

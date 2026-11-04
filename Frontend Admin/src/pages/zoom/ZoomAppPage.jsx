@@ -3,12 +3,30 @@ import { useSearchParams } from 'react-router-dom'
 import {
   applyUserContextChange,
   isHostLikeRole,
+  resetZoomSdkForRetry,
   resolveZoomMeetingContext,
   subscribeMyUserContextChange,
+  ZOOM_RESOLVE_WATCHDOG_MS,
 } from '../../utils/zoomContext'
 import { EmbedShell } from '../embed/EmbedControlsPage'
 import ZoomHostPanel from './ZoomHostPanel'
 import ZoomParticipantPanel from './ZoomParticipantPanel'
+
+function messageForResolveError(err) {
+  if (err?.code === 'ZOOM_OUT_OF_MEETING') {
+    return (
+      err.message ||
+      'Open the Quiz app from inside a Zoom meeting (Apps during the call), not only from the main Apps tab.'
+    )
+  }
+  if (err?.code === 'ZOOM_SDK_TIMEOUT') {
+    return (
+      err.message ||
+      'Zoom took too long to start the app. Close it and reopen from inside a meeting, or update the Zoom client.'
+    )
+  }
+  return err?.message || 'Failed to load Zoom context'
+}
 
 /**
  * Zoom App home URL entry. Resolves meeting context (SDK or mock) and routes
@@ -18,47 +36,93 @@ export default function ZoomAppPage() {
   const [searchParams] = useSearchParams()
   const [context, setContext] = useState(null)
   const [error, setError] = useState('')
+  const [errorCode, setErrorCode] = useState('')
   const [loading, setLoading] = useState(true)
+  const [retryToken, setRetryToken] = useState(0)
+  const [elapsedSec, setElapsedSec] = useState(0)
   const forceRole = searchParams.get('forceRole')
 
   useEffect(() => {
     let cancelled = false
-    ;(async () => {
-      setLoading(true)
+    let settled = false
+
+    const finishError = (code, message) => {
+      if (cancelled || settled) return
+      settled = true
+      setErrorCode(code)
+      setError(message)
+      setContext(null)
+      setLoading(false)
+    }
+
+    const finishOk = (nextContext) => {
+      if (cancelled || settled) return
+      settled = true
+      setContext(nextContext)
       setError('')
+      setErrorCode('')
+      setLoading(false)
+    }
+
+    setLoading(true)
+    setError('')
+    setErrorCode('')
+    setContext(null)
+    setElapsedSec(0)
+
+    // Hard UI watchdog — always leaves Starting… even if Zoom CEF swallows promise races.
+    const watchdog = setTimeout(() => {
+      finishError(
+        'ZOOM_SDK_TIMEOUT',
+        'Zoom took too long to start the app. Start a meeting, then open this app from the in-meeting Apps button (or More → Apps).',
+      )
+      resetZoomSdkForRetry()
+    }, ZOOM_RESOLVE_WATCHDOG_MS)
+
+    const tick = setInterval(() => {
+      if (!cancelled) setElapsedSec((value) => value + 1)
+    }, 1000)
+
+    ;(async () => {
       try {
         const resolved = await resolveZoomMeetingContext(searchParams)
-        if (cancelled) return
+        if (cancelled || settled) return
         if (!resolved) {
-          setError(
-            'Open this app from a Zoom meeting. For browser-only testing, use a Share → Zoom local mock link (?mockMeetingUuid=…).',
+          finishError(
+            'ZOOM_NO_CONTEXT',
+            'Open the Quiz app from inside a Zoom meeting (Apps during the call), not only from the main Apps tab. For browser-only testing, use a Share → Zoom local mock link.',
           )
-          setContext(null)
-        } else {
-          const role =
-            forceRole === 'host' || forceRole === 'participant'
-              ? forceRole === 'host'
-                ? 'host'
-                : 'participant'
-              : resolved.role
-          setContext({ ...resolved, role })
+          return
         }
+        const role =
+          forceRole === 'host' || forceRole === 'participant'
+            ? forceRole === 'host'
+              ? 'host'
+              : 'participant'
+            : resolved.role
+        finishOk({ ...resolved, role })
       } catch (err) {
-        if (cancelled) return
-        setError(err?.message || 'Failed to load Zoom context')
-        setContext(null)
+        finishError(err?.code || 'ZOOM_RESOLVE_FAILED', messageForResolveError(err))
       } finally {
-        if (!cancelled) setLoading(false)
+        clearTimeout(watchdog)
+        clearInterval(tick)
       }
     })()
+
     return () => {
       cancelled = true
+      clearTimeout(watchdog)
+      clearInterval(tick)
     }
-  }, [searchParams, forceRole])
+  }, [searchParams, forceRole, retryToken])
+
+  const handleRetry = () => {
+    resetZoomSdkForRetry()
+    setRetryToken((value) => value + 1)
+  }
 
   const isSdkContext = context?.source === 'sdk'
 
-  // Guest ↔ authenticated ↔ authorized can change while the app stays open.
   useEffect(() => {
     if (!isSdkContext) return undefined
     return subscribeMyUserContextChange((event) => {
@@ -68,7 +132,6 @@ export default function ZoomAppPage() {
         if (forceRole === 'host' || forceRole === 'participant') {
           return { ...next, role: forceRole === 'host' ? 'host' : 'participant' }
         }
-        // Unsigned Zoom guests stay on the participant path.
         if (next.status === 'unauthenticated') {
           return { ...next, role: 'participant' }
         }
@@ -83,16 +146,45 @@ export default function ZoomAppPage() {
         <p className="rounded-xl border border-blue-200/70 bg-white p-4 text-sm text-slate-600">
           Starting Zoom Quiz app…
         </p>
+        <p className="text-[11px] text-slate-500">
+          Waiting {elapsedSec}s — will stop automatically if Zoom does not respond.
+        </p>
+        <p className="text-[11px] text-slate-500">
+          Tip: open this from a <span className="font-semibold">live meeting</span> toolbar → Apps
+          (or More → Apps), not the main Apps tab.
+        </p>
       </EmbedShell>
     )
   }
 
   if (error || !context) {
+    const outOfMeeting =
+      errorCode === 'ZOOM_OUT_OF_MEETING' || errorCode === 'ZOOM_NO_CONTEXT'
     return (
       <EmbedShell>
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
-          <p className="font-semibold">Zoom context unavailable</p>
+          <p className="font-semibold">
+            {outOfMeeting ? 'Open from a Zoom meeting' : 'Zoom context unavailable'}
+          </p>
           <p className="mt-1 text-xs leading-relaxed">{error}</p>
+          <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs leading-relaxed text-amber-900/80">
+            <li>Click New Meeting (or join a meeting you host).</li>
+            <li>
+              On the <span className="font-semibold">bottom meeting toolbar</span>, click{' '}
+              <span className="font-semibold">Apps</span>. If missing, click{' '}
+              <span className="font-semibold">More (…)</span> → Apps.
+            </li>
+            <li>
+              Open <span className="font-semibold">General app 379</span> / Quiz from My Apps.
+            </li>
+          </ol>
+          <button
+            type="button"
+            onClick={handleRetry}
+            className="mt-3 h-10 w-full rounded-lg bg-navy-800 text-sm font-semibold text-white transition hover:bg-navy-900"
+          >
+            Try again
+          </button>
           <p className="mt-3 text-[11px] text-amber-800">
             Local mock example:{' '}
             <code className="rounded bg-white/70 px-1">
@@ -104,8 +196,6 @@ export default function ZoomAppPage() {
     )
   }
 
-  // Meeting hosts/co-hosts who are signed into Zoom use the host console.
-  // Unsigned Zoom guests always use the participant join path (no quiz host login).
   if (isHostLikeRole(context.role) && context.status !== 'unauthenticated') {
     return <ZoomHostPanel context={context} />
   }
