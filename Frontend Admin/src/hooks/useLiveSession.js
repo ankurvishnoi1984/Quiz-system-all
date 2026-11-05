@@ -59,7 +59,9 @@ export function useLiveSession(accessToken, sessionId, options = {}) {
         : getSessionDetailApi(accessToken, sessionId),
     enabled: Boolean(accessToken && sessionId),
     staleTime: 0,
+    retry: (count, err) => (err?.status === 403 || err?.status === 401 ? false : count < 2),
     refetchInterval: (query) => {
+      if (query.state.error?.status === 403 || query.state.error?.status === 401) return false
       const status = query.state.data?.status
       return status && status !== 'live' ? 2000 : false
     },

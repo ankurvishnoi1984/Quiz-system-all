@@ -96,6 +96,52 @@ let lastSdkConfigDetail = null
 let webviewMessageCount = 0
 let webviewMessageProbeAttached = false
 
+/**
+ * Zoom Apps SDK wraps the instance in a Proxy that invents ANY missing method,
+ * including `.then`. Returning that Proxy from async / Promise.resolve makes JS
+ * treat it as a thenable → console warning "Method then is not available…" and
+ * callZoomApi('then') → "must call zoomSdk.config before using other API methods".
+ * Hide fabricated `.then` so Promise adoption never fires.
+ * @param {object} sdk
+ */
+function withoutFabricatedThenable(sdk) {
+  if (!sdk || typeof sdk !== 'object') return sdk
+  return new Proxy(sdk, {
+    get(target, prop, receiver) {
+      if (prop === 'then') return undefined
+      return Reflect.get(target, prop, receiver)
+    },
+  })
+}
+
+function unwrapZoomSdkExport(mod) {
+  const root = mod?.default || mod?.zoomSdk || mod
+  if (root && typeof root.config === 'function') return root
+  if (root?.default && typeof root.default.config === 'function') return root.default
+  return root
+}
+
+/** True when value looks like the Zoom SDK Proxy (thenable trap), not a real Promise. */
+function isZoomSdkInstance(value) {
+  return Boolean(
+    value &&
+      typeof value === 'object' &&
+      typeof value.config === 'function' &&
+      !(value instanceof Promise),
+  )
+}
+
+/** Adopt only real Promises — never Zoom's fabricated `.then`. */
+function asSafePromise(value) {
+  if (value instanceof Promise) return value
+  if (isZoomSdkInstance(value)) {
+    return new Promise((resolve) => {
+      resolve(withoutFabricatedThenable(value))
+    })
+  }
+  return Promise.resolve(value)
+}
+
 function withTimeout(promise, ms, message, code) {
   let timer
   const timeout = new Promise((_, reject) => {
@@ -105,7 +151,7 @@ function withTimeout(promise, ms, message, code) {
       reject(err)
     }, ms)
   })
-  return Promise.race([Promise.resolve(promise), timeout]).finally(() => {
+  return Promise.race([asSafePromise(promise), timeout]).finally(() => {
     clearTimeout(timer)
   })
 }
@@ -298,7 +344,7 @@ function contextFromSearchParams(searchParams) {
 
 async function loadZoomSdkModule() {
   const mod = await import('@zoom/appssdk')
-  return mod?.default || mod?.zoomSdk || mod
+  return withoutFabricatedThenable(unwrapZoomSdkExport(mod))
 }
 
 function isInMeetingRunningContext(runningContext) {
@@ -480,8 +526,9 @@ export async function getZoomSdk(options = {}) {
 
   // Only reuse after boot config finished — otherwise parallel callers hit APIs too early
   // (StrictMode / second getZoomSdk) and Zoom throws "must call zoomSdk.config before…".
+  // Return via asSafePromise so a cached SDK Proxy is never Promise-adopted as a thenable.
   if (configuredSdk && bootConfigured && (!includeCollaborate || collaborateConfigured)) {
-    return configuredSdk
+    return asSafePromise(configuredSdk)
   }
 
   if (configuredSdkPromise && !includeCollaborate) {
@@ -514,7 +561,8 @@ export async function getZoomSdk(options = {}) {
         bootConfigured = true
       }
 
-      return zoomSdk
+      // Box under a plain object — never fulfill a Promise with the SDK Proxy itself.
+      return { zoomSdk }
     })(),
     bootTimeoutMs,
     messageForSdkBootFailure({ code: 'ZOOM_SDK_TIMEOUT' }),
@@ -532,7 +580,8 @@ export async function getZoomSdk(options = {}) {
   })
 
   // Expand boot + optional APIs after handshake — do not spend the handshake budget.
-  const run = timed.then(async (zoomSdk) => {
+  const run = timed.then(async (boxed) => {
+    const zoomSdk = boxed?.zoomSdk ?? boxed
     if (zoomSdk && !collaborateConfigured && !bootConfigured) {
       try {
         const bootResponse = await callZoomConfig(zoomSdk, [...ZOOM_SDK_BOOT_CAPABILITIES])
@@ -547,8 +596,10 @@ export async function getZoomSdk(options = {}) {
       }
       await tryExpandExtendedCore(zoomSdk)
     }
-    return zoomSdk
-  })
+    // Keep returning a plain box from Promise chains; unwrap via asSafePromise
+    // so the SDK Proxy is never adopted as a thenable.
+    return { zoomSdk }
+  }).then((boxed) => asSafePromise(boxed?.zoomSdk ?? null))
 
   if (!includeCollaborate) {
     configuredSdkPromise = run
@@ -650,6 +701,35 @@ async function tryLoadZoomSdkContext() {
   )
 }
 
+const BROWSER_DEMO_MEETING_KEY = 'zoom-browser-demo-meeting-uuid'
+
+/**
+ * Per-browser mock meeting UUID so browser demos do not all collide on
+ * `dev-meeting-local` (that shared id caused 403 spam when another user's session was bound).
+ */
+export function getBrowserDemoMeetingUuid({ rotate = false } = {}) {
+  if (typeof sessionStorage === 'undefined') {
+    return `dev-meeting-local-${Math.random().toString(36).slice(2, 10)}`
+  }
+  try {
+    if (!rotate) {
+      const existing = String(sessionStorage.getItem(BROWSER_DEMO_MEETING_KEY) || '').trim()
+      // Migrate off the legacy shared id that every browser demo used.
+      if (existing && existing !== 'dev-meeting-local') return existing.slice(0, 128)
+    }
+    const created = `dev-meeting-local-${Math.random().toString(36).slice(2, 10)}`
+    sessionStorage.setItem(BROWSER_DEMO_MEETING_KEY, created)
+    return created
+  } catch {
+    return `dev-meeting-local-${Math.random().toString(36).slice(2, 10)}`
+  }
+}
+
+/** Start a fresh browser-demo meeting UUID (avoids inherited foreign session bindings). */
+export function rotateBrowserDemoMeetingUuid() {
+  return getBrowserDemoMeetingUuid({ rotate: true })
+}
+
 /**
  * Browser / web-demo host context when Zoom SDK is unavailable.
  * @returns {ZoomMeetingContext}
@@ -657,7 +737,7 @@ async function tryLoadZoomSdkContext() {
 export function createBrowserDemoContext() {
   return withGuestFields(
     {
-      meetingUuid: 'dev-meeting-local',
+      meetingUuid: getBrowserDemoMeetingUuid(),
       meetingId: null,
       role: 'host',
       zoomUserId: 'dev-host-1',

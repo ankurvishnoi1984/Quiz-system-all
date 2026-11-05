@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import { lookupSessionByCodeApi } from '../../services/embedApi'
+import { getSessionDetailApi } from '../../services/liveApi'
 import {
   bindZoomMeetingSessionApi,
   getZoomMeetingSessionApi,
@@ -14,6 +15,7 @@ import {
   isLinuxZoomClient,
   openQuizForEveryone,
   resetZoomSdkForRetry,
+  rotateBrowserDemoMeetingUuid,
   subscribeCollaborateChange,
 } from '../../utils/zoomContext'
 import {
@@ -181,6 +183,7 @@ export default function ZoomHostPanel({ context }) {
   const [binding, setBinding] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [accessDenied, setAccessDenied] = useState(false)
   const [unbindBusy, setUnbindBusy] = useState(false)
   const [openBusy, setOpenBusy] = useState(false)
   const [suggestBusy, setSuggestBusy] = useState(false)
@@ -199,16 +202,35 @@ export default function ZoomHostPanel({ context }) {
   const refreshBinding = useCallback(async () => {
     setLoading(true)
     setError('')
+    setAccessDenied(false)
     try {
       const data = await getZoomMeetingSessionApi(context.meetingUuid)
-      setBinding(data?.binding || null)
+      const nextBinding = data?.binding || null
+      const boundSessionId = nextBinding?.session_id || nextBinding?.session?.session_id
+      if (boundSessionId && accessToken) {
+        try {
+          await getSessionDetailApi(accessToken, boundSessionId)
+        } catch (err) {
+          if (err?.status === 403 || err?.status === 401) {
+            setBinding(nextBinding)
+            setAccessDenied(true)
+            setError(
+              err?.message ||
+                'Forbidden: session access denied. This meeting is linked to a session your account cannot manage.',
+            )
+            return
+          }
+          throw err
+        }
+      }
+      setBinding(nextBinding)
     } catch (err) {
       setError(err?.message || 'Could not load Zoom meeting binding')
       setBinding(null)
     } finally {
       setLoading(false)
     }
-  }, [context.meetingUuid])
+  }, [accessToken, context.meetingUuid])
 
   useEffect(() => {
     refreshBinding()
@@ -223,6 +245,7 @@ export default function ZoomHostPanel({ context }) {
 
   const bindSession = async (sessionId) => {
     setError('')
+    setAccessDenied(false)
     try {
       const data = await bindZoomMeetingSessionApi(accessToken, {
         meetingUuid: context.meetingUuid,
@@ -261,12 +284,18 @@ export default function ZoomHostPanel({ context }) {
     try {
       await unbindZoomMeetingSessionApi(accessToken, context.meetingUuid)
       setBinding(null)
+      setAccessDenied(false)
       setOpenResult(null)
     } catch (err) {
       setError(err?.message || 'Could not unlink meeting')
     } finally {
       setUnbindBusy(false)
     }
+  }
+
+  const handleFreshBrowserDemo = () => {
+    rotateBrowserDemoMeetingUuid()
+    window.location.assign('/zoom/app')
   }
 
   const handleOpenForEveryone = async () => {
@@ -328,6 +357,47 @@ export default function ZoomHostPanel({ context }) {
   }
 
   const sessionId = binding?.session_id || binding?.session?.session_id
+  const browserDemo = isBrowserDemoContext(context) || context.source === 'mock'
+
+  if (accessDenied && sessionId) {
+    return (
+      <EmbedShell>
+        <ZoomContextBanner
+          context={context}
+          binding={binding}
+          sdkFailedInsideZoom={sdkFailedInsideZoom}
+          linuxUnsupported={linuxUnsupported}
+          onRetrySdk={handleRetrySdk}
+        />
+        <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+          {error ||
+            'This meeting is linked to a session your account cannot manage (Forbidden: session access denied).'}
+        </p>
+        <p className="rounded-xl border border-blue-200/70 bg-white p-3 text-xs text-slate-600">
+          {browserDemo
+            ? 'Browser demo meetings used to share one mock id, so you may have inherited another user’s binding. Start a fresh demo meeting, then link a session you own.'
+            : 'Ask the host who linked this meeting to unlink it, or sign in as a user who can manage that session.'}
+        </p>
+        {browserDemo ? (
+          <button
+            type="button"
+            onClick={handleFreshBrowserDemo}
+            className="h-10 w-full rounded-lg bg-navy-800 text-sm font-semibold text-white transition hover:bg-navy-900"
+          >
+            Start fresh browser demo
+          </button>
+        ) : null}
+        <button
+          type="button"
+          disabled={unbindBusy}
+          onClick={handleUnbind}
+          className="text-xs font-semibold text-rose-700 underline disabled:opacity-50"
+        >
+          {unbindBusy ? 'Unlinking…' : 'Try unlink this meeting'}
+        </button>
+      </EmbedShell>
+    )
+  }
 
   if (!sessionId) {
     return (

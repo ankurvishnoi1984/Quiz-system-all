@@ -146,13 +146,18 @@ export function EmbedControls({ sessionId, bare = false }) {
   const queryClient = useQueryClient()
   const [error, setError] = useState('')
 
-  const { session, mappedQuestions, participants } = useLiveSession(accessToken, sessionId)
+  const { session, mappedQuestions, participants, isLoading, isError } = useLiveSession(
+    accessToken,
+    sessionId,
+  )
 
   const slideQuery = useQuery({
     queryKey: ['embed-controls-slide', sessionId],
     queryFn: () => getPresentSlideApi(accessToken, sessionId),
-    enabled: Boolean(accessToken && sessionId),
+    // Only poll once the host can actually load the session (avoids 403 spam).
+    enabled: Boolean(accessToken && sessionId && session),
     refetchInterval: 4000,
+    retry: (count, err) => (err?.status === 403 || err?.status === 401 ? false : count < 2),
   })
 
   const slideMutation = useMutation({
@@ -192,6 +197,15 @@ export function EmbedControls({ sessionId, bare = false }) {
   }, [error])
 
   const wrap = (node) => (bare ? node : <EmbedShell>{node}</EmbedShell>)
+
+  if (isError || (!isLoading && !session)) {
+    return wrap(
+      <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+        Could not load this session (access denied or missing). Link a session your account can
+        manage, or unlink the meeting and try again.
+      </p>,
+    )
+  }
 
   if (!session) {
     return wrap(
