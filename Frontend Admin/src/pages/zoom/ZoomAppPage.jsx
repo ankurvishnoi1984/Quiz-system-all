@@ -6,6 +6,8 @@ import {
   isBrowserDemoContext,
   isHostLikeRole,
   isLikelyZoomClient,
+  isLinuxZoomClient,
+  messageForSdkBootFailure,
   resetZoomSdkForRetry,
   resolveZoomMeetingContext,
   subscribeMyUserContextChange,
@@ -22,17 +24,8 @@ function messageForResolveError(err) {
       'Open the Quiz app from inside a Zoom meeting (Apps during the call), not only from the main Apps tab.'
     )
   }
-  if (err?.code === 'ZOOM_SDK_TIMEOUT') {
-    return (
-      err.message ||
-      'Zoom took too long to start the app. Close it and reopen from inside a meeting, or update the Zoom client.'
-    )
-  }
-  if (err?.code === 'ZOOM_SDK_FAILED') {
-    return (
-      err.message ||
-      'Zoom Apps SDK did not connect. Confirm Marketplace domain allow-list includes this host and core Zoom App SDK APIs are enabled, then Try again.'
-    )
+  if (err?.code === 'ZOOM_SDK_TIMEOUT' || err?.code === 'ZOOM_SDK_FAILED') {
+    return messageForSdkBootFailure(err)
   }
   return err?.message || 'Failed to load Zoom context'
 }
@@ -98,7 +91,7 @@ export default function ZoomAppPage() {
       finishError(
         'ZOOM_SDK_TIMEOUT',
         isLikelyZoomClient()
-          ? 'Zoom Apps SDK did not finish starting. Close the app and reopen it from the in-meeting Apps panel, update Zoom Workplace, then Try again.'
+          ? messageForSdkBootFailure({ code: 'ZOOM_SDK_TIMEOUT' })
           : 'Zoom took too long to start the app. Start a meeting, then open this app from the in-meeting Apps button (or More → Apps). Or use a Share → Zoom local mock link in the browser.',
       )
       resetZoomSdkForRetry()
@@ -168,6 +161,7 @@ export default function ZoomAppPage() {
   }, [isSdkContext, forceRole])
 
   const likelyZoom = isLikelyZoomClient()
+  const linuxZoomClient = isLinuxZoomClient()
   const bridgeDiag =
     errorCode === 'ZOOM_SDK_TIMEOUT' || errorCode === 'ZOOM_SDK_FAILED'
       ? getZoomSdkBridgeDiagnostic()
@@ -175,7 +169,9 @@ export default function ZoomAppPage() {
 
   if (loading) {
     let waitHint = `Waiting ${elapsedSec}s — browser demo starts automatically if Zoom SDK is unavailable.`
-    if (likelyZoom) {
+    if (linuxZoomClient) {
+      waitHint = 'Zoom Apps SDK is not supported on Linux — use Windows or macOS Zoom Workplace.'
+    } else if (likelyZoom) {
       if (elapsedSec >= 10) {
         waitHint = `Still waiting for Zoom Apps SDK… ${elapsedSec}s. If this hangs, update Zoom Workplace or reopen the app from the in-meeting Apps panel.`
       } else if (elapsedSec >= 5) {
@@ -199,31 +195,45 @@ export default function ZoomAppPage() {
       errorCode === 'ZOOM_OUT_OF_MEETING' || errorCode === 'ZOOM_NO_CONTEXT'
     const sdkFailed =
       errorCode === 'ZOOM_SDK_TIMEOUT' || errorCode === 'ZOOM_SDK_FAILED'
+    const linuxZoom = Boolean(bridgeDiag?.linuxUnsupported || linuxZoomClient)
+    const bridgePresent =
+      bridgeDiag?.bridge === 'webview' || bridgeDiag?.bridge === 'webkit'
+    const sdkTitle = linuxZoom
+      ? 'Zoom Apps SDK not supported on Linux'
+      : bridgePresent
+        ? 'Zoom bridge present — no config reply'
+        : 'Zoom SDK did not connect'
+    const sdkHint = linuxZoom
+      ? 'Use Windows or macOS Zoom Workplace for in-meeting Apps. Linux Zoom can open the panel but will not complete zoomSdk.config().'
+      : bridgePresent
+        ? 'If webviewMessages=0, Marketplace domains highq… and demoquizapi… must show Allowed (not “requires review”). Enable webview DevTools, check console for 403s, finish Local Test, remove/re-add the app, then Try again.'
+        : 'Check Marketplace → Features → Zoom App SDK and domain allow-list (both custom domains Allowed), then remove/re-add the app and Try again.'
+    const showSdkPanel = sdkFailed && (likelyZoom || linuxZoom)
     return (
       <EmbedShell>
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
           <p className="font-semibold">
             {outOfMeeting
               ? 'Open from a Zoom meeting'
-              : sdkFailed && likelyZoom
-                ? 'Zoom SDK did not connect'
+              : showSdkPanel
+                ? sdkTitle
                 : 'Zoom context unavailable'}
           </p>
           <p className="mt-1 text-xs leading-relaxed">{error}</p>
-          {sdkFailed && likelyZoom ? (
+          {showSdkPanel ? (
             <>
-              <p className="mt-2 text-xs leading-relaxed text-amber-900/80">
-                Check Marketplace → Features → Zoom App SDK (core APIs enabled) and that domain
-                allow-list includes this host. If domains still say “requires review”, Zoom may not
-                authorize the SDK until they are Allowed — then remove/re-add the app and Try again.
-              </p>
+              <p className="mt-2 text-xs leading-relaxed text-amber-900/80">{sdkHint}</p>
               {bridgeDiag ? (
                 <pre className="mt-2 max-h-40 overflow-auto rounded-lg border border-amber-200/80 bg-white/80 p-2 text-[10px] leading-relaxed text-slate-700">
                   {`origin=${bridgeDiag.origin}
+os=${bridgeDiag.os}
+bridge=${bridgeDiag.bridge}
 chrome.webview=${bridgeDiag.chromeWebview}
 webkit.jsOCHelper=${bridgeDiag.webkitJsOcHelper}
+webviewMessages=${bridgeDiag.webviewMessages}
 inIframe=${bridgeDiag.inIframe}
 likelyZoom=${bridgeDiag.likelyZoom}
+linuxUnsupported=${bridgeDiag.linuxUnsupported}
 lastConfig=${bridgeDiag.lastConfigDetail || '(none)'}
 ua=${bridgeDiag.uaSnippet}`}
                 </pre>
@@ -249,7 +259,7 @@ ua=${bridgeDiag.uaSnippet}`}
           >
             Try again
           </button>
-          {!likelyZoom ? (
+          {!likelyZoom && !linuxZoom ? (
             <p className="mt-3 text-[11px] text-amber-800">
               Or open in the browser:{' '}
               <code className="rounded bg-white/70 px-1">
@@ -268,7 +278,8 @@ ua=${bridgeDiag.uaSnippet}`}
     <ZoomParticipantPanel context={context} />
   )
 
-  if (!showBrowserDemoBanner) return panel
+  // Never show “Not inside Zoom” browser-demo chrome on Linux Zoom Workplace.
+  if (!showBrowserDemoBanner || linuxZoomClient) return panel
 
   // Banner only — do not wrap another min-h-dvh EmbedShell above the host/participant panel.
   return (

@@ -11,6 +11,7 @@ import {
   isBrowserDemoContext,
   isCollaborateActiveFromEvent,
   isLikelyZoomClient,
+  isLinuxZoomClient,
   openQuizForEveryone,
   resetZoomSdkForRetry,
   subscribeCollaborateChange,
@@ -22,24 +23,41 @@ import {
   SessionCodePrompt,
 } from '../embed/EmbedControlsPage'
 
-function ZoomContextBanner({ context, binding, onUnbind, unbindBusy, sdkFailedInsideZoom, onRetrySdk }) {
+function ZoomContextBanner({
+  context,
+  binding,
+  onUnbind,
+  unbindBusy,
+  sdkFailedInsideZoom,
+  linuxUnsupported,
+  onRetrySdk,
+}) {
   return (
     <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
       <p className="font-semibold">
-        {sdkFailedInsideZoom ? 'Zoom SDK did not connect' : 'Zoom meeting linked'}
+        {linuxUnsupported
+          ? 'Zoom Apps SDK not supported on Linux'
+          : sdkFailedInsideZoom
+            ? 'Zoom SDK did not connect'
+            : 'Zoom meeting linked'}
       </p>
       <p className="mt-0.5 break-all text-[11px] text-sky-800/80">
         {context.meetingUuid}
         {context.source === 'mock' && !sdkFailedInsideZoom ? ' · mock mode' : ''}
         {sdkFailedInsideZoom ? ' · SDK unavailable' : ''}
       </p>
-      {sdkFailedInsideZoom ? (
+      {linuxUnsupported ? (
         <p className="mt-1 text-[11px] text-amber-900">
-          Open for everyone needs a real Zoom meeting context. Confirm Marketplace domain allow-list
-          and Zoom App SDK APIs, then Try again.
+          Open this meeting on Windows or macOS Zoom Workplace. Linux can show the app panel but
+          cannot complete the Apps SDK handshake.
+        </p>
+      ) : sdkFailedInsideZoom ? (
+        <p className="mt-1 text-[11px] text-amber-900">
+          Open for everyone needs a real Zoom meeting context. Confirm Marketplace domains are
+          Allowed (not “requires review”) and Zoom App SDK APIs, then Try again.
         </p>
       ) : null}
-      {sdkFailedInsideZoom && onRetrySdk ? (
+      {sdkFailedInsideZoom && !linuxUnsupported && onRetrySdk ? (
         <button
           type="button"
           onClick={onRetrySdk}
@@ -77,6 +95,7 @@ function OpenForEveryoneCard({
   onOpen,
   mockMode,
   sdkFailedInsideZoom,
+  linuxUnsupported,
   onRetrySdk,
 }) {
   return (
@@ -86,7 +105,11 @@ function OpenForEveryoneCard({
         Participants will not see the quiz until you tap this (like Slido). It starts Collaborate
         mode and invites everyone in the meeting to open the Quiz app.
       </p>
-      {sdkFailedInsideZoom ? (
+      {linuxUnsupported ? (
+        <p className="mt-2 text-[11px] text-amber-800">
+          Not available on Linux Zoom. Use Windows or macOS for Open for everyone.
+        </p>
+      ) : sdkFailedInsideZoom ? (
         <p className="mt-2 text-[11px] text-amber-800">
           Zoom Apps SDK did not connect — Try again. Open for everyone only works with a live SDK
           meeting context.
@@ -97,7 +120,7 @@ function OpenForEveryoneCard({
           use Open for everyone.
         </p>
       ) : null}
-      {sdkFailedInsideZoom && onRetrySdk ? (
+      {sdkFailedInsideZoom && !linuxUnsupported && onRetrySdk ? (
         <button
           type="button"
           onClick={onRetrySdk}
@@ -262,8 +285,11 @@ export default function ZoomHostPanel({ context }) {
   }
 
   const mockMode = context.source === 'mock' || context.source === 'query'
+  const linuxUnsupported = isLinuxZoomClient()
   // Safety net: if we somehow still got browser demo while inside Zoom CEF.
-  const sdkFailedInsideZoom = mockMode && isBrowserDemoContext(context) && isLikelyZoomClient()
+  const sdkFailedInsideZoom =
+    linuxUnsupported ||
+    (mockMode && isBrowserDemoContext(context) && isLikelyZoomClient())
   const handleRetrySdk = useCallback(() => {
     resetZoomSdkForRetry()
     window.location.reload()
@@ -310,6 +336,7 @@ export default function ZoomHostPanel({ context }) {
           context={context}
           binding={null}
           sdkFailedInsideZoom={sdkFailedInsideZoom}
+          linuxUnsupported={linuxUnsupported}
           onRetrySdk={handleRetrySdk}
         />
         {error ? (
@@ -356,6 +383,7 @@ export default function ZoomHostPanel({ context }) {
         onUnbind={handleUnbind}
         unbindBusy={unbindBusy}
         sdkFailedInsideZoom={sdkFailedInsideZoom}
+        linuxUnsupported={linuxUnsupported}
         onRetrySdk={handleRetrySdk}
       />
       {!collaborateActive && !openResult ? (
@@ -372,6 +400,7 @@ export default function ZoomHostPanel({ context }) {
         onOpen={handleOpenForEveryone}
         mockMode={mockMode}
         sdkFailedInsideZoom={sdkFailedInsideZoom}
+        linuxUnsupported={linuxUnsupported}
         onRetrySdk={handleRetrySdk}
       />
       {error ? (

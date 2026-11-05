@@ -71,16 +71,30 @@ export const ZOOM_SDK_CAPABILITIES = [
 const BOOT_SDK_TIMEOUT_BROWSER_MS = 2000
 /** Zoom CEF often needs longer for config() inside a meeting. */
 const BOOT_SDK_TIMEOUT_ZOOM_MS = 15000
+/** WebView2 path: settle + handshake + one retry must fit inside this. */
+const BOOT_SDK_TIMEOUT_WEBVIEW_MS = 25000
+/** First handshake attempt budget (getRunningContext only). */
+const HANDSHAKE_CONFIG_TIMEOUT_MS = 8000
+const WEBVIEW_SETTLE_MS = 400
+const HANDSHAKE_RETRY_DELAY_MS = 1000
 /** Longer timeout for in-meeting Collaborate / invite calls. */
 const SDK_TIMEOUT_MS = 10000
+/** Smallest config() that proves the native bridge answers. */
+export const ZOOM_SDK_HANDSHAKE_CAPABILITIES = ['getRunningContext']
 const IN_MEETING_CONTEXTS = new Set(['inMeeting', 'inWebinar'])
 
 let configuredSdkPromise = null
 let configuredSdk = null
 let collaborateConfigured = false
 let extendedCoreConfigured = false
+/** True only after a config() call has actually resolved (native side ready). */
+let sdkConfigCompleted = false
+/** True after ZOOM_SDK_BOOT_CAPABILITIES (or collaborate set) has been configured. */
+let bootConfigured = false
 let lastRunningContext = null
 let lastSdkConfigDetail = null
+let webviewMessageCount = 0
+let webviewMessageProbeAttached = false
 
 function withTimeout(promise, ms, message, code) {
   let timer
@@ -107,8 +121,39 @@ function resetSdkCache() {
   configuredSdk = null
   collaborateConfigured = false
   extendedCoreConfigured = false
+  sdkConfigCompleted = false
+  bootConfigured = false
   lastRunningContext = null
   lastSdkConfigDetail = null
+  webviewMessageCount = 0
+}
+
+function isConfigResponseUsable(response) {
+  if (response == null || typeof response !== 'object') return false
+  return (
+    'runningContext' in response ||
+    'clientVersion' in response ||
+    'unsupportedApis' in response ||
+    Object.keys(response).length > 0
+  )
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** Count any chrome.webview messages during boot (0 ⇒ Zoom never talked back). */
+function attachWebviewMessageProbe() {
+  if (typeof window === 'undefined' || !window.chrome?.webview) return
+  if (webviewMessageProbeAttached) return
+  webviewMessageProbeAttached = true
+  try {
+    window.chrome.webview.addEventListener('message', () => {
+      webviewMessageCount += 1
+    })
+  } catch {
+    // ignore — probe is best-effort
+  }
 }
 
 /** Prefer Zoom’s own rejection text over a generic timeout message. */
@@ -127,20 +172,45 @@ function describeSdkError(err) {
 
 async function callZoomConfig(zoomSdk, capabilities) {
   try {
-    const response = await zoomSdk.config({ capabilities })
+    const pending = zoomSdk.config({
+      capabilities,
+      // SDK-level timeout (ms) — default 10s; raise so CEF can answer before our outer race.
+      timeout: isLikelyZoomClient() ? 15000 : 8000,
+    })
+    // Native Zoom host sometimes lacks Promise.then — await would resolve as undefined and
+    // later API calls throw "must call zoomSdk.config before using other API methods".
+    if (pending == null || typeof pending.then !== 'function') {
+      throw zoomError(
+        'Zoom Apps SDK config() did not return a Promise. Update Zoom Workplace to the latest version, ensure Marketplace domains are Allowed, then remove and re-add the app.',
+        'ZOOM_SDK_FAILED',
+      )
+    }
+    const response = await pending
+    if (!isConfigResponseUsable(response)) {
+      throw zoomError(
+        webviewMessageCount === 0
+          ? 'Zoom config() returned no payload (webviewMessages=0). Marketplace domains highq… and demoquizapi… must be Allowed; update Zoom Workplace if the console warns about Method then.'
+          : 'Zoom config() returned no usable payload. Reopen the app from in-meeting Apps after Marketplace domains are Allowed.',
+        'ZOOM_SDK_FAILED',
+      )
+    }
+    sdkConfigCompleted = true
     lastSdkConfigDetail = null
     return response
   } catch (err) {
+    if (err?.code === 'ZOOM_OUT_OF_MEETING' || err?.code === 'ZOOM_SDK_TIMEOUT' || err?.code === 'ZOOM_SDK_FAILED') {
+      lastSdkConfigDetail = describeSdkError(err) || lastSdkConfigDetail
+      throw err
+    }
     const detail = describeSdkError(err)
     lastSdkConfigDetail = detail
     if (typeof console !== 'undefined' && console.warn) {
       console.warn('[zoom] config() failed', { capabilities, detail, err })
     }
-    if (err?.code === 'ZOOM_OUT_OF_MEETING' || err?.code === 'ZOOM_SDK_TIMEOUT') throw err
     throw zoomError(
       detail ||
         'Zoom Apps SDK config failed. Confirm Marketplace domain allow-list and Zoom App SDK APIs for this host.',
-      isBrowserUnsupportedSdkError(err) ? 'ZOOM_SDK_FAILED' : 'ZOOM_SDK_FAILED',
+      'ZOOM_SDK_FAILED',
     )
   }
 }
@@ -250,6 +320,9 @@ function assertInMeetingOrThrow(runningContext) {
  */
 export function isLikelyZoomClient() {
   if (typeof navigator === 'undefined') return false
+  // Windows Zoom Apps use WebView2 — strongest signal when present.
+  if (typeof window !== 'undefined' && window.chrome?.webview) return true
+  if (typeof window !== 'undefined' && window.webkit?.messageHandlers?.jsOCHelper) return true
   const ua = String(navigator.userAgent || '')
   if (/ZoomApps|ZoomWebKit|ZoomPresence|\bZoom\b/i.test(ua)) return true
   try {
@@ -267,6 +340,57 @@ export function isLikelyZoomClient() {
   return false
 }
 
+/** Zoom Apps SDK is not supported on Linux Zoom Workplace. */
+export function isLinuxZoomClient() {
+  if (typeof navigator === 'undefined') return false
+  const ua = String(navigator.userAgent || '')
+  if (!/Linux|X11/i.test(ua)) return false
+  return isLikelyZoomClient() || /\bZoom\b/i.test(ua)
+}
+
+/** @returns {'windows'|'mac'|'linux'|'other'} */
+export function getZoomClientOs() {
+  if (typeof navigator === 'undefined') return 'other'
+  const ua = String(navigator.userAgent || '')
+  if (/Windows/i.test(ua)) return 'windows'
+  if (/Mac OS X|Macintosh/i.test(ua)) return 'mac'
+  if (/Linux|X11/i.test(ua)) return 'linux'
+  return 'other'
+}
+
+/** @returns {'webview'|'webkit'|'none'} */
+export function getZoomBridgeKind() {
+  if (typeof window === 'undefined') return 'none'
+  if (window.chrome?.webview) return 'webview'
+  if (window.webkit?.messageHandlers?.jsOCHelper) return 'webkit'
+  return 'none'
+}
+
+/**
+ * User-facing copy when SDK boot times out / fails inside Zoom.
+ * @param {{ code?: string }|null} [err]
+ */
+export function messageForSdkBootFailure(err) {
+  if (isLinuxZoomClient()) {
+    return 'Zoom Apps SDK is not supported on Linux Zoom Workplace. Open this meeting on Windows or macOS to use the Quiz Zoom app.'
+  }
+  if (getZoomBridgeKind() === 'webview' || getZoomBridgeKind() === 'webkit') {
+    return (
+      'Zoom native bridge is present but did not answer config(). If webviewMessages=0, Marketplace domains highq… and demoquizapi… must be Allowed (not requires review). Enable webview DevTools, check for 403s, finish Local Test, then remove and re-add the app.'
+    )
+  }
+  if (err?.code === 'ZOOM_SDK_TIMEOUT') {
+    return (
+      err.message ||
+      'Zoom Apps SDK took too long to start. Close and reopen from inside a meeting, or update the Zoom client.'
+    )
+  }
+  return (
+    err?.message ||
+    'Zoom Apps SDK did not connect. Confirm Marketplace domain allow-list and Zoom App SDK APIs, then Try again.'
+  )
+}
+
 /** True when config() failed because we are in a normal browser, not Zoom. */
 export function isBrowserUnsupportedSdkError(err) {
   const message = String(err?.message || err || '').toLowerCase()
@@ -279,29 +403,44 @@ export function isBrowserUnsupportedSdkError(err) {
 }
 
 function bootTimeoutMsForEnvironment(includeCollaborate) {
-  if (includeCollaborate) return Math.max(SDK_TIMEOUT_MS, BOOT_SDK_TIMEOUT_ZOOM_MS)
+  if (includeCollaborate) return Math.max(SDK_TIMEOUT_MS, BOOT_SDK_TIMEOUT_WEBVIEW_MS)
+  if (getZoomBridgeKind() === 'webview') return BOOT_SDK_TIMEOUT_WEBVIEW_MS
   return isLikelyZoomClient() ? BOOT_SDK_TIMEOUT_ZOOM_MS : BOOT_SDK_TIMEOUT_BROWSER_MS
 }
 
-async function applyRunningContextFromConfig(zoomSdk, configResponse) {
+/**
+ * Smallest config() handshake. On WebView2: settle, try once, retry once after delay.
+ * @param {object} zoomSdk
+ */
+async function handshakeZoomConfig(zoomSdk) {
+  attachWebviewMessageProbe()
+  if (getZoomBridgeKind() === 'webview') {
+    await sleep(WEBVIEW_SETTLE_MS)
+  }
+
+  const attempt = () =>
+    withTimeout(
+      callZoomConfig(zoomSdk, [...ZOOM_SDK_HANDSHAKE_CAPABILITIES]),
+      HANDSHAKE_CONFIG_TIMEOUT_MS,
+      messageForSdkBootFailure({ code: 'ZOOM_SDK_TIMEOUT' }),
+      'ZOOM_SDK_TIMEOUT',
+    )
+
+  try {
+    return await attempt()
+  } catch (err) {
+    if (err?.code === 'ZOOM_OUT_OF_MEETING') throw err
+    if (getZoomBridgeKind() !== 'webview' && !isLikelyZoomClient()) throw err
+    await sleep(HANDSHAKE_RETRY_DELAY_MS)
+    return attempt()
+  }
+}
+
+async function applyRunningContextFromConfig(_zoomSdk, configResponse) {
+  // Use config() payload only — never call getRunningContext here. Calling other APIs
+  // before a successful native config() throws: "must call zoomSdk.config before…".
   lastRunningContext = configResponse?.runningContext || lastRunningContext
   assertInMeetingOrThrow(lastRunningContext)
-
-  if (!lastRunningContext && typeof zoomSdk.getRunningContext === 'function') {
-    try {
-      const running = await withTimeout(
-        zoomSdk.getRunningContext(),
-        isLikelyZoomClient() ? 4000 : 1500,
-        'Timed out reading Zoom running context.',
-        'ZOOM_SDK_TIMEOUT',
-      )
-      lastRunningContext =
-        typeof running === 'string' ? running : running?.runningContext || lastRunningContext
-      assertInMeetingOrThrow(lastRunningContext)
-    } catch (err) {
-      if (err?.code === 'ZOOM_OUT_OF_MEETING' || err?.code === 'ZOOM_SDK_TIMEOUT') throw err
-    }
-  }
 }
 
 /**
@@ -339,7 +478,9 @@ async function tryExpandExtendedCore(zoomSdk) {
 export async function getZoomSdk(options = {}) {
   const includeCollaborate = Boolean(options.includeCollaborate)
 
-  if (configuredSdk && (!includeCollaborate || collaborateConfigured)) {
+  // Only reuse after boot config finished — otherwise parallel callers hit APIs too early
+  // (StrictMode / second getZoomSdk) and Zoom throws "must call zoomSdk.config before…".
+  if (configuredSdk && bootConfigured && (!includeCollaborate || collaborateConfigured)) {
     return configuredSdk
   }
 
@@ -354,10 +495,10 @@ export async function getZoomSdk(options = {}) {
       const zoomSdk = configuredSdk || (await loadZoomSdkModule())
       if (!zoomSdk?.config) return null
 
-      if (!configuredSdk) {
-        // Minimal first config — reduces hang risk when Marketplace APIs are incomplete.
-        const configResponse = await callZoomConfig(zoomSdk, [...ZOOM_SDK_BOOT_CAPABILITIES])
-        await applyRunningContextFromConfig(zoomSdk, configResponse)
+      if (!sdkConfigCompleted) {
+        // Smallest handshake first (getRunningContext only), with WebView settle + one retry.
+        const handshakeResponse = await handshakeZoomConfig(zoomSdk)
+        await applyRunningContextFromConfig(zoomSdk, handshakeResponse)
         configuredSdk = zoomSdk
       }
 
@@ -370,30 +511,40 @@ export async function getZoomSdk(options = {}) {
         await applyRunningContextFromConfig(zoomSdk, configResponse)
         collaborateConfigured = true
         extendedCoreConfigured = true
+        bootConfigured = true
       }
 
       return zoomSdk
     })(),
     bootTimeoutMs,
-    'Zoom Apps SDK took too long to start. Close and reopen the app from inside a meeting, or update the Zoom client.',
+    messageForSdkBootFailure({ code: 'ZOOM_SDK_TIMEOUT' }),
     'ZOOM_SDK_TIMEOUT',
   ).catch((err) => {
     // Prefer a prior config rejection detail over a bare timeout when available.
     const detail = lastSdkConfigDetail
-    if (err?.code === 'ZOOM_SDK_TIMEOUT' && detail) {
+    if (err?.code === 'ZOOM_SDK_TIMEOUT') {
       resetSdkCache()
-      throw zoomError(
-        `Zoom Apps SDK took too long to start (${detail}). Close and reopen from inside a meeting, or update the Zoom client.`,
-        'ZOOM_SDK_TIMEOUT',
-      )
+      const base = messageForSdkBootFailure(err)
+      throw zoomError(detail ? `${base} (${detail})` : base, 'ZOOM_SDK_TIMEOUT')
     }
     resetSdkCache()
     throw err
   })
 
-  // Expand openUrl / onMyUserContextChange after boot succeeds — do not spend the boot budget.
+  // Expand boot + optional APIs after handshake — do not spend the handshake budget.
   const run = timed.then(async (zoomSdk) => {
-    if (zoomSdk && !collaborateConfigured) {
+    if (zoomSdk && !collaborateConfigured && !bootConfigured) {
+      try {
+        const bootResponse = await callZoomConfig(zoomSdk, [...ZOOM_SDK_BOOT_CAPABILITIES])
+        await applyRunningContextFromConfig(zoomSdk, bootResponse)
+        bootConfigured = true
+        configuredSdk = zoomSdk
+      } catch (err) {
+        if (err?.code === 'ZOOM_OUT_OF_MEETING') throw err
+        // Handshake alone is not enough for getMeetingContext / getUserContext.
+        resetSdkCache()
+        throw err
+      }
       await tryExpandExtendedCore(zoomSdk)
     }
     return zoomSdk
@@ -440,35 +591,34 @@ async function tryLoadZoomSdkContext() {
   const zoomSdk = await getZoomSdk()
   if (!zoomSdk) return null
 
-  assertInMeetingOrThrow(lastRunningContext)
-
-  if (!lastRunningContext && typeof zoomSdk.getRunningContext === 'function') {
-    try {
-      const running = await withTimeout(
-        zoomSdk.getRunningContext(),
-        2000,
-        'Timed out reading Zoom running context.',
-        'ZOOM_SDK_TIMEOUT',
-      )
-      const ctx = typeof running === 'string' ? running : running?.runningContext
-      if (ctx) {
-        lastRunningContext = ctx
-        assertInMeetingOrThrow(ctx)
-      }
-    } catch (err) {
-      if (err?.code === 'ZOOM_OUT_OF_MEETING' || err?.code === 'ZOOM_SDK_TIMEOUT') throw err
-    }
+  if (!sdkConfigCompleted || !bootConfigured) {
+    throw zoomError(
+      messageForSdkBootFailure({ code: 'ZOOM_SDK_FAILED' }),
+      'ZOOM_SDK_FAILED',
+    )
   }
+
+  assertInMeetingOrThrow(lastRunningContext)
 
   const [meeting, user] = await Promise.all([
     withTimeout(
-      zoomSdk.getMeetingContext().catch(() => null),
+      zoomSdk.getMeetingContext().catch((err) => {
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('[zoom] getMeetingContext failed', describeSdkError(err) || err)
+        }
+        return null
+      }),
       SDK_TIMEOUT_MS,
       'Timed out reading Zoom meeting context. Start or join a meeting, then reopen the Quiz app.',
       'ZOOM_SDK_TIMEOUT',
     ),
     withTimeout(
-      zoomSdk.getUserContext().catch(() => null),
+      zoomSdk.getUserContext().catch((err) => {
+        if (typeof console !== 'undefined' && console.warn) {
+          console.warn('[zoom] getUserContext failed', describeSdkError(err) || err)
+        }
+        return null
+      }),
       SDK_TIMEOUT_MS,
       'Timed out reading Zoom user context.',
       'ZOOM_SDK_TIMEOUT',
@@ -539,6 +689,11 @@ export async function resolveZoomMeetingContext(searchParams) {
     return fromQuery
   }
 
+  // Linux Zoom Workplace can open the panel but never completes Apps SDK — never fake a meeting.
+  if (isLinuxZoomClient()) {
+    throw zoomError(messageForSdkBootFailure({ code: 'ZOOM_SDK_FAILED' }), 'ZOOM_SDK_FAILED')
+  }
+
   try {
     const fromSdk = await tryLoadZoomSdkContext()
     if (fromSdk) return fromSdk
@@ -546,6 +701,10 @@ export async function resolveZoomMeetingContext(searchParams) {
     // Real Zoom main client with known runningContext — keep the out-of-meeting message.
     if (err?.code === 'ZOOM_OUT_OF_MEETING') {
       throw err
+    }
+
+    if (isLinuxZoomClient()) {
+      throw zoomError(messageForSdkBootFailure(err), err?.code || 'ZOOM_SDK_FAILED')
     }
 
     const inZoom = isLikelyZoomClient()
@@ -575,6 +734,9 @@ export async function resolveZoomMeetingContext(searchParams) {
 
   // SDK returned null without throwing.
   // Inside Zoom that usually means meeting APIs failed — surface retry, do not mock.
+  if (isLinuxZoomClient()) {
+    throw zoomError(messageForSdkBootFailure({ code: 'ZOOM_SDK_FAILED' }), 'ZOOM_SDK_FAILED')
+  }
   if (isLikelyZoomClient()) {
     throw zoomError(
       'Could not read the Zoom meeting context. Close the app and reopen it from the in-meeting Apps panel. Check Marketplace domain allow-list if this keeps happening.',
@@ -792,7 +954,6 @@ export function resetZoomSdkForRetry() {
 /**
  * Runtime flags for Zoom CEF native bridge — shown when config() times out.
  * Helps distinguish “bridge missing” vs “bridge present but no reply” (allow-list / domain review).
- * @returns {{ origin: string, chromeWebview: boolean, webkitJsOcHelper: boolean, inIframe: boolean, likelyZoom: boolean, uaSnippet: string, lastConfigDetail: string|null }}
  */
 export function getZoomSdkBridgeDiagnostic() {
   let inIframe = false
@@ -802,14 +963,17 @@ export function getZoomSdkBridgeDiagnostic() {
     inIframe = true
   }
   const ua = typeof navigator !== 'undefined' ? String(navigator.userAgent || '') : ''
+  const bridge = getZoomBridgeKind()
   return {
     origin: typeof location !== 'undefined' ? String(location.origin || '') : '',
-    chromeWebview: Boolean(typeof window !== 'undefined' && window.chrome?.webview),
-    webkitJsOcHelper: Boolean(
-      typeof window !== 'undefined' && window.webkit?.messageHandlers?.jsOCHelper,
-    ),
+    os: getZoomClientOs(),
+    bridge,
+    chromeWebview: bridge === 'webview',
+    webkitJsOcHelper: bridge === 'webkit',
+    webviewMessages: webviewMessageCount,
     inIframe,
     likelyZoom: isLikelyZoomClient(),
+    linuxUnsupported: isLinuxZoomClient(),
     uaSnippet: ua.slice(0, 120),
     lastConfigDetail: lastSdkConfigDetail,
   }
