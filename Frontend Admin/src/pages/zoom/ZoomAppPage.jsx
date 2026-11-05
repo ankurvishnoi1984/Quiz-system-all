@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   applyUserContextChange,
+  getZoomSdkBridgeDiagnostic,
   isBrowserDemoContext,
   isHostLikeRole,
+  isLikelyZoomClient,
   resetZoomSdkForRetry,
   resolveZoomMeetingContext,
   subscribeMyUserContextChange,
@@ -24,6 +26,12 @@ function messageForResolveError(err) {
     return (
       err.message ||
       'Zoom took too long to start the app. Close it and reopen from inside a meeting, or update the Zoom client.'
+    )
+  }
+  if (err?.code === 'ZOOM_SDK_FAILED') {
+    return (
+      err.message ||
+      'Zoom Apps SDK did not connect. Confirm Marketplace domain allow-list includes this host and core Zoom App SDK APIs are enabled, then Try again.'
     )
   }
   return err?.message || 'Failed to load Zoom context'
@@ -89,7 +97,9 @@ export default function ZoomAppPage() {
       if (cancelled || settled) return
       finishError(
         'ZOOM_SDK_TIMEOUT',
-        'Zoom took too long to start the app. Start a meeting, then open this app from the in-meeting Apps button (or More → Apps). Or use a Share → Zoom local mock link in the browser.',
+        isLikelyZoomClient()
+          ? 'Zoom Apps SDK did not finish starting. Close the app and reopen it from the in-meeting Apps panel, update Zoom Workplace, then Try again.'
+          : 'Zoom took too long to start the app. Start a meeting, then open this app from the in-meeting Apps button (or More → Apps). Or use a Share → Zoom local mock link in the browser.',
       )
       resetZoomSdkForRetry()
     }, ZOOM_RESOLVE_WATCHDOG_MS)
@@ -157,15 +167,29 @@ export default function ZoomAppPage() {
     })
   }, [isSdkContext, forceRole])
 
+  const likelyZoom = isLikelyZoomClient()
+  const bridgeDiag =
+    errorCode === 'ZOOM_SDK_TIMEOUT' || errorCode === 'ZOOM_SDK_FAILED'
+      ? getZoomSdkBridgeDiagnostic()
+      : null
+
   if (loading) {
+    let waitHint = `Waiting ${elapsedSec}s — browser demo starts automatically if Zoom SDK is unavailable.`
+    if (likelyZoom) {
+      if (elapsedSec >= 10) {
+        waitHint = `Still waiting for Zoom Apps SDK… ${elapsedSec}s. If this hangs, update Zoom Workplace or reopen the app from the in-meeting Apps panel.`
+      } else if (elapsedSec >= 5) {
+        waitHint = `Still connecting to Zoom Apps SDK… ${elapsedSec}s`
+      } else {
+        waitHint = `Connecting to Zoom Apps SDK… ${elapsedSec}s`
+      }
+    }
     return (
       <EmbedShell>
         <p className="rounded-xl border border-blue-200/70 bg-white p-4 text-sm text-slate-600">
           Starting Zoom Quiz app…
         </p>
-        <p className="text-[11px] text-slate-500">
-          Waiting {elapsedSec}s — browser demo starts automatically if Zoom SDK is unavailable.
-        </p>
+        <p className="text-[11px] text-slate-500">{waitHint}</p>
       </EmbedShell>
     )
   }
@@ -173,24 +197,51 @@ export default function ZoomAppPage() {
   if (error || !context) {
     const outOfMeeting =
       errorCode === 'ZOOM_OUT_OF_MEETING' || errorCode === 'ZOOM_NO_CONTEXT'
+    const sdkFailed =
+      errorCode === 'ZOOM_SDK_TIMEOUT' || errorCode === 'ZOOM_SDK_FAILED'
     return (
       <EmbedShell>
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
           <p className="font-semibold">
-            {outOfMeeting ? 'Open from a Zoom meeting' : 'Zoom context unavailable'}
+            {outOfMeeting
+              ? 'Open from a Zoom meeting'
+              : sdkFailed && likelyZoom
+                ? 'Zoom SDK did not connect'
+                : 'Zoom context unavailable'}
           </p>
           <p className="mt-1 text-xs leading-relaxed">{error}</p>
-          <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs leading-relaxed text-amber-900/80">
-            <li>Click New Meeting (or join a meeting you host).</li>
-            <li>
-              On the <span className="font-semibold">bottom meeting toolbar</span>, click{' '}
-              <span className="font-semibold">Apps</span>. If missing, click{' '}
-              <span className="font-semibold">More (…)</span> → Apps.
-            </li>
-            <li>
-              Open <span className="font-semibold">General app 379</span> / Quiz from My Apps.
-            </li>
-          </ol>
+          {sdkFailed && likelyZoom ? (
+            <>
+              <p className="mt-2 text-xs leading-relaxed text-amber-900/80">
+                Check Marketplace → Features → Zoom App SDK (core APIs enabled) and that domain
+                allow-list includes this host. If domains still say “requires review”, Zoom may not
+                authorize the SDK until they are Allowed — then remove/re-add the app and Try again.
+              </p>
+              {bridgeDiag ? (
+                <pre className="mt-2 max-h-40 overflow-auto rounded-lg border border-amber-200/80 bg-white/80 p-2 text-[10px] leading-relaxed text-slate-700">
+                  {`origin=${bridgeDiag.origin}
+chrome.webview=${bridgeDiag.chromeWebview}
+webkit.jsOCHelper=${bridgeDiag.webkitJsOcHelper}
+inIframe=${bridgeDiag.inIframe}
+likelyZoom=${bridgeDiag.likelyZoom}
+lastConfig=${bridgeDiag.lastConfigDetail || '(none)'}
+ua=${bridgeDiag.uaSnippet}`}
+                </pre>
+              ) : null}
+            </>
+          ) : (
+            <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs leading-relaxed text-amber-900/80">
+              <li>Click New Meeting (or join a meeting you host).</li>
+              <li>
+                On the <span className="font-semibold">bottom meeting toolbar</span>, click{' '}
+                <span className="font-semibold">Apps</span>. If missing, click{' '}
+                <span className="font-semibold">More (…)</span> → Apps.
+              </li>
+              <li>
+                Open <span className="font-semibold">General app 485</span> / Quiz from My Apps.
+              </li>
+            </ol>
+          )}
           <button
             type="button"
             onClick={handleRetry}
@@ -198,12 +249,14 @@ export default function ZoomAppPage() {
           >
             Try again
           </button>
-          <p className="mt-3 text-[11px] text-amber-800">
-            Or open in the browser:{' '}
-            <code className="rounded bg-white/70 px-1">
-              /zoom/app?mockMeetingUuid=dev-1&amp;mockRole=host&amp;sessionCode=ABC123
-            </code>
-          </p>
+          {!likelyZoom ? (
+            <p className="mt-3 text-[11px] text-amber-800">
+              Or open in the browser:{' '}
+              <code className="rounded bg-white/70 px-1">
+                /zoom/app?mockMeetingUuid=dev-1&amp;mockRole=host&amp;sessionCode=ABC123
+              </code>
+            </p>
+          ) : null}
         </div>
       </EmbedShell>
     )

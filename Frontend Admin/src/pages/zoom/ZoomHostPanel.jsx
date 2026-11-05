@@ -8,8 +8,11 @@ import {
   unbindZoomMeetingSessionApi,
 } from '../../services/zoomApi'
 import {
+  isBrowserDemoContext,
   isCollaborateActiveFromEvent,
+  isLikelyZoomClient,
   openQuizForEveryone,
+  resetZoomSdkForRetry,
   subscribeCollaborateChange,
 } from '../../utils/zoomContext'
 import {
@@ -19,14 +22,32 @@ import {
   SessionCodePrompt,
 } from '../embed/EmbedControlsPage'
 
-function ZoomContextBanner({ context, binding, onUnbind, unbindBusy }) {
+function ZoomContextBanner({ context, binding, onUnbind, unbindBusy, sdkFailedInsideZoom, onRetrySdk }) {
   return (
     <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900">
-      <p className="font-semibold">Zoom meeting linked</p>
+      <p className="font-semibold">
+        {sdkFailedInsideZoom ? 'Zoom SDK did not connect' : 'Zoom meeting linked'}
+      </p>
       <p className="mt-0.5 break-all text-[11px] text-sky-800/80">
         {context.meetingUuid}
-        {context.source === 'mock' ? ' · mock mode' : ''}
+        {context.source === 'mock' && !sdkFailedInsideZoom ? ' · mock mode' : ''}
+        {sdkFailedInsideZoom ? ' · SDK unavailable' : ''}
       </p>
+      {sdkFailedInsideZoom ? (
+        <p className="mt-1 text-[11px] text-amber-900">
+          Open for everyone needs a real Zoom meeting context. Confirm Marketplace domain allow-list
+          and Zoom App SDK APIs, then Try again.
+        </p>
+      ) : null}
+      {sdkFailedInsideZoom && onRetrySdk ? (
+        <button
+          type="button"
+          onClick={onRetrySdk}
+          className="mt-2 text-[11px] font-semibold text-navy-800 underline"
+        >
+          Try again
+        </button>
+      ) : null}
       {binding?.session ? (
         <p className="mt-1 text-[11px]">
           Session <span className="font-mono font-semibold">{binding.session.session_code}</span>
@@ -55,6 +76,8 @@ function OpenForEveryoneCard({
   lastResult,
   onOpen,
   mockMode,
+  sdkFailedInsideZoom,
+  onRetrySdk,
 }) {
   return (
     <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-3 text-xs text-emerald-950">
@@ -63,11 +86,25 @@ function OpenForEveryoneCard({
         Participants will not see the quiz until you tap this (like Slido). It starts Collaborate
         mode and invites everyone in the meeting to open the Quiz app.
       </p>
-      {mockMode ? (
+      {sdkFailedInsideZoom ? (
+        <p className="mt-2 text-[11px] text-amber-800">
+          Zoom Apps SDK did not connect — Try again. Open for everyone only works with a live SDK
+          meeting context.
+        </p>
+      ) : mockMode ? (
         <p className="mt-2 text-[11px] text-amber-800">
           Browser mock cannot invite Zoom participants. Open this app from a real Zoom meeting to
           use Open for everyone.
         </p>
+      ) : null}
+      {sdkFailedInsideZoom && onRetrySdk ? (
+        <button
+          type="button"
+          onClick={onRetrySdk}
+          className="mt-2 text-[11px] font-semibold text-navy-800 underline"
+        >
+          Try again
+        </button>
       ) : null}
       {collaborateActive ? (
         <p className="mt-2 text-[11px] font-semibold text-emerald-800">
@@ -224,6 +261,14 @@ export default function ZoomHostPanel({ context }) {
     }
   }
 
+  const mockMode = context.source === 'mock' || context.source === 'query'
+  // Safety net: if we somehow still got browser demo while inside Zoom CEF.
+  const sdkFailedInsideZoom = mockMode && isBrowserDemoContext(context) && isLikelyZoomClient()
+  const handleRetrySdk = useCallback(() => {
+    resetZoomSdkForRetry()
+    window.location.reload()
+  }, [])
+
   if (!user) {
     return (
       <EmbedShell>
@@ -257,12 +302,16 @@ export default function ZoomHostPanel({ context }) {
   }
 
   const sessionId = binding?.session_id || binding?.session?.session_id
-  const mockMode = context.source === 'mock' || context.source === 'query'
 
   if (!sessionId) {
     return (
       <EmbedShell>
-        <ZoomContextBanner context={context} binding={null} />
+        <ZoomContextBanner
+          context={context}
+          binding={null}
+          sdkFailedInsideZoom={sdkFailedInsideZoom}
+          onRetrySdk={handleRetrySdk}
+        />
         {error ? (
           <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
             {error}
@@ -306,6 +355,8 @@ export default function ZoomHostPanel({ context }) {
         binding={binding}
         onUnbind={handleUnbind}
         unbindBusy={unbindBusy}
+        sdkFailedInsideZoom={sdkFailedInsideZoom}
+        onRetrySdk={handleRetrySdk}
       />
       {!collaborateActive && !openResult ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
@@ -320,6 +371,8 @@ export default function ZoomHostPanel({ context }) {
         lastResult={openResult}
         onOpen={handleOpenForEveryone}
         mockMode={mockMode}
+        sdkFailedInsideZoom={sdkFailedInsideZoom}
+        onRetrySdk={handleRetrySdk}
       />
       {error ? (
         <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
