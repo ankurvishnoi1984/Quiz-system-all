@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, LogOut, Play, Square } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Layers, LogOut, Play, Rocket, Square } from 'lucide-react'
+import { HostQuestionActionButton } from '../../components/live/HostQuestionActionButton'
 import { HostQuestionControls } from '../../components/live/HostQuestionControls'
 import { useHostQuestionMutations } from '../../hooks/useHostQuestionMutations'
 import { useLiveSession } from '../../hooks/useLiveSession'
@@ -9,7 +10,11 @@ import { getPresentSlideApi, setPresentSlideApi } from '../../services/liveApi'
 import { transitionSessionApi } from '../../services/dashboardApi'
 import { lookupSessionByCodeApi } from '../../services/embedApi'
 import { useAuthStore } from '../../store/authStore'
-import { sessionRequiresActivateAllQuestions } from '../../utils/hostQuestionControls'
+import {
+  canHostActivateAllQuestions,
+  canHostCloseAllQuestions,
+  sessionRequiresActivateAllQuestions,
+} from '../../utils/hostQuestionControls'
 import { isSessionQuizTotalTimeEnabled } from '../../utils/sessionFlags'
 import {
   getDistributedPresentMode,
@@ -243,6 +248,22 @@ export function EmbedControls({ sessionId, bare = false }) {
     () => sessionRequiresActivateAllQuestions(session, mappedQuestions, sessionUsesQuestionSets),
     [session, mappedQuestions],
   )
+  const showActivateAllQuestions = useMemo(
+    () =>
+      canHostActivateAllQuestions(mappedQuestions, {
+        canEditLive,
+        singleActiveQuestionMode,
+      }) || (canEditLive && disableSingleActivation),
+    [canEditLive, disableSingleActivation, mappedQuestions, singleActiveQuestionMode],
+  )
+  const showCloseAllQuestions = useMemo(
+    () =>
+      canHostCloseAllQuestions(mappedQuestions, {
+        canEditLive,
+        singleActiveQuestionMode,
+      }),
+    [canEditLive, mappedQuestions, singleActiveQuestionMode],
+  )
 
   // Drive "current question" from the present slide — not only the live flag.
   // Old Zoom Next only bumped slide_index while this panel always showed the live/first question.
@@ -250,6 +271,26 @@ export function EmbedControls({ sessionId, bare = false }) {
     if (currentSlide?.type === 'question' && currentSlide.question) return currentSlide.question
     return mappedQuestions.find((question) => question.isLive) || mappedQuestions[0] || null
   }, [currentSlide, mappedQuestions])
+
+  const questionOptions = useMemo(() => {
+    const raw = activeQuestion?.options
+    if (!Array.isArray(raw) || !raw.length) return []
+    return raw
+      .map((option, index) => {
+        if (option == null) return null
+        if (typeof option === 'string') return { key: String(index), label: option }
+        const label =
+          option.text ??
+          option.label ??
+          option.option_text ??
+          option.value ??
+          option.name ??
+          null
+        if (label == null || String(label).trim() === '') return null
+        return { key: String(option.id ?? option.option_id ?? index), label: String(label) }
+      })
+      .filter(Boolean)
+  }, [activeQuestion])
 
   const goToSlide = useCallback(
     (nextIndex) => {
@@ -355,18 +396,84 @@ export function EmbedControls({ sessionId, bare = false }) {
             isLive ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'
           }`}
         >
-          {isLive ? <Square className="size-4" /> : <Play className="size-4" />}
-          {isLive ? 'End session' : 'Start session'}
+          {isLive ? <Square className="size-4" /> : <Rocket className="size-4" />}
+          {isLive
+            ? lifecycleMutation.isPending
+              ? 'Ending…'
+              : 'End session'
+            : lifecycleMutation.isPending
+              ? 'Launching…'
+              : 'Launch'}
         </button>
       </div>
 
-      {currentSlide?.type === 'question' && activeQuestion ? (
+      {canEditLive && (showActivateAllQuestions || showCloseAllQuestions) ? (
+        <div className="rounded-xl border border-blue-200/70 bg-white p-3 shadow-sm">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            Options
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {showActivateAllQuestions ? (
+              <HostQuestionActionButton
+                disabled={questionMutations.activateAllQuestionsMutation.isPending}
+                icon={Play}
+                label={
+                  questionMutations.activateAllQuestionsMutation.isPending
+                    ? 'Activating…'
+                    : 'Activate all questions'
+                }
+                title="Make all questions live at once"
+                tone="emerald"
+                size="compact"
+                onClick={() => questionMutations.activateAllQuestions()}
+              />
+            ) : null}
+            {showCloseAllQuestions ? (
+              <HostQuestionActionButton
+                disabled={questionMutations.closeAllQuestionsMutation.isPending}
+                icon={Layers}
+                label={
+                  questionMutations.closeAllQuestionsMutation.isPending
+                    ? 'Closing…'
+                    : 'Close all questions'
+                }
+                title="Stop accepting responses on all live untimed questions"
+                tone="rose"
+                size="compact"
+                onClick={() => questionMutations.closeAllQuestions()}
+              />
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {activeQuestion ? (
         <div className="rounded-xl border border-blue-200/70 bg-white p-3 shadow-sm">
           <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-            Question {currentSlide.questionNumber || ''}
+            {currentSlide?.type === 'question'
+              ? `Question ${currentSlide.questionNumber || ''}`
+              : 'Current question'}
           </p>
-          <p className="mb-3 line-clamp-2 text-sm font-semibold text-navy-900">
+          <p className="mb-2 line-clamp-2 text-sm font-semibold text-navy-900">
             {activeQuestion.text}
+          </p>
+          {questionOptions.length ? (
+            <ul className="mb-3 space-y-1.5 rounded-lg border border-blue-100 bg-slate-50/80 p-2">
+              {questionOptions.map((option, index) => (
+                <li
+                  key={option.key}
+                  className="flex gap-2 text-xs leading-snug text-slate-700"
+                >
+                  <span className="shrink-0 font-semibold text-navy-800">
+                    {String.fromCharCode(65 + index)}.
+                  </span>
+                  <span className="min-w-0 break-words">{option.label}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            Host options
           </p>
           <HostQuestionControls
             question={activeQuestion}
@@ -395,7 +502,7 @@ export function EmbedControls({ sessionId, bare = false }) {
             {currentSlide.type === 'participants'
               ? 'Lobby slide. Tap Next question to move to the first question, then Activate so participants can answer.'
               : currentSlide.type === 'distributedQuiz'
-                ? 'Distributed quiz mode — activate all questions from Session / Live controls when needed.'
+                ? 'Distributed quiz mode — use Activate all questions when the session is live.'
                 : 'Ending slide. Participants see rankings or survey wrap-up when enabled.'}
           </p>
         </div>
