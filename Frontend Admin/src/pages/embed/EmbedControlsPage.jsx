@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  ArrowLeft,
   ChevronLeft,
   ChevronRight,
   Image as ImageIcon,
@@ -11,14 +12,22 @@ import {
   Rocket,
   Square,
   Timer,
+  Trophy,
 } from 'lucide-react'
 import { HostQuestionActionButton } from '../../components/live/HostQuestionActionButton'
 import { HostQuestionControls } from '../../components/live/HostQuestionControls'
 import { QuestionMedia } from '../../components/participant-session/QuestionMedia'
 import { useHostQuestionMutations } from '../../hooks/useHostQuestionMutations'
 import { useLiveSession } from '../../hooks/useLiveSession'
-import { getPresentSlideApi, getQuestionResultsApi, setPresentSlideApi } from '../../services/liveApi'
-import { transitionSessionApi } from '../../services/dashboardApi'
+import {
+  deactivateAdvancedAssignmentSlotApi,
+  getPresentSlideApi,
+  getQuestionResultsApi,
+  getSessionLeaderboardApi,
+  setPresentSlideApi,
+  setQuestionLiveStateApi,
+} from '../../services/liveApi'
+import { transitionSessionApi, updateSessionApi } from '../../services/dashboardApi'
 import { lookupSessionByCodeApi } from '../../services/embedApi'
 import { useAuthStore } from '../../store/authStore'
 import {
@@ -26,7 +35,8 @@ import {
   canHostCloseAllQuestions,
   sessionRequiresActivateAllQuestions,
 } from '../../utils/hostQuestionControls'
-import { isSessionQuizTotalTimeEnabled } from '../../utils/sessionFlags'
+import { normalizeLeaderboardEntries } from '../../utils/leaderboard'
+import { isAdvancedBuilderSession, isSessionQuizTotalTimeEnabled } from '../../utils/sessionFlags'
 import {
   getQuestionDeadlineMs,
   getQuizTotalRemainingSeconds,
@@ -43,6 +53,8 @@ import {
   sessionSupportsSurveyEndingScreen,
   sessionUsesQuestionSets,
 } from '../../utils/livePresentation'
+
+const EMBED_HOST_LEADERBOARD_LIMIT = 10
 
 function formatCountdown(totalSeconds) {
   const safe = Math.max(0, Math.floor(Number(totalSeconds) || 0))
@@ -67,6 +79,89 @@ function EmbedTimerChip({ label, remainingSeconds }) {
       <span className="font-semibold uppercase tracking-wide opacity-80">{label}</span>
       <span>{formatCountdown(remainingSeconds)}</span>
     </span>
+  )
+}
+
+/** Full-panel rankings view — replaces the host console until Back. */
+function EmbedOverallRankingsPanel({
+  entries,
+  isLoading,
+  broadcastEnabled,
+  broadcastBusy,
+  canEditLive,
+  onBack,
+  onToggleBroadcast,
+}) {
+  const rows = normalizeLeaderboardEntries(entries).slice(0, EMBED_HOST_LEADERBOARD_LIMIT)
+
+  return (
+    <div className="flex min-h-0 flex-col gap-2">
+      <div className="rounded-xl border border-amber-200/80 bg-white p-2.5 shadow-sm">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-blue-200 bg-white px-2 text-[11px] font-semibold text-navy-800 transition hover:bg-blue-50"
+          >
+            <ArrowLeft className="size-3.5" aria-hidden />
+            Back
+          </button>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-700">
+              Rankings
+            </p>
+            <p className="truncate text-sm font-bold text-navy-900">Overall leaderboard</p>
+          </div>
+          <Trophy className="size-4 shrink-0 text-amber-600" aria-hidden />
+        </div>
+        <button
+          type="button"
+          disabled={!canEditLive || broadcastBusy}
+          onClick={() => onToggleBroadcast(!broadcastEnabled)}
+          className={`mt-2 inline-flex h-8 w-full items-center justify-center rounded-lg text-[11px] font-semibold transition disabled:opacity-50 ${
+            broadcastEnabled
+              ? 'border border-amber-300 bg-amber-100 text-amber-950'
+              : 'bg-amber-600 text-white hover:bg-amber-700'
+          }`}
+        >
+          {broadcastBusy
+            ? 'Updating…'
+            : broadcastEnabled
+              ? 'Visible to all · Hide'
+              : 'Show to all'}
+        </button>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-amber-200/80 bg-amber-50/50 p-2 shadow-sm">
+        {isLoading && !rows.length ? (
+          <p className="px-1 py-3 text-center text-xs text-slate-500">Loading rankings…</p>
+        ) : rows.length ? (
+          <ul className="space-y-1.5">
+            {rows.map((row, index) => (
+              <li
+                key={String(row.participant_id ?? `${row.name}-${index}`)}
+                className="flex items-center gap-2 rounded-lg border border-amber-100 bg-white px-2.5 py-2"
+              >
+                <span className="grid size-7 shrink-0 place-items-center rounded-md bg-amber-200/90 text-xs font-bold text-amber-950">
+                  {index + 1}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-navy-900">
+                  {row.name}
+                </span>
+                <span className="shrink-0 text-sm font-bold tabular-nums text-amber-900">
+                  {row.score}
+                  <span className="ml-0.5 text-[11px] font-semibold text-amber-700/80">pts</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="px-1 py-3 text-center text-xs text-slate-500">
+            No scores yet. Rankings update as participants answer.
+          </p>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -261,11 +356,16 @@ export function EmbedControls({ sessionId, bare = false }) {
   const logout = useAuthStore((state) => state.logout)
   const queryClient = useQueryClient()
   const [error, setError] = useState('')
+  const [hostLeaderboardOpen, setHostLeaderboardOpen] = useState(false)
 
   const { session, mappedQuestions, participants, responses, isLoading, isError } = useLiveSession(
     accessToken,
     sessionId,
   )
+
+  useEffect(() => {
+    setHostLeaderboardOpen(false)
+  }, [sessionId])
 
   const distributedPresentMode = useMemo(
     () => getDistributedPresentMode(session, mappedQuestions),
@@ -312,6 +412,74 @@ export function EmbedControls({ sessionId, bare = false }) {
 
   const onMutationError = useCallback((message) => setError(message), [])
   const questionMutations = useHostQuestionMutations(accessToken, sessionId, { onMutationError })
+
+  const advancedSlotActivation = isAdvancedBuilderSession(session)
+  const canToggleOverallLeaderboard = sessionSupportsOverallLeaderboard(mappedQuestions)
+  const overallRankingsEnabled = Boolean(session?.leaderboard_enabled)
+
+  const deactivateAllLiveQuestions = useCallback(async () => {
+    const liveQuestions = (mappedQuestions || []).filter((question) => question.isLive)
+    if (!liveQuestions.length) return
+    await Promise.all(
+      liveQuestions.map((question) => setQuestionLiveStateApi(accessToken, question.id, false)),
+    )
+    queryClient.invalidateQueries({ queryKey: ['live-questions', sessionId] })
+  }, [accessToken, mappedQuestions, queryClient, sessionId])
+
+  const sessionLeaderboardMutation = useMutation({
+    mutationFn: async ({ enabled }) => {
+      if (enabled) {
+        if (advancedSlotActivation) {
+          await deactivateAdvancedAssignmentSlotApi(accessToken, sessionId)
+        } else {
+          await deactivateAllLiveQuestions()
+        }
+      }
+      return updateSessionApi(accessToken, sessionId, {
+        leaderboard_enabled: enabled,
+        ...(enabled ? { current_rankings_enabled: false } : {}),
+      })
+    },
+    onSuccess: (updated) => {
+      if (updated) {
+        const patch = {
+          leaderboard_enabled: updated.leaderboard_enabled,
+          current_rankings_enabled: updated.current_rankings_enabled,
+          ...(advancedSlotActivation &&
+          (updated.leaderboard_enabled || updated.current_rankings_enabled)
+            ? { advanced_active_slot: null }
+            : {}),
+        }
+        queryClient.setQueryData(['live-session', sessionId], (old) =>
+          old ? { ...old, ...updated, ...patch } : updated,
+        )
+        queryClient.setQueryData(['live-session', sessionId, 'host'], (old) =>
+          old ? { ...old, ...updated, ...patch } : updated,
+        )
+      }
+      queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['live-questions', sessionId] })
+      queryClient.invalidateQueries({
+        queryKey: ['embed-host-leaderboard', sessionId],
+      })
+    },
+    onError: (err) => setError(err?.message || 'Could not update overall rankings'),
+  })
+
+  const hostLeaderboardQuery = useQuery({
+    queryKey: ['embed-host-leaderboard', sessionId, EMBED_HOST_LEADERBOARD_LIMIT],
+    queryFn: () =>
+      getSessionLeaderboardApi(accessToken, sessionId, {
+        limit: EMBED_HOST_LEADERBOARD_LIMIT,
+      }),
+    enabled: Boolean(
+      accessToken && sessionId && canToggleOverallLeaderboard && hostLeaderboardOpen,
+    ),
+    refetchInterval:
+      hostLeaderboardOpen && (session?.status === 'live' || session?.status === 'paused')
+        ? 4000
+        : false,
+  })
 
   const rawSlideIndex = Number(slideQuery.data?.slide_index)
   const slideIndex = Number.isFinite(rawSlideIndex)
@@ -449,6 +617,18 @@ export function EmbedControls({ sessionId, bare = false }) {
     return () => clearTimeout(timer)
   }, [error])
 
+  const openOverallRankings = useCallback(() => {
+    setHostLeaderboardOpen(true)
+    if (!overallRankingsEnabled && canEditLive && !sessionLeaderboardMutation.isPending) {
+      sessionLeaderboardMutation.mutate({ enabled: true })
+    }
+  }, [
+    overallRankingsEnabled,
+    canEditLive,
+    sessionLeaderboardMutation.isPending,
+    sessionLeaderboardMutation.mutate,
+  ])
+
   const wrap = (node) => (bare ? node : <EmbedShell>{node}</EmbedShell>)
 
   if (isError || (!isLoading && !session)) {
@@ -475,6 +655,32 @@ export function EmbedControls({ sessionId, bare = false }) {
     : lifecycleMutation.isPending
       ? 'Launching…'
       : 'Launch'
+
+  if (hostLeaderboardOpen && canToggleOverallLeaderboard) {
+    return wrap(
+      <div className="space-y-2">
+        {error ? (
+          <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+            {error}
+          </p>
+        ) : null}
+        <EmbedOverallRankingsPanel
+          entries={hostLeaderboardQuery.data || []}
+          isLoading={hostLeaderboardQuery.isLoading || hostLeaderboardQuery.isFetching}
+          broadcastEnabled={overallRankingsEnabled}
+          broadcastBusy={sessionLeaderboardMutation.isPending}
+          canEditLive={canEditLive}
+          onBack={() => {
+            setHostLeaderboardOpen(false)
+            if (overallRankingsEnabled && canEditLive && !sessionLeaderboardMutation.isPending) {
+              sessionLeaderboardMutation.mutate({ enabled: false })
+            }
+          }}
+          onToggleBroadcast={(enabled) => sessionLeaderboardMutation.mutate({ enabled })}
+        />
+      </div>,
+    )
+  }
 
   return wrap(
     <div className="space-y-2">
@@ -584,6 +790,22 @@ export function EmbedControls({ sessionId, bare = false }) {
                 tone="rose"
                 size="compact"
                 onClick={() => questionMutations.closeAllQuestions()}
+              />
+            ) : null}
+            {canToggleOverallLeaderboard ? (
+              <HostQuestionActionButton
+                disabled={sessionLeaderboardMutation.isPending}
+                icon={Trophy}
+                label="Overall rankings"
+                title={
+                  overallRankingsEnabled
+                    ? 'Open overall rankings (showing to participants)'
+                    : 'Open overall rankings and show to participants'
+                }
+                active={overallRankingsEnabled}
+                tone="amber"
+                size="compact"
+                onClick={openOverallRankings}
               />
             ) : null}
             <HostQuestionControls
