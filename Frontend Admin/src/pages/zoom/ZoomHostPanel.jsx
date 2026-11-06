@@ -100,56 +100,57 @@ function OpenForEveryoneCard({
   linuxUnsupported,
   onRetrySdk,
 }) {
+  const waiting = !collaborateActive && !lastResult
+  const statusText = collaborateActive
+    ? 'Collaborate active — participants can join.'
+    : lastResult?.collaborate || lastResult?.invite
+      ? `${lastResult.collaborate ? 'Collaborate started. ' : ''}${lastResult.invite ? 'Invitations sent.' : ''}`.trim()
+      : 'Participants will not see the quiz until you open it.'
+
   return (
-    <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-3 text-xs text-emerald-950">
-      <p className="font-semibold text-sm text-navy-900">Open for everyone</p>
-      <p className="mt-1 leading-relaxed text-emerald-900/80">
-        Participants will not see the quiz until you tap this (like Slido). It starts Collaborate
-        mode and invites everyone in the meeting to open the Quiz app.
-      </p>
-      {linuxUnsupported ? (
-        <p className="mt-2 text-[11px] text-amber-800">
-          Not available on Linux Zoom. Use Windows or macOS for Open for everyone.
-        </p>
-      ) : sdkFailedInsideZoom ? (
-        <p className="mt-2 text-[11px] text-amber-800">
-          Zoom Apps SDK did not connect — Try again. Open for everyone only works with a live SDK
-          meeting context.
-        </p>
-      ) : mockMode ? (
-        <p className="mt-2 text-[11px] text-amber-800">
-          Browser mock cannot invite Zoom participants. Open this app from a real Zoom meeting to
-          use Open for everyone.
-        </p>
-      ) : null}
-      {sdkFailedInsideZoom && !linuxUnsupported && onRetrySdk ? (
+    <div
+      className={`rounded-xl border px-2.5 py-2 ${
+        waiting
+          ? 'border-amber-200 bg-amber-50 text-amber-950'
+          : 'border-emerald-200 bg-emerald-50/80 text-emerald-950'
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <p className="min-w-0 flex-1 text-[11px] font-medium leading-snug">{statusText}</p>
         <button
           type="button"
-          onClick={onRetrySdk}
-          className="mt-2 text-[11px] font-semibold text-navy-800 underline"
+          disabled={!enabled || busy || mockMode || linuxUnsupported}
+          onClick={onOpen}
+          className="h-8 shrink-0 rounded-lg bg-emerald-700 px-2.5 text-[11px] font-semibold text-white transition hover:bg-emerald-800 disabled:opacity-50"
         >
-          Try again
+          {busy ? 'Opening…' : collaborateActive ? 'Invite again' : 'Open for everyone'}
         </button>
-      ) : null}
-      {collaborateActive ? (
-        <p className="mt-2 text-[11px] font-semibold text-emerald-800">
-          Collaborate is active — participants can join the Quiz app.
+      </div>
+      {linuxUnsupported ? (
+        <p className="mt-1.5 text-[10px] text-amber-800">
+          Not available on Linux Zoom — use Windows or macOS.
+        </p>
+      ) : sdkFailedInsideZoom ? (
+        <p className="mt-1.5 text-[10px] text-amber-800">
+          Zoom Apps SDK did not connect.
+          {onRetrySdk ? (
+            <>
+              {' '}
+              <button
+                type="button"
+                onClick={onRetrySdk}
+                className="font-semibold text-navy-800 underline"
+              >
+                Try again
+              </button>
+            </>
+          ) : null}
+        </p>
+      ) : mockMode ? (
+        <p className="mt-1.5 text-[10px] text-amber-800">
+          Browser mock — open this app from a real Zoom meeting to invite.
         </p>
       ) : null}
-      {lastResult?.collaborate || lastResult?.invite ? (
-        <p className="mt-2 text-[11px] text-emerald-800">
-          {lastResult.collaborate ? 'Collaborate started. ' : ''}
-          {lastResult.invite ? 'Invitations sent.' : ''}
-        </p>
-      ) : null}
-      <button
-        type="button"
-        disabled={!enabled || busy || mockMode}
-        onClick={onOpen}
-        className="mt-3 h-10 w-full rounded-lg bg-emerald-700 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:opacity-50"
-      >
-        {busy ? 'Opening…' : collaborateActive ? 'Invite again' : 'Open for everyone'}
-      </button>
     </div>
   )
 }
@@ -456,12 +457,6 @@ export default function ZoomHostPanel({ context }) {
         linuxUnsupported={linuxUnsupported}
         onRetrySdk={handleRetrySdk}
       />
-      {!collaborateActive && !openResult ? (
-        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950">
-          Participants will not see the quiz until you tap{' '}
-          <span className="font-semibold">Open for everyone</span>.
-        </p>
-      ) : null}
       <OpenForEveryoneCard
         enabled={Boolean(sessionId)}
         busy={openBusy}

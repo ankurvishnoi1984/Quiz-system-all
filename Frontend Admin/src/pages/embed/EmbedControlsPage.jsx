@@ -1,9 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Layers, LogOut, Play, Rocket, Square, Timer } from 'lucide-react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  Image as ImageIcon,
+  Layers,
+  LogOut,
+  Play,
+  Rocket,
+  Square,
+  Timer,
+} from 'lucide-react'
 import { HostQuestionActionButton } from '../../components/live/HostQuestionActionButton'
 import { HostQuestionControls } from '../../components/live/HostQuestionControls'
+import { QuestionMedia } from '../../components/participant-session/QuestionMedia'
 import { useHostQuestionMutations } from '../../hooks/useHostQuestionMutations'
 import { useLiveSession } from '../../hooks/useLiveSession'
 import { getPresentSlideApi, getQuestionResultsApi, setPresentSlideApi } from '../../services/liveApi'
@@ -56,6 +67,37 @@ function EmbedTimerChip({ label, remainingSeconds }) {
       <span className="font-semibold uppercase tracking-wide opacity-80">{label}</span>
       <span>{formatCountdown(remainingSeconds)}</span>
     </span>
+  )
+}
+
+/** Collapsed by default so Zoom’s narrow panel keeps response bars / actions visible. */
+function EmbedQuestionMediaToggle({ media }) {
+  const [open, setOpen] = useState(false)
+  const mediaKey = media?.url || ''
+
+  useEffect(() => {
+    setOpen(false)
+  }, [mediaKey])
+
+  if (!media?.url) return null
+
+  return (
+    <div className="mb-2">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="inline-flex h-7 items-center gap-1 rounded-lg border border-blue-200 bg-white px-2 text-[10px] font-semibold uppercase tracking-wide text-navy-800 transition hover:bg-blue-50"
+      >
+        <ImageIcon className="size-3 shrink-0" aria-hidden />
+        {open ? 'Hide media' : 'Show media'}
+      </button>
+      {open ? (
+        <div className="mt-1.5 overflow-hidden rounded-lg border border-blue-100 bg-slate-50/80 p-1.5">
+          <QuestionMedia media={media} maxHeightClass="max-h-28" className="rounded-md" />
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -518,6 +560,8 @@ export function EmbedControls({ sessionId, bare = false }) {
           <p className="mb-2 line-clamp-2 text-xs font-semibold leading-snug text-navy-900">
             {activeQuestion.text}
           </p>
+
+          <EmbedQuestionMediaToggle media={activeQuestion.media} />
 
           {optionBreakdown.length ? (
             <ul className="mb-2 space-y-1">
