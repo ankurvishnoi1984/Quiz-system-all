@@ -228,6 +228,25 @@ async function remove(req, res) {
   }
 }
 
+function buildClearedQuestionChangePayload(question) {
+  return {
+    question_id: question.question_id,
+    is_live: false,
+    live_activated_at: null,
+    time_limit_seconds: question.time_limit_seconds ?? null,
+    submissions_closed: false,
+    open_for_reattempt: false,
+    answer_revealed: false,
+    show_leaderboard: false
+  };
+}
+
+function notifyClearedQuestionHostState(sessionCode, clearedQuestions = []) {
+  for (const question of clearedQuestions) {
+    notifyQuestionChange(sessionCode, buildClearedQuestionChangePayload(question));
+  }
+}
+
 async function resetResponses(req, res) {
   try {
     const result = await resetSessionResponses({
@@ -237,7 +256,14 @@ async function resetResponses(req, res) {
 
     const session = await Session.findByPk(result.session_id);
     if (session?.session_code) {
-      notifySessionUpdate(session.session_code, session.status);
+      notifyClearedQuestionHostState(session.session_code, result.cleared_questions);
+      notifySessionUpdate(session.session_code, session.status, {
+        started_at: null,
+        quiz_reset: true
+      });
+      if (result.was_active) {
+        closeAllSessionConnections(session.session_code, { reason: "session_reset" });
+      }
       if (session.leaderboard_enabled || session.current_rankings_enabled) {
         const { resolveSessionLeaderboardScope } = require("../services/response.service");
         buildSessionLeaderboard(session.session_id, resolveLeaderboardTopN(session), {
@@ -279,6 +305,7 @@ function lifecycleAction(action) {
           const extra = {};
           notifySessionUpdate(session.session_code, session.status, extra);
           if (action === "end") {
+            notifyClearedQuestionHostState(session.session_code, session.clearedQuestions);
             notifySessionSettings(session.session_code, {
               leaderboard_enabled: session.leaderboard_enabled,
               current_rankings_enabled: session.current_rankings_enabled,

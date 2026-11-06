@@ -214,7 +214,9 @@ function DashboardPage() {
           `Cleared ${clearedParticipants} participant${
             clearedParticipants === 1 ? '' : 's'
           } and ${clearedResponses} response${clearedResponses === 1 ? '' : 's'}.`,
-          restoredToDraft ? 'The session was moved back to Draft.' : null,
+          restoredToDraft
+            ? 'The session was moved back to Draft and question live state was cleared.'
+            : null,
         ]
           .filter(Boolean)
           .join(' '),
@@ -1044,19 +1046,19 @@ function DashboardPage() {
           <span className="font-semibold text-navy-900">
             {resetConfirmSession?.title || 'this session'}
           </span>
-          ? Participants will also be removed from the live count so they can join again. Question
-          content is kept. This uses a soft delete and can be recovered from the database if needed.
+          ? Participants will also be removed so they can join again. Question content is kept, but
+          Activate / Deactivate and reveal state are cleared. The session moves back to Draft.
         </p>
-        {resetConfirmSession?.status === 'Completed' ? (
-          <p className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-navy-800">
-            This completed session will be moved back to Draft so you can edit and launch it again.
-          </p>
-        ) : null}
-        {resetConfirmSession?.status === 'Live' ? (
+        {resetConfirmSession?.status === 'Live' || resetConfirmSession?.status === 'Paused' ? (
           <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
-            This session is currently live. Connected participants may need to refresh or rejoin.
+            This session is currently {String(resetConfirmSession.status).toLowerCase()}. Connected
+            participants will be disconnected and the session will return to Draft.
           </p>
-        ) : null}
+        ) : (
+          <p className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-navy-800">
+            The session will be moved to Draft so you can edit and launch it again.
+          </p>
+        )}
         <div className="mt-5 flex flex-wrap justify-end gap-2">
           <button
             type="button"

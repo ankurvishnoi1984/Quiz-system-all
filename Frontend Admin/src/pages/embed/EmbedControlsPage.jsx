@@ -518,27 +518,6 @@ export function EmbedControls({ sessionId, bare = false }) {
             ) : null}
           </div>
         ) : null}
-
-        <div className="mt-2 flex gap-1.5">
-          <button
-            type="button"
-            disabled={slideIndex <= 0 || slideMutation.isPending}
-            onClick={() => goToSlide(slideIndex - 1)}
-            className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-lg border border-blue-200 bg-white text-[11px] font-semibold text-navy-800 transition hover:bg-blue-50 disabled:opacity-40"
-          >
-            <ChevronLeft className="size-3.5" />
-            Prev
-          </button>
-          <button
-            type="button"
-            disabled={slideIndex >= slideTotal - 1 || slideMutation.isPending}
-            onClick={() => goToSlide(slideIndex + 1)}
-            className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-lg border border-blue-200 bg-white text-[11px] font-semibold text-navy-800 transition hover:bg-blue-50 disabled:opacity-40"
-          >
-            {slides[slideIndex + 1]?.type === 'question' ? 'Next Q' : 'Next'}
-            <ChevronRight className="size-3.5" />
-          </button>
-        </div>
       </div>
 
       {error ? (
@@ -549,13 +528,31 @@ export function EmbedControls({ sessionId, bare = false }) {
 
       {activeQuestion ? (
         <div className="rounded-xl border border-blue-200/70 bg-white p-2.5 shadow-sm">
-          <div className="mb-1.5 flex items-start justify-between gap-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+          <div className="mb-1.5 flex items-center gap-2">
+            <p className="min-w-0 flex-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
               {currentSlide?.type === 'question'
                 ? `Q${currentSlide.questionNumber || ''}`
                 : 'Question'}
               {optionTotal > 0 ? ` · ${optionTotal} answer${optionTotal === 1 ? '' : 's'}` : ''}
             </p>
+            <button
+              type="button"
+              disabled={slideIndex <= 0 || slideMutation.isPending}
+              onClick={() => goToSlide(slideIndex - 1)}
+              className="inline-flex h-7 shrink-0 items-center gap-0.5 rounded-lg border border-blue-200 bg-white px-2 text-[11px] font-semibold text-navy-800 transition hover:bg-blue-50 disabled:opacity-40"
+            >
+              <ChevronLeft className="size-3.5" />
+              Prev
+            </button>
+            <button
+              type="button"
+              disabled={slideIndex >= slideTotal - 1 || slideMutation.isPending}
+              onClick={() => goToSlide(slideIndex + 1)}
+              className="inline-flex h-7 shrink-0 items-center gap-0.5 rounded-lg border border-blue-200 bg-white px-2 text-[11px] font-semibold text-navy-800 transition hover:bg-blue-50 disabled:opacity-40"
+            >
+              {slides[slideIndex + 1]?.type === 'question' ? 'Next Q' : 'Next'}
+              <ChevronRight className="size-3.5" />
+            </button>
           </div>
 
           <div className="mb-2 flex flex-wrap gap-1.5">
@@ -681,10 +678,30 @@ export function EmbedControls({ sessionId, bare = false }) {
         </div>
       ) : currentSlide ? (
         <div className="rounded-xl border border-blue-200/70 bg-white p-2.5 shadow-sm">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-            Current slide
-          </p>
-          <p className="mt-1 text-sm font-semibold text-navy-900">{currentSlide.label}</p>
+          <div className="mb-1.5 flex items-center gap-2">
+            <p className="min-w-0 flex-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              Current slide
+            </p>
+            <button
+              type="button"
+              disabled={slideIndex <= 0 || slideMutation.isPending}
+              onClick={() => goToSlide(slideIndex - 1)}
+              className="inline-flex h-7 shrink-0 items-center gap-0.5 rounded-lg border border-blue-200 bg-white px-2 text-[11px] font-semibold text-navy-800 transition hover:bg-blue-50 disabled:opacity-40"
+            >
+              <ChevronLeft className="size-3.5" />
+              Prev
+            </button>
+            <button
+              type="button"
+              disabled={slideIndex >= slideTotal - 1 || slideMutation.isPending}
+              onClick={() => goToSlide(slideIndex + 1)}
+              className="inline-flex h-7 shrink-0 items-center gap-0.5 rounded-lg border border-blue-200 bg-white px-2 text-[11px] font-semibold text-navy-800 transition hover:bg-blue-50 disabled:opacity-40"
+            >
+              {slides[slideIndex + 1]?.type === 'question' ? 'Next Q' : 'Next'}
+              <ChevronRight className="size-3.5" />
+            </button>
+          </div>
+          <p className="text-sm font-semibold text-navy-900">{currentSlide.label}</p>
           <p className="mt-1 text-[11px] text-slate-500">
             {currentSlide.type === 'participants'
               ? 'Lobby. Tap Next Q, then Activate so participants can answer.'

@@ -6,6 +6,7 @@ const { isSessionRandomQuestionOrderEnabled } = require("../utils/sessionFlags")
 const {
   notifySessionUpdate,
   notifySessionSettings,
+  notifyQuestionChange,
   notifyQuestionLeaderboardVisibility,
   closeAllSessionConnections
 } = require("./websocket.service");
@@ -39,6 +40,18 @@ async function processDueAutoEndSessions() {
     endedCount += 1;
 
     try {
+      for (const question of ended.clearedQuestions || []) {
+        notifyQuestionChange(ended.session_code, {
+          question_id: question.question_id,
+          is_live: false,
+          live_activated_at: null,
+          time_limit_seconds: question.time_limit_seconds ?? null,
+          submissions_closed: false,
+          open_for_reattempt: false,
+          answer_revealed: false,
+          show_leaderboard: false
+        });
+      }
       notifySessionUpdate(ended.session_code, ended.status);
       notifySessionSettings(ended.session_code, {
         leaderboard_enabled: ended.leaderboard_enabled,

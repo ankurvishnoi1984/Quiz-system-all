@@ -936,9 +936,46 @@ async function archiveSession({ sessionId, user }) {
 }
 
 /**
+ * Clear host activation / reveal state on every question in a session.
+ * Used when ending a session or resetting responses so Zoom + quiz hosts
+ * do not keep stale Activate / Deactivate UI after the run is over.
+ */
+async function clearSessionQuestionHostState(sessionId, { transaction } = {}) {
+  const questions = await Question.findAll({
+    where: { session_id: sessionId },
+    attributes: ["question_id", "is_live", "time_limit_seconds"],
+    transaction
+  });
+
+  if (!questions.length) return [];
+
+  await Question.update(
+    {
+      is_live: false,
+      open_for_reattempt: false,
+      answer_revealed: false,
+      show_leaderboard: false,
+      live_activated_at: null,
+      submissions_closed: false
+    },
+    {
+      where: { session_id: sessionId },
+      transaction
+    }
+  );
+
+  return questions.map((question) => ({
+    question_id: Number(question.question_id),
+    time_limit_seconds: question.time_limit_seconds ?? null,
+    was_live: Boolean(question.is_live)
+  }));
+}
+
+/**
  * Soft-delete all responses and participants for a session (no hard deletes).
  * Participants can rejoin as new records afterward.
- * Completed sessions are moved back to draft so they can be edited/relaunched.
+ * Always moves the session back to draft and clears question live/reveal state
+ * so it can be edited and relaunched cleanly.
  */
 async function resetSessionResponses({ sessionId, user }) {
   const session = await getSessionOrThrow(sessionId);
@@ -951,7 +988,8 @@ async function resetSessionResponses({ sessionId, user }) {
     throw error;
   }
 
-  const wasCompleted = session.status === "completed";
+  const previousStatus = session.status;
+  const wasActive = previousStatus === "live" || previousStatus === "paused";
 
   const result = await sequelize.transaction(async (transaction) => {
     // Soft-delete only (paranoid models). Never pass force: true here.
@@ -978,20 +1016,26 @@ async function resetSessionResponses({ sessionId, user }) {
       }
     );
 
-    if (wasCompleted) {
-      session.status = "draft";
-      if (Object.prototype.hasOwnProperty.call(session.dataValues, "ended_at")) {
-        session.ended_at = null;
-      }
-      await session.save({ transaction });
+    const clearedQuestions = await clearSessionQuestionHostState(session.session_id, {
+      transaction
+    });
+
+    session.status = "draft";
+    session.started_at = null;
+    if (Object.prototype.hasOwnProperty.call(session.dataValues, "ended_at")) {
+      session.ended_at = null;
     }
+    await session.save({ transaction });
 
     return {
       session_id: session.session_id,
       status: session.status,
       responses_cleared: responsesCleared,
       participants_cleared: participantsCleared,
-      restored_to_draft: wasCompleted
+      restored_to_draft: true,
+      was_active: wasActive,
+      previous_status: previousStatus,
+      cleared_questions: clearedQuestions
     };
   });
 
@@ -1030,6 +1074,7 @@ async function endSessionBySystem(session, endedAt = new Date()) {
 
   session.status = "completed";
   session.ended_at = endedAt;
+  session.clearedQuestions = await clearSessionQuestionHostState(session.session_id);
   await clearParticipantFacingDisplaysOnEnd(session);
   await session.save();
   return session;
@@ -1090,6 +1135,7 @@ async function transitionSessionStatus({ sessionId, user, action }) {
   }
   if (action === "end") {
     session.ended_at = new Date();
+    session.clearedQuestions = await clearSessionQuestionHostState(session.session_id);
     await clearParticipantFacingDisplaysOnEnd(session);
   }
   await session.save();
@@ -1422,6 +1468,7 @@ module.exports = {
   updateSession,
   archiveSession,
   resetSessionResponses,
+  clearSessionQuestionHostState,
   endSessionBySystem,
   transitionSessionStatus,
   getSessionByCode,
