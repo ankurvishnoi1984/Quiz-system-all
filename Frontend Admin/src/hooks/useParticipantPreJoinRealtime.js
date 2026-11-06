@@ -35,17 +35,26 @@ export function useParticipantPreJoinRealtime({ sessionCode, enabled }) {
     })
 
     const offSession = client.on(RealtimeEvent.SESSION_UPDATED, (data) => {
-      if (!data?.status) return
+      const nextStatus =
+        typeof data?.status === 'string'
+          ? data.status
+          : data?.status?.status != null
+            ? String(data.status.status)
+            : null
+      if (!nextStatus) return
 
       queryClient.setQueryData(['participant-session', sessionCode], (old) =>
         old
           ? {
               ...applyJoinBlock(data, old),
-              status: data.status,
+              status: nextStatus,
             }
           : old,
       )
-      // Status is applied locally — avoid an immediate public lookup refetch herd.
+      // Refetch on go-live so join UI unlocks even if a CDN served a stale draft lookup.
+      if (nextStatus === 'live' || nextStatus === 'paused') {
+        queryClient.invalidateQueries({ queryKey: ['participant-session', sessionCode] })
+      }
     })
 
     const offSettings = client.on(RealtimeEvent.SESSION_SETTINGS_UPDATED, (data) => {

@@ -465,9 +465,11 @@ function broadcast(sessionCode, role, data) {
 }
 
 function broadcastToSession(sessionCode, data, excludeWs = null) {
+  const code = normalizeSessionCodeKey(sessionCode);
+  if (!code) return;
   const payload = JSON.stringify(data);
   activeConnections.forEach((connSet, key) => {
-    if (key.startsWith(`${sessionCode}:`)) {
+    if (key.startsWith(`${code}:`)) {
       connSet.forEach((ws) => {
         if (ws !== excludeWs && ws.readyState === 1) {
           ws.send(payload);

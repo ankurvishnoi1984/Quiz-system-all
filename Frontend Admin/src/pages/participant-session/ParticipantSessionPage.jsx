@@ -118,7 +118,7 @@ import {
   isSessionOpenForNewJoin,
 } from './utils/joinFlow'
 
-function ParticipantSessionPage({ embed = false }) {
+function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = null }) {
   const { sessionId } = useParams()
   const location = useLocation()
   const [searchParams] = useSearchParams()
@@ -142,19 +142,22 @@ function ParticipantSessionPage({ embed = false }) {
 
   const hasSessionCodeInUrl = hasSessionCodeInJoinPath(location.pathname, sessionId)
   const [sessionCodeInput, setSessionCodeInput] = useState('')
+  const forcedSessionCode = normalizeSessionCode(sessionCodeProp)
+  // Zoom (and other shells) can pass a code without changing the route away from /zoom/app.
+  const hasBoundSessionCode = Boolean(forcedSessionCode) || hasSessionCodeInUrl
   const effectiveSessionCode = normalizeSessionCode(
-    hasSessionCodeInUrl ? sessionId : sessionCodeInput,
+    forcedSessionCode || (hasSessionCodeInUrl ? sessionId : sessionCodeInput),
   )
 
   const canUseStoredJoin = useMemo(
     () =>
       canReuseStoredParticipantSession({
-        hasSessionCodeInUrl,
+        hasSessionCodeInUrl: hasBoundSessionCode,
         participantToken,
         joinedSessionCode,
         effectiveSessionCode,
       }),
-    [hasSessionCodeInUrl, participantToken, joinedSessionCode, effectiveSessionCode],
+    [hasBoundSessionCode, participantToken, joinedSessionCode, effectiveSessionCode],
   )
 
   const {
@@ -994,19 +997,25 @@ function ParticipantSessionPage({ embed = false }) {
     })
 
     const offSession = client.on(RealtimeEvent.SESSION_UPDATED, (data) => {
+      const nextStatus =
+        typeof data?.status === 'string'
+          ? data.status
+          : data?.status?.status != null
+            ? String(data.status.status)
+            : null
       const hasStartedAtPatch = data != null && Object.prototype.hasOwnProperty.call(data, 'started_at')
       if (
-        data?.status ||
+        nextStatus ||
         data?.advanced_active_slot != null ||
         hasStartedAtPatch ||
         data?.quiz_reset
       ) {
-        const ended = data.status === 'completed' || data.status === 'archived'
+        const ended = nextStatus === 'completed' || nextStatus === 'archived'
         queryClient.setQueryData(['participant-session', effectiveSessionCode], (old) =>
           old
             ? {
                 ...old,
-                ...(data?.status ? { status: data.status } : {}),
+                ...(nextStatus ? { status: nextStatus } : {}),
                 ...(data?.advanced_active_slot != null
                   ? { advanced_active_slot: data.advanced_active_slot }
                   : {}),
@@ -1022,6 +1031,15 @@ function ParticipantSessionPage({ embed = false }) {
               }
             : old,
         )
+        // Always refetch on lifecycle changes — Zoom / CDN can leave the public lookup stale.
+        if (
+          nextStatus === 'live' ||
+          nextStatus === 'paused' ||
+          nextStatus === 'completed' ||
+          nextStatus === 'archived'
+        ) {
+          queryClient.invalidateQueries({ queryKey: ['participant-session', effectiveSessionCode] })
+        }
       }
       if (data?.quiz_reset === true) {
         resetQuizProgress()
@@ -1032,15 +1050,15 @@ function ParticipantSessionPage({ embed = false }) {
         pendingActivatedQuestionIdRef.current = null
       }
       // Only refetch public lookup when the event has no status to apply locally.
-      if (!data?.status) {
+      if (!nextStatus) {
         queryClient.invalidateQueries({ queryKey: ['participant-session', effectiveSessionCode] })
       }
       queryClient.invalidateQueries({ queryKey: ['participant-questions', dbSessionId] })
-      if (data.status === 'completed' || data.status === 'live') {
+      if (nextStatus === 'completed' || nextStatus === 'live') {
         queryClient.invalidateQueries({ queryKey: ['participant-leaderboard', dbSessionId] })
         queryClient.invalidateQueries({ queryKey: ['participant-survey-summary', dbSessionId] })
       }
-      if (data.status === 'completed' || data.status === 'archived') {
+      if (nextStatus === 'completed' || nextStatus === 'archived') {
         freezeAllCountdowns()
         if (!sessionEndedNotifiedRef.current) {
           sessionEndedNotifiedRef.current = true
@@ -3084,9 +3102,9 @@ function ParticipantSessionPage({ embed = false }) {
     return (
       <SessionNotLiveView
         session={session}
-        hasSessionCodeInUrl={hasSessionCodeInUrl}
+        hasSessionCodeInUrl={hasBoundSessionCode}
         isRefreshing={sessionQuery.isFetching}
-        onUseDifferentCode={hasSessionCodeInUrl ? undefined : handleUseDifferentSessionCode}
+        onUseDifferentCode={hasBoundSessionCode ? undefined : handleUseDifferentSessionCode}
       />
     )
   }
@@ -3098,7 +3116,7 @@ function ParticipantSessionPage({ embed = false }) {
 
     return (
       <JoinFormView
-        hasSessionCodeInUrl={hasSessionCodeInUrl}
+        hasSessionCodeInUrl={hasBoundSessionCode}
         sessionCodeInput={sessionCodeInput}
         onSessionCodeChange={setSessionCodeInput}
         sessionLookupFailed={sessionLookupFailed}

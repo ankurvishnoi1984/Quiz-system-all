@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Navigate } from 'react-router-dom'
 import { joinZoomMeetingSessionApi, getZoomMeetingSessionApi } from '../../services/zoomApi'
 import { useParticipantStore } from '../../store/participantStore'
 import { buildZoomDeviceFingerprint } from '../../utils/zoomContext'
 import { EmbedShell } from '../embed/EmbedControlsPage'
+import ParticipantSessionPage from '../participant-session/ParticipantSessionPage'
 
 const UNBOUND_POLL_MS = 4000
+const LAUNCH_RETRY_MS = 3000
 
 function GuestModeBanner({ context }) {
   if (!context?.isGuest) return null
@@ -20,14 +21,26 @@ function GuestModeBanner({ context }) {
   )
 }
 
+function isWaitingForHostLaunchError(err) {
+  const message = String(err?.message || '').toLowerCase()
+  return (
+    message.includes('not accepting participants') ||
+    message.includes('not started') ||
+    message.includes('session is not live') ||
+    message.includes('not available for rejoin')
+  )
+}
+
 /**
  * Resolves the quiz session bound to this Zoom meeting, joins when possible,
- * then hands off to the existing /join/:code participant experience.
- * Works for authorized participants and Zoom Guest Mode (unsigned / not-added app).
+ * then keeps the participant quiz inside /zoom/app (no navigate to /join).
+ * That preserves Zoom Apps URL + live WebSocket updates when the host launches.
  */
 export default function ZoomParticipantPanel({ context }) {
   const setParticipant = useParticipantStore((state) => state.setParticipant)
-  const [phase, setPhase] = useState('loading') // loading | need_name | need_fields | ready | error | unbound
+  const participantToken = useParticipantStore((state) => state.participantToken)
+  const joinedSessionCode = useParticipantStore((state) => state.joinedSessionCode)
+  const [phase, setPhase] = useState('loading') // loading | need_name | need_fields | ready | error | unbound | waiting_launch
   const [error, setError] = useState('')
   const [binding, setBinding] = useState(null)
   const [nickname, setNickname] = useState(context.displayName || '')
@@ -95,6 +108,9 @@ export default function ZoomParticipantPanel({ context }) {
         setError(err?.message || 'Could not join the session')
         if (err?.code === 'ZOOM_MEETING_UNBOUND') {
           setPhase('unbound')
+        } else if (isWaitingForHostLaunchError(err)) {
+          // Host linked the meeting but has not Launch'd yet — keep retrying.
+          setPhase('waiting_launch')
         } else {
           setPhase(needsContactFields || needsName ? 'need_fields' : 'error')
         }
@@ -122,35 +138,62 @@ export default function ZoomParticipantPanel({ context }) {
       }
       try {
         const data = await getZoomMeetingSessionApi(context.meetingUuid)
-        if (!data?.binding?.session) {
-          setBinding(null)
+        const nextBinding = data?.binding || null
+        setBinding(nextBinding)
+        if (!nextBinding?.session?.session_code) {
           setPhase('unbound')
           return
         }
-        setBinding(data.binding)
 
-        const sessionJoinType = data.binding.session.join_type
-        if (sessionJoinType === 'anonymous') {
-          await doJoin(data.binding, { nickname: context.displayName || undefined })
+        const boundCode = String(nextBinding.session.session_code || '').trim().toUpperCase()
+        // Already joined this meeting's session — stay in Zoom shell with live quiz UI.
+        if (
+          participantToken &&
+          joinedSessionCode &&
+          String(joinedSessionCode).trim().toUpperCase() === boundCode
+        ) {
+          setJoinResult({ sessionCode: boundCode })
+          setPhase('ready')
           return
         }
-        if (sessionJoinType === 'name' && context.displayName) {
-          await doJoin(data.binding, { nickname: context.displayName })
+
+        if (needsContactFields || needsName) {
+          // Anonymous can auto-join; named/contact joins need the form unless display name is enough.
+          if (joinType === 'name' && (nickname || context.displayName)) {
+            await doJoin(nextBinding, { nickname: nickname || context.displayName })
+            return
+          }
+          if (joinType === 'anonymous') {
+            await doJoin(nextBinding)
+            return
+          }
+          setPhase('need_fields')
           return
         }
-        if (sessionJoinType === 'name') {
-          setPhase('need_name')
-          return
-        }
-        setPhase('need_fields')
+
+        await doJoin(nextBinding)
       } catch (err) {
+        if (err?.code === 'ZOOM_MEETING_UNBOUND') {
+          setPhase('unbound')
+          return
+        }
         if (!quiet) {
-          setError(err?.message || 'Could not load meeting quiz')
+          setError(err?.message || 'Could not load this Zoom meeting')
           setPhase('error')
         }
       }
     },
-    [context.displayName, context.meetingUuid, doJoin],
+    [
+      context.displayName,
+      context.meetingUuid,
+      doJoin,
+      joinType,
+      joinedSessionCode,
+      needsContactFields,
+      needsName,
+      nickname,
+      participantToken,
+    ],
   )
 
   useEffect(() => {
@@ -173,8 +216,24 @@ export default function ZoomParticipantPanel({ context }) {
     return () => clearInterval(timer)
   }, [phase, tryResolveBinding])
 
+  // Host linked but has not Launch'd yet — retry join until the session is live.
+  useEffect(() => {
+    if (phase !== 'waiting_launch' || !binding) return undefined
+    const timer = setInterval(() => {
+      void doJoin(binding, { nickname, email, mobile })
+    }, LAUNCH_RETRY_MS)
+    return () => clearInterval(timer)
+  }, [phase, binding, doJoin, nickname, email, mobile])
+
   if (phase === 'ready' && joinResult?.sessionCode) {
-    return <Navigate to={`/join/${joinResult.sessionCode}`} replace />
+    return (
+      <div className="min-h-dvh bg-slate-50">
+        <div className="mx-auto max-w-md space-y-2 px-3 pt-3">
+          <GuestModeBanner context={context} />
+        </div>
+        <ParticipantSessionPage embed sessionCode={joinResult.sessionCode} />
+      </div>
+    )
   }
 
   if (phase === 'loading') {
@@ -184,6 +243,22 @@ export default function ZoomParticipantPanel({ context }) {
         <p className="rounded-xl border border-blue-200/70 bg-white p-4 text-sm text-slate-600">
           Joining the quiz for this Zoom meeting…
         </p>
+      </EmbedShell>
+    )
+  }
+
+  if (phase === 'waiting_launch') {
+    return (
+      <EmbedShell>
+        <GuestModeBanner context={context} />
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <p className="font-semibold">Waiting for the host to launch</p>
+          <p className="mt-1 text-xs leading-relaxed text-amber-900/80">
+            The quiz is linked to this meeting. When the host taps <span className="font-semibold">Launch</span>,
+            this screen updates automatically — no refresh needed.
+          </p>
+          {error ? <p className="mt-2 text-[11px] text-amber-800/80">{error}</p> : null}
+        </div>
       </EmbedShell>
     )
   }
@@ -213,6 +288,13 @@ export default function ZoomParticipantPanel({ context }) {
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
           <p className="font-semibold">Could not join</p>
           <p className="mt-1 text-xs">{error}</p>
+          <button
+            type="button"
+            onClick={() => tryResolveBinding({ quiet: false })}
+            className="mt-3 h-10 w-full rounded-lg bg-navy-800 text-sm font-semibold text-white transition hover:bg-navy-900"
+          >
+            Try again
+          </button>
         </div>
       </EmbedShell>
     )

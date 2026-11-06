@@ -136,7 +136,7 @@ async function pauseSessionForMeetingEnded(meetingUuid) {
     await session.save();
     try {
       const { notifySessionUpdate } = require("./websocket.service");
-      notifySessionUpdate(session.session_code, session);
+      notifySessionUpdate(session.session_code, session.status);
     } catch {
       // Realtime notify is best-effort for webhook-driven pauses.
     }
