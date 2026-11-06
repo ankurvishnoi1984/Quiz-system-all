@@ -11,7 +11,40 @@ import { lookupSessionByCodeApi } from '../../services/embedApi'
 import { useAuthStore } from '../../store/authStore'
 import { sessionRequiresActivateAllQuestions } from '../../utils/hostQuestionControls'
 import { isSessionQuizTotalTimeEnabled } from '../../utils/sessionFlags'
-import { sessionUsesQuestionSets } from '../../utils/livePresentation'
+import {
+  getDistributedPresentMode,
+  sessionSupportsOverallLeaderboard,
+  sessionSupportsSurveyEndingScreen,
+  sessionUsesQuestionSets,
+} from '../../utils/livePresentation'
+
+/** Same deck shape as Present mode so Zoom/embed Next lands on real question slides. */
+function buildEmbedSlides(mappedQuestions, distributedPresentMode) {
+  const list = [{ type: 'participants', label: 'Lobby' }]
+  if (distributedPresentMode) {
+    list.push({
+      type: 'distributedQuiz',
+      distributedMode: distributedPresentMode,
+      label: 'Distributed quiz',
+    })
+  } else {
+    mappedQuestions.forEach((question, index) => {
+      list.push({
+        type: 'question',
+        question,
+        questionNumber: index + 1,
+        label: `Question ${index + 1}`,
+      })
+    })
+  }
+  if (sessionSupportsOverallLeaderboard(mappedQuestions)) {
+    list.push({ type: 'leaderboard', label: 'Rankings' })
+    list.push({ type: 'podium', label: 'Podium' })
+  } else if (sessionSupportsSurveyEndingScreen(mappedQuestions)) {
+    list.push({ type: 'surveyEnding', label: 'Survey ending' })
+  }
+  return list
+}
 
 /**
  * Compact host console for the narrow side panels that PowerPoint, Teams, and Zoom give add-ins.
@@ -151,6 +184,16 @@ export function EmbedControls({ sessionId, bare = false }) {
     sessionId,
   )
 
+  const distributedPresentMode = useMemo(
+    () => getDistributedPresentMode(session, mappedQuestions),
+    [session, mappedQuestions],
+  )
+  const slides = useMemo(
+    () => buildEmbedSlides(mappedQuestions, distributedPresentMode),
+    [mappedQuestions, distributedPresentMode],
+  )
+  const slideTotal = Math.max(1, slides.length)
+
   const slideQuery = useQuery({
     queryKey: ['embed-controls-slide', sessionId],
     queryFn: () => getPresentSlideApi(accessToken, sessionId),
@@ -161,8 +204,20 @@ export function EmbedControls({ sessionId, bare = false }) {
   })
 
   const slideMutation = useMutation({
-    mutationFn: (slideIndex) => setPresentSlideApi(accessToken, sessionId, { slideIndex }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['embed-controls-slide', sessionId] }),
+    mutationFn: ({ slideIndex, slideType }) =>
+      setPresentSlideApi(accessToken, sessionId, {
+        slideIndex,
+        slideTotal,
+        slideType: slideType || null,
+      }),
+    onSuccess: (data, variables) => {
+      queryClient.setQueryData(['embed-controls-slide', sessionId], {
+        slide_index: variables.slideIndex,
+        slide_type: variables.slideType || null,
+        ...(data && typeof data === 'object' ? data : {}),
+      })
+      queryClient.invalidateQueries({ queryKey: ['embed-controls-slide', sessionId] })
+    },
     onError: (err) => setError(err?.message || 'Could not change the slide'),
   })
 
@@ -175,7 +230,11 @@ export function EmbedControls({ sessionId, bare = false }) {
   const onMutationError = useCallback((message) => setError(message), [])
   const questionMutations = useHostQuestionMutations(accessToken, sessionId, { onMutationError })
 
-  const slideIndex = Number(slideQuery.data?.slide_index) || 0
+  const rawSlideIndex = Number(slideQuery.data?.slide_index)
+  const slideIndex = Number.isFinite(rawSlideIndex)
+    ? Math.min(Math.max(0, rawSlideIndex), slideTotal - 1)
+    : 0
+  const currentSlide = slides[slideIndex] || slides[0] || null
   const isLive = session?.status === 'live'
   const canEditLive = isLive
   const singleActiveQuestionMode = session?.participant_navigation_enabled === false
@@ -185,9 +244,24 @@ export function EmbedControls({ sessionId, bare = false }) {
     [session, mappedQuestions],
   )
 
-  const activeQuestion = useMemo(
-    () => mappedQuestions.find((question) => question.isLive) || mappedQuestions[0] || null,
-    [mappedQuestions],
+  // Drive "current question" from the present slide — not only the live flag.
+  // Old Zoom Next only bumped slide_index while this panel always showed the live/first question.
+  const activeQuestion = useMemo(() => {
+    if (currentSlide?.type === 'question' && currentSlide.question) return currentSlide.question
+    return mappedQuestions.find((question) => question.isLive) || mappedQuestions[0] || null
+  }, [currentSlide, mappedQuestions])
+
+  const goToSlide = useCallback(
+    (nextIndex) => {
+      const clamped = Math.min(Math.max(0, nextIndex), slideTotal - 1)
+      if (clamped === slideIndex || slideMutation.isPending) return
+      const target = slides[clamped]
+      slideMutation.mutate({
+        slideIndex: clamped,
+        slideType: target?.type || null,
+      })
+    },
+    [slideIndex, slideMutation, slideTotal, slides],
   )
 
   useEffect(() => {
@@ -222,7 +296,8 @@ export function EmbedControls({ sessionId, bare = false }) {
           <div className="min-w-0">
             <p className="truncate text-sm font-bold text-navy-900">{session.title}</p>
             <p className="mt-0.5 text-xs text-slate-500">
-              {session.status} · {participants.length} joined · slide {slideIndex + 1}
+              {session.status} · {participants.length} joined ·{' '}
+              {currentSlide?.label || `Slide ${slideIndex + 1}`} ({slideIndex + 1}/{slideTotal})
             </p>
           </div>
           <button
@@ -244,13 +319,13 @@ export function EmbedControls({ sessionId, bare = false }) {
 
       <div className="rounded-xl border border-blue-200/70 bg-white p-3 shadow-sm">
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-          Slides
+          Questions / slides
         </p>
         <div className="flex gap-2">
           <button
             type="button"
             disabled={slideIndex <= 0 || slideMutation.isPending}
-            onClick={() => slideMutation.mutate(slideIndex - 1)}
+            onClick={() => goToSlide(slideIndex - 1)}
             className="inline-flex h-10 flex-1 items-center justify-center gap-1 rounded-lg border border-blue-200 bg-white text-sm font-semibold text-navy-800 transition hover:bg-blue-50 disabled:opacity-40"
           >
             <ChevronLeft className="size-4" />
@@ -258,11 +333,11 @@ export function EmbedControls({ sessionId, bare = false }) {
           </button>
           <button
             type="button"
-            disabled={slideMutation.isPending}
-            onClick={() => slideMutation.mutate(slideIndex + 1)}
+            disabled={slideIndex >= slideTotal - 1 || slideMutation.isPending}
+            onClick={() => goToSlide(slideIndex + 1)}
             className="inline-flex h-10 flex-1 items-center justify-center gap-1 rounded-lg border border-blue-200 bg-white text-sm font-semibold text-navy-800 transition hover:bg-blue-50 disabled:opacity-40"
           >
-            Next
+            {slides[slideIndex + 1]?.type === 'question' ? 'Next question' : 'Next'}
             <ChevronRight className="size-4" />
           </button>
         </div>
@@ -285,10 +360,10 @@ export function EmbedControls({ sessionId, bare = false }) {
         </button>
       </div>
 
-      {activeQuestion ? (
+      {currentSlide?.type === 'question' && activeQuestion ? (
         <div className="rounded-xl border border-blue-200/70 bg-white p-3 shadow-sm">
           <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-            Current question
+            Question {currentSlide.questionNumber || ''}
           </p>
           <p className="mb-3 line-clamp-2 text-sm font-semibold text-navy-900">
             {activeQuestion.text}
@@ -309,6 +384,20 @@ export function EmbedControls({ sessionId, bare = false }) {
             onCloseQuestion={() => questionMutations.closeQuestion(activeQuestion)}
             onOpenForReattempt={() => questionMutations.openForReattempt(activeQuestion)}
           />
+        </div>
+      ) : currentSlide ? (
+        <div className="rounded-xl border border-blue-200/70 bg-white p-3 shadow-sm">
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            Current slide
+          </p>
+          <p className="text-sm font-semibold text-navy-900">{currentSlide.label}</p>
+          <p className="mt-1 text-xs text-slate-500">
+            {currentSlide.type === 'participants'
+              ? 'Lobby slide. Tap Next question to move to the first question, then Activate so participants can answer.'
+              : currentSlide.type === 'distributedQuiz'
+                ? 'Distributed quiz mode — activate all questions from Session / Live controls when needed.'
+                : 'Ending slide. Participants see rankings or survey wrap-up when enabled.'}
+          </p>
         </div>
       ) : null}
     </>,
