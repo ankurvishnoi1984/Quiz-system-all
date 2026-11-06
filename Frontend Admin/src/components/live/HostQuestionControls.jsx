@@ -47,13 +47,16 @@ export function HostQuestionControls({
   const isActiveQuestion = Boolean(question.isLive)
 
   return (
-    <div>
+    <div className={showLabel ? undefined : 'contents'}>
       {showLabel ? (
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
           Host controls
         </p>
       ) : null}
-      <div data-tour="host-controls" className="flex flex-wrap gap-2">
+      <div
+        data-tour="host-controls"
+        className={showLabel ? 'flex flex-wrap gap-2' : 'contents'}
+      >
         {!sessionQuizTotalTimeEnabled && !disableSingleActivation ? (
           <HostQuestionActionButton
             dataTour="activate-question"

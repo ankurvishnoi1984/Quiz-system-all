@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Layers, LogOut, Play, Rocket, Square } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Layers, LogOut, Play, Rocket, Square, Timer } from 'lucide-react'
 import { HostQuestionActionButton } from '../../components/live/HostQuestionActionButton'
 import { HostQuestionControls } from '../../components/live/HostQuestionControls'
 import { useHostQuestionMutations } from '../../hooks/useHostQuestionMutations'
 import { useLiveSession } from '../../hooks/useLiveSession'
-import { getPresentSlideApi, setPresentSlideApi } from '../../services/liveApi'
+import { getPresentSlideApi, getQuestionResultsApi, setPresentSlideApi } from '../../services/liveApi'
 import { transitionSessionApi } from '../../services/dashboardApi'
 import { lookupSessionByCodeApi } from '../../services/embedApi'
 import { useAuthStore } from '../../store/authStore'
@@ -17,11 +17,47 @@ import {
 } from '../../utils/hostQuestionControls'
 import { isSessionQuizTotalTimeEnabled } from '../../utils/sessionFlags'
 import {
+  getQuestionDeadlineMs,
+  getQuizTotalRemainingSeconds,
+  getRemainingQuestionSeconds,
+} from '../../utils/questionTimer'
+import {
+  buildOptionChartData,
+  buildRatingChartData,
+  getPresentOptionColor,
   getDistributedPresentMode,
+  getQuestionChartRawType,
+  questionUsesOptionChart,
   sessionSupportsOverallLeaderboard,
   sessionSupportsSurveyEndingScreen,
   sessionUsesQuestionSets,
 } from '../../utils/livePresentation'
+
+function formatCountdown(totalSeconds) {
+  const safe = Math.max(0, Math.floor(Number(totalSeconds) || 0))
+  const minutes = Math.floor(safe / 60)
+  const seconds = safe % 60
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
+}
+
+function timerChipClass(remainingSeconds) {
+  if (remainingSeconds <= 0) return 'border-rose-300 bg-rose-50 text-rose-800'
+  if (remainingSeconds < 10) return 'border-amber-300 bg-amber-50 text-amber-900'
+  return 'border-sky-200 bg-sky-50 text-sky-900'
+}
+
+function EmbedTimerChip({ label, remainingSeconds }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold tabular-nums ${timerChipClass(remainingSeconds)}`}
+      title={`${label} remaining`}
+    >
+      <Timer className="size-3 shrink-0" aria-hidden />
+      <span className="font-semibold uppercase tracking-wide opacity-80">{label}</span>
+      <span>{formatCountdown(remainingSeconds)}</span>
+    </span>
+  )
+}
 
 /** Same deck shape as Present mode so Zoom/embed Next lands on real question slides. */
 function buildEmbedSlides(mappedQuestions, distributedPresentMode) {
@@ -184,7 +220,7 @@ export function EmbedControls({ sessionId, bare = false }) {
   const queryClient = useQueryClient()
   const [error, setError] = useState('')
 
-  const { session, mappedQuestions, participants, isLoading, isError } = useLiveSession(
+  const { session, mappedQuestions, participants, responses, isLoading, isError } = useLiveSession(
     accessToken,
     sessionId,
   )
@@ -272,25 +308,85 @@ export function EmbedControls({ sessionId, bare = false }) {
     return mappedQuestions.find((question) => question.isLive) || mappedQuestions[0] || null
   }, [currentSlide, mappedQuestions])
 
-  const questionOptions = useMemo(() => {
-    const raw = activeQuestion?.options
-    if (!Array.isArray(raw) || !raw.length) return []
-    return raw
-      .map((option, index) => {
-        if (option == null) return null
-        if (typeof option === 'string') return { key: String(index), label: option }
-        const label =
-          option.text ??
-          option.label ??
-          option.option_text ??
-          option.value ??
-          option.name ??
-          null
-        if (label == null || String(label).trim() === '') return null
-        return { key: String(option.id ?? option.option_id ?? index), label: String(label) }
-      })
-      .filter(Boolean)
+  const chartRawType = activeQuestion ? getQuestionChartRawType(activeQuestion) : null
+  const currentResponses = useMemo(
+    () =>
+      (responses || []).filter(
+        (row) => Number(row.question_id) === Number(activeQuestion?.id),
+      ),
+    [responses, activeQuestion?.id],
+  )
+
+  const questionResultsQuery = useQuery({
+    queryKey: ['embed-question-results', activeQuestion?.id],
+    queryFn: () => getQuestionResultsApi(accessToken, activeQuestion.id),
+    enabled: Boolean(accessToken && activeQuestion?.id),
+    refetchInterval: activeQuestion?.isLive ? 4000 : 8000,
+  })
+
+  const optionBreakdown = useMemo(() => {
+    if (!activeQuestion) return []
+    if (chartRawType === 'rating') {
+      return buildRatingChartData(currentResponses, activeQuestion).map((row, index) => ({
+        key: `rating-${row.name}-${index}`,
+        label: row.name,
+        count: Number(row.value) || 0,
+        letter: null,
+        color: getPresentOptionColor(row.name, index, chartRawType),
+      }))
+    }
+    if (!questionUsesOptionChart(chartRawType)) return []
+    return buildOptionChartData(
+      activeQuestion,
+      questionResultsQuery.data,
+      currentResponses,
+    ).map((row, index) => ({
+      key: String(row.optionId ?? `${row.name}-${index}`),
+      label: row.name,
+      count: Number(row.value) || 0,
+      letter: String.fromCharCode(65 + index),
+      color: getPresentOptionColor(row.name, index, chartRawType),
+      isCorrect: Boolean(
+        (activeQuestion.options || []).find(
+          (opt) =>
+            Number(opt.option_id) === Number(row.optionId) ||
+            String(opt.option_text).trim() === String(row.name).trim(),
+        )?.is_correct,
+      ),
+    }))
+  }, [activeQuestion, chartRawType, currentResponses, questionResultsQuery.data])
+
+  const optionTotal = useMemo(
+    () => optionBreakdown.reduce((sum, row) => sum + row.count, 0),
+    [optionBreakdown],
+  )
+
+  const showQuizTimer = Boolean(sessionQuizTotalTimeEnabled && session?.started_at)
+  const questionDeadlineMs = useMemo(() => {
+    if (!activeQuestion?.isLive || activeQuestion?.isSurvey) return null
+    if (Number(activeQuestion?.timeLimit) <= 0) return null
+    return getQuestionDeadlineMs(activeQuestion)
   }, [activeQuestion])
+  const showQuestionTimer = questionDeadlineMs != null
+  const [timerTick, setTimerTick] = useState(0)
+
+  useEffect(() => {
+    if (!showQuizTimer && !showQuestionTimer) return undefined
+    const id = window.setInterval(() => setTimerTick((value) => value + 1), 1000)
+    return () => window.clearInterval(id)
+  }, [showQuizTimer, showQuestionTimer, session?.started_at, activeQuestion?.id, activeQuestion?.liveActivatedAt])
+
+  const quizRemainingSeconds = useMemo(() => {
+    if (!showQuizTimer) return 0
+    void timerTick
+    return getQuizTotalRemainingSeconds(session)
+  }, [showQuizTimer, session, timerTick])
+
+  const questionRemainingSeconds = useMemo(() => {
+    if (!showQuestionTimer || questionDeadlineMs == null) return 0
+    void timerTick
+    return getRemainingQuestionSeconds(questionDeadlineMs)
+  }, [showQuestionTimer, questionDeadlineMs, timerTick])
 
   const goToSlide = useCallback(
     (nextIndex) => {
@@ -330,24 +426,75 @@ export function EmbedControls({ sessionId, bare = false }) {
     )
   }
 
+  const lifecycleLabel = isLive
+    ? lifecycleMutation.isPending
+      ? 'Ending…'
+      : 'End'
+    : lifecycleMutation.isPending
+      ? 'Launching…'
+      : 'Launch'
+
   return wrap(
-    <>
-      <div className="rounded-xl border border-blue-200/70 bg-white p-3 shadow-sm">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
+    <div className="space-y-2">
+      <div className="rounded-xl border border-blue-200/70 bg-white p-2.5 shadow-sm">
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-bold text-navy-900">{session.title}</p>
-            <p className="mt-0.5 text-xs text-slate-500">
+            <p className="mt-0.5 text-[11px] text-slate-500">
               {session.status} · {participants.length} joined ·{' '}
               {currentSlide?.label || `Slide ${slideIndex + 1}`} ({slideIndex + 1}/{slideTotal})
             </p>
           </div>
           <button
             type="button"
+            disabled={lifecycleMutation.isPending || session.status === 'completed'}
+            onClick={() => lifecycleMutation.mutate(isLive ? 'end' : 'start')}
+            className={`inline-flex h-8 shrink-0 items-center gap-1 rounded-lg px-2.5 text-[11px] font-semibold text-white transition disabled:opacity-50 ${
+              isLive ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'
+            }`}
+          >
+            {isLive ? <Square className="size-3" /> : <Rocket className="size-3" />}
+            {lifecycleLabel}
+          </button>
+          <button
+            type="button"
             onClick={logout}
             title="Sign out of this panel"
-            className="shrink-0 rounded-lg border border-blue-200 p-2 text-slate-500 transition hover:bg-blue-50"
+            className="shrink-0 rounded-lg border border-blue-200 p-1.5 text-slate-500 transition hover:bg-blue-50"
           >
-            <LogOut className="size-4" />
+            <LogOut className="size-3.5" />
+          </button>
+        </div>
+
+        {showQuizTimer || showQuestionTimer ? (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {showQuizTimer ? (
+              <EmbedTimerChip label="Quiz" remainingSeconds={quizRemainingSeconds} />
+            ) : null}
+            {showQuestionTimer ? (
+              <EmbedTimerChip label="Question" remainingSeconds={questionRemainingSeconds} />
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="mt-2 flex gap-1.5">
+          <button
+            type="button"
+            disabled={slideIndex <= 0 || slideMutation.isPending}
+            onClick={() => goToSlide(slideIndex - 1)}
+            className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-lg border border-blue-200 bg-white text-[11px] font-semibold text-navy-800 transition hover:bg-blue-50 disabled:opacity-40"
+          >
+            <ChevronLeft className="size-3.5" />
+            Prev
+          </button>
+          <button
+            type="button"
+            disabled={slideIndex >= slideTotal - 1 || slideMutation.isPending}
+            onClick={() => goToSlide(slideIndex + 1)}
+            className="inline-flex h-8 flex-1 items-center justify-center gap-1 rounded-lg border border-blue-200 bg-white text-[11px] font-semibold text-navy-800 transition hover:bg-blue-50 disabled:opacity-40"
+          >
+            {slides[slideIndex + 1]?.type === 'question' ? 'Next Q' : 'Next'}
+            <ChevronRight className="size-3.5" />
           </button>
         </div>
       </div>
@@ -358,69 +505,95 @@ export function EmbedControls({ sessionId, bare = false }) {
         </p>
       ) : null}
 
-      <div className="rounded-xl border border-blue-200/70 bg-white p-3 shadow-sm">
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-          Questions / slides
-        </p>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            disabled={slideIndex <= 0 || slideMutation.isPending}
-            onClick={() => goToSlide(slideIndex - 1)}
-            className="inline-flex h-10 flex-1 items-center justify-center gap-1 rounded-lg border border-blue-200 bg-white text-sm font-semibold text-navy-800 transition hover:bg-blue-50 disabled:opacity-40"
-          >
-            <ChevronLeft className="size-4" />
-            Previous
-          </button>
-          <button
-            type="button"
-            disabled={slideIndex >= slideTotal - 1 || slideMutation.isPending}
-            onClick={() => goToSlide(slideIndex + 1)}
-            className="inline-flex h-10 flex-1 items-center justify-center gap-1 rounded-lg border border-blue-200 bg-white text-sm font-semibold text-navy-800 transition hover:bg-blue-50 disabled:opacity-40"
-          >
-            {slides[slideIndex + 1]?.type === 'question' ? 'Next question' : 'Next'}
-            <ChevronRight className="size-4" />
-          </button>
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-blue-200/70 bg-white p-3 shadow-sm">
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-          Session
-        </p>
-        <button
-          type="button"
-          disabled={lifecycleMutation.isPending || session.status === 'completed'}
-          onClick={() => lifecycleMutation.mutate(isLive ? 'end' : 'start')}
-          className={`inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg text-sm font-semibold text-white transition disabled:opacity-50 ${
-            isLive ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'
-          }`}
-        >
-          {isLive ? <Square className="size-4" /> : <Rocket className="size-4" />}
-          {isLive
-            ? lifecycleMutation.isPending
-              ? 'Ending…'
-              : 'End session'
-            : lifecycleMutation.isPending
-              ? 'Launching…'
-              : 'Launch'}
-        </button>
-      </div>
-
-      {canEditLive && (showActivateAllQuestions || showCloseAllQuestions) ? (
-        <div className="rounded-xl border border-blue-200/70 bg-white p-3 shadow-sm">
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-            Options
+      {activeQuestion ? (
+        <div className="rounded-xl border border-blue-200/70 bg-white p-2.5 shadow-sm">
+          <div className="mb-1.5 flex items-start justify-between gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              {currentSlide?.type === 'question'
+                ? `Q${currentSlide.questionNumber || ''}`
+                : 'Question'}
+              {optionTotal > 0 ? ` · ${optionTotal} answer${optionTotal === 1 ? '' : 's'}` : ''}
+            </p>
+          </div>
+          <p className="mb-2 line-clamp-2 text-xs font-semibold leading-snug text-navy-900">
+            {activeQuestion.text}
           </p>
-          <div className="flex flex-wrap gap-2">
-            {showActivateAllQuestions ? (
+
+          {optionBreakdown.length ? (
+            <ul className="mb-2 space-y-1">
+              {optionBreakdown.map((option) => {
+                const percent =
+                  optionTotal > 0 ? Math.round((option.count / optionTotal) * 100) : 0
+                return (
+                  <li
+                    key={option.key}
+                    className="relative overflow-hidden rounded-md border border-slate-200/80 bg-white"
+                  >
+                    <div
+                      className="pointer-events-none absolute inset-y-0 left-0 transition-[width] duration-500 ease-out"
+                      style={{
+                        width: `${percent}%`,
+                        background: `linear-gradient(90deg, ${option.color}33 0%, ${option.color}14 100%)`,
+                      }}
+                      aria-hidden
+                    />
+                    <div
+                      className="pointer-events-none absolute inset-y-0 left-0 w-0.5"
+                      style={{ backgroundColor: option.color }}
+                      aria-hidden
+                    />
+                    <div className="relative flex items-center gap-1.5 px-2 py-1.5">
+                      {option.letter ? (
+                        <span
+                          className="grid size-5 shrink-0 place-items-center rounded text-[10px] font-bold text-white"
+                          style={{ backgroundColor: option.color }}
+                        >
+                          {option.letter}
+                        </span>
+                      ) : null}
+                      <p className="min-w-0 flex-1 truncate text-[11px] font-semibold text-navy-900">
+                        {option.label}
+                        {option.isCorrect && activeQuestion.answerRevealed ? (
+                          <span className="ml-1 text-[10px] font-bold text-emerald-600">✓</span>
+                        ) : null}
+                      </p>
+                      <span
+                        className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white"
+                        style={{ backgroundColor: option.color }}
+                        title={`${percent}% · ${option.count} vote${option.count === 1 ? '' : 's'}`}
+                      >
+                        {percent}%
+                      </span>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          ) : Array.isArray(activeQuestion.options) && activeQuestion.options.length ? (
+            <ul className="mb-2 space-y-1 rounded-lg border border-blue-100 bg-slate-50/80 p-2">
+              {activeQuestion.options.map((option, index) => (
+                <li
+                  key={String(option.option_id ?? index)}
+                  className="flex gap-2 text-[11px] leading-snug text-slate-700"
+                >
+                  <span className="shrink-0 font-semibold text-navy-800">
+                    {String.fromCharCode(65 + index)}.
+                  </span>
+                  <span className="min-w-0 truncate">{option.option_text}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          <div className="flex flex-wrap gap-1.5">
+            {canEditLive && showActivateAllQuestions ? (
               <HostQuestionActionButton
                 disabled={questionMutations.activateAllQuestionsMutation.isPending}
                 icon={Play}
                 label={
                   questionMutations.activateAllQuestionsMutation.isPending
                     ? 'Activating…'
-                    : 'Activate all questions'
+                    : 'Activate all'
                 }
                 title="Make all questions live at once"
                 tone="emerald"
@@ -428,14 +601,14 @@ export function EmbedControls({ sessionId, bare = false }) {
                 onClick={() => questionMutations.activateAllQuestions()}
               />
             ) : null}
-            {showCloseAllQuestions ? (
+            {canEditLive && showCloseAllQuestions ? (
               <HostQuestionActionButton
                 disabled={questionMutations.closeAllQuestionsMutation.isPending}
                 icon={Layers}
                 label={
                   questionMutations.closeAllQuestionsMutation.isPending
                     ? 'Closing…'
-                    : 'Close all questions'
+                    : 'Close all'
                 }
                 title="Stop accepting responses on all live untimed questions"
                 tone="rose"
@@ -443,71 +616,40 @@ export function EmbedControls({ sessionId, bare = false }) {
                 onClick={() => questionMutations.closeAllQuestions()}
               />
             ) : null}
+            <HostQuestionControls
+              question={activeQuestion}
+              canEditLive={canEditLive}
+              singleActiveQuestionMode={singleActiveQuestionMode}
+              sessionQuizTotalTimeEnabled={sessionQuizTotalTimeEnabled}
+              disableSingleActivation={disableSingleActivation}
+              size="compact"
+              showLabel={false}
+              questionLiveMutation={questionMutations.questionLiveMutation}
+              answerRevealMutation={questionMutations.answerRevealMutation}
+              questionLeaderboardMutation={questionMutations.questionLeaderboardMutation}
+              closeQuestionMutation={questionMutations.closeQuestionMutation}
+              reattemptMutation={questionMutations.reattemptMutation}
+              onCloseQuestion={() => questionMutations.closeQuestion(activeQuestion)}
+              onOpenForReattempt={() => questionMutations.openForReattempt(activeQuestion)}
+            />
           </div>
         </div>
-      ) : null}
-
-      {activeQuestion ? (
-        <div className="rounded-xl border border-blue-200/70 bg-white p-3 shadow-sm">
-          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-            {currentSlide?.type === 'question'
-              ? `Question ${currentSlide.questionNumber || ''}`
-              : 'Current question'}
-          </p>
-          <p className="mb-2 line-clamp-2 text-sm font-semibold text-navy-900">
-            {activeQuestion.text}
-          </p>
-          {questionOptions.length ? (
-            <ul className="mb-3 space-y-1.5 rounded-lg border border-blue-100 bg-slate-50/80 p-2">
-              {questionOptions.map((option, index) => (
-                <li
-                  key={option.key}
-                  className="flex gap-2 text-xs leading-snug text-slate-700"
-                >
-                  <span className="shrink-0 font-semibold text-navy-800">
-                    {String.fromCharCode(65 + index)}.
-                  </span>
-                  <span className="min-w-0 break-words">{option.label}</span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-            Host options
-          </p>
-          <HostQuestionControls
-            question={activeQuestion}
-            canEditLive={canEditLive}
-            singleActiveQuestionMode={singleActiveQuestionMode}
-            sessionQuizTotalTimeEnabled={sessionQuizTotalTimeEnabled}
-            disableSingleActivation={disableSingleActivation}
-            size="compact"
-            showLabel={false}
-            questionLiveMutation={questionMutations.questionLiveMutation}
-            answerRevealMutation={questionMutations.answerRevealMutation}
-            questionLeaderboardMutation={questionMutations.questionLeaderboardMutation}
-            closeQuestionMutation={questionMutations.closeQuestionMutation}
-            reattemptMutation={questionMutations.reattemptMutation}
-            onCloseQuestion={() => questionMutations.closeQuestion(activeQuestion)}
-            onOpenForReattempt={() => questionMutations.openForReattempt(activeQuestion)}
-          />
-        </div>
       ) : currentSlide ? (
-        <div className="rounded-xl border border-blue-200/70 bg-white p-3 shadow-sm">
-          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+        <div className="rounded-xl border border-blue-200/70 bg-white p-2.5 shadow-sm">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
             Current slide
           </p>
-          <p className="text-sm font-semibold text-navy-900">{currentSlide.label}</p>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-sm font-semibold text-navy-900">{currentSlide.label}</p>
+          <p className="mt-1 text-[11px] text-slate-500">
             {currentSlide.type === 'participants'
-              ? 'Lobby slide. Tap Next question to move to the first question, then Activate so participants can answer.'
+              ? 'Lobby. Tap Next Q, then Activate so participants can answer.'
               : currentSlide.type === 'distributedQuiz'
-                ? 'Distributed quiz mode — use Activate all questions when the session is live.'
-                : 'Ending slide. Participants see rankings or survey wrap-up when enabled.'}
+                ? 'Distributed quiz — use Activate all when live.'
+                : 'Ending slide for rankings or survey wrap-up.'}
           </p>
         </div>
       ) : null}
-    </>,
+    </div>,
   )
 }
 
