@@ -557,6 +557,56 @@ export function EmbedControls({ sessionId, bare = false }) {
               {optionTotal > 0 ? ` · ${optionTotal} answer${optionTotal === 1 ? '' : 's'}` : ''}
             </p>
           </div>
+
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {canEditLive && showActivateAllQuestions ? (
+              <HostQuestionActionButton
+                disabled={questionMutations.activateAllQuestionsMutation.isPending}
+                icon={Play}
+                label={
+                  questionMutations.activateAllQuestionsMutation.isPending
+                    ? 'Activating…'
+                    : 'Activate all'
+                }
+                title="Make all questions live at once"
+                tone="emerald"
+                size="compact"
+                onClick={() => questionMutations.activateAllQuestions()}
+              />
+            ) : null}
+            {canEditLive && showCloseAllQuestions ? (
+              <HostQuestionActionButton
+                disabled={questionMutations.closeAllQuestionsMutation.isPending}
+                icon={Layers}
+                label={
+                  questionMutations.closeAllQuestionsMutation.isPending
+                    ? 'Closing…'
+                    : 'Close all'
+                }
+                title="Stop accepting responses on all live untimed questions"
+                tone="rose"
+                size="compact"
+                onClick={() => questionMutations.closeAllQuestions()}
+              />
+            ) : null}
+            <HostQuestionControls
+              question={activeQuestion}
+              canEditLive={canEditLive}
+              singleActiveQuestionMode={singleActiveQuestionMode}
+              sessionQuizTotalTimeEnabled={sessionQuizTotalTimeEnabled}
+              disableSingleActivation={disableSingleActivation}
+              size="compact"
+              showLabel={false}
+              questionLiveMutation={questionMutations.questionLiveMutation}
+              answerRevealMutation={questionMutations.answerRevealMutation}
+              questionLeaderboardMutation={questionMutations.questionLeaderboardMutation}
+              closeQuestionMutation={questionMutations.closeQuestionMutation}
+              reattemptMutation={questionMutations.reattemptMutation}
+              onCloseQuestion={() => questionMutations.closeQuestion(activeQuestion)}
+              onOpenForReattempt={() => questionMutations.openForReattempt(activeQuestion)}
+            />
+          </div>
+
           <p className="mb-2 line-clamp-2 text-xs font-semibold leading-snug text-navy-900">
             {activeQuestion.text}
           </p>
@@ -564,7 +614,7 @@ export function EmbedControls({ sessionId, bare = false }) {
           <EmbedQuestionMediaToggle media={activeQuestion.media} />
 
           {optionBreakdown.length ? (
-            <ul className="mb-2 space-y-1">
+            <ul className="space-y-1">
               {optionBreakdown.map((option) => {
                 const percent =
                   optionTotal > 0 ? Math.round((option.count / optionTotal) * 100) : 0
@@ -614,7 +664,7 @@ export function EmbedControls({ sessionId, bare = false }) {
               })}
             </ul>
           ) : Array.isArray(activeQuestion.options) && activeQuestion.options.length ? (
-            <ul className="mb-2 space-y-1 rounded-lg border border-blue-100 bg-slate-50/80 p-2">
+            <ul className="space-y-1 rounded-lg border border-blue-100 bg-slate-50/80 p-2">
               {activeQuestion.options.map((option, index) => (
                 <li
                   key={String(option.option_id ?? index)}
@@ -628,55 +678,6 @@ export function EmbedControls({ sessionId, bare = false }) {
               ))}
             </ul>
           ) : null}
-
-          <div className="flex flex-wrap gap-1.5">
-            {canEditLive && showActivateAllQuestions ? (
-              <HostQuestionActionButton
-                disabled={questionMutations.activateAllQuestionsMutation.isPending}
-                icon={Play}
-                label={
-                  questionMutations.activateAllQuestionsMutation.isPending
-                    ? 'Activating…'
-                    : 'Activate all'
-                }
-                title="Make all questions live at once"
-                tone="emerald"
-                size="compact"
-                onClick={() => questionMutations.activateAllQuestions()}
-              />
-            ) : null}
-            {canEditLive && showCloseAllQuestions ? (
-              <HostQuestionActionButton
-                disabled={questionMutations.closeAllQuestionsMutation.isPending}
-                icon={Layers}
-                label={
-                  questionMutations.closeAllQuestionsMutation.isPending
-                    ? 'Closing…'
-                    : 'Close all'
-                }
-                title="Stop accepting responses on all live untimed questions"
-                tone="rose"
-                size="compact"
-                onClick={() => questionMutations.closeAllQuestions()}
-              />
-            ) : null}
-            <HostQuestionControls
-              question={activeQuestion}
-              canEditLive={canEditLive}
-              singleActiveQuestionMode={singleActiveQuestionMode}
-              sessionQuizTotalTimeEnabled={sessionQuizTotalTimeEnabled}
-              disableSingleActivation={disableSingleActivation}
-              size="compact"
-              showLabel={false}
-              questionLiveMutation={questionMutations.questionLiveMutation}
-              answerRevealMutation={questionMutations.answerRevealMutation}
-              questionLeaderboardMutation={questionMutations.questionLeaderboardMutation}
-              closeQuestionMutation={questionMutations.closeQuestionMutation}
-              reattemptMutation={questionMutations.reattemptMutation}
-              onCloseQuestion={() => questionMutations.closeQuestion(activeQuestion)}
-              onOpenForReattempt={() => questionMutations.openForReattempt(activeQuestion)}
-            />
-          </div>
         </div>
       ) : currentSlide ? (
         <div className="rounded-xl border border-blue-200/70 bg-white p-2.5 shadow-sm">
