@@ -370,7 +370,13 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
     queryKey: ['participant-questions', sessionQuery.data?.session_id, participantToken],
     queryFn: () => listSessionQuestionsApi(participantToken, sessionQuery.data?.session_id),
     enabled: Boolean(participantToken && sessionQuery.data?.session_id) && !ipBlocked,
-    refetchInterval: !ipBlocked && (step === 'active' || step === 'waiting') ? 5000 : false,
+    // Embed/Zoom CEF can lag on WebSocket; poll faster there so activate is not ~5s late.
+    refetchInterval:
+      !ipBlocked && (step === 'active' || step === 'waiting')
+        ? embedMode
+          ? 1500
+          : 5000
+        : false,
   })
 
   useEffect(() => {
@@ -636,12 +642,19 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
       return 0
     }
     if (!questionCountdownEndsAt) return 0
-    return getRemainingQuestionSeconds(questionCountdownEndsAt)
+    const limit = Number(question?.timeLimit ?? question?.time_limit_seconds ?? 0)
+    return getRemainingQuestionSeconds(
+      questionCountdownEndsAt,
+      Date.now(),
+      limit > 0 ? limit : null,
+    )
   }, [
     isSessionEnded,
     hasQuestionCountdown,
     questionCountdownFrozen,
     questionCountdownEndsAt,
+    question?.timeLimit,
+    question?.time_limit_seconds,
     countdownTick,
   ])
 

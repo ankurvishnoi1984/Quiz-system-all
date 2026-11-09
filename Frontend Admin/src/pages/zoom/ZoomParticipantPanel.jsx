@@ -8,19 +8,6 @@ import ParticipantSessionPage from '../participant-session/ParticipantSessionPag
 const UNBOUND_POLL_MS = 4000
 const LAUNCH_RETRY_MS = 3000
 
-function GuestModeBanner({ context }) {
-  if (!context?.isGuest) return null
-  return (
-    <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-950">
-      <p className="font-semibold">You’re in as Guest</p>
-      <p className="mt-0.5 leading-relaxed text-violet-900/80">
-        You can take the quiz without signing in to Zoom. Ask the host to link a session and tap{' '}
-        <span className="font-semibold">Open for everyone</span> if this screen stays on waiting.
-      </p>
-    </div>
-  )
-}
-
 function isWaitingForHostLaunchError(err) {
   const message = String(err?.message || '').toLowerCase()
   return (
@@ -48,18 +35,32 @@ export default function ZoomParticipantPanel({ context }) {
   const [mobile, setMobile] = useState('')
   const [joinResult, setJoinResult] = useState(null)
   const joiningRef = useRef(false)
+  const phaseRef = useRef(phase)
+  const nicknameRef = useRef(nickname)
+  const emailRef = useRef(email)
+  const mobileRef = useRef(mobile)
+  const bindingRef = useRef(binding)
+  const participantTokenRef = useRef(participantToken)
+  const joinedSessionCodeRef = useRef(joinedSessionCode)
+
+  phaseRef.current = phase
+  nicknameRef.current = nickname
+  emailRef.current = email
+  mobileRef.current = mobile
+  bindingRef.current = binding
+  participantTokenRef.current = participantToken
+  joinedSessionCodeRef.current = joinedSessionCode
 
   useEffect(() => {
-    if (context.displayName && !nickname) {
+    if (context.displayName && !nicknameRef.current) {
       setNickname(context.displayName)
     }
-  }, [context.displayName, nickname])
+  }, [context.displayName])
 
   const joinType = binding?.session?.join_type || 'anonymous'
 
   const needsContactFields = useMemo(
-    () =>
-      ['name_email', 'name_mobile', 'name_email_mobile'].includes(joinType),
+    () => ['name_email', 'name_mobile', 'name_email_mobile'].includes(joinType),
     [joinType],
   )
 
@@ -69,16 +70,25 @@ export default function ZoomParticipantPanel({ context }) {
     async (activeBinding, fields = {}) => {
       if (joiningRef.current) return
       joiningRef.current = true
-      setPhase('loading')
+      // Keep the form mounted while submitting so Zoom/mobile keyboards are not dismissed
+      // by flipping through the loading screen on every parent re-render.
+      const previousPhase = phaseRef.current
+      if (previousPhase !== 'need_fields' && previousPhase !== 'need_name') {
+        setPhase('loading')
+      }
       setError('')
       try {
         const data = await joinZoomMeetingSessionApi({
           meeting_uuid: context.meetingUuid,
           zoom_user_id: context.zoomUserId || undefined,
           display_name: context.displayName || undefined,
-          nickname: fields.nickname || nickname || context.displayName || undefined,
-          email: fields.email || email || undefined,
-          mobile: fields.mobile || mobile || undefined,
+          nickname:
+            fields.nickname ||
+            nicknameRef.current ||
+            context.displayName ||
+            undefined,
+          email: fields.email || emailRef.current || undefined,
+          mobile: fields.mobile || mobileRef.current || undefined,
           device_fingerprint: buildZoomDeviceFingerprint(context),
         })
 
@@ -118,21 +128,16 @@ export default function ZoomParticipantPanel({ context }) {
         joiningRef.current = false
       }
     },
-    [
-      context,
-      email,
-      mobile,
-      needsContactFields,
-      needsName,
-      nickname,
-      setParticipant,
-    ],
+    [context, needsContactFields, needsName, setParticipant],
   )
 
   const tryResolveBinding = useCallback(
     async ({ quiet = false } = {}) => {
       if (joiningRef.current) return
-      if (!quiet) {
+      const currentPhase = phaseRef.current
+      // Never tear down the join form while the participant is typing.
+      const onJoinForm = currentPhase === 'need_fields' || currentPhase === 'need_name'
+      if (!quiet && !onJoinForm) {
         setPhase('loading')
         setError('')
       }
@@ -141,29 +146,43 @@ export default function ZoomParticipantPanel({ context }) {
         const nextBinding = data?.binding || null
         setBinding(nextBinding)
         if (!nextBinding?.session?.session_code) {
-          setPhase('unbound')
+          if (!onJoinForm) setPhase('unbound')
           return
         }
 
         const boundCode = String(nextBinding.session.session_code || '').trim().toUpperCase()
+        const sessionJoinType = nextBinding.session?.join_type || 'anonymous'
+        const sessionNeedsContact = ['name_email', 'name_mobile', 'name_email_mobile'].includes(
+          sessionJoinType,
+        )
+        const sessionNeedsName = sessionJoinType === 'name' || sessionNeedsContact
+
         // Already joined this meeting's session — stay in Zoom shell with live quiz UI.
         if (
-          participantToken &&
-          joinedSessionCode &&
-          String(joinedSessionCode).trim().toUpperCase() === boundCode
+          participantTokenRef.current &&
+          joinedSessionCodeRef.current &&
+          String(joinedSessionCodeRef.current).trim().toUpperCase() === boundCode
         ) {
           setJoinResult({ sessionCode: boundCode })
           setPhase('ready')
           return
         }
 
-        if (needsContactFields || needsName) {
+        // Stay on the form while the participant enters name/email — do not auto-rejoin
+        // or flash loading on every parent refresh.
+        if (onJoinForm) {
+          return
+        }
+
+        if (sessionNeedsContact || sessionNeedsName) {
           // Anonymous can auto-join; named/contact joins need the form unless display name is enough.
-          if (joinType === 'name' && (nickname || context.displayName)) {
-            await doJoin(nextBinding, { nickname: nickname || context.displayName })
+          if (sessionJoinType === 'name' && (nicknameRef.current || context.displayName)) {
+            await doJoin(nextBinding, {
+              nickname: nicknameRef.current || context.displayName,
+            })
             return
           }
-          if (joinType === 'anonymous') {
+          if (sessionJoinType === 'anonymous') {
             await doJoin(nextBinding)
             return
           }
@@ -174,28 +193,20 @@ export default function ZoomParticipantPanel({ context }) {
         await doJoin(nextBinding)
       } catch (err) {
         if (err?.code === 'ZOOM_MEETING_UNBOUND') {
-          setPhase('unbound')
+          if (!onJoinForm) setPhase('unbound')
           return
         }
-        if (!quiet) {
+        if (!quiet && !onJoinForm) {
           setError(err?.message || 'Could not load this Zoom meeting')
           setPhase('error')
         }
       }
     },
-    [
-      context.displayName,
-      context.meetingUuid,
-      doJoin,
-      joinType,
-      joinedSessionCode,
-      needsContactFields,
-      needsName,
-      nickname,
-      participantToken,
-    ],
+    [context.displayName, context.meetingUuid, doJoin],
   )
 
+  // Resolve once per meeting — do NOT depend on form field state (that remounted the form
+  // on every keystroke and dismissed the mobile keyboard).
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -205,7 +216,8 @@ export default function ZoomParticipantPanel({ context }) {
     return () => {
       cancelled = true
     }
-  }, [tryResolveBinding])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- meeting identity only
+  }, [context.meetingUuid, context.zoomUserId])
 
   // Late joiners: poll while waiting for the host to link + invite.
   useEffect(() => {
@@ -220,17 +232,18 @@ export default function ZoomParticipantPanel({ context }) {
   useEffect(() => {
     if (phase !== 'waiting_launch' || !binding) return undefined
     const timer = setInterval(() => {
-      void doJoin(binding, { nickname, email, mobile })
+      void doJoin(bindingRef.current, {
+        nickname: nicknameRef.current,
+        email: emailRef.current,
+        mobile: mobileRef.current,
+      })
     }, LAUNCH_RETRY_MS)
     return () => clearInterval(timer)
-  }, [phase, binding, doJoin, nickname, email, mobile])
+  }, [phase, binding, doJoin])
 
   if (phase === 'ready' && joinResult?.sessionCode) {
     return (
       <div className="min-h-dvh bg-slate-50">
-        <div className="mx-auto max-w-md space-y-2 px-3 pt-3">
-          <GuestModeBanner context={context} />
-        </div>
         <ParticipantSessionPage embed sessionCode={joinResult.sessionCode} />
       </div>
     )
@@ -239,7 +252,6 @@ export default function ZoomParticipantPanel({ context }) {
   if (phase === 'loading') {
     return (
       <EmbedShell>
-        <GuestModeBanner context={context} />
         <p className="rounded-xl border border-blue-200/70 bg-white p-4 text-sm text-slate-600">
           Joining the quiz for this Zoom meeting…
         </p>
@@ -250,12 +262,12 @@ export default function ZoomParticipantPanel({ context }) {
   if (phase === 'waiting_launch') {
     return (
       <EmbedShell>
-        <GuestModeBanner context={context} />
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
           <p className="font-semibold">Waiting for the host to launch</p>
           <p className="mt-1 text-xs leading-relaxed text-amber-900/80">
-            The quiz is linked to this meeting. When the host taps <span className="font-semibold">Launch</span>,
-            this screen updates automatically — no refresh needed.
+            The quiz is linked to this meeting. When the host taps{' '}
+            <span className="font-semibold">Launch</span>, this screen updates automatically — no
+            refresh needed.
           </p>
           {error ? <p className="mt-2 text-[11px] text-amber-800/80">{error}</p> : null}
         </div>
@@ -266,12 +278,12 @@ export default function ZoomParticipantPanel({ context }) {
   if (phase === 'unbound') {
     return (
       <EmbedShell>
-        <GuestModeBanner context={context} />
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
           <p className="font-semibold">Waiting for the host</p>
           <p className="mt-1 text-xs leading-relaxed text-amber-900/80">
-            The host needs to link a quiz session and tap <span className="font-semibold">Open for
-            everyone</span> so you can join. This screen refreshes automatically.
+            The host needs to link a quiz session and tap{' '}
+            <span className="font-semibold">Open for everyone</span> so you can join. This screen
+            refreshes automatically.
           </p>
           {context.source === 'mock' ? (
             <p className="mt-2 text-[11px] text-amber-800">Mock meeting: {context.meetingUuid}</p>
@@ -284,7 +296,6 @@ export default function ZoomParticipantPanel({ context }) {
   if (phase === 'error') {
     return (
       <EmbedShell>
-        <GuestModeBanner context={context} />
         <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
           <p className="font-semibold">Could not join</p>
           <p className="mt-1 text-xs">{error}</p>
@@ -302,7 +313,6 @@ export default function ZoomParticipantPanel({ context }) {
 
   return (
     <EmbedShell>
-      <GuestModeBanner context={context} />
       <form
         className="space-y-3 rounded-xl border border-blue-200/70 bg-white p-4 shadow-sm"
         onSubmit={(event) => {
@@ -324,6 +334,8 @@ export default function ZoomParticipantPanel({ context }) {
             value={nickname}
             onChange={(event) => setNickname(event.target.value)}
             placeholder="Your name"
+            autoComplete="name"
+            enterKeyHint="next"
             className="h-10 w-full rounded-lg border border-blue-200 px-3 text-sm outline-none focus:border-sky-400"
           />
         ) : null}
@@ -335,6 +347,9 @@ export default function ZoomParticipantPanel({ context }) {
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="Email"
+            autoComplete="email"
+            inputMode="email"
+            enterKeyHint="next"
             className="h-10 w-full rounded-lg border border-blue-200 px-3 text-sm outline-none focus:border-sky-400"
           />
         ) : null}
@@ -345,6 +360,9 @@ export default function ZoomParticipantPanel({ context }) {
             value={mobile}
             onChange={(event) => setMobile(event.target.value)}
             placeholder="Mobile"
+            autoComplete="tel"
+            inputMode="tel"
+            enterKeyHint="done"
             className="h-10 w-full rounded-lg border border-blue-200 px-3 text-sm outline-none focus:border-sky-400"
           />
         ) : null}

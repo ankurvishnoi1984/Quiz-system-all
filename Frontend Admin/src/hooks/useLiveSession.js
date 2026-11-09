@@ -239,22 +239,21 @@ export function useLiveSession(accessToken, sessionId, options = {}) {
       const pid = Number(incoming?.participant_id)
       if (Number.isFinite(pid)) {
         queryClient.setQueryData(['live-participants', sessionId, mode], (old) => {
-          if (!Array.isArray(old)) return old
+          const next = {
+            participant_id: pid,
+            nickname: incoming.nickname || null,
+          }
+          // Seed the list if the first fetch hasn't landed yet (was dropping joins → "0 joined").
+          if (!Array.isArray(old)) return [next]
           if (old.some((row) => Number(row.participant_id) === pid)) return old
-          return [
-            ...old,
-            {
-              participant_id: pid,
-              nickname: incoming.nickname || null,
-            },
-          ]
+          return [...old, next]
         })
         queryClient.setQueryData(['live-session', sessionId, mode], (old) => {
           if (!old) return old
           const current = Number(old.participants_count)
           return {
             ...old,
-            participants_count: Number.isFinite(current) ? current + 1 : old.participants_count,
+            participants_count: Number.isFinite(current) ? current + 1 : 1,
           }
         })
       }

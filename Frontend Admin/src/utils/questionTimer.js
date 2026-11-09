@@ -20,10 +20,26 @@ export function getQuestionDeadlineMs(question) {
   return activated + limit * 1000
 }
 
-/** Whole seconds remaining until deadline (floor — avoids showing limit+1). */
-export function getRemainingQuestionSeconds(deadlineMs, nowMs = Date.now()) {
+/**
+ * Whole seconds remaining until deadline (floor — avoids showing limit+1).
+ * Optional maxSeconds clamps display during activation grace (deadline can be limit+grace ahead).
+ */
+export function getRemainingQuestionSeconds(deadlineMs, nowMs = Date.now(), maxSeconds = null) {
   if (deadlineMs == null) return 0
-  return Math.max(0, Math.floor((deadlineMs - nowMs) / 1000))
+  let remaining = Math.max(0, Math.floor((deadlineMs - nowMs) / 1000))
+  const cap = Number(maxSeconds)
+  if (Number.isFinite(cap) && cap > 0) {
+    remaining = Math.min(remaining, Math.floor(cap))
+  }
+  return remaining
+}
+
+/** Remaining seconds for a timed question, capped at its configured time limit. */
+export function getQuestionRemainingSeconds(question, nowMs = Date.now()) {
+  const limit = Number(question?.timeLimit ?? question?.time_limit_seconds ?? 0)
+  const deadline = getQuestionDeadlineMs(question)
+  if (deadline == null) return 0
+  return getRemainingQuestionSeconds(deadline, nowMs, limit > 0 ? limit : null)
 }
 
 export function isTimedLiveQuestionExpired(question, now = Date.now()) {

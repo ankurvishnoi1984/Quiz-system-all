@@ -10,7 +10,8 @@ const {
   User,
   Response,
   Participant,
-  ParticipantQuestionAssignment
+  ParticipantQuestionAssignment,
+  ZoomMeetingSession
 } = require("../models");
 const {
   isSessionQuizTotalTimeEnabled,
@@ -28,6 +29,40 @@ const {
 
 function isParticipantNavigationEnabled(session) {
   return session.participant_navigation_enabled !== false;
+}
+
+/**
+ * Zoom-only delivery buffer. Normal (non-Zoom) sessions keep activate = now.
+ * Override with QUESTION_ACTIVATE_GRACE_MS (milliseconds). Default 3000.
+ */
+const QUESTION_ACTIVATE_GRACE_MS = Math.max(
+  0,
+  Number(process.env.QUESTION_ACTIVATE_GRACE_MS ?? 3000) || 0
+);
+
+async function sessionHasActiveZoomBinding(sessionId) {
+  if (!sessionId || QUESTION_ACTIVATE_GRACE_MS <= 0) return false;
+  try {
+    const row = await ZoomMeetingSession.findOne({
+      where: {
+        session_id: Number(sessionId),
+        status: { [Op.in]: ["active", "paused"] }
+      },
+      attributes: ["zoom_meeting_session_id"]
+    });
+    return Boolean(row);
+  } catch {
+    return false;
+  }
+}
+
+/** Normal quizzes: now. Zoom-linked sessions: now + grace for CEF/WS delivery lag. */
+async function questionActivationTimestamp(sessionId, fromDate = new Date()) {
+  const base = fromDate instanceof Date ? fromDate : new Date();
+  if (await sessionHasActiveZoomBinding(sessionId)) {
+    return new Date(base.getTime() + QUESTION_ACTIVATE_GRACE_MS);
+  }
+  return base;
 }
 
 /** When navigation is off, only one question may be live per session. */
@@ -973,7 +1008,7 @@ async function setQuestionLiveState({ questionId, user, isLive }) {
 
   question.is_live = Boolean(isLive);
   if (Boolean(isLive)) {
-    question.live_activated_at = new Date();
+    question.live_activated_at = await questionActivationTimestamp(session.session_id);
     question.submissions_closed = false;
   } else {
     question.open_for_reattempt = false;
@@ -983,10 +1018,33 @@ async function setQuestionLiveState({ questionId, user, isLive }) {
     question.submissions_closed = false;
   }
   await question.save();
+
+  // Activating a question dismisses overall/current rankings so participants see the question.
+  let rankingsCleared = false;
+  if (Boolean(isLive)) {
+    const clearLb = Boolean(session.leaderboard_enabled);
+    const clearCurrent = Boolean(session.current_rankings_enabled);
+    const clearSurvey = Boolean(session.survey_results_enabled);
+    if (clearLb || clearCurrent || clearSurvey) {
+      if (clearLb) session.leaderboard_enabled = false;
+      if (clearCurrent) session.current_rankings_enabled = false;
+      if (clearSurvey) session.survey_results_enabled = false;
+      await session.save();
+      rankingsCleared = true;
+    }
+  }
+
   const saved = await Question.findByPk(question.question_id, {
     include: [{ model: QuestionOption, order: [["display_order", "ASC"]] }]
   });
-  return { question: saved, deactivatedQuestionIds };
+  return {
+    question: saved,
+    deactivatedQuestionIds,
+    rankingsCleared,
+    leaderboard_enabled: Boolean(session.leaderboard_enabled),
+    current_rankings_enabled: Boolean(session.current_rankings_enabled),
+    survey_results_enabled: Boolean(session.survey_results_enabled)
+  };
 }
 
 function getQuestionOptions(question) {
@@ -1230,11 +1288,12 @@ async function activateAllQuestionsForSession({ sessionId, user }) {
   }
 
   const now = new Date();
+  const activatedAt = await questionActivationTimestamp(sessionId, now);
   const questionIds = toActivate.map((q) => q.question_id);
   await Question.update(
     {
       is_live: true,
-      live_activated_at: now,
+      live_activated_at: activatedAt,
       submissions_closed: false,
       open_for_reattempt: false,
       answer_revealed: false,
@@ -1246,8 +1305,21 @@ async function activateAllQuestionsForSession({ sessionId, user }) {
   let startedAt = session.started_at || null;
   if (isSessionQuizTotalTimeEnabled(session) && !session.started_at) {
     session.started_at = now;
-    await session.save();
     startedAt = now;
+  }
+
+  // Same as single-question activate: hide rankings so participants see questions.
+  const rankingsCleared =
+    Boolean(session.leaderboard_enabled) ||
+    Boolean(session.current_rankings_enabled) ||
+    Boolean(session.survey_results_enabled);
+  if (rankingsCleared) {
+    session.leaderboard_enabled = false;
+    session.current_rankings_enabled = false;
+    session.survey_results_enabled = false;
+  }
+  if (rankingsCleared || startedAt === now) {
+    await session.save();
   }
 
   const questions = await Question.findAll({
@@ -1255,7 +1327,14 @@ async function activateAllQuestionsForSession({ sessionId, user }) {
     include: [{ model: QuestionOption, order: [["display_order", "ASC"]] }]
   });
 
-  return { questions, started_at: startedAt };
+  return {
+    questions,
+    started_at: startedAt,
+    rankingsCleared,
+    leaderboard_enabled: Boolean(session.leaderboard_enabled),
+    current_rankings_enabled: Boolean(session.current_rankings_enabled),
+    survey_results_enabled: Boolean(session.survey_results_enabled)
+  };
 }
 
 /**
@@ -1428,6 +1507,7 @@ async function activateAdvancedAssignmentSlot({ sessionId, user, slot }) {
   const previouslyLiveIds = previouslyLive.map((row) => Number(row.question_id));
 
   const now = new Date();
+  const activatedAt = await questionActivationTimestamp(session.session_id, now);
   await Question.update(
     {
       is_live: false,
@@ -1443,7 +1523,7 @@ async function activateAdvancedAssignmentSlot({ sessionId, user, slot }) {
   await Question.update(
     {
       is_live: true,
-      live_activated_at: now,
+      live_activated_at: activatedAt,
       submissions_closed: false,
       open_for_reattempt: false,
       answer_revealed: false,
@@ -1537,11 +1617,12 @@ async function ensureAllQuestionsLiveForQuizTotalTimeSession(session) {
   if (!inactive.length) return [];
 
   const now = new Date();
+  const activatedAt = await questionActivationTimestamp(session.session_id, now);
   const questionIds = inactive.map((q) => q.question_id);
   await Question.update(
     {
       is_live: true,
-      live_activated_at: now,
+      live_activated_at: activatedAt,
       submissions_closed: false,
       open_for_reattempt: false,
       answer_revealed: false,
@@ -1668,7 +1749,7 @@ async function openQuestionForReattempt({ questionId, user }) {
     question.submissions_closed = false;
     question.answer_revealed = false;
     question.show_leaderboard = false;
-    question.live_activated_at = new Date();
+    question.live_activated_at = await questionActivationTimestamp(question.session_id);
     await question.save({ transaction });
 
     const savedQuestion = await Question.findByPk(question.question_id, {

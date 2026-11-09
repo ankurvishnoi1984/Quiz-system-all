@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getQuestionDeadlineMs, getRemainingQuestionSeconds } from '../utils/questionTimer'
+import { getQuestionDeadlineMs, getQuestionRemainingSeconds } from '../utils/questionTimer'
 
 /**
  * Host countdown for single-active timed questions.
@@ -28,7 +28,7 @@ export function useHostQuestionCountdown(question, { singleActiveQuestionMode = 
   }, [visible, deadlineMs, question?.id, question?.liveActivatedAt])
 
   const remainingSeconds =
-    visible && deadlineMs != null ? getRemainingQuestionSeconds(deadlineMs, nowMs) : 0
+    visible && deadlineMs != null ? getQuestionRemainingSeconds(question, nowMs) : 0
 
   return {
     visible,

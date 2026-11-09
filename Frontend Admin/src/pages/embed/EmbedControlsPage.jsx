@@ -13,6 +13,7 @@ import {
   Square,
   Timer,
   Trophy,
+  Users,
 } from 'lucide-react'
 import { HostQuestionActionButton } from '../../components/live/HostQuestionActionButton'
 import { HostQuestionControls } from '../../components/live/HostQuestionControls'
@@ -39,8 +40,8 @@ import { normalizeLeaderboardEntries } from '../../utils/leaderboard'
 import { isAdvancedBuilderSession, isSessionQuizTotalTimeEnabled } from '../../utils/sessionFlags'
 import {
   getQuestionDeadlineMs,
+  getQuestionRemainingSeconds,
   getQuizTotalRemainingSeconds,
-  getRemainingQuestionSeconds,
 } from '../../utils/questionTimer'
 import {
   buildOptionChartData,
@@ -55,6 +56,80 @@ import {
 } from '../../utils/livePresentation'
 
 const EMBED_HOST_LEADERBOARD_LIMIT = 10
+
+function EmbedLeaderboardRows({
+  entries,
+  emptyLabel = 'No scores yet.',
+  startRank = 1,
+  limit = EMBED_HOST_LEADERBOARD_LIMIT,
+}) {
+  const rows = normalizeLeaderboardEntries(entries).slice(0, limit)
+  if (!rows.length) {
+    return <p className="px-1 py-3 text-center text-xs text-slate-500">{emptyLabel}</p>
+  }
+  return (
+    <ul className="space-y-1.5">
+      {rows.map((row, index) => (
+        <li
+          key={String(row.participant_id ?? `${row.name}-${index}`)}
+          className="flex items-center gap-2 rounded-lg border border-amber-100 bg-white px-2.5 py-2"
+        >
+          <span className="grid size-7 shrink-0 place-items-center rounded-md bg-amber-200/90 text-xs font-bold text-amber-950">
+            {startRank + index}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-navy-900">
+            {row.name}
+          </span>
+          <span className="shrink-0 text-sm font-bold tabular-nums text-amber-900">
+            {row.score}
+            <span className="ml-0.5 text-[11px] font-semibold text-amber-700/80">pts</span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** Compact top-3 podium for the narrow Zoom/embed panel. */
+function EmbedPodiumRows({ entries }) {
+  const top3 = normalizeLeaderboardEntries(entries).slice(0, 3)
+  if (!top3.length) {
+    return (
+      <p className="px-1 py-3 text-center text-xs text-slate-500">
+        No scores yet for the podium.
+      </p>
+    )
+  }
+  const byRank = [top3[1] || null, top3[0] || null, top3[2] || null]
+  const styles = [
+    { place: '2nd', bar: 'h-14', bg: 'bg-slate-200', text: 'text-slate-800' },
+    { place: '1st', bar: 'h-20', bg: 'bg-amber-300', text: 'text-amber-950' },
+    { place: '3rd', bar: 'h-12', bg: 'bg-orange-200', text: 'text-orange-950' },
+  ]
+  return (
+    <div className="flex items-end justify-center gap-2 px-1 pb-1 pt-2">
+      {byRank.map((row, index) => {
+        const style = styles[index]
+        if (!row) {
+          return <div key={`empty-${style.place}`} className="w-20" />
+        }
+        return (
+          <div key={String(row.participant_id ?? style.place)} className="flex w-20 flex-col items-center">
+            <p className="mb-1 line-clamp-2 min-h-8 text-center text-[10px] font-semibold text-navy-900">
+              {row.name}
+            </p>
+            <p className="mb-1 text-[10px] font-bold tabular-nums text-slate-600">{row.score} pts</p>
+            <div
+              className={`flex w-full items-end justify-center rounded-t-lg ${style.bar} ${style.bg}`}
+            >
+              <span className={`pb-1.5 text-xs font-extrabold ${style.text}`}>{style.place}</span>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 function formatCountdown(totalSeconds) {
   const safe = Math.max(0, Math.floor(Number(totalSeconds) || 0))
@@ -92,8 +167,6 @@ function EmbedOverallRankingsPanel({
   onBack,
   onToggleBroadcast,
 }) {
-  const rows = normalizeLeaderboardEntries(entries).slice(0, EMBED_HOST_LEADERBOARD_LIMIT)
-
   return (
     <div className="flex min-h-0 flex-col gap-2">
       <div className="rounded-xl border border-amber-200/80 bg-white p-2.5 shadow-sm">
@@ -110,7 +183,9 @@ function EmbedOverallRankingsPanel({
             <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-700">
               Rankings
             </p>
-            <p className="truncate text-sm font-bold text-navy-900">Overall leaderboard</p>
+            <p className="truncate text-sm font-bold text-navy-900">
+              Overall leaderboard · Top {EMBED_HOST_LEADERBOARD_LIMIT}
+            </p>
           </div>
           <Trophy className="size-4 shrink-0 text-amber-600" aria-hidden />
         </div>
@@ -118,6 +193,11 @@ function EmbedOverallRankingsPanel({
           type="button"
           disabled={!canEditLive || broadcastBusy}
           onClick={() => onToggleBroadcast(!broadcastEnabled)}
+          title={
+            broadcastEnabled
+              ? 'Hide overall rankings from participants (you can keep viewing here)'
+              : 'Show overall rankings to participants'
+          }
           className={`mt-2 inline-flex h-8 w-full items-center justify-center rounded-lg text-[11px] font-semibold transition disabled:opacity-50 ${
             broadcastEnabled
               ? 'border border-amber-300 bg-amber-100 text-amber-950'
@@ -127,38 +207,23 @@ function EmbedOverallRankingsPanel({
           {broadcastBusy
             ? 'Updating…'
             : broadcastEnabled
-              ? 'Visible to all · Hide'
-              : 'Show to all'}
+              ? 'Showing to participants · Hide'
+              : 'Show rankings to participants'}
         </button>
+        <p className="mt-1.5 text-[10px] leading-snug text-slate-500">
+          This panel is host-only. Use the button above only when you want participants to see
+          rankings too.
+        </p>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-amber-200/80 bg-amber-50/50 p-2 shadow-sm">
-        {isLoading && !rows.length ? (
+        {isLoading && !normalizeLeaderboardEntries(entries).length ? (
           <p className="px-1 py-3 text-center text-xs text-slate-500">Loading rankings…</p>
-        ) : rows.length ? (
-          <ul className="space-y-1.5">
-            {rows.map((row, index) => (
-              <li
-                key={String(row.participant_id ?? `${row.name}-${index}`)}
-                className="flex items-center gap-2 rounded-lg border border-amber-100 bg-white px-2.5 py-2"
-              >
-                <span className="grid size-7 shrink-0 place-items-center rounded-md bg-amber-200/90 text-xs font-bold text-amber-950">
-                  {index + 1}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-sm font-semibold text-navy-900">
-                  {row.name}
-                </span>
-                <span className="shrink-0 text-sm font-bold tabular-nums text-amber-900">
-                  {row.score}
-                  <span className="ml-0.5 text-[11px] font-semibold text-amber-700/80">pts</span>
-                </span>
-              </li>
-            ))}
-          </ul>
         ) : (
-          <p className="px-1 py-3 text-center text-xs text-slate-500">
-            No scores yet. Rankings update as participants answer.
-          </p>
+          <EmbedLeaderboardRows
+            entries={entries}
+            emptyLabel="No scores yet. Rankings update as participants answer."
+          />
         )}
       </div>
     </div>
@@ -358,10 +423,15 @@ export function EmbedControls({ sessionId, bare = false }) {
   const [error, setError] = useState('')
   const [hostLeaderboardOpen, setHostLeaderboardOpen] = useState(false)
 
-  const { session, mappedQuestions, participants, responses, isLoading, isError } = useLiveSession(
-    accessToken,
-    sessionId,
-  )
+  const {
+    session,
+    mappedQuestions,
+    participants,
+    liveParticipantsCount,
+    responses,
+    isLoading,
+    isError,
+  } = useLiveSession(accessToken, sessionId)
 
   useEffect(() => {
     setHostLeaderboardOpen(false)
@@ -411,7 +481,43 @@ export function EmbedControls({ sessionId, bare = false }) {
   })
 
   const onMutationError = useCallback((message) => setError(message), [])
-  const questionMutations = useHostQuestionMutations(accessToken, sessionId, { onMutationError })
+
+  const clearSessionEndingScreens = useCallback(async () => {
+    const current =
+      queryClient.getQueryData(['live-session', sessionId]) ||
+      queryClient.getQueryData(['live-session', sessionId, 'host']) ||
+      session
+    const clearLb = Boolean(current?.leaderboard_enabled)
+    const clearCurrent = Boolean(current?.current_rankings_enabled)
+    const clearSurvey = Boolean(current?.survey_results_enabled)
+    if (!clearLb && !clearCurrent && !clearSurvey) return null
+
+    const updated = await updateSessionApi(accessToken, sessionId, {
+      ...(clearLb ? { leaderboard_enabled: false } : {}),
+      ...(clearCurrent ? { current_rankings_enabled: false } : {}),
+      ...(clearSurvey ? { survey_results_enabled: false } : {}),
+    })
+    if (updated) {
+      const patch = {
+        leaderboard_enabled: updated.leaderboard_enabled,
+        current_rankings_enabled: updated.current_rankings_enabled,
+        survey_results_enabled: updated.survey_results_enabled,
+      }
+      queryClient.setQueryData(['live-session', sessionId], (old) =>
+        old ? { ...old, ...updated, ...patch } : updated,
+      )
+      queryClient.setQueryData(['live-session', sessionId, 'host'], (old) =>
+        old ? { ...old, ...updated, ...patch } : old,
+      )
+    }
+    queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
+    return updated
+  }, [accessToken, sessionId, queryClient, session])
+
+  const questionMutations = useHostQuestionMutations(accessToken, sessionId, {
+    onMutationError,
+    clearEndingScreensOnActivate: clearSessionEndingScreens,
+  })
 
   const advancedSlotActivation = isAdvancedBuilderSession(session)
   const canToggleOverallLeaderboard = sessionSupportsOverallLeaderboard(mappedQuestions)
@@ -437,7 +543,12 @@ export function EmbedControls({ sessionId, bare = false }) {
       }
       return updateSessionApi(accessToken, sessionId, {
         leaderboard_enabled: enabled,
-        ...(enabled ? { current_rankings_enabled: false } : {}),
+        ...(enabled
+          ? {
+              current_rankings_enabled: false,
+              leaderboard_top_n: EMBED_HOST_LEADERBOARD_LIMIT,
+            }
+          : {}),
       })
     },
     onSuccess: (updated) => {
@@ -466,6 +577,15 @@ export function EmbedControls({ sessionId, bare = false }) {
     onError: (err) => setError(err?.message || 'Could not update overall rankings'),
   })
 
+  const rawSlideIndex = Number(slideQuery.data?.slide_index)
+  const slideIndex = Number.isFinite(rawSlideIndex)
+    ? Math.min(Math.max(0, rawSlideIndex), slideTotal - 1)
+    : 0
+  const currentSlide = slides[slideIndex] || slides[0] || null
+  const onRankingsOrPodiumSlide =
+    currentSlide?.type === 'leaderboard' || currentSlide?.type === 'podium'
+  const shouldFetchHostLeaderboard = hostLeaderboardOpen || onRankingsOrPodiumSlide
+
   const hostLeaderboardQuery = useQuery({
     queryKey: ['embed-host-leaderboard', sessionId, EMBED_HOST_LEADERBOARD_LIMIT],
     queryFn: () =>
@@ -473,20 +593,39 @@ export function EmbedControls({ sessionId, bare = false }) {
         limit: EMBED_HOST_LEADERBOARD_LIMIT,
       }),
     enabled: Boolean(
-      accessToken && sessionId && canToggleOverallLeaderboard && hostLeaderboardOpen,
+      accessToken && sessionId && canToggleOverallLeaderboard && shouldFetchHostLeaderboard,
     ),
     refetchInterval:
-      hostLeaderboardOpen && (session?.status === 'live' || session?.status === 'paused')
+      shouldFetchHostLeaderboard && (session?.status === 'live' || session?.status === 'paused')
         ? 4000
         : false,
   })
-
-  const rawSlideIndex = Number(slideQuery.data?.slide_index)
-  const slideIndex = Number.isFinite(rawSlideIndex)
-    ? Math.min(Math.max(0, rawSlideIndex), slideTotal - 1)
-    : 0
-  const currentSlide = slides[slideIndex] || slides[0] || null
+  // Progress ignores Lobby — Zoom hosts skip it, so Question 1 should read 1/7 not 2/8.
+  const contentSlides = useMemo(
+    () => slides.filter((slide) => slide.type !== 'participants'),
+    [slides],
+  )
+  const contentSlideTotal = Math.max(1, contentSlides.length)
+  const contentSlidePosition = useMemo(() => {
+    if (!currentSlide || currentSlide.type === 'participants') return 0
+    const idx = contentSlides.findIndex(
+      (slide) =>
+        slide.type === currentSlide.type &&
+        (slide.type !== 'question' ||
+          Number(slide.questionNumber) === Number(currentSlide.questionNumber)),
+    )
+    return idx >= 0 ? idx + 1 : Math.max(1, slideIndex)
+  }, [contentSlides, currentSlide, slideIndex])
+  const slideProgressLabel =
+    currentSlide?.type === 'participants'
+      ? 'Lobby'
+      : `${currentSlide?.label || `Slide ${contentSlidePosition}`} (${contentSlidePosition}/${contentSlideTotal})`
   const isLive = session?.status === 'live'
+  const joinedCount = Math.max(
+    participants.length,
+    Number(session?.participants_count) || 0,
+    Number(liveParticipantsCount) || 0,
+  )
   const canEditLive = isLive
   const singleActiveQuestionMode = session?.participant_navigation_enabled === false
   const sessionQuizTotalTimeEnabled = isSessionQuizTotalTimeEnabled(session)
@@ -511,12 +650,12 @@ export function EmbedControls({ sessionId, bare = false }) {
     [canEditLive, mappedQuestions, singleActiveQuestionMode],
   )
 
-  // Drive "current question" from the present slide — not only the live flag.
-  // Old Zoom Next only bumped slide_index while this panel always showed the live/first question.
+  // Drive "current question" from the present slide only.
+  // Do not fall back to Q1 while on Lobby — that made hosts see the same question twice.
   const activeQuestion = useMemo(() => {
     if (currentSlide?.type === 'question' && currentSlide.question) return currentSlide.question
-    return mappedQuestions.find((question) => question.isLive) || mappedQuestions[0] || null
-  }, [currentSlide, mappedQuestions])
+    return null
+  }, [currentSlide])
 
   const chartRawType = activeQuestion ? getQuestionChartRawType(activeQuestion) : null
   const currentResponses = useMemo(
@@ -593,10 +732,10 @@ export function EmbedControls({ sessionId, bare = false }) {
   }, [showQuizTimer, session, timerTick])
 
   const questionRemainingSeconds = useMemo(() => {
-    if (!showQuestionTimer || questionDeadlineMs == null) return 0
+    if (!showQuestionTimer || !activeQuestion) return 0
     void timerTick
-    return getRemainingQuestionSeconds(questionDeadlineMs)
-  }, [showQuestionTimer, questionDeadlineMs, timerTick])
+    return getQuestionRemainingSeconds(activeQuestion)
+  }, [showQuestionTimer, activeQuestion, timerTick])
 
   const goToSlide = useCallback(
     (nextIndex) => {
@@ -611,6 +750,30 @@ export function EmbedControls({ sessionId, bare = false }) {
     [slideIndex, slideMutation, slideTotal, slides],
   )
 
+  // Zoom/embed hosts: skip Lobby and land on the first question once the session is live.
+  useEffect(() => {
+    if (!isLive || slideMutation.isPending || !slides.length) return
+    if (currentSlide?.type !== 'participants') return
+    const firstContentIndex = slides.findIndex(
+      (slide) => slide.type === 'question' || slide.type === 'distributedQuiz',
+    )
+    if (firstContentIndex <= 0) return
+    goToSlide(firstContentIndex)
+  }, [isLive, currentSlide?.type, slides, slideMutation.isPending, goToSlide])
+
+  // Opening Rankings / Podium (including refresh while already on the slide) broadcasts scores.
+  useEffect(() => {
+    if (!isLive || !onRankingsOrPodiumSlide || !canToggleOverallLeaderboard) return
+    if (overallRankingsEnabled || sessionLeaderboardMutation.isPending) return
+    sessionLeaderboardMutation.mutate({ enabled: true })
+  }, [
+    isLive,
+    onRankingsOrPodiumSlide,
+    canToggleOverallLeaderboard,
+    overallRankingsEnabled,
+    sessionLeaderboardMutation,
+  ])
+
   useEffect(() => {
     if (!error) return undefined
     const timer = setTimeout(() => setError(''), 4000)
@@ -618,16 +781,9 @@ export function EmbedControls({ sessionId, bare = false }) {
   }, [error])
 
   const openOverallRankings = useCallback(() => {
+    // Host-only view — do not broadcast to participants until they use "Show rankings to participants".
     setHostLeaderboardOpen(true)
-    if (!overallRankingsEnabled && canEditLive && !sessionLeaderboardMutation.isPending) {
-      sessionLeaderboardMutation.mutate({ enabled: true })
-    }
-  }, [
-    overallRankingsEnabled,
-    canEditLive,
-    sessionLeaderboardMutation.isPending,
-    sessionLeaderboardMutation.mutate,
-  ])
+  }, [])
 
   const wrap = (node) => (bare ? node : <EmbedShell>{node}</EmbedShell>)
 
@@ -671,10 +827,8 @@ export function EmbedControls({ sessionId, bare = false }) {
           broadcastBusy={sessionLeaderboardMutation.isPending}
           canEditLive={canEditLive}
           onBack={() => {
+            // Close host view only — leave participant visibility as the host set it.
             setHostLeaderboardOpen(false)
-            if (overallRankingsEnabled && canEditLive && !sessionLeaderboardMutation.isPending) {
-              sessionLeaderboardMutation.mutate({ enabled: false })
-            }
           }}
           onToggleBroadcast={(enabled) => sessionLeaderboardMutation.mutate({ enabled })}
         />
@@ -688,10 +842,46 @@ export function EmbedControls({ sessionId, bare = false }) {
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-bold text-navy-900">{session.title}</p>
-            <p className="mt-0.5 text-[11px] text-slate-500">
-              {session.status} · {participants.length} joined ·{' '}
-              {currentSlide?.label || `Slide ${slideIndex + 1}`} ({slideIndex + 1}/{slideTotal})
-            </p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <span
+                className={`inline-flex h-6 items-center rounded-md px-2 text-[10px] font-bold uppercase tracking-wide ${
+                  isLive
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : session?.status === 'paused'
+                      ? 'bg-amber-100 text-amber-900'
+                      : 'bg-slate-100 text-slate-600'
+                }`}
+              >
+                {session.status}
+              </span>
+              <span
+                className="inline-flex h-6 items-center gap-1 rounded-md border border-blue-100 bg-slate-50 px-2 text-[11px] font-semibold tabular-nums text-navy-800"
+                title="Total participants who joined this session"
+              >
+                <Users className="size-3 text-slate-500" aria-hidden />
+                <span>{joinedCount}</span>
+                <span className="font-medium text-slate-500">joined</span>
+              </span>
+              {isLive ? (
+                <span
+                  className="inline-flex h-6 items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2 text-[11px] font-semibold tabular-nums text-emerald-800"
+                  title="Participants currently connected"
+                >
+                  <span className="relative flex size-1.5 shrink-0" aria-hidden>
+                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
+                  </span>
+                  <span>{liveParticipantsCount}</span>
+                  <span className="font-medium text-emerald-700/80">live</span>
+                </span>
+              ) : null}
+              <span
+                className="inline-flex h-6 max-w-full items-center truncate rounded-md border border-blue-200/80 bg-white px-2 text-[11px] font-semibold text-navy-800"
+                title={slideProgressLabel}
+              >
+                {slideProgressLabel}
+              </span>
+            </div>
           </div>
           <button
             type="button"
@@ -734,13 +924,12 @@ export function EmbedControls({ sessionId, bare = false }) {
 
       {activeQuestion ? (
         <div className="rounded-xl border border-blue-200/70 bg-white p-2.5 shadow-sm">
-          <div className="mb-1.5 flex items-center gap-2">
-            <p className="min-w-0 flex-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-              {currentSlide?.type === 'question'
-                ? `Q${currentSlide.questionNumber || ''}`
-                : 'Question'}
-              {optionTotal > 0 ? ` · ${optionTotal} answer${optionTotal === 1 ? '' : 's'}` : ''}
-            </p>
+          <div className="mb-1.5 flex items-center justify-end gap-2">
+            {optionTotal > 0 ? (
+              <p className="mr-auto text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                {optionTotal} answer{optionTotal === 1 ? '' : 's'}
+              </p>
+            ) : null}
             <button
               type="button"
               disabled={slideIndex <= 0 || slideMutation.isPending}
@@ -799,8 +988,8 @@ export function EmbedControls({ sessionId, bare = false }) {
                 label="Overall rankings"
                 title={
                   overallRankingsEnabled
-                    ? 'Open overall rankings (showing to participants)'
-                    : 'Open overall rankings and show to participants'
+                    ? 'View rankings (currently also shown to participants — use Hide inside to stop sharing)'
+                    : 'View rankings for host only — optionally show to participants from that screen'
                 }
                 active={overallRankingsEnabled}
                 tone="amber"
@@ -826,8 +1015,13 @@ export function EmbedControls({ sessionId, bare = false }) {
             />
           </div>
 
-          <p className="mb-2 line-clamp-2 text-xs font-semibold leading-snug text-navy-900">
-            {activeQuestion.text}
+          <p className="mb-2 text-xs font-semibold leading-snug text-navy-900">
+            <span className="mr-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+              {currentSlide?.type === 'question'
+                ? `Q${currentSlide.questionNumber || ''}`
+                : 'Q'}
+            </span>
+            <span className="line-clamp-2">{activeQuestion.text}</span>
           </p>
 
           <EmbedQuestionMediaToggle media={activeQuestion.media} />
@@ -837,42 +1031,64 @@ export function EmbedControls({ sessionId, bare = false }) {
               {optionBreakdown.map((option) => {
                 const percent =
                   optionTotal > 0 ? Math.round((option.count / optionTotal) * 100) : 0
+                const isRevealedCorrect =
+                  Boolean(option.isCorrect) && Boolean(activeQuestion.answerRevealed)
                 return (
                   <li
                     key={option.key}
-                    className="relative overflow-hidden rounded-md border border-slate-200/80 bg-white"
+                    className={`relative overflow-hidden rounded-md border ${
+                      isRevealedCorrect
+                        ? 'border-emerald-500 bg-emerald-50'
+                        : 'border-slate-200/80 bg-white'
+                    }`}
                   >
                     <div
                       className="pointer-events-none absolute inset-y-0 left-0 transition-[width] duration-500 ease-out"
                       style={{
                         width: `${percent}%`,
-                        background: `linear-gradient(90deg, ${option.color}33 0%, ${option.color}14 100%)`,
+                        background: isRevealedCorrect
+                          ? 'linear-gradient(90deg, rgba(16,185,129,0.35) 0%, rgba(16,185,129,0.12) 100%)'
+                          : `linear-gradient(90deg, ${option.color}33 0%, ${option.color}14 100%)`,
                       }}
                       aria-hidden
                     />
                     <div
                       className="pointer-events-none absolute inset-y-0 left-0 w-0.5"
-                      style={{ backgroundColor: option.color }}
+                      style={{
+                        backgroundColor: isRevealedCorrect ? '#10b981' : option.color,
+                      }}
                       aria-hidden
                     />
                     <div className="relative flex items-center gap-1.5 px-2 py-1.5">
                       {option.letter ? (
                         <span
-                          className="grid size-5 shrink-0 place-items-center rounded text-[10px] font-bold text-white"
-                          style={{ backgroundColor: option.color }}
+                          className={`grid size-5 shrink-0 place-items-center rounded text-[10px] font-bold text-white ${
+                            isRevealedCorrect ? 'bg-emerald-600' : ''
+                          }`}
+                          style={
+                            isRevealedCorrect ? undefined : { backgroundColor: option.color }
+                          }
                         >
                           {option.letter}
                         </span>
                       ) : null}
-                      <p className="min-w-0 flex-1 truncate text-[11px] font-semibold text-navy-900">
+                      <p
+                        className={`min-w-0 flex-1 truncate text-[11px] font-semibold ${
+                          isRevealedCorrect ? 'text-emerald-900' : 'text-navy-900'
+                        }`}
+                      >
                         {option.label}
-                        {option.isCorrect && activeQuestion.answerRevealed ? (
-                          <span className="ml-1 text-[10px] font-bold text-emerald-600">✓</span>
+                        {isRevealedCorrect ? (
+                          <span className="ml-1.5 inline-block rounded bg-emerald-600 px-1 py-px text-[9px] font-bold uppercase tracking-wide text-white">
+                            Correct
+                          </span>
                         ) : null}
                       </p>
                       <span
-                        className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white"
-                        style={{ backgroundColor: option.color }}
+                        className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white ${
+                          isRevealedCorrect ? 'bg-emerald-600' : ''
+                        }`}
+                        style={isRevealedCorrect ? undefined : { backgroundColor: option.color }}
                         title={`${percent}% · ${option.count} vote${option.count === 1 ? '' : 's'}`}
                       >
                         {percent}%
@@ -923,14 +1139,66 @@ export function EmbedControls({ sessionId, bare = false }) {
               <ChevronRight className="size-3.5" />
             </button>
           </div>
-          <p className="text-sm font-semibold text-navy-900">{currentSlide.label}</p>
-          <p className="mt-1 text-[11px] text-slate-500">
-            {currentSlide.type === 'participants'
-              ? 'Lobby. Tap Next Q, then Activate so participants can answer.'
-              : currentSlide.type === 'distributedQuiz'
-                ? 'Distributed quiz — use Activate all when live.'
-                : 'Ending slide for rankings or survey wrap-up.'}
-          </p>
+          <div className="mb-1.5 flex items-center gap-1.5">
+            {onRankingsOrPodiumSlide ? (
+              <Trophy className="size-3.5 shrink-0 text-amber-600" aria-hidden />
+            ) : null}
+            <p className="text-sm font-semibold text-navy-900">{currentSlide.label}</p>
+          </div>
+          {currentSlide.type === 'leaderboard' ? (
+            <div className="mt-1 space-y-2">
+              <p className="text-[11px] text-slate-500">
+                Overall rankings · Top {EMBED_HOST_LEADERBOARD_LIMIT}
+                {overallRankingsEnabled ? ' · shown to participants' : ''}
+              </p>
+              <div className="max-h-64 overflow-y-auto rounded-lg border border-amber-200/80 bg-amber-50/50 p-2">
+                {hostLeaderboardQuery.isLoading &&
+                !normalizeLeaderboardEntries(hostLeaderboardQuery.data || []).length ? (
+                  <p className="px-1 py-3 text-center text-xs text-slate-500">Loading rankings…</p>
+                ) : (
+                  <EmbedLeaderboardRows entries={hostLeaderboardQuery.data || []} />
+                )}
+              </div>
+            </div>
+          ) : currentSlide.type === 'podium' ? (
+            <div className="mt-1 space-y-2">
+              <p className="text-[11px] text-slate-500">
+                Top 3 podium
+                {overallRankingsEnabled ? ' · shown to participants' : ''}
+              </p>
+              <div className="rounded-lg border border-amber-200/80 bg-amber-50/40 px-1 py-2">
+                {hostLeaderboardQuery.isLoading &&
+                !normalizeLeaderboardEntries(hostLeaderboardQuery.data || []).length ? (
+                  <p className="px-1 py-3 text-center text-xs text-slate-500">Loading podium…</p>
+                ) : (
+                  <EmbedPodiumRows entries={hostLeaderboardQuery.data || []} />
+                )}
+              </div>
+              {normalizeLeaderboardEntries(hostLeaderboardQuery.data || []).length > 3 ? (
+                <div className="max-h-36 overflow-y-auto rounded-lg border border-amber-100 bg-white p-2">
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                    Also in top {EMBED_HOST_LEADERBOARD_LIMIT}
+                  </p>
+                  <EmbedLeaderboardRows
+                    entries={normalizeLeaderboardEntries(hostLeaderboardQuery.data || []).slice(
+                      3,
+                      EMBED_HOST_LEADERBOARD_LIMIT,
+                    )}
+                    startRank={4}
+                    limit={EMBED_HOST_LEADERBOARD_LIMIT - 3}
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <p className="mt-1 text-[11px] text-slate-500">
+              {currentSlide.type === 'participants'
+                ? 'Lobby for join / waiting. Moving to Question 1…'
+                : currentSlide.type === 'distributedQuiz'
+                  ? 'Distributed quiz — use Activate all when live.'
+                  : 'Ending slide for rankings or survey wrap-up.'}
+            </p>
+          )}
         </div>
       ) : null}
     </div>,

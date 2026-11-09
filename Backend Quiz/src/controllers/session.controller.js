@@ -45,7 +45,7 @@ const {
   closeAllQuestionSubmissionsForSession
 } = require("../services/question.service");
 const { getSessionSummaryReport, getSessionQuestionsReport, getSessionParticipantsReport, getSessionQaReport } = require("../services/session-report.service");
-const { Session } = require("../models");
+const { Session, Participant } = require("../models");
 const { getFrontendPublicUrl } = require("../config/publicAppUrl");
 const { isSessionRandomQuestionOrderEnabled } = require("../utils/sessionFlags");
 const {
@@ -102,9 +102,16 @@ async function detail(req, res) {
       sessionId: Number(req.params.sessionId),
       user: req.user
     });
+    const plain = sessionWithLiveParticipantCount(session);
+    const sessionId = Number(plain.session_id);
+    if (Number.isFinite(sessionId)) {
+      plain.participants_count = await Participant.count({
+        where: { session_id: sessionId }
+      });
+    }
     return successResponse(
       res,
-      { session: sessionWithLiveParticipantCount(session) },
+      { session: plain },
       "Session fetched",
       200
     );
@@ -691,7 +698,16 @@ async function activateAllQuestions(req, res) {
     const questions = result?.questions || result || [];
     const startedAt = result?.started_at ?? null;
     const session = await Session.findByPk(sessionId, {
-      attributes: ["session_code", "status", "started_at"]
+      attributes: [
+        "session_code",
+        "status",
+        "started_at",
+        "leaderboard_enabled",
+        "current_rankings_enabled",
+        "survey_results_enabled",
+        "leaderboard_top_n",
+        "show_participant_count"
+      ]
     });
     if (session?.session_code) {
       for (const question of questions) {
@@ -705,13 +721,24 @@ async function activateAllQuestions(req, res) {
           started_at: startedAt
         });
       }
+      if (result?.rankingsCleared) {
+        notifySessionSettings(session.session_code, {
+          leaderboard_enabled: Boolean(result.leaderboard_enabled),
+          current_rankings_enabled: Boolean(result.current_rankings_enabled),
+          survey_results_enabled: Boolean(result.survey_results_enabled),
+          leaderboard_top_n: session.leaderboard_top_n,
+          show_participant_count: session.show_participant_count
+        });
+      }
     }
     return successResponse(
       res,
       {
         questions,
         activated_count: questions.length,
-        started_at: startedAt || session?.started_at || null
+        started_at: startedAt || session?.started_at || null,
+        rankings_cleared: Boolean(result?.rankingsCleared),
+        leaderboard_enabled: Boolean(result?.leaderboard_enabled)
       },
       "All questions activated",
       200

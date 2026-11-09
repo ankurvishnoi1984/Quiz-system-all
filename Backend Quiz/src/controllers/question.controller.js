@@ -29,7 +29,8 @@ const {
   notifyQuestionReattemptOpened,
   notifyAnswerRevealed,
   notifyQuestionLeaderboardVisibility,
-  notifyLeaderboard
+  notifyLeaderboard,
+  notifySessionSettings
 } = require("../services/websocket.service");
 const { Session } = require("../models");
 const {
@@ -286,13 +287,27 @@ function buildQuestionDeactivatePayload(questionId) {
 function setLiveState(isLive) {
   return async (req, res) => {
     try {
-      const { question, deactivatedQuestionIds = [] } = await setQuestionLiveState({
+      const {
+        question,
+        deactivatedQuestionIds = [],
+        rankingsCleared = false,
+        leaderboard_enabled,
+        current_rankings_enabled,
+        survey_results_enabled
+      } = await setQuestionLiveState({
         questionId: Number(req.params.questionId),
         user: req.user,
         isLive
       });
       const session = await Session.findByPk(question.session_id, {
-        attributes: ["session_code"]
+        attributes: [
+          "session_code",
+          "leaderboard_enabled",
+          "current_rankings_enabled",
+          "survey_results_enabled",
+          "leaderboard_top_n",
+          "show_participant_count"
+        ]
       });
       if (session?.session_code) {
         for (const otherId of deactivatedQuestionIds) {
@@ -308,10 +323,39 @@ function setLiveState(isLive) {
           session.session_code,
           buildQuestionChangePayload(question, isLive)
         );
+        if (rankingsCleared) {
+          notifySessionSettings(session.session_code, {
+            leaderboard_enabled:
+              leaderboard_enabled != null
+                ? leaderboard_enabled
+                : session.leaderboard_enabled,
+            current_rankings_enabled:
+              current_rankings_enabled != null
+                ? current_rankings_enabled
+                : session.current_rankings_enabled,
+            survey_results_enabled:
+              survey_results_enabled != null
+                ? survey_results_enabled
+                : session.survey_results_enabled,
+            leaderboard_top_n: session.leaderboard_top_n,
+            show_participant_count: session.show_participant_count
+          });
+        }
       }
       return successResponse(
         res,
-        { question },
+        {
+          question,
+          rankings_cleared: Boolean(rankingsCleared),
+          leaderboard_enabled: Boolean(
+            leaderboard_enabled != null ? leaderboard_enabled : session?.leaderboard_enabled
+          ),
+          current_rankings_enabled: Boolean(
+            current_rankings_enabled != null
+              ? current_rankings_enabled
+              : session?.current_rankings_enabled
+          )
+        },
         isLive ? "Question activated" : "Question deactivated",
         200
       );
