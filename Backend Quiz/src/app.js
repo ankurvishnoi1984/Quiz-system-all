@@ -90,4 +90,30 @@ app.use((_req, res) => {
   return errorResponse(res, "Route not found", 404);
 });
 
+// Express error middleware (stacks for thrown / body-parser / multer errors).
+// Responds directly so we do not double-log via errorResponse().
+app.use((err, _req, res, _next) => {
+  const { logError } = require("./services/error-log.service");
+  const statusCode = Number(err.status || err.statusCode) || 500;
+  logError({
+    level: statusCode >= 500 ? "error" : "warn",
+    source: "api",
+    message: err.message || "Unhandled error",
+    stack: err.stack,
+    statusCode,
+    code: err.code || "express_error"
+  });
+  if (res.headersSent) return;
+  const body = {
+    success: false,
+    message:
+      statusCode >= 500
+        ? "Something went wrong"
+        : err.message || "Request failed",
+    errors: null
+  };
+  if (err.code) body.code = err.code;
+  return res.status(statusCode).json(body);
+});
+
 module.exports = app;

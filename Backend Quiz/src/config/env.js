@@ -2,6 +2,14 @@ const dotenv = require("dotenv");
 
 dotenv.config();
 
+function envFlagTrue(raw, defaultValue = false) {
+  if (raw == null || String(raw).trim() === "") return defaultValue;
+  const normalized = String(raw).trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  return defaultValue;
+}
+
 const env = {
   nodeEnv: process.env.NODE_ENV || "development",
   port: Number(process.env.PORT || 5000),
@@ -44,6 +52,23 @@ const env = {
       process.env.SMS_MSG_TEMPLATE ||
       process.env.SMS_MSG ||
       "{0} is your otp to verify your number for doctor engagement survey activity. Thank you - Highvoltage Softwares Pvt Ltd."
+  },
+  mongo: {
+    logEnabled: envFlagTrue(process.env.MONGO_LOG_ENABLED, false),
+    uri: (process.env.MONGO_URI || "").trim(),
+    retentionDays: Number(process.env.MONGO_LOG_RETENTION_DAYS || 90),
+    ssh: {
+      enabled: envFlagTrue(process.env.MONGO_SSH_TUNNEL_ENABLED, false),
+      host: (process.env.MONGO_SSH_HOST || "").trim(),
+      port: Number(process.env.MONGO_SSH_PORT || 2222),
+      user: (process.env.MONGO_SSH_USER || "").trim(),
+      privateKeyPath: (process.env.MONGO_SSH_PRIVATE_KEY_PATH || "").trim(),
+      password: process.env.MONGO_SSH_PASSWORD || "",
+      localHost: (process.env.MONGO_SSH_LOCAL_HOST || "127.0.0.1").trim(),
+      localPort: Number(process.env.MONGO_SSH_LOCAL_PORT || 27017),
+      remoteHost: (process.env.MONGO_SSH_REMOTE_HOST || "127.0.0.1").trim(),
+      remotePort: Number(process.env.MONGO_SSH_REMOTE_PORT || 27017)
+    }
   }
 };
 

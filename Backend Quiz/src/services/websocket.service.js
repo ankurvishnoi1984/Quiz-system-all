@@ -5,6 +5,7 @@ const { isIntegrationsEnabled } = require("../config/integrations");
 const { resolveEmbedToken } = require("./session-embed-token.service");
 const { extractRequestIp, normalizeIp, expandIpAliases } = require("../utils/ip");
 const { isIpBlocked } = require("./blocked-ip.service");
+const { logError } = require("./error-log.service");
 
 const ADMIN_CLOSE_CODE = 4008;
 const ADMIN_CLOSE_REASON = "Closed by administrator";
@@ -87,6 +88,12 @@ function wsLog(level, message, meta = {}) {
   const line = meta && Object.keys(meta).length ? `${message} ${JSON.stringify(meta)}` : message;
   if (level === "error") {
     console.error("[WS]", line);
+    logError({
+      level: "error",
+      source: "websocket",
+      message,
+      extra: meta && Object.keys(meta).length ? meta : null
+    });
   } else if (level === "warn") {
     console.warn("[WS]", line);
   } else {

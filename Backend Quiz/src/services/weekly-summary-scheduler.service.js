@@ -1,5 +1,6 @@
 const cron = require("node-cron");
 const { sendWeeklySummaryIfDue } = require("./weekly-summary.service");
+const { logError } = require("./error-log.service");
 
 const DEFAULT_CRON = "0 9 * * 1";
 const DEFAULT_TZ = "Asia/Kolkata";
@@ -18,6 +19,13 @@ async function runWeeklySummaryTick(label = "scheduled") {
     }
   } catch (err) {
     console.warn(`[weekly-summary] ${label} run failed:`, err.message);
+    logError({
+      level: "error",
+      source: "scheduler",
+      message: `weekly-summary ${label} failed: ${err.message}`,
+      stack: err.stack,
+      code: "weekly_summary"
+    });
   }
 }
 

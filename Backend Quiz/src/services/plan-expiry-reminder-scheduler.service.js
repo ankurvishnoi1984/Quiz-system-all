@@ -1,6 +1,7 @@
 const cron = require("node-cron");
 const { sendPlanExpiryRemindersIfDue } = require("./plan-expiry-reminder.service");
 const { isPlanExpiryReminderEnabled } = require("../config/plan-expiry-reminders");
+const { logError } = require("./error-log.service");
 
 /** Default: every day at 09:15 Asia/Kolkata (after weekly summary slot). */
 const DEFAULT_CRON = "15 9 * * *";
@@ -22,6 +23,13 @@ async function runPlanExpiryReminderTick(label = "scheduled") {
     return result;
   } catch (err) {
     console.warn(`[plan-expiry-reminder] ${label} run failed:`, err.message);
+    logError({
+      level: "error",
+      source: "scheduler",
+      message: `plan-expiry-reminder ${label} failed: ${err.message}`,
+      stack: err.stack,
+      code: "plan_expiry_reminder"
+    });
     throw err;
   }
 }

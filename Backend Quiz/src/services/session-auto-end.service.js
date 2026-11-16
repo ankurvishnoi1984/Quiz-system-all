@@ -10,6 +10,7 @@ const {
   notifyQuestionLeaderboardVisibility,
   closeAllSessionConnections
 } = require("./websocket.service");
+const { logError } = require("./error-log.service");
 
 const AUTO_END_POLL_MS = Number(process.env.SESSION_AUTO_END_POLL_MS) || 30000;
 
@@ -72,6 +73,13 @@ async function processDueAutoEndSessions() {
       closeAllSessionConnections(ended.session_code, { reason: "session_ended" });
     } catch (error) {
       console.warn("[auto-end] Failed to notify session end:", error.message);
+      logError({
+        level: "warn",
+        source: "scheduler",
+        message: `auto-end notify failed: ${error.message}`,
+        stack: error.stack,
+        code: "auto_end_notify"
+      });
     }
   }
 
@@ -84,6 +92,13 @@ function startSessionAutoEndScheduler() {
   pollTimer = setInterval(() => {
     processDueAutoEndSessions().catch((error) => {
       console.warn("[auto-end] Scheduler tick failed:", error.message);
+      logError({
+        level: "error",
+        source: "scheduler",
+        message: `auto-end tick failed: ${error.message}`,
+        stack: error.stack,
+        code: "auto_end_tick"
+      });
     });
   }, AUTO_END_POLL_MS);
 
@@ -93,6 +108,13 @@ function startSessionAutoEndScheduler() {
 
   processDueAutoEndSessions().catch((error) => {
     console.warn("[auto-end] Initial scheduler run failed:", error.message);
+    logError({
+      level: "error",
+      source: "scheduler",
+      message: `auto-end initial run failed: ${error.message}`,
+      stack: error.stack,
+      code: "auto_end_initial"
+    });
   });
 
   console.log(`[auto-end] Scheduler started (every ${AUTO_END_POLL_MS}ms)`);
