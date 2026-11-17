@@ -19,6 +19,7 @@ const {
   joinViaZoomMeeting
 } = require("../services/zoom-meeting.service");
 const { getFrontendPublicUrl } = require("../config/publicAppUrl");
+const { logCaughtError } = require("../services/error-log.service");
 
 function requestOrigin(req) {
   if (!req) return "";
@@ -158,6 +159,12 @@ async function oauthCallback(req, res) {
         "[zoom-oauth] FRONTEND_PUBLIC_URL is missing or points at the API host (%s). Set it to the SPA origin (e.g. https://highq.netcastservice.online).",
         frontendBase || "(empty)"
       );
+      logCaughtError(new Error("FRONTEND_PUBLIC_URL misconfigured for Zoom OAuth"), {
+        source: "api",
+        code: "zoom_oauth_frontend_misconfigured",
+        level: "error",
+        extra: { frontend_base: frontendBase || null, reason: reason || null }
+      });
       return res
         .status(200)
         .type("html")
@@ -192,6 +199,11 @@ async function oauthCallback(req, res) {
 
     return finishRedirect(true);
   } catch (err) {
+    logCaughtError(err, {
+      source: "api",
+      code: err.code || "zoom_oauth_callback",
+      message: `Zoom OAuth callback failed: ${err.message || "oauth_failed"}`
+    });
     return finishRedirect(false, err.code || err.message || "oauth_failed");
   }
 }

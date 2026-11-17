@@ -3,6 +3,7 @@ const { User, Plan, JobRun } = require("../models");
 const { sendPlanExpiringSoonEmail } = require("./email.service");
 const { toDateOnlyString, todayDateOnlyUtc } = require("./plan.service");
 const { isPlanExpiryReminderEnabled } = require("../config/plan-expiry-reminders");
+const { logCaughtError } = require("./error-log.service");
 
 const PLAN_EXPIRY_REMINDER_JOB = JobRun.PLAN_EXPIRY_REMINDER_JOB;
 /** Reminder offsets (days before plan_expires_at). */
@@ -126,6 +127,13 @@ async function sendPlanExpiryRemindersIfDue(_now = new Date()) {
           `[plan-expiry-reminder] Failed user=${user.user_id} days=${daysLeft}:`,
           err.message
         );
+        logCaughtError(err, {
+          source: "scheduler",
+          level: "warn",
+          code: "plan_expiry_reminder_user",
+          message: `plan-expiry-reminder failed user=${user.user_id} days=${daysLeft}`,
+          extra: { user_id: user.user_id, days_left: daysLeft }
+        });
       }
     }
   }

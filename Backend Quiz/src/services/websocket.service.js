@@ -5,7 +5,7 @@ const { isIntegrationsEnabled } = require("../config/integrations");
 const { resolveEmbedToken } = require("./session-embed-token.service");
 const { extractRequestIp, normalizeIp, expandIpAliases } = require("../utils/ip");
 const { isIpBlocked } = require("./blocked-ip.service");
-const { logError } = require("./error-log.service");
+const { logError, logCaughtError } = require("./error-log.service");
 
 const ADMIN_CLOSE_CODE = 4008;
 const ADMIN_CLOSE_REASON = "Closed by administrator";
@@ -796,6 +796,13 @@ function notifySessionProgress(sessionCode, sessionId) {
         session_id: sessionId,
         error: err.message
       });
+      logCaughtError(err, {
+        source: "websocket",
+        level: "warn",
+        code: "session_progress_failed",
+        message: `session_progress_failed: ${err.message}`,
+        extra: { session: sessionCode, session_id: sessionId }
+      });
     } finally {
       state.inFlight = false;
       if (state.pending) schedule();
@@ -807,7 +814,15 @@ function notifySessionProgress(sessionCode, sessionId) {
     const wait = Math.max(0, SESSION_PROGRESS_DEBOUNCE_MS - (Date.now() - state.lastSentAt));
     state.timer = setTimeout(() => {
       state.timer = null;
-      flush().catch(() => {});
+      flush().catch((err) => {
+        logCaughtError(err, {
+          source: "websocket",
+          level: "warn",
+          code: "session_progress_flush",
+          message: `session_progress flush failed: ${err.message}`,
+          extra: { session: sessionCode, session_id: sessionId }
+        });
+      });
     }, wait);
   };
 

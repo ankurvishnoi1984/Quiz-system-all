@@ -12,6 +12,7 @@ const {
 } = require("../config/auth-features");
 const env = require("../config/env");
 const { isRateLimitEnabled } = require("../utils/ip-rate-limit");
+const { logCaughtError } = require("./error-log.service");
 
 const PURPOSES = {
   PAYMENT: "payment",
@@ -560,6 +561,11 @@ async function sendAdminActionOtp({ fullName } = {}) {
       });
     } catch (err) {
       console.error("sendAdminActionOtp mail failed:", to, err.message);
+      logCaughtError(err, {
+        code: "admin_action_otp_mail",
+        message: `sendAdminActionOtp mail failed: ${to}`,
+        extra: { to }
+      });
       sendErrors.push(to);
     }
   }

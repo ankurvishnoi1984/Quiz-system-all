@@ -1,6 +1,7 @@
 const { Op } = require("sequelize");
 const { BlockedIp, User } = require("../models");
 const { normalizeIp, isValidIp, expandIpAliases } = require("../utils/ip");
+const { logCaughtError } = require("./error-log.service");
 
 /** @type {Set<string>} */
 const blockedIpCache = new Set();
@@ -64,6 +65,11 @@ async function loadBlockedIpCache() {
       console.log(`[blocked-ip] Loaded ${rows.length} blocked IP(s) (legacy schema)`);
     } catch (inner) {
       console.error("[blocked-ip] Failed to load cache:", err.message, inner.message);
+      logCaughtError(inner, {
+        code: "blocked_ip_cache_load",
+        message: "Failed to load blocked IP cache",
+        extra: { primary_error: err.message, fallback_error: inner.message }
+      });
       cacheLoaded = false;
     }
   }

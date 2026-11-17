@@ -38,6 +38,7 @@ const {
   resolveSessionLeaderboardScope
 } = require("../services/response.service");
 const { resolveLeaderboardTopN } = require("../utils/leaderboardTopN");
+const { logCaughtError } = require("../services/error-log.service");
 const {
   activateAllQuestionsForSession,
   activateAdvancedAssignmentSlot,
@@ -227,6 +228,12 @@ async function remove(req, res) {
         terminateSessionRealtime(session, { status: "archived" });
       } catch (notifyErr) {
         console.warn("[session] archive realtime terminate failed:", notifyErr.message);
+        logCaughtError(notifyErr, {
+          source: "websocket",
+          level: "warn",
+          code: "session_archive_realtime_terminate",
+          message: `archive realtime terminate failed: ${notifyErr.message}`
+        });
       }
     }
     return successResponse(res, { session }, "Session archived", 200);
@@ -277,7 +284,14 @@ async function resetResponses(req, res) {
           scope: resolveSessionLeaderboardScope(session)
         })
           .then((leaderboard) => notifyLeaderboard(session.session_code, { leaderboard }))
-          .catch(() => {});
+          .catch((err) => {
+            logCaughtError(err, {
+              source: "websocket",
+              level: "warn",
+              code: "session_reset_leaderboard_notify",
+              message: `resetResponses leaderboard notify failed: ${err.message}`
+            });
+          });
       }
     }
 
@@ -336,7 +350,15 @@ function lifecycleAction(action) {
             }
             closeAllSessionConnections(session.session_code, { reason: "session_ended" });
           }
-        })().catch(() => {});
+        })().catch((err) => {
+          logCaughtError(err, {
+            source: "websocket",
+            level: "warn",
+            code: "session_lifecycle_realtime_notify",
+            message: `session lifecycle realtime notify failed (${action}): ${err.message}`,
+            extra: { action, session_id: session.session_id }
+          });
+        });
       }
       return successResponse(
         res,

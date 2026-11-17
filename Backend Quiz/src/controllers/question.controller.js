@@ -32,6 +32,7 @@ const {
   notifyLeaderboard,
   notifySessionSettings
 } = require("../services/websocket.service");
+const { logCaughtError } = require("../services/error-log.service");
 const { Session } = require("../models");
 const {
   buildQuestionLeaderboard,
@@ -508,7 +509,15 @@ async function openForReattempt(req, res) {
           scope: resolveSessionLeaderboardScope(session)
         })
           .then((leaderboard) => notifyLeaderboard(session.session_code, { leaderboard }))
-          .catch(() => {});
+          .catch((err) => {
+            logCaughtError(err, {
+              source: "websocket",
+              level: "warn",
+              code: "question_leaderboard_notify",
+              message: `question leaderboard notify failed: ${err.message}`,
+              extra: { session_id: question.session_id, question_id: question.question_id }
+            });
+          });
       }
     }
     return successResponse(

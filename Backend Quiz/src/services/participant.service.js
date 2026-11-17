@@ -6,6 +6,7 @@ const {
   normalizeParticipantSessionState
 } = require("../utils/participantSessionState");
 const { notifyParticipantJoined, notifySessionProgress } = require("./websocket.service");
+const { logCaughtError } = require("./error-log.service");
 
 const RETURNING_PARTICIPANT_STATUSES = new Set(["live", "paused", "completed", "archived"]);
 
@@ -221,7 +222,15 @@ async function finalizeParticipantJoin(session, participant, { isReturning = fal
 
   if (session.session_code) {
     notifyParticipantJoined(session.session_code, refreshed);
-    notifySessionProgress(session.session_code, session.session_id).catch(() => {});
+    notifySessionProgress(session.session_code, session.session_id).catch((err) => {
+      logCaughtError(err, {
+        source: "websocket",
+        level: "warn",
+        code: "participant_join_session_progress_notify",
+        message: `notifySessionProgress after join failed: ${err.message}`,
+        extra: { session_id: session.session_id }
+      });
+    });
   }
 
   return result;

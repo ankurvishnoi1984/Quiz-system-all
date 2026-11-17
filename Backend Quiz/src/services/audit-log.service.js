@@ -1,6 +1,7 @@
 const { Op } = require("sequelize");
 const AuditLog = require("../models/audit-log.model");
 const { requestMetadataFromContext } = require("../utils/audit-context");
+const { logCaughtError } = require("./error-log.service");
 
 const REDACTED = "[REDACTED]";
 const SENSITIVE_KEY_PATTERN =
@@ -54,6 +55,15 @@ async function logAuditEvent(event, options = {}) {
       entity_type: payload.entity_type,
       entity_id: payload.entity_id,
       error: error.message
+    });
+    logCaughtError(error, {
+      code: "audit_log_write",
+      message: "Failed to write audit log",
+      extra: {
+        action: payload.action,
+        entity_type: payload.entity_type,
+        entity_id: payload.entity_id
+      }
     });
     return null;
   }

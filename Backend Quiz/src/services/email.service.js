@@ -15,6 +15,7 @@ const {
   renderPlanExpiringSoonEmail,
   EMAIL_LOGO_CID
 } = require("./email-templates");
+const { logCaughtError } = require("./error-log.service");
 
 const EMAIL_LOGO_PATH = path.join(__dirname, "../../assets/email-logo.png");
 
@@ -316,6 +317,10 @@ async function listWebsiteSignupAdminEmails(excludeEmail) {
       });
   } catch (err) {
     console.error("listWebsiteSignupAdminEmails failed:", err);
+    logCaughtError(err, {
+      code: "list_website_signup_admin_emails",
+      message: "listWebsiteSignupAdminEmails failed"
+    });
     return [];
   }
 }
@@ -377,6 +382,10 @@ async function sendWebsiteSignupWelcomeEmail({
       });
     } catch (err) {
       console.error("website signup admin notification failed:", err);
+      logCaughtError(err, {
+        code: "website_signup_admin_notify",
+        message: "website signup admin notification failed"
+      });
     }
   }
 
@@ -402,6 +411,10 @@ async function listWeeklySummaryEmails() {
       });
   } catch (err) {
     console.error("listWeeklySummaryEmails failed:", err);
+    logCaughtError(err, {
+      code: "list_weekly_summary_emails",
+      message: "listWeeklySummaryEmails failed"
+    });
     return [];
   }
 }

@@ -19,6 +19,7 @@ const {
 const { getLiveRateLimitWindows } = require("../utils/ip-rate-limit");
 const { Session, User, Department, Client } = require("../models");
 const { normalizeIp } = require("../utils/ip");
+const { logCaughtError } = require("./error-log.service");
 
 const WS_OPEN = 1;
 const HISTORY_MAX_POINTS = 120;
@@ -264,6 +265,11 @@ async function maybeSweepTerminalSessionConnections() {
     lastSweepResult = await sweepTerminalSessionConnections();
   } catch (err) {
     console.error("websocket monitor terminal sweep failed:", err.message);
+    logCaughtError(err, {
+      source: "websocket",
+      code: "ws_monitor_terminal_sweep",
+      message: "websocket monitor terminal sweep failed"
+    });
     lastSweepResult = { swept: 0, closed: 0, error: err.message };
   }
   return { ...lastSweepResult, throttled: false };
@@ -276,16 +282,32 @@ async function getWebSocketMonitorData() {
   const snapshot = buildSnapshot();
   appendHistory(snapshot);
 
-  void purgeExpiredRateLimitEvents().catch(() => {});
+  void purgeExpiredRateLimitEvents().catch((err) => {
+    logCaughtError(err, {
+      source: "websocket",
+      code: "ws_monitor_purge_rate_limit_events",
+      message: "purgeExpiredRateLimitEvents failed from monitor"
+    });
+  });
 
   const [sessions, blockedIps, rateLimitEvents] = await Promise.all([
     enrichSessionsWithMetadata(snapshot.sessions),
     listBlockedIps().catch((err) => {
       console.error("list blocked ips for monitor failed:", err.message);
+      logCaughtError(err, {
+        source: "websocket",
+        code: "ws_monitor_list_blocked_ips",
+        message: "list blocked ips for monitor failed"
+      });
       return [];
     }),
     listRecentRateLimitEvents({ limit: MONITOR_LIST_LIMIT }).catch((err) => {
       console.error("list rate limit events for monitor failed:", err.message);
+      logCaughtError(err, {
+        source: "websocket",
+        code: "ws_monitor_list_rate_limit_events",
+        message: "list rate limit events for monitor failed"
+      });
       return [];
     })
   ]);

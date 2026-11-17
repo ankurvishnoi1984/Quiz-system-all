@@ -97,6 +97,26 @@ function logError(payload = {}) {
     });
 }
 
+/**
+ * Log a swallowed catch (service/background). Never throws.
+ * Prefer this over raw logError when you already have an Error object.
+ */
+function logCaughtError(
+  err,
+  { source = "service", code = null, level = "error", extra = null, message = null } = {}
+) {
+  const error = err instanceof Error ? err : new Error(String(err ?? "Unknown error"));
+  logError({
+    level,
+    source,
+    code,
+    message: message || error.message,
+    stack: error.stack || null,
+    extra
+  });
+}
+
 module.exports = {
-  logError
+  logError,
+  logCaughtError
 };

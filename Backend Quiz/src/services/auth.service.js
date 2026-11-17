@@ -11,6 +11,7 @@ const {
   sendPasswordChangedEmail,
   sendWebsiteSignupWelcomeEmail
 } = require("./email.service");
+const { logCaughtError } = require("./error-log.service");
 const { generateTemporaryPassword } = require("../utils/password");
 const { addDaysToDateOnly, toDateOnlyString, getHostPlanUsage, canSelfServePlanChange } = require("./plan.service");
 const { recordPlanAssignment, PLAN_HISTORY_SOURCES } = require("./plan-history.service");
@@ -285,6 +286,7 @@ async function signupUser(input) {
     });
   } catch (err) {
     console.error("signupUser welcome email failed:", err);
+    logCaughtError(err, { code: "signup_welcome_email", message: "signupUser welcome email failed" });
   }
 
   const createdUser = await User.findOne({ where: { email } });
@@ -596,6 +598,10 @@ async function changePassword(userId, body = {}) {
     } catch (error) {
       confirmation_email_sent = false;
       console.error("Password change confirmation email failed:", error);
+      logCaughtError(error, {
+        code: "password_change_email",
+        message: "Password change confirmation email failed"
+      });
     }
   }
 

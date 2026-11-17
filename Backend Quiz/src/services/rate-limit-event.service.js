@@ -1,5 +1,6 @@
 const { Op } = require("sequelize");
 const RateLimitEvent = require("../models/rate-limit-event.model");
+const { logCaughtError } = require("./error-log.service");
 
 const RETENTION_DAYS = 7;
 const LIST_LIMIT = 500;
@@ -59,7 +60,13 @@ async function purgeExpiredRateLimitEvents({ force = false } = {}) {
     where: {
       created_at: { [Op.lt]: cutoff }
     }
-  }).catch(() => 0);
+  }).catch((err) => {
+    logCaughtError(err, {
+      code: "rate_limit_event_purge",
+      message: "purgeExpiredRateLimitEvents destroy failed"
+    });
+    return 0;
+  });
   return { purged: true, deleted: Number(deleted) || 0 };
 }
 

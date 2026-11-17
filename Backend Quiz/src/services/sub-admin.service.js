@@ -11,6 +11,7 @@ const {
 } = require("../config/user-rights");
 const { listAuditLogs } = require("./audit-log.service");
 const { sendNewUserWelcomeEmail } = require("./email.service");
+const { logCaughtError } = require("./error-log.service");
 
 function createError(message, statusCode) {
   const error = new Error(message);
@@ -173,6 +174,10 @@ async function createSubAdmin(input) {
     email_sent = true;
   } catch (err) {
     console.error("createSubAdmin welcome email failed:", err);
+    logCaughtError(err, {
+      code: "create_sub_admin_welcome_email",
+      message: "createSubAdmin welcome email failed"
+    });
   }
 
   const fresh = await User.findByPk(user.user_id, {

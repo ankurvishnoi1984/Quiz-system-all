@@ -18,6 +18,7 @@ const {
   isPlanExpired
 } = require("./plan.service");
 const { formatAmount } = require("../utils/formatAmount");
+const { logCaughtError } = require("./error-log.service");
 
 const PLAN_HISTORY_SOURCES = {
   SIGNUP: "signup",
@@ -176,6 +177,10 @@ async function countsBySessionId(Model, sessionIds) {
     }
   } catch (err) {
     console.error("countsBySessionId failed:", err.message);
+    logCaughtError(err, {
+      code: "plan_history_counts_by_session",
+      message: "countsBySessionId failed"
+    });
   }
   return map;
 }
@@ -313,6 +318,10 @@ async function getPlanAccountOverview(userId) {
         order: [["created_at", "DESC"]]
       }).catch((err) => {
         console.error("list participant addons for plan overview failed:", err.message);
+        logCaughtError(err, {
+          code: "plan_overview_participant_addons",
+          message: "list participant addons for plan overview failed"
+        });
         return [];
       }),
       UserQuestionAddon.findAll({
@@ -320,6 +329,10 @@ async function getPlanAccountOverview(userId) {
         order: [["created_at", "DESC"]]
       }).catch((err) => {
         console.error("list question addons for plan overview failed:", err.message);
+        logCaughtError(err, {
+          code: "plan_overview_question_addons",
+          message: "list question addons for plan overview failed"
+        });
         return [];
       })
     ]);

@@ -12,6 +12,7 @@ const {
   Role
 } = require("../models");
 const { sendNewUserWelcomeEmail } = require("./email.service");
+const { logCaughtError } = require("./error-log.service");
 const {
   getPlanOrThrow,
   toPlanPayload,
@@ -244,6 +245,10 @@ async function createUserByAdmin(input, adminUser) {
   } catch (err) {
     emailError = err.message || "Failed to send welcome email";
     console.error("createUserByAdmin welcome email failed:", err);
+    logCaughtError(err, {
+      code: "admin_create_user_welcome_email",
+      message: "createUserByAdmin welcome email failed"
+    });
   }
 
   const plan = planId ? await Plan.findByPk(planId) : null;

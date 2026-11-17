@@ -1,5 +1,6 @@
 const { extractRequestIp } = require("./ip");
 const { errorResponse } = require("./response");
+const { logCaughtError } = require("../services/error-log.service");
 
 /** @type {Map<string, Map<string, { count: number, resetAt: number, meta?: object }>>} */
 const registries = new Map();
@@ -126,9 +127,21 @@ function createIpRateLimiter({
           limitMax: safeMax
         }).catch((err) => {
           console.warn("[rate-limit] failed to persist 429 event:", err?.message || err);
+          logCaughtError(err, {
+            source: "api",
+            level: "warn",
+            code: "rate_limit_persist_429",
+            message: "failed to persist 429 event"
+          });
         });
       } catch (err) {
         console.warn("[rate-limit] failed to load event service:", err?.message || err);
+        logCaughtError(err, {
+          source: "api",
+          level: "warn",
+          code: "rate_limit_load_event_service",
+          message: "failed to load rate-limit event service"
+        });
       }
 
       return errorResponse(

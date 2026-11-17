@@ -13,6 +13,7 @@ const {
   tryAcquireJoinSlot,
   consumeJoinReservation
 } = require("./plan-join-slots");
+const { logCaughtError } = require("./error-log.service");
 
 const ACCOUNT_PLAN_LIMIT_MESSAGE =
   "Participant limit exceeded for this session. Please contact the session host.";
@@ -614,6 +615,10 @@ async function notifyHostPlanLimitIfNeeded(usage) {
     });
   } catch (err) {
     console.error("notifyHostPlanLimitIfNeeded email failed:", err);
+    logCaughtError(err, {
+      code: "plan_limit_email",
+      message: "notifyHostPlanLimitIfNeeded email failed"
+    });
   }
 }
 
@@ -642,6 +647,10 @@ async function notifyHostPlanExpiredIfNeeded(usage) {
     });
   } catch (err) {
     console.error("notifyHostPlanExpiredIfNeeded email failed:", err);
+    logCaughtError(err, {
+      code: "plan_expired_email",
+      message: "notifyHostPlanExpiredIfNeeded email failed"
+    });
   }
 }
 

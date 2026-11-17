@@ -5,6 +5,7 @@ const { sequelize } = require("../config/database");
 const { User, Role } = require("../models");
 const { getHostPlanUsage } = require("./plan.service");
 const { sendTeamMemberVerificationEmail } = require("./email.service");
+const { logCaughtError } = require("./error-log.service");
 const { signEmailVerificationToken } = require("../utils/jwt");
 const { getFrontendPublicUrl } = require("../config/publicAppUrl");
 const { buildSubAdminUserWhere } = require("../config/data-scope");
@@ -249,6 +250,10 @@ async function addTeamMember({ ownerId, fullName, email, role = "host" }) {
   } catch (error) {
     emailError = error.message || "Verification email could not be sent";
     console.error("addTeamMember verification email failed:", error);
+    logCaughtError(error, {
+      code: "team_member_verification_email",
+      message: "addTeamMember verification email failed"
+    });
   }
 
   return {

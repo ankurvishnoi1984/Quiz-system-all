@@ -14,6 +14,7 @@ const {
 } = require("../services/response.service");
 const { validateSubmitResponsePayload } = require("../validators/response.validator");
 const { broadcastResponse, notifySessionProgress } = require("../services/websocket.service");
+const { logCaughtError } = require("../services/error-log.service");
 const { Session } = require("../models");
 
 async function submit(req, res) {
@@ -33,7 +34,15 @@ async function submit(req, res) {
         sessionId: response.session_id,
         response
       });
-      notifySessionProgress(session.session_code, response.session_id).catch(() => {});
+      notifySessionProgress(session.session_code, response.session_id).catch((err) => {
+        logCaughtError(err, {
+          source: "websocket",
+          level: "warn",
+          code: "response_session_progress_notify",
+          message: `notifySessionProgress after submit failed: ${err.message}`,
+          extra: { session_id: response.session_id }
+        });
+      });
     }
     const statusCode = created ? 201 : 200;
     const message = created ? "Response submitted" : "Response updated";
