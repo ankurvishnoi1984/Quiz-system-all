@@ -82,9 +82,25 @@ async function listAuditLogs(filters = {}) {
 
   if (filters.action) where.action = filters.action;
   if (filters.entity_type) where.entity_type = filters.entity_type;
+  if (filters.entity_id) where.entity_id = String(filters.entity_id);
   if (filters.actor_type) where.actor_type = filters.actor_type;
   if (filters.actor_id) where.actor_id = String(filters.actor_id);
   if (filters.request_id) where.request_id = filters.request_id;
+  if (filters.http_method) {
+    where.http_method = String(filters.http_method).trim().toUpperCase();
+  }
+  if (filters.session_id != null && filters.session_id !== "") {
+    const sessionId = Number(filters.session_id);
+    if (Number.isInteger(sessionId) && sessionId > 0) where.session_id = sessionId;
+  }
+  if (filters.client_id != null && filters.client_id !== "") {
+    const clientId = Number(filters.client_id);
+    if (Number.isInteger(clientId) && clientId > 0) where.client_id = clientId;
+  }
+  if (filters.dept_id != null && filters.dept_id !== "") {
+    const deptId = Number(filters.dept_id);
+    if (Number.isInteger(deptId) && deptId > 0) where.dept_id = deptId;
+  }
   if (filters.from || filters.to) {
     where.created_at = {};
     if (filters.from) where.created_at[Op.gte] = new Date(filters.from);

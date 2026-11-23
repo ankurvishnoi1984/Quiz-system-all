@@ -27,6 +27,7 @@ const pageTitles = {
   '/team': 'Team Management',
   '/manage/teams': 'Team Management',
   '/monitor/websockets': 'Connection Monitor',
+  '/manage/audit-logs': 'Audit Log',
 }
 
 function Navbar() {

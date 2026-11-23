@@ -27,6 +27,7 @@ import MyPlanPage from './pages/MyPlanPage'
 import TeamManagementPage from './pages/TeamManagementPage'
 import VerifyEmailPage from './pages/VerifyEmailPage'
 import WebSocketMonitorPage from './pages/WebSocketMonitorPage'
+import AuditLogPage from './pages/AuditLogPage'
 import QuestionBankPage from './pages/QuestionBankPage'
 import SessionAdminPage from './pages/SessionAdminPage'
 import ParticipantSessionPage from './pages/participant-session'
@@ -397,6 +398,14 @@ function App() {
                 <RequireRight right="connection_monitor">
                   <WebSocketMonitorPage />
                 </RequireRight>
+              }
+            />
+            <Route
+              path="/manage/audit-logs"
+              element={
+                <SuperAdminOnlyRoute>
+                  <AuditLogPage />
+                </SuperAdminOnlyRoute>
               }
             />
           </Route>
