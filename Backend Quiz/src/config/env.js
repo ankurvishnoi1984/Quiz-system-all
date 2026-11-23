@@ -69,6 +69,11 @@ const env = {
       remoteHost: (process.env.MONGO_SSH_REMOTE_HOST || "127.0.0.1").trim(),
       remotePort: Number(process.env.MONGO_SSH_REMOTE_PORT || 27017)
     }
+  },
+  // JSONL files for Alloy → Loki. Default: <process.cwd()>/logs
+  appLog: {
+    dir: (process.env.APP_LOG_DIR || "").trim(),
+    retentionDays: Number(process.env.APP_LOG_FILE_RETENTION_DAYS || 7)
   }
 };
 

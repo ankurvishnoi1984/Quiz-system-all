@@ -1,0 +1,61 @@
+// Grafana Alloy v1.22 — Phase 1: tail quiz API JSONL → Loki
+//
+// Install/config location (typical MSI):
+//   C:\Program Files\GrafanaLabs\Alloy\config.alloy
+// Or copy this file there and restart the Alloy Windows service.
+//
+// Log path matches APP_LOG_DIR on the Windows Server API install.
+// If your API path differs, change __path__ below.
+
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+livedebugging {
+  enabled = false
+}
+
+local.file_match "quiz" {
+  path_targets = [
+    {
+      __path__ = "C:/Websites/QuizSystem/final_quiz/Quiz-system-backend-main/Quiz-system-backend-main/logs/app-*.jsonl",
+      app      = "quiz-api",
+    },
+  ]
+}
+
+loki.source.file "quiz" {
+  targets    = local.file_match.quiz.targets
+  forward_to = [loki.process.quiz.receiver]
+}
+
+loki.process "quiz" {
+  stage.json {
+    expressions = {
+      level  = "level",
+      source = "source",
+      ts     = "ts",
+    }
+  }
+
+  stage.labels {
+    values = {
+      level  = "",
+      source = "",
+    }
+  }
+
+  stage.timestamp {
+    source = "ts"
+    format = "RFC3339"
+  }
+
+  forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://127.0.0.1:3100/loki/api/v1/push"
+  }
+}

@@ -9,6 +9,7 @@ yarn-error.log*
 *.docx
 quiz_db.sql
 .env
+logs/
 *.zip
 *-firebase-adminsdk*.json
 serviceAccount*.json

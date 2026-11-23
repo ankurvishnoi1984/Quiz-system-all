@@ -2,6 +2,7 @@ const os = require("os");
 const env = require("../config/env");
 const { getMongoDb, isMongoReady } = require("../config/mongo");
 const { requestMetadataFromContext } = require("../utils/audit-context");
+const { writeLogLine } = require("./log-file.service");
 
 const SENSITIVE_KEY =
   /pass(word)?|otp|token|secret|authorization|cookie|private[_-]?key/i;
@@ -50,8 +51,9 @@ function buildDocument(payload = {}) {
   const meta = requestMetadataFromContext();
   const statusCode =
     payload.statusCode != null ? Number(payload.statusCode) : null;
+  const createdAt = new Date();
   return {
-    created_at: new Date(),
+    created_at: createdAt,
     level: normalizeLevel(payload.level, statusCode),
     source: payload.source || "api",
     message: truncate(payload.message || "Unknown error", MAX_MESSAGE),
@@ -76,9 +78,13 @@ function buildDocument(payload = {}) {
 
 /**
  * Fire-and-forget error logger. Never throws; never blocks the caller.
+ * Always writes a JSONL line for Alloy/Loki; Mongo insert is optional.
  */
 function logError(payload = {}) {
   const doc = buildDocument(payload);
+
+  // File first so Loki still gets the line if Mongo is down.
+  writeLogLine(doc);
 
   if (!env.mongo.logEnabled || !isMongoReady()) {
     const line = `[error-log:${doc.level}] ${doc.source} ${doc.message}`;

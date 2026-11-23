@@ -1,0 +1,62 @@
+# Loki 3.7.x single-binary config for Windows Server.
+# Copy to: C:\Monitoring\Loki\loki-config.yaml
+# Data dir: C:\Monitoring\Loki\data
+#
+# Run (or via NSSM service):
+#   loki.exe -config.file=C:\Monitoring\Loki\loki-config.yaml
+#
+# Ready check: http://127.0.0.1:3100/ready
+
+auth_enabled: false
+
+server:
+  http_listen_address: 127.0.0.1
+  http_listen_port: 3100
+  grpc_listen_address: 127.0.0.1
+  grpc_listen_port: 9096
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: C:/Monitoring/Loki/data
+  storage:
+    filesystem:
+      chunks_directory: C:/Monitoring/Loki/data/chunks
+      rules_directory: C:/Monitoring/Loki/data/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+query_range:
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 100
+
+schema_config:
+  configs:
+    - from: 2026-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  retention_period: 720h
+  allow_structured_metadata: true
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+
+compactor:
+  working_directory: C:/Monitoring/Loki/data/compactor
+  compaction_interval: 10m
+  retention_enabled: true
+  retention_delete_delay: 2h
+  retention_delete_worker_count: 150
+  delete_request_store: filesystem
+
+analytics:
+  reporting_enabled: false

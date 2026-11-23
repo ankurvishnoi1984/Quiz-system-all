@@ -3,6 +3,7 @@ const env = require("./config/env");
 const { connectDatabase } = require("./config/database");
 const { connectMongo, closeMongo } = require("./config/mongo");
 const { logError } = require("./services/error-log.service");
+const { closeLogFile } = require("./services/log-file.service");
 const { setupWebSocketServer } = require("./services/websocket.service");
 const { startSessionAutoEndScheduler } = require("./services/session-auto-end.service");
 const { startWeeklySummaryScheduler } = require("./services/weekly-summary-scheduler.service");
@@ -20,6 +21,11 @@ async function shutdown(signal) {
   console.log(`[server] ${signal} received, closing Mongo…`);
   try {
     await closeMongo();
+  } catch (_) {
+    /* ignore */
+  }
+  try {
+    closeLogFile();
   } catch (_) {
     /* ignore */
   }
