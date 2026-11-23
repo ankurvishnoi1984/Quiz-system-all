@@ -38,6 +38,10 @@ import EmbedParticipantPage from './pages/embed/EmbedParticipantPage'
 import ZoomAppPage from './pages/zoom/ZoomAppPage'
 import PreviewModePage from './pages/preview-mode'
 import QuickViewModePage from './pages/quick-view'
+import PrivacyPolicyPage from './pages/legal/PrivacyPolicyPage'
+import TermsOfUsePage from './pages/legal/TermsOfUsePage'
+import SupportPage from './pages/legal/SupportPage'
+import ZoomAppDocumentationPage from './pages/legal/ZoomAppDocumentationPage'
 import { SessionsProvider } from './context/SessionsContext'
 import { useAuthStore } from './store/authStore'
 import HostLayout from './layouts/HostLayout'
@@ -69,6 +73,10 @@ function isPublicAppPath(pathname) {
     (INTEGRATIONS_ENABLED && pathname.startsWith('/embed/display')) ||
     (INTEGRATIONS_ENABLED && pathname.startsWith('/embed/participant')) ||
     (ZOOM_APP_ENABLED && pathname.startsWith('/zoom/')) ||
+    pathname === '/privacy' ||
+    pathname === '/terms' ||
+    pathname === '/support' ||
+    pathname === '/docs/zoom' ||
     pathname === '/login' ||
     pathname === '/session-admin/login' ||
     pathname === '/forgot-password' ||
@@ -128,6 +136,10 @@ function App() {
           <Route path="/join" element={<ParticipantSessionPage />} />
           <Route path="/present/view" element={<PresentViewPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/privacy" element={<PrivacyPolicyPage />} />
+          <Route path="/terms" element={<TermsOfUsePage />} />
+          <Route path="/support" element={<SupportPage />} />
+          <Route path="/docs/zoom" element={<ZoomAppDocumentationPage />} />
           {INTEGRATIONS_ENABLED ? (
             <>
               <Route path="/embed/display" element={<EmbedDisplayPage />} />
