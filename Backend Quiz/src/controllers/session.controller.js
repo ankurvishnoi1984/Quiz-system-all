@@ -38,7 +38,8 @@ const {
   resolveSessionLeaderboardScope
 } = require("../services/response.service");
 const { resolveLeaderboardTopN } = require("../utils/leaderboardTopN");
-const { logCaughtError } = require("../services/error-log.service");
+const { logCaughtError, logEvent } = require("../services/error-log.service");
+const { participantEventsTotal } = require("../config/metrics");
 const {
   activateAllQuestionsForSession,
   activateAdvancedAssignmentSlot,
@@ -493,6 +494,23 @@ async function joinByCode(req, res) {
       200
     );
   } catch (err) {
+    try {
+      participantEventsTotal.inc({ event: "participant_join_rejected" });
+      logEvent({
+        event: "participant_join_rejected",
+        source: "api",
+        level: "warn",
+        message: err.message || "participant_join_rejected",
+        code: "participant_join_rejected",
+        extra: {
+          session_code: req.params.code || null,
+          reason: err.message || null,
+          status_code: err.statusCode || 500
+        }
+      });
+    } catch (_) {
+      /* ignore */
+    }
     return errorResponse(res, err.message, err.statusCode || 500);
   }
 }

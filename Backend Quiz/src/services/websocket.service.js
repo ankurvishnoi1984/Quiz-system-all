@@ -5,7 +5,15 @@ const { isIntegrationsEnabled } = require("../config/integrations");
 const { resolveEmbedToken } = require("./session-embed-token.service");
 const { extractRequestIp, normalizeIp, expandIpAliases } = require("../utils/ip");
 const { isIpBlocked } = require("./blocked-ip.service");
-const { logError, logCaughtError } = require("./error-log.service");
+const { logError, logCaughtError, logEvent } = require("./error-log.service");
+const { wsConnections, wsEventsTotal } = require("../config/metrics");
+
+const WS_FILE_EVENTS = new Set([
+  "handshake_complete",
+  "connection_closed",
+  "handshake_rejected",
+  "auth_token_rejected"
+]);
 
 const ADMIN_CLOSE_CODE = 4008;
 const ADMIN_CLOSE_REASON = "Closed by administrator";
@@ -98,6 +106,35 @@ function wsLog(level, message, meta = {}) {
     console.warn("[WS]", line);
   } else {
     console.log("[WS]", line);
+  }
+
+  if (!WS_FILE_EVENTS.has(message)) return;
+  try {
+    const role = String(meta.role || "unknown");
+    wsEventsTotal.inc({ event: message });
+    if (message === "handshake_complete") {
+      wsConnections.inc({ role });
+    } else if (message === "connection_closed" && meta.metrics_counted) {
+      // Only decrement when handshake_complete previously counted this socket.
+      wsConnections.dec({ role });
+    }
+    logEvent({
+      event: message,
+      source: "websocket",
+      level: level === "warn" || level === "error" ? "warn" : "info",
+      message,
+      code: message,
+      session_id: meta.session_id || null,
+      extra: {
+        session: meta.session || null,
+        role: meta.role || null,
+        reason: meta.reason || null,
+        code: meta.code != null ? meta.code : null,
+        authStatus: meta.authStatus || null
+      }
+    });
+  } catch (_) {
+    /* never break WS */
   }
 }
 
@@ -339,11 +376,13 @@ function continueHandshakeAfterSessionGate({ ws, req, remote, sessionCode, role,
           auth_status: ws.authStatus
         });
 
+        ws.metricsCounted = true;
         wsLog("info", "handshake_complete", {
           session: sessionCode,
           role,
           authStatus: ws.authStatus,
-          activeInBucket: activeConnections.get(connectionKey)?.size
+          activeInBucket: activeConnections.get(connectionKey)?.size,
+          session_id: ws.user?.session_id || null
         });
 
         if (role === "participant" && ws.user?.participant_id) {
@@ -429,7 +468,9 @@ function continueHandshakeAfterSessionGate({ ws, req, remote, sessionCode, role,
           role,
           authStatus,
           code,
-          reason: reason?.toString() || "(none)"
+          reason: reason?.toString() || "(none)",
+          metrics_counted: Boolean(ws.metricsCounted),
+          session_id: ws.user?.session_id || null
         });
         const wasAuthenticatedParticipant =
           role === "participant" && Boolean(ws.user?.participant_id);

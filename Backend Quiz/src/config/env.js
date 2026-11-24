@@ -74,6 +74,10 @@ const env = {
   appLog: {
     dir: (process.env.APP_LOG_DIR || "").trim(),
     retentionDays: Number(process.env.APP_LOG_FILE_RETENTION_DAYS || 7)
+  },
+  metrics: {
+    // Slow requests write a warn line to JSONL only (not Mongo).
+    slowRequestMs: Number(process.env.SLOW_REQUEST_MS || 1500)
   }
 };
 

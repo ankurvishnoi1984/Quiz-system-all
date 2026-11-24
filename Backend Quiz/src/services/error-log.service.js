@@ -41,7 +41,9 @@ function redactValue(value, depth = 0) {
 
 function normalizeLevel(level, statusCode) {
   const raw = String(level || "").toLowerCase();
-  if (raw === "fatal" || raw === "error" || raw === "warn") return raw;
+  if (raw === "fatal" || raw === "error" || raw === "warn" || raw === "info") {
+    return raw;
+  }
   if (statusCode >= 500) return "error";
   if (statusCode >= 400) return "warn";
   return "error";
@@ -52,10 +54,13 @@ function buildDocument(payload = {}) {
   const statusCode =
     payload.statusCode != null ? Number(payload.statusCode) : null;
   const createdAt = new Date();
+  const sessionId =
+    payload.session_id != null ? payload.session_id : meta.session_id;
   return {
     created_at: createdAt,
     level: normalizeLevel(payload.level, statusCode),
     source: payload.source || "api",
+    event: payload.event != null ? String(payload.event) : null,
     message: truncate(payload.message || "Unknown error", MAX_MESSAGE),
     stack: truncate(payload.stack || null, MAX_STACK),
     status_code: Number.isFinite(statusCode) ? statusCode : null,
@@ -69,7 +74,7 @@ function buildDocument(payload = {}) {
     actor_id: meta.actor_id,
     client_id: meta.client_id,
     dept_id: meta.dept_id,
-    session_id: meta.session_id,
+    session_id: sessionId,
     env: env.nodeEnv,
     host: os.hostname(),
     extra: payload.extra != null ? redactValue(payload.extra) : null
@@ -122,7 +127,41 @@ function logCaughtError(
   });
 }
 
+/**
+ * Structured info/warn event for Loki (JSONL only). Never writes Mongo error_logs.
+ */
+function logEvent({
+  event,
+  source = "api",
+  level = "info",
+  message = null,
+  code = null,
+  extra = null,
+  session_id = null
+} = {}) {
+  try {
+    const eventName = event != null ? String(event) : "event";
+    const doc = buildDocument({
+      level: level || "info",
+      source,
+      event: eventName,
+      message: message || eventName,
+      code: code || eventName,
+      extra: extra != null ? { event: eventName, ...extra } : { event: eventName },
+      session_id
+    });
+    // Force non-error levels for file-only events (buildDocument already set level).
+    if (!["info", "warn"].includes(doc.level)) {
+      doc.level = "info";
+    }
+    writeLogLine(doc);
+  } catch (err) {
+    console.error(`[log-event] write failed: ${err.message}`);
+  }
+}
+
 module.exports = {
   logError,
-  logCaughtError
+  logCaughtError,
+  logEvent
 };

@@ -14,7 +14,8 @@ const {
 } = require("../services/response.service");
 const { validateSubmitResponsePayload } = require("../validators/response.validator");
 const { broadcastResponse, notifySessionProgress } = require("../services/websocket.service");
-const { logCaughtError } = require("../services/error-log.service");
+const { logCaughtError, logEvent } = require("../services/error-log.service");
+const { participantEventsTotal } = require("../config/metrics");
 const { Session } = require("../models");
 
 async function submit(req, res) {
@@ -48,6 +49,24 @@ async function submit(req, res) {
     const message = created ? "Response submitted" : "Response updated";
     return successResponse(res, { response }, message, statusCode);
   } catch (err) {
+    try {
+      participantEventsTotal.inc({ event: "response_submit_failed" });
+      logEvent({
+        event: "response_submit_failed",
+        source: "api",
+        level: "warn",
+        message: err.message || "response_submit_failed",
+        code: "response_submit_failed",
+        session_id: req.participant?.session_id || null,
+        extra: {
+          participant_id: req.participant?.participant_id || null,
+          reason: err.message || null,
+          status_code: err.statusCode || (err.name === "SequelizeUniqueConstraintError" ? 409 : 500)
+        }
+      });
+    } catch (_) {
+      /* ignore */
+    }
     if (err.name === "SequelizeUniqueConstraintError") {
       return errorResponse(
         res,
