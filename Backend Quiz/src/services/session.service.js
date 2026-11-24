@@ -248,6 +248,10 @@ async function createSession({ deptId, input, user }) {
      show_results_to_participants: input.show_results_to_participants ?? true,
      allow_late_join: false,
      join_locked: false,
+     tab_switch_detection_enabled: Boolean(input.tab_switch_detection_enabled),
+     single_device_join_enabled: input.single_device_join_enabled !== false,
+     auto_email_report_on_end: input.auto_email_report_on_end !== false,
+     report_email_sent_at: null,
      leaderboard_enabled: input.leaderboard_enabled ?? false,
      current_rankings_enabled: false,
      leaderboard_top_n:
@@ -429,6 +433,10 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
         show_results_to_participants: source.show_results_to_participants ?? true,
         allow_late_join: source.allow_late_join ?? false,
         join_locked: false,
+        tab_switch_detection_enabled: Boolean(source.tab_switch_detection_enabled),
+        single_device_join_enabled: true,
+        auto_email_report_on_end: true,
+        report_email_sent_at: null,
         leaderboard_enabled: source.leaderboard_enabled ?? false,
         current_rankings_enabled: false,
         leaderboard_top_n: normalizeLeaderboardTopN(
@@ -632,7 +640,10 @@ async function updateSession({ sessionId, input, user }) {
     "present_mode_settings",
     "participant_theme",
     "participant_theme_custom",
-    "join_locked"
+    "join_locked",
+    "tab_switch_detection_enabled",
+    "single_device_join_enabled",
+    "auto_email_report_on_end"
   ];
   const inputKeys = Object.keys(input || {});
 
@@ -770,6 +781,18 @@ async function updateSession({ sessionId, input, user }) {
       input.join_locked !== undefined
         ? Boolean(input.join_locked)
         : Boolean(session.join_locked),
+    tab_switch_detection_enabled:
+      input.tab_switch_detection_enabled !== undefined
+        ? Boolean(input.tab_switch_detection_enabled)
+        : Boolean(session.tab_switch_detection_enabled),
+    single_device_join_enabled:
+      input.single_device_join_enabled !== undefined
+        ? Boolean(input.single_device_join_enabled)
+        : Boolean(session.single_device_join_enabled),
+    auto_email_report_on_end:
+      input.auto_email_report_on_end !== undefined
+        ? Boolean(input.auto_email_report_on_end)
+        : session.auto_email_report_on_end !== false,
     show_participant_count:
       input.show_participant_count !== undefined
         ? Boolean(input.show_participant_count)
@@ -1067,6 +1090,23 @@ async function clearParticipantFacingDisplaysOnEnd(session) {
   return hiddenQuestionIds;
 }
 
+function queueSessionEndedReportEmail(sessionId) {
+  try {
+    const { sendSessionEndedReportEmail } = require("./email.service");
+    const { logCaughtError } = require("./error-log.service");
+    void sendSessionEndedReportEmail(sessionId).catch((err) => {
+      console.warn("[session-report-email] Failed:", err.message);
+      logCaughtError(err, {
+        source: "session_report_email",
+        message: err.message,
+        code: "session_report_email"
+      });
+    });
+  } catch (err) {
+    console.warn("[session-report-email] Setup failed:", err.message);
+  }
+}
+
 async function endSessionBySystem(session, endedAt = new Date()) {
   if (!session || !["live", "paused"].includes(session.status)) {
     return null;
@@ -1077,6 +1117,7 @@ async function endSessionBySystem(session, endedAt = new Date()) {
   session.clearedQuestions = await clearSessionQuestionHostState(session.session_id);
   await clearParticipantFacingDisplaysOnEnd(session);
   await session.save();
+  queueSessionEndedReportEmail(session.session_id);
   return session;
 }
 
@@ -1139,6 +1180,10 @@ async function transitionSessionStatus({ sessionId, user, action }) {
     await clearParticipantFacingDisplaysOnEnd(session);
   }
   await session.save();
+
+  if (action === "end") {
+    queueSessionEndedReportEmail(session.session_id);
+  }
 
   return session;
 }
@@ -1308,6 +1353,17 @@ async function joinSession({ code, payload }) {
     });
   }
 
+  if (
+    Boolean(session.single_device_join_enabled) &&
+    wantsFreshParticipantIdentity(joinPayload)
+  ) {
+    const error = new Error(
+      "This session allows only one device per participant. Rejoin with the same identity instead of creating a new one."
+    );
+    error.statusCode = 403;
+    throw error;
+  }
+
   const existingByIdentity = await findParticipantByJoinIdentity(session, {
     nickname: identity.nickname,
     email: identity.email || joinPayload.email,
@@ -1315,11 +1371,21 @@ async function joinSession({ code, payload }) {
   });
   if (existingByIdentity) {
     assertSessionAcceptingJoin(session, { isReturning: true });
+    const identityUpdates = {};
     if (identity.mobile && !existingByIdentity.mobile) {
-      await existingByIdentity.update({ mobile: identity.mobile });
+      identityUpdates.mobile = identity.mobile;
     }
     if (identity.email && !existingByIdentity.email) {
-      await existingByIdentity.update({ email: identity.email });
+      identityUpdates.email = identity.email;
+    }
+    if (
+      joinPayload.device_fingerprint &&
+      joinPayload.device_fingerprint !== existingByIdentity.device_fingerprint
+    ) {
+      identityUpdates.device_fingerprint = String(joinPayload.device_fingerprint).slice(0, 100);
+    }
+    if (Object.keys(identityUpdates).length) {
+      await existingByIdentity.update(identityUpdates);
     }
     const { assignRandomSetToParticipant } = require("./question-set.service");
     const { assignRandomQuestionOrderToParticipant } = require("../utils/participantQuestionOrder");

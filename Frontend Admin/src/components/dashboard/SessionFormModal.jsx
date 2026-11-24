@@ -130,6 +130,7 @@ const defaultInitial = {
   quizTotalQuestionTimersEnabled: false,
   quizTotalTimeSynced: false,
   overallLeaderboard: false,
+  tabSwitchDetectionEnabled: false,
   showParticipantCount: false,
   showSessionTitle: true,
   showAppLogo: true,
@@ -216,6 +217,9 @@ function SessionFormModal({
     Boolean(defaultInitial.quizTotalTimeSynced),
   )
   const [overallLeaderboard, setOverallLeaderboard] = useState(defaultInitial.overallLeaderboard)
+  const [tabSwitchDetectionEnabled, setTabSwitchDetectionEnabled] = useState(
+    defaultInitial.tabSwitchDetectionEnabled,
+  )
   const [showParticipantCount, setShowParticipantCount] = useState(
     defaultInitial.showParticipantCount,
   )
@@ -323,6 +327,7 @@ function SessionFormModal({
       Boolean(initialValues.quizTotalTimeEnabled) && Boolean(initialValues.quizTotalTimeSynced),
     )
     setOverallLeaderboard(initialValues.overallLeaderboard === true)
+    setTabSwitchDetectionEnabled(Boolean(initialValues.tabSwitchDetectionEnabled))
     setShowParticipantCount(initialValues.showParticipantCount === true)
     setShowSessionTitle(initialValues.showSessionTitle !== false)
     setShowAppLogo(initialValues.showAppLogo !== false)
@@ -664,6 +669,7 @@ function SessionFormModal({
         enableNavigation && quizTotalTimeEnabled && quizTotalQuestionTimersEnabled,
       quizTotalTimeSynced: enableNavigation && quizTotalTimeEnabled && quizTotalTimeSynced,
       overallLeaderboard,
+      tabSwitchDetectionEnabled,
       showParticipantCount,
       showSessionTitle,
       showAppLogo,
@@ -1415,6 +1421,28 @@ function SessionFormModal({
                   </div>
                 </>
               ) : null}
+              <div className="md:col-span-2 space-y-3 rounded-xl border border-amber-200/80 bg-amber-50/40 p-3">
+                <p className="text-sm font-semibold text-slate-800">Anti-cheat</p>
+                <p className="text-xs text-slate-500">
+                  Single-device join and end-of-session host email reports are always on for new
+                  sessions.
+                </p>
+                <label className="flex items-center justify-between gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-700">Detect tab switching</p>
+                    <p className="text-xs text-slate-500">
+                      Warn participants and log an event when they leave the quiz tab during scored
+                      questions.
+                    </p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={tabSwitchDetectionEnabled}
+                    onChange={(event) => setTabSwitchDetectionEnabled(event.target.checked)}
+                    className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
+                  />
+                </label>
+              </div>
               <div className="md:col-span-2 space-y-3">
                 <div>
                   <p className="text-sm font-semibold text-slate-700">Waiting screen media</p>

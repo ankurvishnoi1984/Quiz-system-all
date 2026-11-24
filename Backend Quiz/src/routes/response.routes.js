@@ -1,5 +1,6 @@
 const express = require("express");
 const responseController = require("../controllers/response.controller");
+const anticheatController = require("../controllers/anticheat.controller");
 const authMiddleware = require("../middlewares/auth.middleware");
 const participantAuthMiddleware = require("../middlewares/participant-auth.middleware");
 const authorizeStaff = require("../middlewares/staff.middleware");
@@ -7,6 +8,19 @@ const qaAccessMiddleware = require("../middlewares/qa-access.middleware");
 const { authorizeAnyRight, authorizeRights } = require("../middlewares/rights.middleware");
 
 const router = express.Router();
+
+router.post(
+  "/sessions/:sessionId/anticheat/tab-switch",
+  participantAuthMiddleware,
+  anticheatController.reportTabSwitch
+);
+router.get(
+  "/sessions/:sessionId/anticheat",
+  authMiddleware,
+  authorizeStaff,
+  authorizeAnyRight("present", "sessions", "reports"),
+  anticheatController.listAnticheat
+);
 
 router.get("/sessions/:sessionId/participantQuestions",participantAuthMiddleware, responseController.listParticipantQuestions);
 router.get("/sessions/:sessionId/leaderboard", participantAuthMiddleware, responseController.participantSessionLeaderboard);

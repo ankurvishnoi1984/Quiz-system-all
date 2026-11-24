@@ -510,6 +510,9 @@ function validateUpdateSessionPayload(payload) {
     "customer_match_zones",
     "customer_match_zone", // legacy singular alias during rollout
     "join_locked",
+    "tab_switch_detection_enabled",
+    "single_device_join_enabled",
+    "auto_email_report_on_end",
     "scheduled_date",
     "scheduled_time",
     "auto_end_enabled",
@@ -583,6 +586,21 @@ function validateUpdateSessionPayload(payload) {
     validateCustomerMatchZonesShape(payload.customer_match_zone, errors);
   }
   coerceOptionalBoolean(payload?.join_locked, "join_locked", errors);
+  coerceOptionalBoolean(
+    payload?.tab_switch_detection_enabled,
+    "tab_switch_detection_enabled",
+    errors
+  );
+  coerceOptionalBoolean(
+    payload?.single_device_join_enabled,
+    "single_device_join_enabled",
+    errors
+  );
+  coerceOptionalBoolean(
+    payload?.auto_email_report_on_end,
+    "auto_email_report_on_end",
+    errors
+  );
   errors.push(...validateJoinAllowlistFields(payload));
 
   const scheduledDateError = validateScheduledDate(payload?.scheduled_date);
@@ -697,6 +715,16 @@ function validateJoinSessionPayload(payload) {
     typeof payload.join_identity_token !== "string"
   ) {
     errors.push("join_identity_token must be a string when provided");
+  }
+
+  if (
+    payload?.device_fingerprint !== undefined &&
+    payload?.device_fingerprint !== null &&
+    (typeof payload.device_fingerprint !== "string" ||
+      payload.device_fingerprint.trim().length === 0 ||
+      payload.device_fingerprint.length > 100)
+  ) {
+    errors.push("device_fingerprint must be a non-empty string up to 100 characters when provided");
   }
 
   return errors;

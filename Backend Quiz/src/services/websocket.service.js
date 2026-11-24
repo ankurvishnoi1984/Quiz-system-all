@@ -385,7 +385,12 @@ function continueHandshakeAfterSessionGate({ ws, req, remote, sessionCode, role,
         const { assertParticipantWsWithinPlanLimit } = require("./plan.service");
 
         Session.findByPk(decoded.session_id, {
-          attributes: ["session_id", "session_code", "host_id"]
+          attributes: [
+            "session_id",
+            "session_code",
+            "host_id",
+            "single_device_join_enabled"
+          ]
         })
           .then(async (session) => {
             if (!session || ws.readyState !== ws.OPEN) return;
@@ -395,6 +400,17 @@ function continueHandshakeAfterSessionGate({ ws, req, remote, sessionCode, role,
               return;
             }
             finishHandshake();
+            if (
+              Boolean(session.single_device_join_enabled) &&
+              decoded.participant_id
+            ) {
+              kickOtherParticipantSockets(
+                sessionCode,
+                decoded.participant_id,
+                ws
+              );
+              scheduleParticipantPresenceNotify(sessionCode);
+            }
           })
           .catch((err) => {
             wsLog("error", "plan_limit_check_failed", {
@@ -736,6 +752,9 @@ function notifySessionSettings(sessionCode, settings) {
     random_question_order_enabled: Boolean(settings.random_question_order_enabled),
     allow_late_join: Boolean(settings.allow_late_join),
     join_locked: Boolean(settings.join_locked),
+    tab_switch_detection_enabled: Boolean(settings.tab_switch_detection_enabled),
+    single_device_join_enabled: settings.single_device_join_enabled !== false,
+    auto_email_report_on_end: settings.auto_email_report_on_end !== false,
     join_blocked:
       settings.join_blocked !== undefined ? Boolean(settings.join_blocked) : undefined,
     join_blocked_message:
@@ -762,6 +781,48 @@ function notifyParticipantJoined(sessionCode, participant) {
       nickname: participant.nickname || null
     }
   });
+}
+
+function notifyParticipantAnticheat(sessionCode, payload) {
+  if (!sessionCode || !payload) return;
+  broadcastToSession(sessionCode, {
+    type: "participant_anticheat",
+    participant_id: payload.participant_id ?? null,
+    nickname: payload.nickname ?? null,
+    tab_switch_count: Number(payload.tab_switch_count) || 0,
+    last_tab_switch_at: payload.last_tab_switch_at || null
+  });
+}
+
+/** When single-device mode is on, close older sockets for the same participant. */
+function kickOtherParticipantSockets(sessionCode, participantId, keepWs = null) {
+  const pid = Number(participantId);
+  if (!sessionCode || !Number.isFinite(pid) || pid <= 0) return 0;
+  let closed = 0;
+  for (const [key, set] of activeConnections.entries()) {
+    if (!String(key).startsWith(`${sessionCode}:`)) continue;
+    for (const sock of [...set]) {
+      if (keepWs && sock === keepWs) continue;
+      if (Number(sock.user?.participant_id) !== pid) continue;
+      try {
+        send(sock, {
+          type: "error",
+          code: "replaced_by_new_device",
+          message:
+            "You joined this session from another device or tab. This connection was closed."
+        });
+      } catch {
+        // ignore
+      }
+      try {
+        sock.close(4004, "Replaced by another connection");
+      } catch {
+        // ignore
+      }
+      closed += 1;
+    }
+  }
+  return closed;
 }
 
 /** Coalesce join/submit progress fan-out: at most ~1 broadcast per session / debounce window. */
@@ -1168,6 +1229,8 @@ module.exports = {
   notifyMatchResponseSubmitted,
   notifySessionSettings,
   notifyParticipantJoined,
+  notifyParticipantAnticheat,
+  kickOtherParticipantSockets,
   notifyParticipantPresence,
   scheduleParticipantPresenceNotify,
   notifySessionProgress,

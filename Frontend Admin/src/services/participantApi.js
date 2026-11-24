@@ -117,6 +117,17 @@ export async function submitResponseApi(participantToken, payload) {
   return data?.response || null
 }
 
+export async function reportTabSwitchApi(participantToken, sessionId, questionId = null) {
+  const body = {}
+  if (questionId != null && questionId !== '') {
+    body.question_id = Number(questionId)
+  }
+  return authRequest(`/sessions/${sessionId}/anticheat/tab-switch`, participantToken, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
 export async function listQaQuestionsApi(participantToken, sessionId) {
   const data = await authRequest(`/qa/${sessionId}/questions`, participantToken)
   return data?.questions || []

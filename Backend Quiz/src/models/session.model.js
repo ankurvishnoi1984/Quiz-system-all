@@ -124,6 +124,25 @@ const Session = sequelize.define(
       allowNull: false,
       defaultValue: false
     },
+    tab_switch_detection_enabled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+    single_device_join_enabled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true
+    },
+    auto_email_report_on_end: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true
+    },
+    report_email_sent_at: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
     leaderboard_enabled: {
       type: DataTypes.BOOLEAN,
       allowNull: true,

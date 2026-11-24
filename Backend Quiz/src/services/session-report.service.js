@@ -183,9 +183,11 @@ function buildQuestionResponseBreakdown(question, options, responses) {
   return [];
 }
 
-async function getSessionSummaryReport({ sessionId, user }) {
+async function getSessionSummaryReport({ sessionId, user, skipAccessCheck = false }) {
   const session = await getSessionForAccess(sessionId);
-  assertStaffAccess(user, session);
+  if (!skipAccessCheck) {
+    assertStaffAccess(user, session);
+  }
 
   const numericSessionId = Number(sessionId);
 
@@ -815,9 +817,52 @@ async function getSessionQaReport({ sessionId, user }) {
   };
 }
 
+function escapeCsvCell(value) {
+  const text = String(value ?? "");
+  if (/[",\n\r]/.test(text)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+}
+
+function buildParticipantsReportCsv(participantSummaries = []) {
+  const header = [
+    "participant_id",
+    "nickname",
+    "email",
+    "mobile",
+    "responses_submitted",
+    "score"
+  ];
+  const lines = [header.join(",")];
+  for (const row of participantSummaries) {
+    lines.push(
+      [
+        escapeCsvCell(row.participant_id),
+        escapeCsvCell(row.nickname),
+        escapeCsvCell(row.email),
+        escapeCsvCell(row.mobile),
+        escapeCsvCell(row.responses_submitted ?? 0),
+        escapeCsvCell(row.score ?? 0)
+      ].join(",")
+    );
+  }
+  return `\uFEFF${lines.join("\r\n")}`;
+}
+
+async function getSessionSummaryReportForHost(sessionId) {
+  return getSessionSummaryReport({
+    sessionId,
+    user: null,
+    skipAccessCheck: true
+  });
+}
+
 module.exports = {
   getSessionSummaryReport,
+  getSessionSummaryReportForHost,
   getSessionQuestionsReport,
   getSessionParticipantsReport,
-  getSessionQaReport
+  getSessionQaReport,
+  buildParticipantsReportCsv
 };

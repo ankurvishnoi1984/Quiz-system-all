@@ -1167,6 +1167,86 @@ Plans expiring in next 7 days: ${summary.plansExpiringSoon}
   };
 }
 
+function renderSessionEndedReportEmail({
+  fullName,
+  sessionTitle,
+  summary,
+  quizStats,
+  brandName,
+  logoCid,
+  logoUrl
+}) {
+  const platformName = brandName || "Quiz Platform";
+  const greeting = fullName ? `Hello ${fullName},` : "Hello,";
+  const title = String(sessionTitle || "Session").trim() || "Session";
+  const joined = Number(summary?.total_joined) || 0;
+  const responded = Number(summary?.total_responded) || 0;
+  const engagement =
+    summary?.avg_engagement_rate_percent != null
+      ? `${summary.avg_engagement_rate_percent}%`
+      : "—";
+  const quizRows =
+    quizStats?.has_quiz_mode
+      ? `${renderMetricRow("Top score", quizStats.top_score ?? 0)}${renderMetricRow(
+          "Average score",
+          quizStats.avg_score ?? 0
+        )}`
+      : "";
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px;font-size:16px;line-height:1.65;color:${BRAND.slate};">${escapeHtml(greeting)}</p>
+    <p style="margin:0 0 24px;font-size:16px;line-height:1.65;color:${BRAND.slate};">
+      Your session <strong>${escapeHtml(title)}</strong> has ended. Here is a quick summary. A CSV of participants is attached.
+    </p>
+
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px;">
+      <tr>
+        <td style="background-color:${BRAND.surface};border:1px solid ${BRAND.border};border-radius:12px;padding:20px 22px;">
+          <p style="margin:0 0 14px;font-size:14px;font-weight:700;color:${BRAND.navy};">Session summary</p>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+            ${renderMetricRow("Joined", joined)}
+            ${renderMetricRow("Responded", responded)}
+            ${renderMetricRow("Avg engagement", engagement)}
+            ${quizRows}
+          </table>
+        </td>
+      </tr>
+    </table>
+  `;
+
+  const text = [
+    greeting,
+    "",
+    `Your session "${title}" has ended.`,
+    `Joined: ${joined}`,
+    `Responded: ${responded}`,
+    `Avg engagement: ${engagement}`,
+    quizStats?.has_quiz_mode
+      ? `Top score: ${quizStats.top_score ?? 0}\nAverage score: ${quizStats.avg_score ?? 0}`
+      : "",
+    "",
+    "A CSV of participants is attached.",
+    "",
+    `— ${platformName}`
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
+
+  const html = renderEmailLayout({
+    title: `Session report: ${title}`,
+    brandName: platformName,
+    logoCid,
+    logoUrl,
+    bodyHtml
+  });
+
+  return {
+    subject: `Session report: ${title}`,
+    text,
+    html
+  };
+}
+
 function renderEmailOtpEmail({ fullName, code, purpose, expiresInMinutes, brandName, logoCid, logoUrl }) {
   const greeting = fullName ? `Hello ${fullName},` : "Hello,";
   const safeGreeting = escapeHtml(greeting);
@@ -1269,6 +1349,7 @@ module.exports = {
   renderParticipantLimitExceededEmail,
   renderPlanExpiredEmail,
   renderPlanExpiringSoonEmail,
+  renderSessionEndedReportEmail,
   buildLoginUrl,
   buildEmailLogoUrl,
   EMAIL_LOGO_CID

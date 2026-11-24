@@ -229,6 +229,17 @@ export function playAnswerWrong() {
   playTone({ frequency: 220, duration: 0.28, type: 'sawtooth', volume: 0.07, delay: 0.14, slideTo: 140 })
 }
 
+/** Attention cue when a participant leaves the quiz tab (anti-cheat). */
+export function playTabSwitchAlert() {
+  unlockTimerAudio()
+  throttled('tab-switch-alert', 2000, () => {
+    playTone({ frequency: 880, duration: 0.12, type: 'square', volume: 0.14 })
+    playTone({ frequency: 660, duration: 0.12, type: 'square', volume: 0.14, delay: 0.14 })
+    playTone({ frequency: 880, duration: 0.12, type: 'square', volume: 0.14, delay: 0.28 })
+    playTone({ frequency: 520, duration: 0.28, type: 'sawtooth', volume: 0.12, delay: 0.44, slideTo: 280 })
+  })
+}
+
 export function playAnswerReveal() {
   playTone({ frequency: 698, duration: 0.12, type: 'triangle', volume: 0.08 })
   playTone({ frequency: 932, duration: 0.2, type: 'triangle', volume: 0.09, delay: 0.1 })

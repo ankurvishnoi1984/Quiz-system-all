@@ -53,6 +53,11 @@ export async function listSessionParticipantsApi(accessToken, sessionId) {
   return data?.participants || []
 }
 
+export async function getSessionAnticheatApi(accessToken, sessionId) {
+  const data = await authRequest(`/sessions/${sessionId}/anticheat`, accessToken)
+  return data?.participants || []
+}
+
 export async function listSessionQuestionAssignmentsApi(accessToken, sessionId) {
   const data = await authRequest(`/sessions/${sessionId}/question-assignments`, accessToken)
   return {

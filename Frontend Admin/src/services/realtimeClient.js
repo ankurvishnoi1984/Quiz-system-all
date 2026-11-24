@@ -6,6 +6,7 @@ const MAX_RECONNECT_ATTEMPTS = 8
 const STRICT_MODE_CONNECT_DELAY_MS = 0
 const ADMIN_DISCONNECT_CODE = 4008
 const IP_BLOCKED_CODE = 4009
+const REPLACED_BY_NEW_DEVICE_CODE = 4004
 
 /** Log in dev or when VITE_WS_DEBUG=true */
 const WS_DEBUG =
@@ -194,16 +195,25 @@ class RealtimeClient {
         if (
           this.#adminClosed ||
           Number(event.code) === ADMIN_DISCONNECT_CODE ||
-          Number(event.code) === IP_BLOCKED_CODE
+          Number(event.code) === IP_BLOCKED_CODE ||
+          Number(event.code) === REPLACED_BY_NEW_DEVICE_CODE
         ) {
           this.#manualClose = true
+          const replaced = Number(event.code) === REPLACED_BY_NEW_DEVICE_CODE
+          const ipBlocked = Number(event.code) === IP_BLOCKED_CODE
           this.#emit(
-            Number(event.code) === IP_BLOCKED_CODE
-              ? 'connection_ip_blocked'
-              : 'connection_closed_by_admin',
+            replaced
+              ? 'replaced_by_new_device'
+              : ipBlocked
+                ? 'connection_ip_blocked'
+                : 'connection_closed_by_admin',
             {
               code: event.code,
-              reason: event.reason || 'Closed by administrator',
+              reason:
+                event.reason ||
+                (replaced
+                  ? 'Replaced by another connection'
+                  : 'Closed by administrator'),
               generation: gen,
             },
           )
@@ -437,10 +447,12 @@ export const RealtimeEvent = {
   PARTICIPANT_JOINED: 'participant_joined',
   PARTICIPANT_LEFT: 'participant_left',
   PARTICIPANT_PRESENCE: 'participant_presence',
+  PARTICIPANT_ANTICHEAT: 'participant_anticheat',
   PRESENT_SLIDE_CHANGED: 'present_slide_changed',
   CONNECTION_CLOSED_BY_ADMIN: 'connection_closed_by_admin',
   SESSION_TERMINATED: 'session_terminated',
   CONNECTION_IP_BLOCKED: 'connection_ip_blocked',
+  REPLACED_BY_NEW_DEVICE: 'replaced_by_new_device',
 }
 
 export default RealtimeClient

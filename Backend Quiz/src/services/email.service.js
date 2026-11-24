@@ -13,9 +13,15 @@ const {
   renderParticipantLimitExceededEmail,
   renderPlanExpiredEmail,
   renderPlanExpiringSoonEmail,
+  renderSessionEndedReportEmail,
   EMAIL_LOGO_CID
 } = require("./email-templates");
 const { logCaughtError } = require("./error-log.service");
+const { Session, User } = require("../models");
+const {
+  getSessionSummaryReportForHost,
+  buildParticipantsReportCsv
+} = require("./session-report.service");
 
 const EMAIL_LOGO_PATH = path.join(__dirname, "../../assets/email-logo.png");
 
@@ -443,6 +449,100 @@ async function sendWeeklySummaryEmail(summary) {
   });
 }
 
+/**
+ * Fire-and-forget safe from session end paths. Idempotent via report_email_sent_at.
+ */
+async function sendSessionEndedReportEmail(sessionId) {
+  const numericId = Number(sessionId);
+  if (!Number.isFinite(numericId) || numericId <= 0) return { sent: false, reason: "invalid_id" };
+
+  const session = await Session.findByPk(numericId, {
+    attributes: [
+      "session_id",
+      "title",
+      "host_id",
+      "status",
+      "auto_email_report_on_end",
+      "report_email_sent_at"
+    ]
+  });
+  if (!session) return { sent: false, reason: "not_found" };
+  if (session.auto_email_report_on_end === false) {
+    return { sent: false, reason: "disabled" };
+  }
+  if (session.report_email_sent_at) {
+    return { sent: false, reason: "already_sent" };
+  }
+  if (!["completed", "archived"].includes(session.status)) {
+    return { sent: false, reason: "not_ended" };
+  }
+
+  const [claimed] = await Session.update(
+    { report_email_sent_at: new Date() },
+    {
+      where: {
+        session_id: numericId,
+        report_email_sent_at: null
+      }
+    }
+  );
+  if (!claimed) {
+    return { sent: false, reason: "already_sent" };
+  }
+
+  try {
+    const host = await User.findByPk(session.host_id, {
+      attributes: ["user_id", "full_name", "email"]
+    });
+    const to = String(host?.email || "").trim();
+    if (!to) {
+      return { sent: false, reason: "no_host_email" };
+    }
+
+    const report = await getSessionSummaryReportForHost(numericId);
+    const csv = buildParticipantsReportCsv(report.participant_summaries || []);
+    const safeTitle = String(session.title || "session")
+      .replace(/[^\w\-]+/g, "_")
+      .slice(0, 40);
+    const config = await getActiveMailConfig();
+    const brandName = config?.sender_name || "Quiz Platform";
+    const logoAttachment = getEmailLogoAttachment();
+    const { subject, text, html } = renderSessionEndedReportEmail({
+      fullName: host.full_name,
+      sessionTitle: session.title,
+      summary: report.summary,
+      quizStats: report.quiz_stats,
+      brandName,
+      logoCid: logoAttachment ? EMAIL_LOGO_CID : null
+    });
+
+    const attachments = [
+      {
+        filename: `session-report-${safeTitle || numericId}.csv`,
+        content: csv,
+        contentType: "text/csv; charset=utf-8"
+      }
+    ];
+    if (logoAttachment) attachments.push(logoAttachment);
+
+    await sendMailWithConfig(config, {
+      to,
+      subject,
+      text,
+      html,
+      attachments
+    });
+
+    return { sent: true, to };
+  } catch (err) {
+    await Session.update(
+      { report_email_sent_at: null },
+      { where: { session_id: numericId } }
+    ).catch(() => {});
+    throw err;
+  }
+}
+
 module.exports = {
   getActiveMailConfig,
   sendMail,
@@ -455,5 +555,6 @@ module.exports = {
   sendWeeklySummaryEmail,
   sendParticipantLimitExceededEmail,
   sendPlanExpiredEmail,
-  sendPlanExpiringSoonEmail
+  sendPlanExpiringSoonEmail,
+  sendSessionEndedReportEmail
 };

@@ -8,6 +8,7 @@ import {
   getParticipantSessionSurveySummaryApi,
   getParticipantSurveyQuestionResultsApi,
   joinSessionApi,
+  reportTabSwitchApi,
   sendSessionJoinOtpApi,
   verifyCustomerMatchApi,
   verifySessionJoinOtpApi,
@@ -17,6 +18,7 @@ import {
   submitResponseApi,
   // upvoteQaApi, // Q&A feature disabled
 } from '../../services/participantApi'
+import { getOrCreateDeviceFingerprint } from '../../utils/deviceFingerprint'
 import { createRealtimeClient, RealtimeEvent } from '../../services/realtimeClient'
 import { useParticipantStore } from '../../store/participantStore'
 import { useParticipantProgressPersistence } from '../../hooks/useParticipantProgressPersistence'
@@ -42,6 +44,7 @@ import {
   playPickAnswer,
   playSessionEnded,
   playSubmitSuccess,
+  playTabSwitchAlert,
   unlockTimerAudio,
 } from '../../utils/timerSounds'
 import {
@@ -241,6 +244,9 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
   const [otpBusy, setOtpBusy] = useState(false)
   const [joinBusy, setJoinBusy] = useState(false)
   const [joinError, setJoinError] = useState('')
+  const [tabAwayWarning, setTabAwayWarning] = useState(false)
+  const [replacedByNewDevice, setReplacedByNewDevice] = useState(false)
+  const lastTabSwitchReportAtRef = useRef(0)
   const [autoJoinPending, setAutoJoinPending] = useState(false)
   const autoJoinAttemptedRef = useRef(false)
   const joinIdentityTokenRef = useRef(queryIdentity.joinToken || '')
@@ -1009,6 +1015,12 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
       // Connection closed by admin — do not auto-rejoin until refresh
     })
 
+    const offReplacedDevice = client.on(RealtimeEvent.REPLACED_BY_NEW_DEVICE, () => {
+      setReplacedByNewDevice(true)
+      useParticipantStore.getState().clearParticipant?.()
+      client.disconnect()
+    })
+
     const offSession = client.on(RealtimeEvent.SESSION_UPDATED, (data) => {
       const nextStatus =
         typeof data?.status === 'string'
@@ -1377,6 +1389,14 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
                 data.join_locked !== undefined
                   ? Boolean(data.join_locked)
                   : old.join_locked,
+              tab_switch_detection_enabled:
+                data.tab_switch_detection_enabled !== undefined
+                  ? Boolean(data.tab_switch_detection_enabled)
+                  : old.tab_switch_detection_enabled,
+              single_device_join_enabled:
+                data.single_device_join_enabled !== undefined
+                  ? Boolean(data.single_device_join_enabled)
+                  : old.single_device_join_enabled,
               join_blocked:
                 data.join_blocked !== undefined
                   ? Boolean(data.join_blocked)
@@ -1526,6 +1546,7 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
       offConnected()
       offIpBlocked()
       offAdminClosed()
+      offReplacedDevice()
       offSession()
       offQuestion()
       offReattempt()
@@ -2123,6 +2144,50 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
     isCurrentQuestionLeaderboardVisible &&
     step === 'active' &&
     Boolean(questionLockedBySubmission || submitted)
+
+  const tabSwitchDetectionEnabled = Boolean(session?.tab_switch_detection_enabled)
+  const monitoringQuizTab =
+    tabSwitchDetectionEnabled &&
+    step === 'active' &&
+    Boolean(question) &&
+    !isSessionEnded &&
+    !question?.isSurvey &&
+    question?.isQuizMode !== false &&
+    !hasSubmittedQuestion
+
+  useEffect(() => {
+    if (!monitoringQuizTab || !participantToken || !dbSessionId) return undefined
+
+    const reportLeave = () => {
+      const now = Date.now()
+      if (now - lastTabSwitchReportAtRef.current < 2500) return
+      lastTabSwitchReportAtRef.current = now
+      setTabAwayWarning(true)
+      unlockTimerAudio()
+      playTabSwitchAlert()
+      void reportTabSwitchApi(participantToken, dbSessionId, question?.id).catch(() => {})
+    }
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') reportLeave()
+    }
+    const onBlur = () => {
+      if (document.visibilityState === 'hidden') return
+      reportLeave()
+    }
+
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('blur', onBlur)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('blur', onBlur)
+    }
+  }, [
+    monitoringQuizTab,
+    participantToken,
+    dbSessionId,
+    question?.id,
+  ])
 
   const surveyResultsQuery = useQuery({
     queryKey: ['participant-survey-results', question?.id, participantToken],
@@ -2792,6 +2857,7 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
         email: checkEmail || (customerMatchGate.required ? matchEmail : null),
         mobile: checkMobile,
         is_anonymous: isAnonymous,
+        device_fingerprint: getOrCreateDeviceFingerprint(),
       }
       if (nickname) joinPayload.nickname = nickname
       if (otpToken) joinPayload.otp_token = otpToken
@@ -3489,6 +3555,24 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
         message="The host has ended this session. Thank you for participating!"
         confirmLabel="OK"
         onClose={() => setSessionEndedModal(false)}
+      />
+
+      <ParticipantAlertModal
+        open={tabAwayWarning}
+        variant="error"
+        title="Return to the quiz"
+        message="You left the quiz tab. Please stay on this page while answering scored questions."
+        confirmLabel="I'm back"
+        onClose={() => setTabAwayWarning(false)}
+      />
+
+      <ParticipantAlertModal
+        open={replacedByNewDevice}
+        variant="info"
+        title="Joined from another device"
+        message="This session allows one active device. Your previous connection was closed because you joined again elsewhere."
+        confirmLabel="OK"
+        onClose={() => setReplacedByNewDevice(false)}
       />
 
       {inactivityModal}

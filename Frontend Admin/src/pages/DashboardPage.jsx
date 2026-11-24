@@ -584,6 +584,9 @@ function DashboardPage() {
         show_participant_count: Boolean(values.showParticipantCount),
         show_session_title: values.showSessionTitle !== false,
         show_app_logo: values.showAppLogo !== false,
+        tab_switch_detection_enabled: Boolean(values.tabSwitchDetectionEnabled),
+        single_device_join_enabled: true,
+        auto_email_report_on_end: true,
         auto_end_enabled: Boolean(values.autoEndEnabled),
         auto_end_date: values.autoEndEnabled ? values.autoEndDate || null : null,
         auto_end_time: values.autoEndEnabled ? values.autoEndTime || null : null,
@@ -649,6 +652,7 @@ function DashboardPage() {
       ),
       quizTotalTimeSynced: Boolean(editSession.quiz_total_time_synced),
       overallLeaderboard: Boolean(editSession.leaderboard_enabled),
+      tabSwitchDetectionEnabled: Boolean(editSession.tab_switch_detection_enabled),
       showParticipantCount: Boolean(editSession.show_participant_count),
       showSessionTitle: editSession.show_session_title !== false,
       showAppLogo: editSession.show_app_logo !== false,
@@ -722,6 +726,9 @@ function DashboardPage() {
       // Live-editable participant display flags (backend liveSettingsOnly).
       show_session_title: values.showSessionTitle !== false,
       show_app_logo: values.showAppLogo !== false,
+      tab_switch_detection_enabled: Boolean(values.tabSwitchDetectionEnabled),
+      single_device_join_enabled: true,
+      auto_email_report_on_end: true,
     }
 
     if (!editSessionLiveSettingsOnly) {

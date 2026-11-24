@@ -24,6 +24,7 @@ import {
   Presentation,
   Rocket,
   Share2,
+  ShieldAlert,
   Trophy,
   Users,
 } from 'lucide-react'
@@ -86,6 +87,7 @@ import { useAuthStore, syncAuthForNewBrowserTab } from '../store/authStore'
 import { useHostOnboarding } from '../context/HostOnboardingContext'
 import {
   getQuestionResultsApi,
+  getSessionAnticheatApi,
   getSessionDetailApi,
   getSessionLeaderboardApi,
   getSessionResponsesApi,
@@ -167,6 +169,7 @@ function LivePage() {
   const [hostAlert, setHostAlert] = useState(null)
   const [endSessionConfirmOpen, setEndSessionConfirmOpen] = useState(false)
   const [inactivityOpen, setInactivityOpen] = useState(false)
+  const [anticheatByParticipant, setAnticheatByParticipant] = useState({})
   // const [qaExporting, setQaExporting] = useState(false) // Q&A feature disabled
 
 
@@ -567,6 +570,18 @@ function LivePage() {
       playHostParticipantJoined()
     })
 
+    const offAnticheat = client.on(RealtimeEvent.PARTICIPANT_ANTICHEAT, (data) => {
+      const pid = Number(data?.participant_id)
+      if (!Number.isFinite(pid)) return
+      setAnticheatByParticipant((prev) => ({
+        ...prev,
+        [pid]: {
+          nickname: data?.nickname || prev[pid]?.nickname || `Participant ${pid}`,
+          tab_switch_count: Number(data?.tab_switch_count) || 0,
+          last_tab_switch_at: data?.last_tab_switch_at || null,
+        },
+      }))
+    })
 
     client.connect()
     return () => {
@@ -583,6 +598,7 @@ function LivePage() {
       offQuestionLb()
       offLeaderboard()
       offParticipantJoined()
+      offAnticheat()
       client.disconnect()
     }
   }, [sessionQuery.data?.session_code, accessToken, queryClient, sessionId, leaderboardLimit])
@@ -836,6 +852,63 @@ function LivePage() {
       setErrorMessage(error.message || 'Unable to update room lock'),
   })
 
+  const sessionTabSwitchMutation = useMutation({
+    mutationFn: (enabled) =>
+      updateSessionApi(accessToken, sessionId, { tab_switch_detection_enabled: enabled }),
+    onSuccess: (updated) => {
+      if (updated) {
+        const patch = {
+          tab_switch_detection_enabled: Boolean(updated.tab_switch_detection_enabled),
+        }
+        queryClient.setQueryData(['live-session', sessionId], (old) =>
+          old ? { ...old, ...updated, ...patch } : updated,
+        )
+        queryClient.setQueryData(['live-session', sessionId, 'host'], (old) =>
+          old ? { ...old, ...updated, ...patch } : old,
+        )
+      }
+      queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['live-anticheat', sessionId] })
+    },
+    onError: (error) =>
+      setErrorMessage(error.message || 'Unable to update tab detection'),
+  })
+
+  const anticheatQuery = useQuery({
+    queryKey: ['live-anticheat', sessionId],
+    queryFn: () => getSessionAnticheatApi(accessToken, sessionId),
+    enabled: Boolean(
+      accessToken && sessionId && sessionQuery.data?.tab_switch_detection_enabled,
+    ),
+    refetchInterval: sessionQuery.data?.status === 'live' ? 15000 : false,
+  })
+
+  useEffect(() => {
+    const rows = anticheatQuery.data
+    if (!Array.isArray(rows)) return
+    const next = {}
+    for (const row of rows) {
+      const pid = Number(row.participant_id)
+      if (!Number.isFinite(pid)) continue
+      next[pid] = {
+        nickname: row.nickname,
+        tab_switch_count: Number(row.tab_switch_count) || 0,
+        last_tab_switch_at: row.last_tab_switch_at || null,
+      }
+    }
+    setAnticheatByParticipant(next)
+  }, [anticheatQuery.data])
+
+  const anticheatRows = useMemo(() => {
+    return Object.entries(anticheatByParticipant)
+      .map(([id, row]) => ({
+        participant_id: Number(id),
+        nickname: row.nickname || `Participant ${id}`,
+        tab_switch_count: Number(row.tab_switch_count) || 0,
+      }))
+      .filter((row) => row.tab_switch_count > 0)
+      .sort((a, b) => b.tab_switch_count - a.tab_switch_count)
+  }, [anticheatByParticipant])
 
   const {
     questionLiveMutation,
@@ -1518,6 +1591,29 @@ function LivePage() {
                 }
               />
             ) : null}
+            {showSessionControls ? (
+              <HostQuestionActionButton
+                disabled={sessionTabSwitchMutation.isPending}
+                icon={ShieldAlert}
+                label={
+                  sessionTabSwitchMutation.isPending
+                    ? 'Updating…'
+                    : session?.tab_switch_detection_enabled
+                      ? 'Tab detect on'
+                      : 'Tab detect'
+                }
+                title={
+                  session?.tab_switch_detection_enabled
+                    ? 'Turn off tab-switch detection for participants'
+                    : 'Warn and log when participants leave the quiz tab during scored questions'
+                }
+                active={Boolean(session?.tab_switch_detection_enabled)}
+                tone="amber"
+                onClick={() =>
+                  sessionTabSwitchMutation.mutate(!session?.tab_switch_detection_enabled)
+                }
+              />
+            ) : null}
             {/* Participant count live toggle — configure in New Session modal instead; keep for future.
             {showSessionControls ? (
               <HostQuestionActionButton
@@ -1853,6 +1949,33 @@ function LivePage() {
             </div>
           </div>
 
+          {session?.tab_switch_detection_enabled ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-amber-950">Tab-switch alerts</p>
+                <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">
+                  {anticheatRows.length}
+                </span>
+              </div>
+              <ul className="mt-3 max-h-40 space-y-1.5 overflow-auto text-sm text-amber-950">
+                {anticheatRows.length ? (
+                  anticheatRows.slice(0, 12).map((row) => (
+                    <li
+                      key={row.participant_id}
+                      className="flex items-center justify-between gap-2 rounded-lg bg-white/70 px-2.5 py-1.5"
+                    >
+                      <span className="truncate font-medium">{row.nickname}</span>
+                      <span className="shrink-0 font-semibold tabular-nums">
+                        {row.tab_switch_count}×
+                      </span>
+                    </li>
+                  ))
+                ) : (
+                  <li className="text-xs text-amber-800/80">No tab switches logged yet.</li>
+                )}
+              </ul>
+            </div>
+          ) : null}
 
           <div className="rounded-2xl border border-blue-200 bg-white p-4">
             <div className="flex items-center justify-between">
