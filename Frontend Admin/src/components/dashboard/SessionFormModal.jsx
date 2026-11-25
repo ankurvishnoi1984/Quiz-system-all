@@ -131,6 +131,7 @@ const defaultInitial = {
   quizTotalTimeSynced: false,
   overallLeaderboard: false,
   tabSwitchDetectionEnabled: false,
+  tabSwitchBlockAfter: 3,
   showParticipantCount: false,
   showSessionTitle: true,
   showAppLogo: true,
@@ -219,6 +220,9 @@ function SessionFormModal({
   const [overallLeaderboard, setOverallLeaderboard] = useState(defaultInitial.overallLeaderboard)
   const [tabSwitchDetectionEnabled, setTabSwitchDetectionEnabled] = useState(
     defaultInitial.tabSwitchDetectionEnabled,
+  )
+  const [tabSwitchBlockAfter, setTabSwitchBlockAfter] = useState(
+    Number(defaultInitial.tabSwitchBlockAfter) || 3,
   )
   const [showParticipantCount, setShowParticipantCount] = useState(
     defaultInitial.showParticipantCount,
@@ -328,6 +332,11 @@ function SessionFormModal({
     )
     setOverallLeaderboard(initialValues.overallLeaderboard === true)
     setTabSwitchDetectionEnabled(Boolean(initialValues.tabSwitchDetectionEnabled))
+    setTabSwitchBlockAfter(
+      Number(initialValues.tabSwitchBlockAfter) > 0
+        ? Number(initialValues.tabSwitchBlockAfter)
+        : 3,
+    )
     setShowParticipantCount(initialValues.showParticipantCount === true)
     setShowSessionTitle(initialValues.showSessionTitle !== false)
     setShowAppLogo(initialValues.showAppLogo !== false)
@@ -670,6 +679,9 @@ function SessionFormModal({
       quizTotalTimeSynced: enableNavigation && quizTotalTimeEnabled && quizTotalTimeSynced,
       overallLeaderboard,
       tabSwitchDetectionEnabled,
+      tabSwitchBlockAfter: tabSwitchDetectionEnabled
+        ? Math.min(20, Math.max(1, Number(tabSwitchBlockAfter) || 3))
+        : null,
       showParticipantCount,
       showSessionTitle,
       showAppLogo,
@@ -1442,6 +1454,30 @@ function SessionFormModal({
                     className="h-5 w-5 rounded border-slate-300 text-navy-700 focus:ring-blue-500/40"
                   />
                 </label>
+                {tabSwitchDetectionEnabled ? (
+                  <div className="rounded-xl border border-blue-200/70 bg-white px-3 py-3">
+                    <label className="block text-sm font-semibold text-slate-700" htmlFor="tab-switch-block-after">
+                      Block after how many tab switches?
+                    </label>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Participant is warned each time, then locked out of the quiz after this many
+                      switches (1–20).
+                    </p>
+                    <input
+                      id="tab-switch-block-after"
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={tabSwitchBlockAfter}
+                      onChange={(event) =>
+                        setTabSwitchBlockAfter(
+                          Math.min(20, Math.max(1, Number(event.target.value) || 1)),
+                        )
+                      }
+                      className="mt-2 h-10 w-28 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-800 focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    />
+                  </div>
+                ) : null}
               </div>
               <div className="md:col-span-2 space-y-3">
                 <div>
@@ -1879,7 +1915,7 @@ function SessionFormModal({
                 // submit button that replaces Next on the last step.
                 window.setTimeout(() => setActiveTab(tabId), 0)
               }}
-              className="h-11 rounded-xl border border-navy-900/20 bg-white px-4 text-sm font-semibold text-navy-900 transition hover:bg-blue-50"
+              className="h-11 rounded-xl bg-navy-900 px-4 text-sm font-semibold text-white transition hover:bg-navy-800"
             >
               Next
             </button>

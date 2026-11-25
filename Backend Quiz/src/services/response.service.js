@@ -451,6 +451,11 @@ function resolveQuizPointsEarned({ session, question, isCorrect, responseTimeMs,
 }
 
 async function submitResponse({ participant, input }) {
+  const {
+    assertParticipantNotAnticheatBlocked
+  } = require("./anticheat.service");
+  await assertParticipantNotAnticheatBlocked(participant);
+
   const question = await Question.findByPk(Number(input.question_id), {
     include: [{ model: QuestionOption }]
   });

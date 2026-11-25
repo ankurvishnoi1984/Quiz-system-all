@@ -306,6 +306,40 @@ function coerceOptionalBoolean(value, fieldName, errors) {
   }
 }
 
+const TAB_SWITCH_BLOCK_AFTER_MIN = 1;
+const TAB_SWITCH_BLOCK_AFTER_MAX = 20;
+const TAB_SWITCH_BLOCK_AFTER_DEFAULT = 3;
+
+/** When detection is on, returns 1–20 (default 3). When off, returns null. */
+function normalizeTabSwitchBlockAfter(detectionEnabled, value) {
+  if (!detectionEnabled) return null;
+  if (value === undefined || value === null || value === "") {
+    return TAB_SWITCH_BLOCK_AFTER_DEFAULT;
+  }
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < TAB_SWITCH_BLOCK_AFTER_MIN) {
+    return TAB_SWITCH_BLOCK_AFTER_DEFAULT;
+  }
+  return Math.min(TAB_SWITCH_BLOCK_AFTER_MAX, n);
+}
+
+function validateTabSwitchBlockAfter(payload, errors) {
+  if (payload?.tab_switch_block_after === undefined) return;
+  if (payload.tab_switch_block_after === null || payload.tab_switch_block_after === "") {
+    return;
+  }
+  const n = Number(payload.tab_switch_block_after);
+  if (
+    !Number.isInteger(n) ||
+    n < TAB_SWITCH_BLOCK_AFTER_MIN ||
+    n > TAB_SWITCH_BLOCK_AFTER_MAX
+  ) {
+    errors.push(
+      `tab_switch_block_after must be an integer between ${TAB_SWITCH_BLOCK_AFTER_MIN} and ${TAB_SWITCH_BLOCK_AFTER_MAX}`
+    );
+  }
+}
+
 const {
   validatePresentModeSettings
 } = require("../utils/presentModeSettings");
@@ -476,6 +510,12 @@ function validateCreateSessionPayload(payload) {
     })
   );
   validateLeaderboardTopNField(payload, errors);
+  coerceOptionalBoolean(
+    payload?.tab_switch_detection_enabled,
+    "tab_switch_detection_enabled",
+    errors
+  );
+  validateTabSwitchBlockAfter(payload, errors);
 
   return errors;
 }
@@ -511,6 +551,7 @@ function validateUpdateSessionPayload(payload) {
     "customer_match_zone", // legacy singular alias during rollout
     "join_locked",
     "tab_switch_detection_enabled",
+    "tab_switch_block_after",
     "single_device_join_enabled",
     "auto_email_report_on_end",
     "scheduled_date",
@@ -591,6 +632,7 @@ function validateUpdateSessionPayload(payload) {
     "tab_switch_detection_enabled",
     errors
   );
+  validateTabSwitchBlockAfter(payload, errors);
   coerceOptionalBoolean(
     payload?.single_device_join_enabled,
     "single_device_join_enabled",
@@ -773,5 +815,7 @@ module.exports = {
   validateJoinSessionPayload,
   validateMintJoinIdentityTokenPayload,
   resolveJoinOtpRequired,
-  isContactJoinType
+  isContactJoinType,
+  normalizeTabSwitchBlockAfter,
+  TAB_SWITCH_BLOCK_AFTER_DEFAULT
 };

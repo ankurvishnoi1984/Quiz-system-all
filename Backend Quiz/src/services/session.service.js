@@ -48,7 +48,10 @@ const {
   assertSessionJoinIdentityFields,
   assertSessionJoinOtpToken
 } = require("./otp.service");
-const { resolveJoinOtpRequired } = require("../validators/session.validator");
+const {
+  resolveJoinOtpRequired,
+  normalizeTabSwitchBlockAfter
+} = require("../validators/session.validator");
 const { isValidMobile } = require("../utils/phone");
 const {
   canAccessDepartment,
@@ -249,6 +252,10 @@ async function createSession({ deptId, input, user }) {
      allow_late_join: false,
      join_locked: false,
      tab_switch_detection_enabled: Boolean(input.tab_switch_detection_enabled),
+     tab_switch_block_after: normalizeTabSwitchBlockAfter(
+       Boolean(input.tab_switch_detection_enabled),
+       input.tab_switch_block_after
+     ),
      single_device_join_enabled: input.single_device_join_enabled !== false,
      auto_email_report_on_end: input.auto_email_report_on_end !== false,
      report_email_sent_at: null,
@@ -434,6 +441,10 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
         allow_late_join: source.allow_late_join ?? false,
         join_locked: false,
         tab_switch_detection_enabled: Boolean(source.tab_switch_detection_enabled),
+        tab_switch_block_after: normalizeTabSwitchBlockAfter(
+          Boolean(source.tab_switch_detection_enabled),
+          source.tab_switch_block_after
+        ),
         single_device_join_enabled: true,
         auto_email_report_on_end: true,
         report_email_sent_at: null,
@@ -642,6 +653,7 @@ async function updateSession({ sessionId, input, user }) {
     "participant_theme_custom",
     "join_locked",
     "tab_switch_detection_enabled",
+    "tab_switch_block_after",
     "single_device_join_enabled",
     "auto_email_report_on_end"
   ];
@@ -785,6 +797,19 @@ async function updateSession({ sessionId, input, user }) {
       input.tab_switch_detection_enabled !== undefined
         ? Boolean(input.tab_switch_detection_enabled)
         : Boolean(session.tab_switch_detection_enabled),
+    tab_switch_block_after: (() => {
+      const detectionEnabled =
+        input.tab_switch_detection_enabled !== undefined
+          ? Boolean(input.tab_switch_detection_enabled)
+          : Boolean(session.tab_switch_detection_enabled);
+      if (input.tab_switch_block_after !== undefined || input.tab_switch_detection_enabled !== undefined) {
+        return normalizeTabSwitchBlockAfter(detectionEnabled, input.tab_switch_block_after);
+      }
+      return normalizeTabSwitchBlockAfter(
+        detectionEnabled,
+        session.tab_switch_block_after
+      );
+    })(),
     single_device_join_enabled:
       input.single_device_join_enabled !== undefined
         ? Boolean(input.single_device_join_enabled)

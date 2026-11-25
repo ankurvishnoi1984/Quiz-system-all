@@ -245,6 +245,8 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
   const [joinBusy, setJoinBusy] = useState(false)
   const [joinError, setJoinError] = useState('')
   const [tabAwayWarning, setTabAwayWarning] = useState(false)
+  const [tabSwitchWarningCount, setTabSwitchWarningCount] = useState(0)
+  const [quizBlockedByAnticheat, setQuizBlockedByAnticheat] = useState(false)
   const [replacedByNewDevice, setReplacedByNewDevice] = useState(false)
   const lastTabSwitchReportAtRef = useRef(0)
   const [autoJoinPending, setAutoJoinPending] = useState(false)
@@ -723,6 +725,7 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
   const openForReattempt = Boolean(question?.openForReattempt)
 
   const inputsLocked =
+    quizBlockedByAnticheat ||
     isSessionEnded ||
     (submissionsClosed && !openForReattempt) ||
     (navigationEnabled && allQuestionsClosedByHost && !openForReattempt) ||
@@ -1019,6 +1022,18 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
       setReplacedByNewDevice(true)
       useParticipantStore.getState().clearParticipant?.()
       client.disconnect()
+    })
+
+    const offAnticheat = client.on(RealtimeEvent.PARTICIPANT_ANTICHEAT, (data) => {
+      const pid = Number(data?.participant_id)
+      const myId = Number(useParticipantStore.getState().joinedUser?.id)
+      if (!Number.isFinite(pid) || !Number.isFinite(myId) || pid !== myId) return
+      const count = Number(data?.tab_switch_count) || 0
+      if (count > 0) setTabSwitchWarningCount(count)
+      if (data?.blocked) {
+        setQuizBlockedByAnticheat(true)
+        setTabAwayWarning(false)
+      }
     })
 
     const offSession = client.on(RealtimeEvent.SESSION_UPDATED, (data) => {
@@ -1393,6 +1408,10 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
                 data.tab_switch_detection_enabled !== undefined
                   ? Boolean(data.tab_switch_detection_enabled)
                   : old.tab_switch_detection_enabled,
+              tab_switch_block_after:
+                data.tab_switch_block_after !== undefined
+                  ? data.tab_switch_block_after
+                  : old.tab_switch_block_after,
               single_device_join_enabled:
                 data.single_device_join_enabled !== undefined
                   ? Boolean(data.single_device_join_enabled)
@@ -1547,6 +1566,7 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
       offIpBlocked()
       offAdminClosed()
       offReplacedDevice()
+      offAnticheat()
       offSession()
       offQuestion()
       offReattempt()
@@ -2146,8 +2166,13 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
     Boolean(questionLockedBySubmission || submitted)
 
   const tabSwitchDetectionEnabled = Boolean(session?.tab_switch_detection_enabled)
+  const tabSwitchBlockAfter =
+    session?.tab_switch_block_after != null && Number(session.tab_switch_block_after) > 0
+      ? Number(session.tab_switch_block_after)
+      : null
   const monitoringQuizTab =
     tabSwitchDetectionEnabled &&
+    !quizBlockedByAnticheat &&
     step === 'active' &&
     Boolean(question) &&
     !isSessionEnded &&
@@ -2162,10 +2187,22 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
       const now = Date.now()
       if (now - lastTabSwitchReportAtRef.current < 2500) return
       lastTabSwitchReportAtRef.current = now
-      setTabAwayWarning(true)
       unlockTimerAudio()
       playTabSwitchAlert()
-      void reportTabSwitchApi(participantToken, dbSessionId, question?.id).catch(() => {})
+      void reportTabSwitchApi(participantToken, dbSessionId, question?.id)
+        .then((result) => {
+          const count = Number(result?.tab_switch_count) || 0
+          if (count > 0) setTabSwitchWarningCount(count)
+          if (result?.blocked) {
+            setQuizBlockedByAnticheat(true)
+            setTabAwayWarning(false)
+            return
+          }
+          setTabAwayWarning(true)
+        })
+        .catch(() => {
+          setTabAwayWarning(true)
+        })
     }
 
     const onVisibility = () => {
@@ -2565,7 +2602,7 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
   }
 
   const handleNextOrSubmit = async () => {
-    if (isSessionEnded) return
+    if (isSessionEnded || quizBlockedByAnticheat) return
     // Lockstep: Submit saves the answer only; schedule advances when the shared timer ends.
     if (syncedQuestionLockstep && !sessionTimerExpired) {
       if (question?.id) await submitQuestionById(question.id)
@@ -2868,8 +2905,16 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
       const result = await joinSessionApi(effectiveSessionCode, joinPayload)
       if (result.isReturning && result.sessionState) {
         hydrateQuizProgress(result.sessionState)
+        if (result.sessionState?.anticheat?.blocked) {
+          setQuizBlockedByAnticheat(true)
+          setTabSwitchWarningCount(
+            Number(result.sessionState.anticheat.tab_switch_count) || 0,
+          )
+        }
       } else {
         resetQuizProgress()
+        setQuizBlockedByAnticheat(false)
+        setTabSwitchWarningCount(0)
       }
       setParticipant({
         token: result.token,
@@ -3383,9 +3428,23 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
               <SessionEndedPanel thanksImageUrl={session?.thanks_screen_image_url || ''} />
             ) : null}
 
+            {step === 'active' && quizBlockedByAnticheat && !isSessionEnded ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-8 text-center shadow-sm">
+                <p className="text-lg font-bold text-red-900">Removed from quiz</p>
+                <p className="mt-2 text-sm text-red-800/90">
+                  You left the quiz tab too many times
+                  {tabSwitchBlockAfter
+                    ? ` (${tabSwitchWarningCount || tabSwitchBlockAfter} of ${tabSwitchBlockAfter})`
+                    : ''}
+                  . You can no longer answer questions in this session.
+                </p>
+              </div>
+            ) : null}
+
             {step === 'active' &&
               !question &&
               !isSessionEnded &&
+              !quizBlockedByAnticheat &&
               !(
                 sessionQuizTotalTimeEnabled &&
                 (lastQuestionFinalized || sessionTimerExpired)
@@ -3404,6 +3463,7 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
 
             {step === 'active' &&
               !isSessionEnded &&
+              !quizBlockedByAnticheat &&
               sessionQuizTotalTimeEnabled &&
               (lastQuestionFinalized || sessionTimerExpired) && (
                 <QuizCompletedThanksPanel
@@ -3419,6 +3479,7 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
             {step === 'active' &&
               question &&
               !isSessionEnded &&
+              !quizBlockedByAnticheat &&
               !(
                 sessionQuizTotalTimeEnabled &&
                 (lastQuestionFinalized || sessionTimerExpired)
@@ -3558,10 +3619,14 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
       />
 
       <ParticipantAlertModal
-        open={tabAwayWarning}
+        open={tabAwayWarning && !quizBlockedByAnticheat}
         variant="error"
         title="Return to the quiz"
-        message="You left the quiz tab. Please stay on this page while answering scored questions."
+        message={
+          tabSwitchBlockAfter
+            ? `You left the quiz tab (warning ${tabSwitchWarningCount || 1} of ${tabSwitchBlockAfter}). Stay on this page or you will be blocked from the quiz.`
+            : 'You left the quiz tab. Please stay on this page while answering scored questions.'
+        }
         confirmLabel="I'm back"
         onClose={() => setTabAwayWarning(false)}
       />

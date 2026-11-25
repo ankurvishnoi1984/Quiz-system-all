@@ -579,6 +579,7 @@ function LivePage() {
           nickname: data?.nickname || prev[pid]?.nickname || `Participant ${pid}`,
           tab_switch_count: Number(data?.tab_switch_count) || 0,
           last_tab_switch_at: data?.last_tab_switch_at || null,
+          blocked: Boolean(data?.blocked),
         },
       }))
     })
@@ -894,6 +895,7 @@ function LivePage() {
         nickname: row.nickname,
         tab_switch_count: Number(row.tab_switch_count) || 0,
         last_tab_switch_at: row.last_tab_switch_at || null,
+        blocked: Boolean(row.blocked),
       }
     }
     setAnticheatByParticipant(next)
@@ -905,9 +907,13 @@ function LivePage() {
         participant_id: Number(id),
         nickname: row.nickname || `Participant ${id}`,
         tab_switch_count: Number(row.tab_switch_count) || 0,
+        blocked: Boolean(row.blocked),
       }))
-      .filter((row) => row.tab_switch_count > 0)
-      .sort((a, b) => b.tab_switch_count - a.tab_switch_count)
+      .filter((row) => row.tab_switch_count > 0 || row.blocked)
+      .sort((a, b) => {
+        if (a.blocked !== b.blocked) return a.blocked ? -1 : 1
+        return b.tab_switch_count - a.tab_switch_count
+      })
   }, [anticheatByParticipant])
 
   const {
@@ -1964,7 +1970,14 @@ function LivePage() {
                       key={row.participant_id}
                       className="flex items-center justify-between gap-2 rounded-lg bg-white/70 px-2.5 py-1.5"
                     >
-                      <span className="truncate font-medium">{row.nickname}</span>
+                      <span className="truncate font-medium">
+                        {row.nickname}
+                        {row.blocked ? (
+                          <span className="ml-1.5 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700">
+                            Blocked
+                          </span>
+                        ) : null}
+                      </span>
                       <span className="shrink-0 font-semibold tabular-nums">
                         {row.tab_switch_count}×
                       </span>

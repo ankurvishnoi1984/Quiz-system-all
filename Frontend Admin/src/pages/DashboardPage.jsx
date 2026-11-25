@@ -585,6 +585,9 @@ function DashboardPage() {
         show_session_title: values.showSessionTitle !== false,
         show_app_logo: values.showAppLogo !== false,
         tab_switch_detection_enabled: Boolean(values.tabSwitchDetectionEnabled),
+        tab_switch_block_after: values.tabSwitchDetectionEnabled
+          ? Number(values.tabSwitchBlockAfter) || 3
+          : null,
         single_device_join_enabled: true,
         auto_email_report_on_end: true,
         auto_end_enabled: Boolean(values.autoEndEnabled),
@@ -653,6 +656,7 @@ function DashboardPage() {
       quizTotalTimeSynced: Boolean(editSession.quiz_total_time_synced),
       overallLeaderboard: Boolean(editSession.leaderboard_enabled),
       tabSwitchDetectionEnabled: Boolean(editSession.tab_switch_detection_enabled),
+      tabSwitchBlockAfter: Number(editSession.tab_switch_block_after) || 3,
       showParticipantCount: Boolean(editSession.show_participant_count),
       showSessionTitle: editSession.show_session_title !== false,
       showAppLogo: editSession.show_app_logo !== false,
@@ -727,6 +731,9 @@ function DashboardPage() {
       show_session_title: values.showSessionTitle !== false,
       show_app_logo: values.showAppLogo !== false,
       tab_switch_detection_enabled: Boolean(values.tabSwitchDetectionEnabled),
+      tab_switch_block_after: values.tabSwitchDetectionEnabled
+        ? Number(values.tabSwitchBlockAfter) || 3
+        : null,
       single_device_join_enabled: true,
       auto_email_report_on_end: true,
     }

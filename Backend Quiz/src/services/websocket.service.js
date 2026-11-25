@@ -753,6 +753,10 @@ function notifySessionSettings(sessionCode, settings) {
     allow_late_join: Boolean(settings.allow_late_join),
     join_locked: Boolean(settings.join_locked),
     tab_switch_detection_enabled: Boolean(settings.tab_switch_detection_enabled),
+    tab_switch_block_after:
+      settings.tab_switch_block_after != null && settings.tab_switch_block_after !== ""
+        ? Number(settings.tab_switch_block_after) || null
+        : null,
     single_device_join_enabled: settings.single_device_join_enabled !== false,
     auto_email_report_on_end: settings.auto_email_report_on_end !== false,
     join_blocked:
@@ -790,7 +794,13 @@ function notifyParticipantAnticheat(sessionCode, payload) {
     participant_id: payload.participant_id ?? null,
     nickname: payload.nickname ?? null,
     tab_switch_count: Number(payload.tab_switch_count) || 0,
-    last_tab_switch_at: payload.last_tab_switch_at || null
+    last_tab_switch_at: payload.last_tab_switch_at || null,
+    blocked: Boolean(payload.blocked),
+    blocked_at: payload.blocked_at || null,
+    block_after:
+      payload.block_after != null && payload.block_after !== ""
+        ? Number(payload.block_after) || null
+        : null
   });
 }
 

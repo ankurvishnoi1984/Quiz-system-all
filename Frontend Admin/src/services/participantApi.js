@@ -122,10 +122,17 @@ export async function reportTabSwitchApi(participantToken, sessionId, questionId
   if (questionId != null && questionId !== '') {
     body.question_id = Number(questionId)
   }
-  return authRequest(`/sessions/${sessionId}/anticheat/tab-switch`, participantToken, {
+  const data = await authRequest(`/sessions/${sessionId}/anticheat/tab-switch`, participantToken, {
     method: 'POST',
     body: JSON.stringify(body),
   })
+  return {
+    recorded: Boolean(data?.recorded),
+    tab_switch_count: Number(data?.tab_switch_count) || 0,
+    blocked: Boolean(data?.blocked),
+    block_after: data?.block_after != null ? Number(data.block_after) || null : null,
+    last_tab_switch_at: data?.last_tab_switch_at || null,
+  }
 }
 
 export async function listQaQuestionsApi(participantToken, sessionId) {

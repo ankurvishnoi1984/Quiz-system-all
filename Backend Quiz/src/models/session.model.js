@@ -129,6 +129,11 @@ const Session = sequelize.define(
       allowNull: false,
       defaultValue: false
     },
+    tab_switch_block_after: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: null
+    },
     single_device_join_enabled: {
       type: DataTypes.BOOLEAN,
       allowNull: false,

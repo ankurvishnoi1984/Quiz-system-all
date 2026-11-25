@@ -13,8 +13,33 @@ function getAnticheatState(participant) {
   return {
     tab_switch_count: Number(anticheat.tab_switch_count) || 0,
     last_tab_switch_at: anticheat.last_tab_switch_at || null,
+    blocked: Boolean(anticheat.blocked),
+    blocked_at: anticheat.blocked_at || null,
+    blocked_reason: anticheat.blocked_reason || null,
     events: Array.isArray(anticheat.events) ? anticheat.events : []
   };
+}
+
+function isParticipantAnticheatBlocked(participant) {
+  return getAnticheatState(participant).blocked === true;
+}
+
+async function assertParticipantNotAnticheatBlocked(participant) {
+  const row =
+    participant?.session_state != null
+      ? participant
+      : await Participant.findByPk(participant.participant_id, {
+          attributes: ["participant_id", "session_state"]
+        });
+  if (!row) return;
+  if (isParticipantAnticheatBlocked(row)) {
+    const error = new Error(
+      "You have been blocked from this quiz for leaving the tab too many times."
+    );
+    error.statusCode = 403;
+    error.code = "anticheat_blocked";
+    throw error;
+  }
 }
 
 async function recordTabSwitchViolation({ participant, sessionId = null, questionId = null }) {
@@ -28,7 +53,13 @@ async function recordTabSwitchViolation({ participant, sessionId = null, questio
   }
 
   const session = await Session.findByPk(participant.session_id, {
-    attributes: ["session_id", "session_code", "tab_switch_detection_enabled", "status"]
+    attributes: [
+      "session_id",
+      "session_code",
+      "tab_switch_detection_enabled",
+      "tab_switch_block_after",
+      "status"
+    ]
   });
   if (!session) {
     const error = new Error("Session not found");
@@ -36,7 +67,15 @@ async function recordTabSwitchViolation({ participant, sessionId = null, questio
     throw error;
   }
   if (!session.tab_switch_detection_enabled) {
-    return { recorded: false, reason: "disabled", tab_switch_count: 0, last_tab_switch_at: null, events: [] };
+    return {
+      recorded: false,
+      reason: "disabled",
+      tab_switch_count: 0,
+      last_tab_switch_at: null,
+      blocked: false,
+      block_after: null,
+      events: []
+    };
   }
   if (!["live", "paused"].includes(session.status)) {
     return {
@@ -44,6 +83,8 @@ async function recordTabSwitchViolation({ participant, sessionId = null, questio
       reason: "session_not_live",
       tab_switch_count: 0,
       last_tab_switch_at: null,
+      blocked: false,
+      block_after: null,
       events: []
     };
   }
@@ -56,6 +97,19 @@ async function recordTabSwitchViolation({ participant, sessionId = null, questio
   }
 
   const prev = getAnticheatState(row);
+  const blockAfterRaw = Number(session.tab_switch_block_after);
+  const blockAfter =
+    Number.isInteger(blockAfterRaw) && blockAfterRaw > 0 ? blockAfterRaw : null;
+
+  if (prev.blocked) {
+    return {
+      recorded: false,
+      reason: "already_blocked",
+      ...prev,
+      block_after: blockAfter
+    };
+  }
+
   const nowIso = new Date().toISOString();
   const event = {
     type: "tab_switch",
@@ -63,9 +117,14 @@ async function recordTabSwitchViolation({ participant, sessionId = null, questio
     question_id: questionId != null ? Number(questionId) : null
   };
   const events = [...prev.events, event].slice(-MAX_STORED_EVENTS);
+  const tabSwitchCount = prev.tab_switch_count + 1;
+  const shouldBlock = blockAfter != null && tabSwitchCount >= blockAfter;
   const next = {
-    tab_switch_count: prev.tab_switch_count + 1,
+    tab_switch_count: tabSwitchCount,
     last_tab_switch_at: nowIso,
+    blocked: shouldBlock,
+    blocked_at: shouldBlock ? nowIso : null,
+    blocked_reason: shouldBlock ? "tab_switch" : null,
     events
   };
 
@@ -79,11 +138,14 @@ async function recordTabSwitchViolation({ participant, sessionId = null, questio
       participant_id: row.participant_id,
       nickname: row.nickname || null,
       tab_switch_count: next.tab_switch_count,
-      last_tab_switch_at: next.last_tab_switch_at
+      last_tab_switch_at: next.last_tab_switch_at,
+      blocked: next.blocked,
+      blocked_at: next.blocked_at,
+      block_after: blockAfter
     });
   }
 
-  return { recorded: true, ...next };
+  return { recorded: true, ...next, block_after: blockAfter };
 }
 
 async function listSessionAnticheatSummary({ sessionId, user }) {
@@ -100,22 +162,32 @@ async function listSessionAnticheatSummary({ sessionId, user }) {
   const participants = rows
     .map((row) => {
       const anticheat = getAnticheatState(row);
-      if (!anticheat.tab_switch_count) return null;
+      if (!anticheat.tab_switch_count && !anticheat.blocked) return null;
       return {
         participant_id: row.participant_id,
         nickname: row.nickname || `Participant ${row.participant_id}`,
         tab_switch_count: anticheat.tab_switch_count,
-        last_tab_switch_at: anticheat.last_tab_switch_at
+        last_tab_switch_at: anticheat.last_tab_switch_at,
+        blocked: anticheat.blocked,
+        blocked_at: anticheat.blocked_at
       };
     })
     .filter(Boolean)
-    .sort((a, b) => b.tab_switch_count - a.tab_switch_count);
+    .sort((a, b) => {
+      if (a.blocked !== b.blocked) return a.blocked ? -1 : 1;
+      return b.tab_switch_count - a.tab_switch_count;
+    });
 
-  return { participants };
+  return {
+    participants,
+    tab_switch_block_after: session.tab_switch_block_after ?? null
+  };
 }
 
 module.exports = {
   recordTabSwitchViolation,
   listSessionAnticheatSummary,
-  getAnticheatState
+  getAnticheatState,
+  isParticipantAnticheatBlocked,
+  assertParticipantNotAnticheatBlocked
 };
