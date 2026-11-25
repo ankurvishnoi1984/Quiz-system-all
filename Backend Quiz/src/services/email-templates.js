@@ -1196,7 +1196,7 @@ function renderSessionEndedReportEmail({
   const bodyHtml = `
     <p style="margin:0 0 16px;font-size:16px;line-height:1.65;color:${BRAND.slate};">${escapeHtml(greeting)}</p>
     <p style="margin:0 0 24px;font-size:16px;line-height:1.65;color:${BRAND.slate};">
-      Your session <strong>${escapeHtml(title)}</strong> has ended. Here is a quick summary. A CSV of participants is attached.
+      Your session <strong>${escapeHtml(title)}</strong> has ended. Here is a quick summary. The full session report (same as Download report in analytics) is attached as an Excel file.
     </p>
 
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 24px;">
@@ -1225,7 +1225,7 @@ function renderSessionEndedReportEmail({
       ? `Top score: ${quizStats.top_score ?? 0}\nAverage score: ${quizStats.avg_score ?? 0}`
       : "",
     "",
-    "A CSV of participants is attached.",
+    "The full session report (same as Download report in analytics) is attached as an Excel file.",
     "",
     `— ${platformName}`
   ]

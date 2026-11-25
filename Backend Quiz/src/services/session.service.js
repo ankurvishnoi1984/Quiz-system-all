@@ -32,6 +32,8 @@ const {
   isSessionQuizTotalTimeEnabled,
   MULTI_NAV_TIMED_JOIN_CLOSED_MESSAGE
 } = require("../utils/sessionFlags");
+const { logEvent } = require("./error-log.service");
+const { sessionEventsTotal } = require("../config/metrics");
 const {
   assertParticipantCapacity,
   assertSessionAcceptingJoin,
@@ -346,7 +348,27 @@ async function createSession({ deptId, input, user }) {
    });
 
    await provisionSessionAdminForSession({ session, host });
-   return attachSessionAdminCredentials(await getSessionOrThrow(session.session_id));
+   const created = await attachSessionAdminCredentials(
+     await getSessionOrThrow(session.session_id)
+   );
+   try {
+     sessionEventsTotal.inc({ event: "session_created" });
+     logEvent({
+       event: "session_created",
+       source: "api",
+       message: `session_created ${created.session_code}`,
+       session_id: created.session_id,
+       extra: {
+         session_code: created.session_code,
+         status: created.status,
+         dept_id: created.dept_id,
+         host_id: created.host_id
+       }
+     });
+   } catch (_) {
+     /* ignore */
+   }
+   return created;
 }
 
 /**
@@ -980,6 +1002,18 @@ async function archiveSession({ sessionId, user }) {
   session.status = "archived";
   await session.save();
   await deactivateSessionAdminForSession(session);
+  try {
+    sessionEventsTotal.inc({ event: "session_archived" });
+    logEvent({
+      event: "session_archived",
+      source: "api",
+      message: `session_archived ${session.session_code}`,
+      session_id: session.session_id,
+      extra: { session_code: session.session_code, status: session.status }
+    });
+  } catch (_) {
+    /* ignore */
+  }
   return attachSessionAdminCredentials(session);
 }
 
@@ -1208,6 +1242,32 @@ async function transitionSessionStatus({ sessionId, user, action }) {
 
   if (action === "end") {
     queueSessionEndedReportEmail(session.session_id);
+  }
+
+  const eventByAction = {
+    start: "session_started",
+    resume: "session_started",
+    pause: "session_paused",
+    end: "session_ended"
+  };
+  const eventName = eventByAction[action];
+  if (eventName) {
+    try {
+      sessionEventsTotal.inc({ event: eventName });
+      logEvent({
+        event: eventName,
+        source: "api",
+        message: `${eventName} ${session.session_code}`,
+        session_id: session.session_id,
+        extra: {
+          action,
+          session_code: session.session_code,
+          status: session.status
+        }
+      });
+    } catch (_) {
+      /* ignore */
+    }
   }
 
   return session;

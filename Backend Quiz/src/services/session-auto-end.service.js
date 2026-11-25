@@ -2,6 +2,8 @@ const { Op } = require("sequelize");
 const { Session } = require("../models");
 const { buildAutoEndAt } = require("../utils/sessionDateTime");
 const { endSessionBySystem } = require("./session.service");
+const { logEvent, logError } = require("./error-log.service");
+const { sessionEventsTotal } = require("../config/metrics");
 const { isSessionRandomQuestionOrderEnabled } = require("../utils/sessionFlags");
 const {
   notifySessionUpdate,
@@ -10,7 +12,6 @@ const {
   notifyQuestionLeaderboardVisibility,
   closeAllSessionConnections
 } = require("./websocket.service");
-const { logError } = require("./error-log.service");
 
 const AUTO_END_POLL_MS = Number(process.env.SESSION_AUTO_END_POLL_MS) || 30000;
 
@@ -39,6 +40,18 @@ async function processDueAutoEndSessions() {
     if (!ended?.session_code) continue;
 
     endedCount += 1;
+    try {
+      sessionEventsTotal.inc({ event: "session_auto_ended" });
+      logEvent({
+        event: "session_auto_ended",
+        source: "scheduler",
+        message: `session_auto_ended ${ended.session_code}`,
+        session_id: ended.session_id,
+        extra: { session_code: ended.session_code, status: ended.status }
+      });
+    } catch (_) {
+      /* ignore */
+    }
 
     try {
       for (const question of ended.clearedQuestions || []) {

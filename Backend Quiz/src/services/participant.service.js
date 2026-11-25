@@ -6,7 +6,8 @@ const {
   normalizeParticipantSessionState
 } = require("../utils/participantSessionState");
 const { notifyParticipantJoined, notifySessionProgress } = require("./websocket.service");
-const { logCaughtError } = require("./error-log.service");
+const { logCaughtError, logEvent } = require("./error-log.service");
+const { participantEventsTotal } = require("../config/metrics");
 
 const RETURNING_PARTICIPANT_STATUSES = new Set(["live", "paused", "completed", "archived"]);
 
@@ -231,6 +232,23 @@ async function finalizeParticipantJoin(session, participant, { isReturning = fal
         extra: { session_id: session.session_id }
       });
     });
+  }
+
+  try {
+    participantEventsTotal.inc({ event: "participant_joined" });
+    logEvent({
+      event: "participant_joined",
+      source: "api",
+      message: `participant_joined session=${session.session_code}`,
+      session_id: session.session_id,
+      extra: {
+        session_code: session.session_code,
+        participant_id: refreshed.participant_id,
+        is_returning: Boolean(isReturning)
+      }
+    });
+  } catch (_) {
+    /* ignore */
   }
 
   return result;

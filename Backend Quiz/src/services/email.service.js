@@ -18,10 +18,6 @@ const {
 } = require("./email-templates");
 const { logCaughtError } = require("./error-log.service");
 const { Session, User } = require("../models");
-const {
-  getSessionSummaryReportForHost,
-  buildParticipantsReportCsv
-} = require("./session-report.service");
 
 const EMAIL_LOGO_PATH = path.join(__dirname, "../../assets/email-logo.png");
 
@@ -499,28 +495,30 @@ async function sendSessionEndedReportEmail(sessionId) {
       return { sent: false, reason: "no_host_email" };
     }
 
-    const report = await getSessionSummaryReportForHost(numericId);
-    const csv = buildParticipantsReportCsv(report.participant_summaries || []);
-    const safeTitle = String(session.title || "session")
-      .replace(/[^\w\-]+/g, "_")
-      .slice(0, 40);
+    // Lazy require: session-report-excel pulls response/plan which cycle back here.
+    const {
+      buildCombinedSessionReportExcel
+    } = require("./session-report-excel.service");
+    const { buffer, filename, summaryReport } =
+      await buildCombinedSessionReportExcel(numericId);
     const config = await getActiveMailConfig();
     const brandName = config?.sender_name || "Quiz Platform";
     const logoAttachment = getEmailLogoAttachment();
     const { subject, text, html } = renderSessionEndedReportEmail({
       fullName: host.full_name,
       sessionTitle: session.title,
-      summary: report.summary,
-      quizStats: report.quiz_stats,
+      summary: summaryReport.summary,
+      quizStats: summaryReport.quiz_stats,
       brandName,
       logoCid: logoAttachment ? EMAIL_LOGO_CID : null
     });
 
     const attachments = [
       {
-        filename: `session-report-${safeTitle || numericId}.csv`,
-        content: csv,
-        contentType: "text/csv; charset=utf-8"
+        filename,
+        content: buffer,
+        contentType:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
       }
     ];
     if (logoAttachment) attachments.push(logoAttachment);
