@@ -1,10 +1,6 @@
 const { Op } = require("sequelize");
 const { Plan, User, Session } = require("../models");
 const {
-  sendParticipantLimitExceededEmail,
-  sendPlanExpiredEmail
-} = require("./email.service");
-const {
   countLiveParticipantConnectionsForSessionCodes,
   countLiveParticipantConnectionsBySessionCodeMap
 } = require("./websocket.service");
@@ -606,6 +602,8 @@ async function notifyHostPlanLimitIfNeeded(usage) {
   if (!updated) return;
 
   try {
+    // Lazy require avoids circular load with email.service.
+    const { sendParticipantLimitExceededEmail } = require("./email.service");
     await sendParticipantLimitExceededEmail({
       to: host.email,
       fullName: host.full_name,
@@ -639,6 +637,8 @@ async function notifyHostPlanExpiredIfNeeded(usage) {
   if (!updated) return;
 
   try {
+    // Lazy require avoids circular load with email.service.
+    const { sendPlanExpiredEmail } = require("./email.service");
     await sendPlanExpiredEmail({
       to: host.email,
       fullName: host.full_name,

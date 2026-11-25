@@ -576,9 +576,11 @@ async function getSessionQuestionsReport({ sessionId, user }) {
   };
 }
 
-async function getSessionParticipantsReport({ sessionId, user }) {
+async function getSessionParticipantsReport({ sessionId, user, skipAccessCheck = false }) {
   const session = await getSessionForAccess(sessionId);
-  assertStaffAccess(user, session);
+  if (!skipAccessCheck) {
+    assertStaffAccess(user, session);
+  }
 
   const numericSessionId = Number(sessionId);
 
@@ -858,11 +860,20 @@ async function getSessionSummaryReportForHost(sessionId) {
   });
 }
 
+async function getSessionParticipantsReportForHost(sessionId) {
+  return getSessionParticipantsReport({
+    sessionId,
+    user: null,
+    skipAccessCheck: true
+  });
+}
+
 module.exports = {
   getSessionSummaryReport,
   getSessionSummaryReportForHost,
   getSessionQuestionsReport,
   getSessionParticipantsReport,
+  getSessionParticipantsReportForHost,
   getSessionQaReport,
   buildParticipantsReportCsv
 };
