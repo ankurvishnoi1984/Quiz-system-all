@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, Download, FileUp, Loader2, Plus, Trash2, X } from 'lucide-react'
 import Modal from '../ui/Modal'
-import { uploadQuestionMediaApi } from '../../services/mediaApi'
+import { uploadFontApi, uploadQuestionMediaApi } from '../../services/mediaApi'
+import { CertificateLayoutEditor } from '../session/CertificateLayoutEditor'
+import {
+  DEFAULT_CERTIFICATE_LAYOUT,
+  normalizeCertificateLayout,
+} from '../../utils/certificateFonts'
 import { compressQuestionImage } from '../../utils/compressQuestionImage'
 import {
   QUESTION_MEDIA_ACCEPT,
@@ -132,6 +137,10 @@ const defaultInitial = {
   overallLeaderboard: false,
   tabSwitchDetectionEnabled: false,
   tabSwitchBlockAfter: 3,
+  certificateEnabled: false,
+  certificateTemplateUrl: '',
+  certificateCustomFontUrl: '',
+  certificateNameLayout: { ...DEFAULT_CERTIFICATE_LAYOUT },
   showParticipantCount: false,
   showSessionTitle: true,
   showAppLogo: true,
@@ -224,6 +233,22 @@ function SessionFormModal({
   const [tabSwitchBlockAfter, setTabSwitchBlockAfter] = useState(
     Number(defaultInitial.tabSwitchBlockAfter) || 3,
   )
+  const [certificateEnabled, setCertificateEnabled] = useState(
+    Boolean(defaultInitial.certificateEnabled),
+  )
+  const [certificateTemplateUrl, setCertificateTemplateUrl] = useState(
+    defaultInitial.certificateTemplateUrl || '',
+  )
+  const [certificateCustomFontUrl, setCertificateCustomFontUrl] = useState(
+    defaultInitial.certificateCustomFontUrl || '',
+  )
+  const [certificateNameLayout, setCertificateNameLayout] = useState(() =>
+    normalizeCertificateLayout(defaultInitial.certificateNameLayout),
+  )
+  const [certificateTemplateUploading, setCertificateTemplateUploading] = useState(false)
+  const [certificateTemplateError, setCertificateTemplateError] = useState('')
+  const [certificateFontUploading, setCertificateFontUploading] = useState(false)
+  const [certificateFontError, setCertificateFontError] = useState('')
   const [showParticipantCount, setShowParticipantCount] = useState(
     defaultInitial.showParticipantCount,
   )
@@ -337,6 +362,12 @@ function SessionFormModal({
         ? Number(initialValues.tabSwitchBlockAfter)
         : 3,
     )
+    setCertificateEnabled(Boolean(initialValues.certificateEnabled))
+    setCertificateTemplateUrl(initialValues.certificateTemplateUrl || '')
+    setCertificateCustomFontUrl(initialValues.certificateCustomFontUrl || '')
+    setCertificateNameLayout(normalizeCertificateLayout(initialValues.certificateNameLayout))
+    setCertificateTemplateError('')
+    setCertificateFontError('')
     setShowParticipantCount(initialValues.showParticipantCount === true)
     setShowSessionTitle(initialValues.showSessionTitle !== false)
     setShowAppLogo(initialValues.showAppLogo !== false)
@@ -490,6 +521,41 @@ function SessionFormModal({
       inputRef: thanksImageInputRef,
       label: 'thank you image',
     })
+  }
+
+  const handleCertificateTemplateUpload = async (file) => {
+    await uploadSessionImage({
+      file,
+      uploading: certificateTemplateUploading,
+      setUploading: setCertificateTemplateUploading,
+      setError: setCertificateTemplateError,
+      setUrl: setCertificateTemplateUrl,
+      inputRef: { current: null },
+      label: 'certificate template',
+    })
+  }
+
+  const handleCertificateFontUpload = async (file) => {
+    if (!file || certificateFontUploading) return
+    if (!uploadDeptId) {
+      setCertificateFontError('Select a department before uploading a font.')
+      return
+    }
+    setCertificateFontError('')
+    setCertificateFontUploading(true)
+    try {
+      const { fileUrl } = await uploadFontApi(uploadDeptId, file)
+      if (!fileUrl) throw new Error('Upload succeeded but no file URL was returned')
+      const stored = normalizeQuestionMediaUrlForStorage(fileUrl) || fileUrl
+      setCertificateCustomFontUrl(stored)
+      setCertificateNameLayout((prev) =>
+        normalizeCertificateLayout({ ...prev, font_family: 'CertificateCustom' }),
+      )
+    } catch (err) {
+      setCertificateFontError(err.message || 'Failed to upload font')
+    } finally {
+      setCertificateFontUploading(false)
+    }
   }
 
   const clearJoinAllowlist = () => {
@@ -681,6 +747,22 @@ function SessionFormModal({
       tabSwitchDetectionEnabled,
       tabSwitchBlockAfter: tabSwitchDetectionEnabled
         ? Math.min(20, Math.max(1, Number(tabSwitchBlockAfter) || 3))
+        : null,
+      certificateEnabled: Boolean(certificateEnabled),
+      certificateTemplateUrl: certificateEnabled
+        ? certificateTemplateUrl
+          ? normalizeQuestionMediaUrlForStorage(certificateTemplateUrl) ||
+            certificateTemplateUrl
+          : null
+        : null,
+      certificateCustomFontUrl: certificateEnabled
+        ? certificateCustomFontUrl
+          ? normalizeQuestionMediaUrlForStorage(certificateCustomFontUrl) ||
+            certificateCustomFontUrl
+          : null
+        : null,
+      certificateNameLayout: certificateEnabled
+        ? normalizeCertificateLayout(certificateNameLayout)
         : null,
       showParticipantCount,
       showSessionTitle,
@@ -1658,6 +1740,32 @@ function SessionFormModal({
             role="tabpanel"
             hidden={effectiveTab !== 'look'}
           >
+          <div className="md:col-span-2">
+            <CertificateLayoutEditor
+              enabled={certificateEnabled}
+              onEnabledChange={setCertificateEnabled}
+              templateUrl={certificateTemplateUrl}
+              onTemplateUpload={handleCertificateTemplateUpload}
+              onTemplateClear={() => {
+                setCertificateTemplateUrl('')
+                setCertificateTemplateError('')
+              }}
+              templateUploading={certificateTemplateUploading}
+              templateError={certificateTemplateError}
+              customFontUrl={certificateCustomFontUrl}
+              onFontUpload={handleCertificateFontUpload}
+              onFontClear={() => {
+                setCertificateCustomFontUrl('')
+                setCertificateFontError('')
+              }}
+              fontUploading={certificateFontUploading}
+              fontError={certificateFontError}
+              layout={certificateNameLayout}
+              onLayoutChange={setCertificateNameLayout}
+              canUpload={Boolean(uploadDeptId)}
+            />
+          </div>
+
           <div className="md:col-span-2">
             <label className="text-sm font-semibold text-slate-700">Session logo</label>
             <p className="mt-1 text-xs text-slate-500">

@@ -117,6 +117,32 @@ export async function submitResponseApi(participantToken, payload) {
   return data?.response || null
 }
 
+export async function downloadCertificateApi(participantToken, sessionId) {
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1'
+  const response = await fetch(`${API_BASE}/sessions/${sessionId}/certificate`, {
+    headers: {
+      Authorization: `Bearer ${participantToken}`,
+    },
+  })
+  if (!response.ok) {
+    let message = 'Failed to download certificate'
+    try {
+      const payload = await response.json()
+      message = payload?.message || message
+    } catch {
+      // ignore
+    }
+    const error = new Error(message)
+    error.status = response.status
+    throw error
+  }
+  const blob = await response.blob()
+  const disposition = response.headers.get('Content-Disposition') || ''
+  const match = /filename="([^"]+)"/i.exec(disposition)
+  const filename = match?.[1] || `certificate-${sessionId}.png`
+  return { blob, filename }
+}
+
 export async function reportTabSwitchApi(participantToken, sessionId, questionId = null) {
   const body = {}
   if (questionId != null && questionId !== '') {

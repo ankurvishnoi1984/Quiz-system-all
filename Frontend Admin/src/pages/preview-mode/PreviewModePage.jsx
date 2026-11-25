@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { Award } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
 import { useLiveSession } from '../../hooks/useLiveSession'
 import { getPresentSlideApi, getSessionSurveySummaryApi } from '../../services/liveApi'
@@ -28,6 +29,9 @@ function resolveLiveQuestionTarget(questions) {
 function resolveEndingScreen(session) {
   if (session?.leaderboard_enabled || session?.current_rankings_enabled) return 'leaderboard'
   if (session?.survey_results_enabled) return 'surveyEnding'
+  if (session?.certificate_enabled && session?.certificate_download_enabled) {
+    return 'certificate'
+  }
   return null
 }
 
@@ -47,7 +51,11 @@ function PreviewModePage() {
   const lastEndingScreenRef = useRef(null)
 
   const applyFollowPayload = useCallback((data, questions) => {
-    if (data?.screen === 'leaderboard' || data?.screen === 'surveyEnding') {
+    if (
+      data?.screen === 'leaderboard' ||
+      data?.screen === 'surveyEnding' ||
+      data?.screen === 'certificate'
+    ) {
       setScreen(data.screen)
       setFollowQuestionId(null)
       setFollowQuestionIndex(null)
@@ -219,7 +227,9 @@ function PreviewModePage() {
   useEffect(() => {
     if (!didBootstrapRef.current) return
     if (resolveEndingScreen(session)) return
-    if (screen === 'leaderboard' || screen === 'surveyEnding') return
+    if (screen === 'leaderboard' || screen === 'surveyEnding' || screen === 'certificate') {
+      return
+    }
 
     const liveTarget = resolveLiveQuestionTarget(mappedQuestions)
     if (!liveTarget) return
@@ -242,7 +252,9 @@ function PreviewModePage() {
   // If the last live question is closed, fall back to join without waiting for Live tab.
   useEffect(() => {
     if (!didBootstrapRef.current || !mappedQuestions.length) return
-    if (screen === 'leaderboard' || screen === 'surveyEnding') return
+    if (screen === 'leaderboard' || screen === 'surveyEnding' || screen === 'certificate') {
+      return
+    }
     if (resolveEndingScreen(session)) return
     const anyLive = mappedQuestions.some((q) => q.isLive)
     if (anyLive) return
@@ -375,6 +387,37 @@ function PreviewModePage() {
         summary={surveySummaryQuery.data}
         isLoading={surveySummaryQuery.isLoading}
       />
+    )
+  } else if (screen === 'certificate') {
+    body = (
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-[clamp(1rem,4vw,3rem)] py-[clamp(1.5rem,4vh,2.5rem)]">
+        <div className="relative flex w-full flex-1 flex-col items-center justify-center overflow-hidden rounded-2xl border border-amber-200/80 bg-linear-to-br from-amber-50 via-white to-sky-50/80 px-[clamp(1.5rem,4vw,3rem)] py-[clamp(2rem,5vh,3.5rem)] text-center shadow-sm">
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-linear-to-b from-amber-100/70 to-transparent"
+            aria-hidden
+          />
+          <div className="relative w-full">
+            <div className="mx-auto mb-5 inline-flex size-[clamp(3.5rem,6vw,4.5rem)] items-center justify-center rounded-full bg-amber-100 text-amber-800 ring-4 ring-amber-50">
+              <Award className="size-[clamp(1.5rem,3vw,2rem)]" aria-hidden />
+            </div>
+            <p className="text-[clamp(0.7rem,1.2vw,0.8rem)] font-semibold uppercase tracking-[0.2em] text-amber-800">
+              Well done
+            </p>
+            <h2 className="mt-2 text-[clamp(1.75rem,4vw,2.75rem)] font-bold tracking-tight text-navy-900">
+              Save your achievement
+            </h2>
+            {session?.title ? (
+              <p className="mt-3 text-[clamp(1rem,1.8vw,1.2rem)] font-medium text-slate-700">
+                {session.title}
+              </p>
+            ) : null}
+            <p className="mx-auto mt-4 max-w-md text-[clamp(0.95rem,1.8vw,1.15rem)] leading-relaxed text-slate-600">
+              Participants can download a personalized certificate with their name from this
+              session.
+            </p>
+          </div>
+        </div>
+      </div>
     )
   } else if (screen === 'join' || !activeQuestion) {
     body = <PreviewJoinSlide session={session} />

@@ -54,6 +54,7 @@ const {
   resolveJoinOtpRequired,
   normalizeTabSwitchBlockAfter
 } = require("../validators/session.validator");
+const { resolveCertificateFields } = require("../utils/certificateLayout");
 const { isValidMobile } = require("../utils/phone");
 const {
   canAccessDepartment,
@@ -335,6 +336,7 @@ async function createSession({ deptId, input, user }) {
        String(input.thanks_screen_image_url).trim()
          ? String(input.thanks_screen_image_url).trim()
          : null,
+     ...resolveCertificateFields(input),
      participant_theme: normalizeParticipantTheme(input.participant_theme),
      participant_theme_custom:
        normalizeParticipantTheme(input.participant_theme) === CUSTOM_PARTICIPANT_THEME
@@ -508,6 +510,13 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
           ? source.waiting_screen_media_type || "image"
           : null,
         thanks_screen_image_url: source.thanks_screen_image_url || null,
+        ...resolveCertificateFields({
+          certificate_enabled: source.certificate_enabled,
+          certificate_template_url: source.certificate_template_url,
+          certificate_custom_font_url: source.certificate_custom_font_url,
+          certificate_name_layout: source.certificate_name_layout,
+          certificate_download_enabled: false
+        }),
         participant_theme: normalizeParticipantTheme(source.participant_theme),
         participant_theme_custom:
           normalizeParticipantTheme(source.participant_theme) === CUSTOM_PARTICIPANT_THEME
@@ -677,7 +686,8 @@ async function updateSession({ sessionId, input, user }) {
     "tab_switch_detection_enabled",
     "tab_switch_block_after",
     "single_device_join_enabled",
-    "auto_email_report_on_end"
+    "auto_email_report_on_end",
+    "certificate_download_enabled"
   ];
   const inputKeys = Object.keys(input || {});
 
@@ -840,6 +850,44 @@ async function updateSession({ sessionId, input, user }) {
       input.auto_email_report_on_end !== undefined
         ? Boolean(input.auto_email_report_on_end)
         : session.auto_email_report_on_end !== false,
+    ...(() => {
+      const certInputTouches =
+        input.certificate_enabled !== undefined ||
+        input.certificate_template_url !== undefined ||
+        input.certificate_custom_font_url !== undefined ||
+        input.certificate_name_layout !== undefined ||
+        input.certificate_download_enabled !== undefined;
+      if (!certInputTouches) {
+        return {
+          certificate_enabled: Boolean(session.certificate_enabled),
+          certificate_template_url: session.certificate_template_url || null,
+          certificate_custom_font_url: session.certificate_custom_font_url || null,
+          certificate_name_layout: session.certificate_name_layout || null,
+          certificate_download_enabled: Boolean(session.certificate_download_enabled)
+        };
+      }
+      // Live-only download toggle: keep template/layout, flip flag only.
+      if (
+        session.status !== "draft" &&
+        input.certificate_download_enabled !== undefined &&
+        input.certificate_enabled === undefined &&
+        input.certificate_template_url === undefined &&
+        input.certificate_custom_font_url === undefined &&
+        input.certificate_name_layout === undefined
+      ) {
+        return {
+          certificate_enabled: Boolean(session.certificate_enabled),
+          certificate_template_url: session.certificate_template_url || null,
+          certificate_custom_font_url: session.certificate_custom_font_url || null,
+          certificate_name_layout: session.certificate_name_layout || null,
+          certificate_download_enabled: Boolean(input.certificate_download_enabled)
+        };
+      }
+      return resolveCertificateFields(input, {
+        forUpdate: true,
+        existing: session
+      });
+    })(),
     show_participant_count:
       input.show_participant_count !== undefined
         ? Boolean(input.show_participant_count)

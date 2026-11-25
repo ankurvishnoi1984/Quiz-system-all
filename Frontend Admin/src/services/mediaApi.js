@@ -61,3 +61,54 @@ export async function uploadQuestionMediaApi(deptId, file) {
 
   return execute(false)
 }
+
+export async function uploadFontApi(deptId, file) {
+  const execute = async (afterRefresh = false) => {
+    const { accessToken, refreshToken, clearAuth } = useAuthStore.getState()
+    if (!accessToken) {
+      const err = new Error('Not authenticated')
+      err.status = 401
+      throw err
+    }
+
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('dept_id', String(deptId))
+
+    const response = await fetch(`${API_BASE_URL}/media/upload-font`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: formData,
+    })
+
+    const payload = await parseJson(response)
+
+    if (response.status === 401 && refreshToken && !afterRefresh) {
+      try {
+        await refreshHostAccessToken()
+        return execute(true)
+      } catch {
+        clearAuth()
+        const err = new Error(payload?.message || 'Session expired')
+        err.status = 401
+        throw err
+      }
+    }
+
+    if (!response.ok) {
+      const err = new Error(payload?.message || 'Font upload failed')
+      err.status = response.status
+      err.details = payload?.errors || null
+      throw err
+    }
+
+    return {
+      fileUrl: payload?.data?.file_url ?? null,
+      filePath: payload?.data?.file_path ?? null,
+    }
+  }
+
+  return execute(false)
+}

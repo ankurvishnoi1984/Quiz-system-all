@@ -92,6 +92,8 @@ import { SurveySessionEndingPanel } from './components/SurveySessionEndingPanel'
 import { SessionHeader } from './components/SessionHeader'
 import { SessionEndedBanner, SessionEndedPanel } from './components/SessionEndedBanner'
 import { QuizCompletedThanksPanel } from './components/QuizCompletedThanksPanel'
+import { CertificateReadyPanel } from './components/CertificateReadyPanel'
+import { CertificateDownloadButton } from '../../components/participant-session/CertificateDownloadButton'
 import { ParticipantInstructionsRail } from './components/ParticipantInstructionsRail'
 import { WaitingForQuestion } from './components/WaitingForQuestion'
 import { WaitingView } from './components/WaitingView'
@@ -484,7 +486,12 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
     !showSurveyResults &&
     sessionSupportsSurveyEndingScreen(mappedQuestions)
   const showSurveyEndingScreen = showSurveyResults || showSurveyThanks
-  const endingScreenOnlyMode = showOverallLeaderboardTab || showSurveyEndingScreen
+  // Host Certificates toggle replaces the live question (same pattern as rankings).
+  const showCertificateScreen = Boolean(
+    session?.certificate_enabled && session?.certificate_download_enabled,
+  )
+  const endingScreenOnlyMode =
+    showOverallLeaderboardTab || showSurveyEndingScreen || showCertificateScreen
   // Advanced is host-paced (one slot at a time) — no Previous/Next across assigned questions.
   const navigationEnabled =
     !isAdvancedBuilderSession(session) && session?.participant_navigation_enabled !== false
@@ -1416,6 +1423,14 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
                 data.single_device_join_enabled !== undefined
                   ? Boolean(data.single_device_join_enabled)
                   : old.single_device_join_enabled,
+              certificate_enabled:
+                data.certificate_enabled !== undefined
+                  ? Boolean(data.certificate_enabled)
+                  : old.certificate_enabled,
+              certificate_download_enabled:
+                data.certificate_download_enabled !== undefined
+                  ? Boolean(data.certificate_download_enabled)
+                  : old.certificate_download_enabled,
               join_blocked:
                 data.join_blocked !== undefined
                   ? Boolean(data.join_blocked)
@@ -3394,22 +3409,30 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
         ) : null}
 
         {showOverallLeaderboardTab ? (
-          showParticipantPodium ? (
-            <ParticipantPodiumPanel leaderboard={leaderboard} />
-          ) : (
-            <OverallLeaderboardPanel
-              leaderboard={leaderboard}
-              sessionStatus={session?.status}
-              isLoading={leaderboardQuery.isLoading}
-              title={rankingsTitle}
-              subtitle={rankingsSubtitle}
-              viewerEntry={leaderboardMe}
-              highlightParticipantId={
-                joinedUser?.id ?? leaderboardMe?.participant_id ?? null
-              }
-              topN={normalizeLeaderboardTopN(session?.leaderboard_top_n)}
+          <>
+            {showParticipantPodium ? (
+              <ParticipantPodiumPanel leaderboard={leaderboard} />
+            ) : (
+              <OverallLeaderboardPanel
+                leaderboard={leaderboard}
+                sessionStatus={session?.status}
+                isLoading={leaderboardQuery.isLoading}
+                title={rankingsTitle}
+                subtitle={rankingsSubtitle}
+                viewerEntry={leaderboardMe}
+                highlightParticipantId={
+                  joinedUser?.id ?? leaderboardMe?.participant_id ?? null
+                }
+                topN={normalizeLeaderboardTopN(session?.leaderboard_top_n)}
+              />
+            )}
+            <CertificateDownloadButton
+              enabled={showCertificateScreen}
+              participantToken={participantToken}
+              sessionId={dbSessionId}
+              className="mt-2"
             />
-          )
+          </>
         ) : showSurveyEndingScreen ? (
           <SurveySessionEndingPanel
             sessionTitle={session?.show_session_title !== false ? session.title : ''}
@@ -3421,11 +3444,25 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
                 ? surveySummaryQuery.error?.message || 'Unable to load survey results.'
                 : ''
             }
+            certificateDownloadEnabled={showCertificateScreen}
+            participantToken={participantToken}
+            sessionId={dbSessionId}
+          />
+        ) : showCertificateScreen ? (
+          <CertificateReadyPanel
+            sessionTitle={session?.show_session_title !== false ? session?.title : ''}
+            participantToken={participantToken}
+            sessionId={dbSessionId}
           />
         ) : (
           <>
             {step === 'active' && isSessionEnded ? (
-              <SessionEndedPanel thanksImageUrl={session?.thanks_screen_image_url || ''} />
+              <SessionEndedPanel
+                thanksImageUrl={session?.thanks_screen_image_url || ''}
+                certificateDownloadEnabled={showCertificateScreen}
+                participantToken={participantToken}
+                sessionId={dbSessionId}
+              />
             ) : null}
 
             {step === 'active' && quizBlockedByAnticheat && !isSessionEnded ? (
@@ -3473,6 +3510,11 @@ function ParticipantSessionPage({ embed = false, sessionCode: sessionCodeProp = 
                   thanksImageUrl={session?.thanks_screen_image_url || ''}
                   onPrevious={handlePrevious}
                   canGoPrevious={canShowPreviousQuestion && displayQuestionIndex > 0}
+                  certificateDownloadEnabled={Boolean(
+                    session?.certificate_enabled && session?.certificate_download_enabled,
+                  )}
+                  participantToken={participantToken}
+                  sessionId={dbSessionId}
                 />
               )}
 

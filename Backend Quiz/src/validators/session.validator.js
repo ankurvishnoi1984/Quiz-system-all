@@ -340,6 +340,35 @@ function validateTabSwitchBlockAfter(payload, errors) {
   }
 }
 
+function validateCertificateFields(payload, errors) {
+  coerceOptionalBoolean(payload?.certificate_enabled, "certificate_enabled", errors);
+  coerceOptionalBoolean(
+    payload?.certificate_download_enabled,
+    "certificate_download_enabled",
+    errors
+  );
+  for (const field of ["certificate_template_url", "certificate_custom_font_url"]) {
+    if (payload?.[field] !== undefined && payload[field] !== null && payload[field] !== "") {
+      if (typeof payload[field] !== "string" || payload[field].trim().length === 0) {
+        errors.push(`${field} must be a non-empty string or null`);
+      }
+    }
+  }
+  if (
+    payload?.certificate_name_layout !== undefined &&
+    payload.certificate_name_layout !== null &&
+    typeof payload.certificate_name_layout !== "object"
+  ) {
+    errors.push("certificate_name_layout must be an object or null");
+  }
+  if (payload?.certificate_enabled === true) {
+    const template = payload.certificate_template_url;
+    if (template !== undefined && (template === null || String(template).trim() === "")) {
+      errors.push("certificate_template_url is required when certificate_enabled is true");
+    }
+  }
+}
+
 const {
   validatePresentModeSettings
 } = require("../utils/presentModeSettings");
@@ -516,6 +545,7 @@ function validateCreateSessionPayload(payload) {
     errors
   );
   validateTabSwitchBlockAfter(payload, errors);
+  validateCertificateFields(payload, errors);
 
   return errors;
 }
@@ -563,6 +593,11 @@ function validateUpdateSessionPayload(payload) {
     "waiting_screen_image_url",
     "waiting_screen_media_type",
     "thanks_screen_image_url",
+    "certificate_enabled",
+    "certificate_template_url",
+    "certificate_custom_font_url",
+    "certificate_name_layout",
+    "certificate_download_enabled",
     "present_mode_settings",
     "participant_theme",
     "participant_theme_custom",
@@ -643,6 +678,7 @@ function validateUpdateSessionPayload(payload) {
     "auto_email_report_on_end",
     errors
   );
+  validateCertificateFields(payload, errors);
   errors.push(...validateJoinAllowlistFields(payload));
 
   const scheduledDateError = validateScheduledDate(payload?.scheduled_date);

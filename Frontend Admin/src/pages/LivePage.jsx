@@ -24,6 +24,7 @@ import {
   Presentation,
   Rocket,
   Share2,
+  Award,
   ShieldAlert,
   Trophy,
   Users,
@@ -419,6 +420,13 @@ function LivePage() {
       pushPreviewFollow({ screen: 'surveyEnding' })
       return
     }
+    if (
+      sessionQuery.data?.certificate_enabled &&
+      sessionQuery.data?.certificate_download_enabled
+    ) {
+      pushPreviewFollow({ screen: 'certificate' })
+      return
+    }
     if (livePreviewTarget?.question?.id) {
       pushPreviewFollow({
         screen: 'question',
@@ -433,6 +441,8 @@ function LivePage() {
     sessionQuery.data?.leaderboard_enabled,
     sessionQuery.data?.current_rankings_enabled,
     sessionQuery.data?.survey_results_enabled,
+    sessionQuery.data?.certificate_enabled,
+    sessionQuery.data?.certificate_download_enabled,
     livePreviewTarget,
     pushPreviewFollow,
   ])
@@ -647,18 +657,21 @@ function LivePage() {
     const clearLb = Boolean(current?.leaderboard_enabled)
     const clearCurrent = Boolean(current?.current_rankings_enabled)
     const clearSurvey = Boolean(current?.survey_results_enabled)
-    if (!clearLb && !clearCurrent && !clearSurvey) return null
+    const clearCertificate = Boolean(current?.certificate_download_enabled)
+    if (!clearLb && !clearCurrent && !clearSurvey && !clearCertificate) return null
 
     const updated = await updateSessionApi(accessToken, sessionId, {
       ...(clearLb ? { leaderboard_enabled: false } : {}),
       ...(clearCurrent ? { current_rankings_enabled: false } : {}),
       ...(clearSurvey ? { survey_results_enabled: false } : {}),
+      ...(clearCertificate ? { certificate_download_enabled: false } : {}),
     })
     if (updated) {
       const patch = {
         leaderboard_enabled: updated.leaderboard_enabled,
         current_rankings_enabled: updated.current_rankings_enabled,
         survey_results_enabled: updated.survey_results_enabled,
+        certificate_download_enabled: Boolean(updated.certificate_download_enabled),
       }
       queryClient.setQueryData(['live-session', sessionId], (old) =>
         old ? { ...old, ...updated, ...patch } : updated,
@@ -693,12 +706,16 @@ function LivePage() {
       if (mode === 'current') {
         return updateSessionApi(accessToken, sessionId, {
           current_rankings_enabled: enabled,
-          ...(enabled ? { leaderboard_enabled: false } : {}),
+          ...(enabled
+            ? { leaderboard_enabled: false, certificate_download_enabled: false }
+            : {}),
         })
       }
       return updateSessionApi(accessToken, sessionId, {
         leaderboard_enabled: enabled,
-        ...(enabled ? { current_rankings_enabled: false } : {}),
+        ...(enabled
+          ? { current_rankings_enabled: false, certificate_download_enabled: false }
+          : {}),
       })
     },
     onSuccess: (updated) => {
@@ -706,6 +723,7 @@ function LivePage() {
         const patch = {
           leaderboard_enabled: updated.leaderboard_enabled,
           current_rankings_enabled: updated.current_rankings_enabled,
+          certificate_download_enabled: Boolean(updated.certificate_download_enabled),
           ...(advancedSlotActivation &&
           (updated.leaderboard_enabled || updated.current_rankings_enabled)
             ? { advanced_active_slot: null }
@@ -787,7 +805,10 @@ function LivePage() {
   const sessionSurveyResultsMutation = useMutation({
     mutationFn: async (enabled) => {
       if (enabled) await deactivateAllLiveQuestions()
-      return updateSessionApi(accessToken, sessionId, { survey_results_enabled: enabled })
+      return updateSessionApi(accessToken, sessionId, {
+        survey_results_enabled: enabled,
+        ...(enabled ? { certificate_download_enabled: false } : {}),
+      })
     },
     onSuccess: (updated) => {
       if (updated) {
@@ -797,6 +818,7 @@ function LivePage() {
                 ...old,
                 ...updated,
                 survey_results_enabled: updated.survey_results_enabled,
+                certificate_download_enabled: Boolean(updated.certificate_download_enabled),
               }
             : updated,
         )
@@ -806,6 +828,7 @@ function LivePage() {
                 ...old,
                 ...updated,
                 survey_results_enabled: updated.survey_results_enabled,
+                certificate_download_enabled: Boolean(updated.certificate_download_enabled),
               }
             : old,
         )
@@ -873,6 +896,70 @@ function LivePage() {
     },
     onError: (error) =>
       setErrorMessage(error.message || 'Unable to update tab detection'),
+  })
+
+  const sessionCertificateMutation = useMutation({
+    mutationFn: async (enabled) => {
+      if (enabled) {
+        if (advancedSlotActivation) {
+          await deactivateAdvancedAssignmentSlotApi(accessToken, sessionId)
+        } else {
+          await deactivateAllLiveQuestions()
+        }
+      }
+      return updateSessionApi(accessToken, sessionId, {
+        certificate_download_enabled: enabled,
+        ...(enabled
+          ? {
+              leaderboard_enabled: false,
+              current_rankings_enabled: false,
+              survey_results_enabled: false,
+            }
+          : {}),
+      })
+    },
+    onSuccess: (updated) => {
+      if (updated) {
+        const patch = {
+          certificate_download_enabled: Boolean(updated.certificate_download_enabled),
+          leaderboard_enabled: updated.leaderboard_enabled,
+          current_rankings_enabled: updated.current_rankings_enabled,
+          survey_results_enabled: updated.survey_results_enabled,
+          ...(advancedSlotActivation && updated.certificate_download_enabled
+            ? { advanced_active_slot: null }
+            : {}),
+        }
+        queryClient.setQueryData(['live-session', sessionId], (old) =>
+          old ? { ...old, ...updated, ...patch } : updated,
+        )
+        queryClient.setQueryData(['live-session', sessionId, 'host'], (old) =>
+          old ? { ...old, ...updated, ...patch } : old,
+        )
+      }
+      queryClient.invalidateQueries({ queryKey: ['live-session', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['live-questions', sessionId] })
+      queryClient.invalidateQueries({ queryKey: ['live-dept-sessions'] })
+      if (updated?.certificate_download_enabled) {
+        pushPreviewFollow({ screen: 'certificate' })
+      } else if (
+        sessionQuery.data?.leaderboard_enabled ||
+        sessionQuery.data?.current_rankings_enabled
+      ) {
+        pushPreviewFollow({ screen: 'leaderboard' })
+      } else if (sessionQuery.data?.survey_results_enabled) {
+        pushPreviewFollow({ screen: 'surveyEnding' })
+      } else if (livePreviewTarget?.question?.id) {
+        pushPreviewFollow({
+          screen: 'question',
+          questionId: livePreviewTarget.question.id,
+          questionIndex: livePreviewTarget.questionIndex,
+        })
+      } else {
+        pushPreviewFollow({ screen: 'join' })
+      }
+    },
+    onError: (error) =>
+      setErrorMessage(error.message || 'Unable to update certificate download'),
   })
 
   const anticheatQuery = useQuery({
@@ -1232,6 +1319,12 @@ function LivePage() {
     return partitionQuestionsByPoolEligibility(mappedQuestions)
   }, [mappedQuestions, markedEligiblePoolEnabled])
   const showSessionControls = session?.status === 'live' || session?.status === 'paused'
+  const showCertificateControl =
+    Boolean(session?.certificate_enabled) &&
+    Boolean(session?.certificate_template_url) &&
+    (showSessionControls ||
+      session?.status === 'completed' ||
+      session?.status === 'archived')
   const showCloseAllQuestionsButton = useMemo(
     () =>
       canHostCloseAllQuestions(mappedQuestions, {
@@ -1594,6 +1687,29 @@ function LivePage() {
                 tone="slate"
                 onClick={() =>
                   sessionJoinLockMutation.mutate(!session?.join_locked)
+                }
+              />
+            ) : null}
+            {showCertificateControl ? (
+              <HostQuestionActionButton
+                disabled={sessionCertificateMutation.isPending}
+                icon={Award}
+                label={
+                  sessionCertificateMutation.isPending
+                    ? 'Updating…'
+                    : session?.certificate_download_enabled
+                      ? 'Certificates on'
+                      : 'Certificates'
+                }
+                title={
+                  session?.certificate_download_enabled
+                    ? 'Hide certificate download and return participants to the session'
+                    : 'Show certificate download to participants and close the live question / rankings'
+                }
+                active={Boolean(session?.certificate_download_enabled)}
+                tone="amber"
+                onClick={() =>
+                  sessionCertificateMutation.mutate(!session?.certificate_download_enabled)
                 }
               />
             ) : null}

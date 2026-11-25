@@ -1,6 +1,7 @@
 import { BarChart3, CheckCircle2 } from 'lucide-react'
 import { QuestionSurveyResults } from './question/QuestionSurveyResults'
 import { mapParticipantQuestion } from '../utils/questionUtils'
+import { CertificateDownloadButton } from '../../../components/participant-session/CertificateDownloadButton'
 
 function SummarySkeleton({ count = 2 }) {
   return (
@@ -23,6 +24,9 @@ export function SurveySessionEndingPanel({
   variant = 'participant',
   showThankYou = true,
   thanksOnly = false,
+  certificateDownloadEnabled = false,
+  participantToken = null,
+  sessionId = null,
 }) {
   const isPresent = variant === 'present'
   const questions = summary?.questions || []
@@ -58,6 +62,14 @@ export function SurveySessionEndingPanel({
           <p className="mt-4 text-sm leading-relaxed text-slate-600 sm:text-base">
             The host has ended this session. Your responses have been recorded.
           </p>
+          {!isPresent ? (
+            <CertificateDownloadButton
+              enabled={certificateDownloadEnabled}
+              participantToken={participantToken}
+              sessionId={sessionId}
+              className="mt-5"
+            />
+          ) : null}
         </div>
       </section>
     )
@@ -116,6 +128,14 @@ export function SurveySessionEndingPanel({
                 {totalQuestions} question{totalQuestions === 1 ? '' : 's'} · {totalResponses} total
                 response{totalResponses === 1 ? '' : 's'}
               </p>
+              {!isPresent ? (
+                <CertificateDownloadButton
+                  enabled={certificateDownloadEnabled}
+                  participantToken={participantToken}
+                  sessionId={sessionId}
+                  className="mt-4"
+                />
+              ) : null}
             </div>
           </div>
         </div>

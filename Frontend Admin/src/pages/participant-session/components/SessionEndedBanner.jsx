@@ -1,5 +1,6 @@
 import { CheckCircle2 } from 'lucide-react'
 import { resolveQuestionMediaUrl } from '../../../utils/questionMedia'
+import { CertificateDownloadButton } from '../../../components/participant-session/CertificateDownloadButton'
 
 /** Compact notice above ending screens (leaderboard / survey results). */
 export function SessionEndedBanner() {
@@ -11,8 +12,21 @@ export function SessionEndedBanner() {
 }
 
 /** Full-page style message when the session is completed and no question should be shown. */
-export function SessionEndedPanel({ thanksImageUrl = '' }) {
+export function SessionEndedPanel({
+  thanksImageUrl = '',
+  certificateDownloadEnabled = false,
+  participantToken = null,
+  sessionId = null,
+}) {
   const imageSrc = resolveQuestionMediaUrl(thanksImageUrl)
+  const certificateButton = (
+    <CertificateDownloadButton
+      enabled={certificateDownloadEnabled}
+      participantToken={participantToken}
+      sessionId={sessionId}
+      className="mt-5"
+    />
+  )
 
   if (imageSrc) {
     return (
@@ -25,6 +39,7 @@ export function SessionEndedPanel({ thanksImageUrl = '' }) {
               className="max-h-[min(78vh,42rem)] w-full object-contain"
             />
           </div>
+          {certificateButton}
         </div>
       </section>
     )
@@ -39,6 +54,7 @@ export function SessionEndedPanel({ thanksImageUrl = '' }) {
       <p className="mt-4 max-w-md text-base leading-relaxed text-slate-600 sm:text-lg">
         The host has ended this session. Thank you for participating!
       </p>
+      {certificateButton}
     </section>
   )
 }

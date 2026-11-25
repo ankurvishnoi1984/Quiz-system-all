@@ -1,5 +1,6 @@
 import { CheckCircle2 } from 'lucide-react'
 import { resolveQuestionMediaUrl } from '../../../utils/questionMedia'
+import { CertificateDownloadButton } from '../../../components/participant-session/CertificateDownloadButton'
 
 /**
  * Flip to true to re-enable Previous on the quiz-complete thanks screen
@@ -12,9 +13,20 @@ export function QuizCompletedThanksPanel({
   thanksImageUrl = '',
   onPrevious,
   canGoPrevious = false,
+  certificateDownloadEnabled = false,
+  participantToken = null,
+  sessionId = null,
 }) {
   const showPrevious = QUIZ_THANKS_ALLOW_REVIEW && typeof onPrevious === 'function'
   const imageSrc = resolveQuestionMediaUrl(thanksImageUrl)
+  const certificateButton = (
+    <CertificateDownloadButton
+      enabled={certificateDownloadEnabled}
+      participantToken={participantToken}
+      sessionId={sessionId}
+      className="mt-5"
+    />
+  )
 
   if (imageSrc) {
     return (
@@ -27,6 +39,7 @@ export function QuizCompletedThanksPanel({
               className="max-h-[min(78vh,42rem)] w-full object-contain"
             />
           </div>
+          {certificateButton}
           {showPrevious ? (
             <div className="mt-4 flex justify-center pb-2">
               <button
@@ -62,6 +75,7 @@ export function QuizCompletedThanksPanel({
         <p className="mt-4 text-sm leading-relaxed text-slate-600 sm:text-base">
           Your answers have been recorded.
         </p>
+        {certificateButton}
         {showPrevious ? (
           <div className="mt-8 flex justify-center">
             <button

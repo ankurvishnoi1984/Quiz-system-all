@@ -4,12 +4,14 @@ const authMiddleware = require("../middlewares/auth.middleware");
 const authorizeStaff = require("../middlewares/staff.middleware");
 const { authorizeRights } = require("../middlewares/rights.middleware");
 const { userHasRight } = require("../config/user-rights");
-const { uploadMedia } = require("../config/multer");
+const { uploadMedia, uploadFont } = require("../config/multer");
 const multer = require("multer");
 const { errorResponse } = require("../utils/response");
+const certificateController = require("../controllers/certificate.controller");
 
 const router = express.Router();
 const uploadSingleFile = uploadMedia.single("file");
+const uploadSingleFont = uploadFont.single("file");
 const QUESTION_MEDIA_ROLES = [
   "author",
   "super_admin",
@@ -45,6 +47,24 @@ router.post(
   authorizeQuestionMediaUpload,
   handleMediaUpload,
   mediaController.upload
+);
+
+function handleFontUpload(req, res, next) {
+  uploadSingleFont(req, res, (error) => {
+    if (!error) return next();
+    if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+      return errorResponse(res, "Font file size exceeds 5MB limit", 400);
+    }
+    return errorResponse(res, error.message || "Font upload failed", 400);
+  });
+}
+
+router.post(
+  "/media/upload-font",
+  authorizeStaff,
+  authorizeQuestionMediaUpload,
+  handleFontUpload,
+  certificateController.uploadFontFile
 );
 router.get(
   "/media/:deptId",

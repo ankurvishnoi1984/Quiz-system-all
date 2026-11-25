@@ -588,6 +588,17 @@ function DashboardPage() {
         tab_switch_block_after: values.tabSwitchDetectionEnabled
           ? Number(values.tabSwitchBlockAfter) || 3
           : null,
+        certificate_enabled: Boolean(values.certificateEnabled),
+        certificate_template_url: values.certificateEnabled
+          ? values.certificateTemplateUrl || null
+          : null,
+        certificate_custom_font_url: values.certificateEnabled
+          ? values.certificateCustomFontUrl || null
+          : null,
+        certificate_name_layout: values.certificateEnabled
+          ? values.certificateNameLayout || null
+          : null,
+        certificate_download_enabled: false,
         single_device_join_enabled: true,
         auto_email_report_on_end: true,
         auto_end_enabled: Boolean(values.autoEndEnabled),
@@ -657,6 +668,10 @@ function DashboardPage() {
       overallLeaderboard: Boolean(editSession.leaderboard_enabled),
       tabSwitchDetectionEnabled: Boolean(editSession.tab_switch_detection_enabled),
       tabSwitchBlockAfter: Number(editSession.tab_switch_block_after) || 3,
+      certificateEnabled: Boolean(editSession.certificate_enabled),
+      certificateTemplateUrl: editSession.certificate_template_url || '',
+      certificateCustomFontUrl: editSession.certificate_custom_font_url || '',
+      certificateNameLayout: editSession.certificate_name_layout || null,
       showParticipantCount: Boolean(editSession.show_participant_count),
       showSessionTitle: editSession.show_session_title !== false,
       showAppLogo: editSession.show_app_logo !== false,
@@ -741,6 +756,16 @@ function DashboardPage() {
     if (!editSessionLiveSettingsOnly) {
       Object.assign(payload, {
         description: values.description || null,
+        certificate_enabled: Boolean(values.certificateEnabled),
+        certificate_template_url: values.certificateEnabled
+          ? values.certificateTemplateUrl || null
+          : null,
+        certificate_custom_font_url: values.certificateEnabled
+          ? values.certificateCustomFontUrl || null
+          : null,
+        certificate_name_layout: values.certificateEnabled
+          ? values.certificateNameLayout || null
+          : null,
         scheduled_date: values.scheduledDate || null,
         scheduled_time: values.scheduledTime || null,
         show_results_to_participants: true,

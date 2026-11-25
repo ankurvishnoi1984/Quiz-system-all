@@ -268,6 +268,29 @@ const Session = sequelize.define(
       type: DataTypes.TEXT,
       allowNull: true
     },
+    certificate_enabled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+    certificate_template_url: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    certificate_custom_font_url: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    certificate_name_layout: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: null
+    },
+    certificate_download_enabled: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
     present_mode_settings: {
       type: DataTypes.JSON,
       allowNull: true,

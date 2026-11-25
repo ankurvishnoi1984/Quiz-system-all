@@ -92,8 +92,55 @@ const uploadExtraQuestionAttachment = multer({
   }
 });
 
+const fontAllowedTypes = new Set([
+  "font/ttf",
+  "font/otf",
+  "font/woff",
+  "font/woff2",
+  "application/font-woff",
+  "application/font-woff2",
+  "application/x-font-ttf",
+  "application/x-font-otf",
+  "application/octet-stream"
+]);
+
+const fontAllowedExtensions = new Set([".ttf", ".otf", ".woff", ".woff2"]);
+
+const fontStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    const destinationPath = path.join(uploadsRoot, "fonts");
+    fs.mkdirSync(destinationPath, { recursive: true });
+    cb(null, destinationPath);
+  },
+  filename: (_req, file, cb) => {
+    const extension = path.extname(file.originalname || "").toLowerCase();
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    cb(null, `${uniqueSuffix}${extension}`);
+  }
+});
+
+const fontFileFilter = (_req, file, cb) => {
+  const extension = path.extname(file.originalname || "").toLowerCase();
+  if (!fontAllowedExtensions.has(extension)) {
+    return cb(new Error("Only TTF, OTF, WOFF, or WOFF2 font files are allowed"));
+  }
+  if (file.mimetype && !fontAllowedTypes.has(file.mimetype) && file.mimetype !== "application/octet-stream") {
+    // Some browsers send odd MIME types; extension check already passed.
+  }
+  return cb(null, true);
+};
+
+const uploadFont = multer({
+  storage: fontStorage,
+  fileFilter: fontFileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024
+  }
+});
+
 module.exports = {
   uploadMedia,
   uploadExtraSeatAttachment,
-  uploadExtraQuestionAttachment
+  uploadExtraQuestionAttachment,
+  uploadFont
 };

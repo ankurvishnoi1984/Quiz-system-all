@@ -39,11 +39,17 @@ export function mapPresentSlideToPreviewFollow(slideIndex, questionCount, ending
   return { screen: 'join', questionId: null, questionIndex: null }
 }
 
-/** @typedef {'join' | 'question' | 'leaderboard' | 'surveyEnding'} PreviewScreen */
+/** @typedef {'join' | 'question' | 'leaderboard' | 'surveyEnding' | 'certificate'} PreviewScreen */
 /** @typedef {{ type: 'preview_follow', sessionId: string, screen: PreviewScreen, questionId: number | null, questionIndex: number | null }} PreviewFollowMessage */
 /** @typedef {{ type: 'preview_ready', sessionId: string }} PreviewReadyMessage */
 
-const PREVIEW_SCREENS = new Set(['join', 'question', 'leaderboard', 'surveyEnding'])
+const PREVIEW_SCREENS = new Set([
+  'join',
+  'question',
+  'leaderboard',
+  'surveyEnding',
+  'certificate',
+])
 
 /**
  * @param {string|number} sessionId

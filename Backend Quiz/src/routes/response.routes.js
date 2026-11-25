@@ -1,6 +1,7 @@
 const express = require("express");
 const responseController = require("../controllers/response.controller");
 const anticheatController = require("../controllers/anticheat.controller");
+const certificateController = require("../controllers/certificate.controller");
 const authMiddleware = require("../middlewares/auth.middleware");
 const participantAuthMiddleware = require("../middlewares/participant-auth.middleware");
 const authorizeStaff = require("../middlewares/staff.middleware");
@@ -20,6 +21,11 @@ router.get(
   authorizeStaff,
   authorizeAnyRight("present", "sessions", "reports"),
   anticheatController.listAnticheat
+);
+router.get(
+  "/sessions/:sessionId/certificate",
+  participantAuthMiddleware,
+  certificateController.downloadParticipantCertificate
 );
 
 router.get("/sessions/:sessionId/participantQuestions",participantAuthMiddleware, responseController.listParticipantQuestions);

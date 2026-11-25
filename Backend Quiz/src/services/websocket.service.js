@@ -800,6 +800,8 @@ function notifySessionSettings(sessionCode, settings) {
         : null,
     single_device_join_enabled: settings.single_device_join_enabled !== false,
     auto_email_report_on_end: settings.auto_email_report_on_end !== false,
+    certificate_enabled: Boolean(settings.certificate_enabled),
+    certificate_download_enabled: Boolean(settings.certificate_download_enabled),
     join_blocked:
       settings.join_blocked !== undefined ? Boolean(settings.join_blocked) : undefined,
     join_blocked_message:
