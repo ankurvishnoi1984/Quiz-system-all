@@ -877,12 +877,25 @@ function LivePage() {
   })
 
   const sessionTabSwitchMutation = useMutation({
-    mutationFn: (enabled) =>
-      updateSessionApi(accessToken, sessionId, { tab_switch_detection_enabled: enabled }),
+    mutationFn: (enabled) => {
+      const payload = { tab_switch_detection_enabled: enabled }
+      if (enabled) {
+        const existing = Number(sessionQuery.data?.tab_switch_block_after)
+        payload.tab_switch_block_after =
+          Number.isInteger(existing) && existing > 0 ? existing : 3
+      } else {
+        payload.tab_switch_block_after = null
+      }
+      return updateSessionApi(accessToken, sessionId, payload)
+    },
     onSuccess: (updated) => {
       if (updated) {
         const patch = {
           tab_switch_detection_enabled: Boolean(updated.tab_switch_detection_enabled),
+          tab_switch_block_after:
+            updated.tab_switch_block_after != null
+              ? Number(updated.tab_switch_block_after) || null
+              : null,
         }
         queryClient.setQueryData(['live-session', sessionId], (old) =>
           old ? { ...old, ...updated, ...patch } : updated,

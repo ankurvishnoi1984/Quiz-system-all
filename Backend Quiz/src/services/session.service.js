@@ -834,13 +834,13 @@ async function updateSession({ sessionId, input, user }) {
         input.tab_switch_detection_enabled !== undefined
           ? Boolean(input.tab_switch_detection_enabled)
           : Boolean(session.tab_switch_detection_enabled);
-      if (input.tab_switch_block_after !== undefined || input.tab_switch_detection_enabled !== undefined) {
-        return normalizeTabSwitchBlockAfter(detectionEnabled, input.tab_switch_block_after);
-      }
-      return normalizeTabSwitchBlockAfter(
-        detectionEnabled,
-        session.tab_switch_block_after
-      );
+      // Prefer explicit payload; otherwise keep existing session value (Live toggle
+      // only sends tab_switch_detection_enabled and must not wipe a custom limit).
+      const rawBlockAfter =
+        input.tab_switch_block_after !== undefined
+          ? input.tab_switch_block_after
+          : session.tab_switch_block_after;
+      return normalizeTabSwitchBlockAfter(detectionEnabled, rawBlockAfter);
     })(),
     single_device_join_enabled:
       input.single_device_join_enabled !== undefined
