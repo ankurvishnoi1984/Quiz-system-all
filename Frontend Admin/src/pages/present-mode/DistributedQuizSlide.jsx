@@ -10,6 +10,7 @@ import { countResponseSubmissions, filterResponsesForQuestion } from '../../util
 import { getPresentModeSettings } from '../../utils/presentModeSettings'
 import { partitionQuestionsByPoolEligibility } from '../../utils/poolEligibleUi'
 import { sessionUsesMarkedEligiblePool } from '../../utils/sessionFlags'
+import { resolveSessionLogoUrl } from '../../utils/sessionLogo'
 
 const MODE_COPY = {
   advanced: {
@@ -188,7 +189,8 @@ export function DistributedQuizSlide({
     <div className="quiz-slide-in flex min-h-0 flex-1 flex-col">
       <PresentSlideHeader
         sessionTitle={sessionTitle}
-        sessionLogoUrl={session?.logo_url}
+        sessionLogoUrl={resolveSessionLogoUrl(session, 'present')}
+        showAppLogo={session?.show_app_logo !== false}
         participantCount={participantCount}
         liveParticipantCount={liveParticipantCount}
         isSessionLive={isSessionLive}

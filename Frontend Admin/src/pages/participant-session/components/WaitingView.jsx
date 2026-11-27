@@ -1,5 +1,6 @@
 import { Clock3, Users } from 'lucide-react'
 import { BrandLogoPair } from '../../../components/branding/BrandLogoPair'
+import { resolveSessionLogoUrl } from '../../../utils/sessionLogo'
 import { PageCenteredShell } from './PageCenteredShell'
 
 export function WaitingView({ session, transitioningLive }) {
@@ -24,7 +25,7 @@ export function WaitingView({ session, transitioningLive }) {
       <div className="quiz-enter space-y-4">
         <BrandLogoPair
           variant="hero"
-          sessionLogoUrl={session?.logo_url}
+          sessionLogoUrl={resolveSessionLogoUrl(session, 'participant')}
           sessionTitle={session?.title || 'Session'}
           showAppLogo={showAppLogo}
         />

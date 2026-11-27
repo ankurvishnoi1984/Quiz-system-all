@@ -36,7 +36,39 @@ import {
   normalizeParticipantTheme,
   toCustomThemeColorsApi,
 } from '../../utils/participantTheme'
+import {
+  DEFAULT_PRESENT_THEME_MODE,
+  PRESENT_THEME_MODE_CUSTOM,
+  PRESENT_THEME_MODE_MIRROR,
+  defaultPresentThemeCustom,
+  normalizePresentThemeMode,
+} from '../../utils/presentTheme'
+import {
+  DEFAULT_SESSION_LOGO_PLACEMENT,
+  SESSION_LOGO_PLACEMENT_BOTH,
+  SESSION_LOGO_PLACEMENT_PARTICIPANT,
+  SESSION_LOGO_PLACEMENT_PRESENT,
+  normalizeSessionLogoPlacement,
+} from '../../utils/sessionLogo'
 import { ParticipantThemePicker } from '../session/ParticipantThemePicker'
+
+const SESSION_LOGO_PLACEMENT_OPTIONS = [
+  {
+    value: SESSION_LOGO_PLACEMENT_BOTH,
+    label: 'Both',
+    description: 'Show on participant and Present Mode screens.',
+  },
+  {
+    value: SESSION_LOGO_PLACEMENT_PARTICIPANT,
+    label: 'Participant only',
+    description: 'Show on participant screens only.',
+  },
+  {
+    value: SESSION_LOGO_PLACEMENT_PRESENT,
+    label: 'Present only',
+    description: 'Show on Present Mode screens only.',
+  },
+]
 import {
   MAX_ALLOWLIST_ENTRIES,
   allowlistEntryCount,
@@ -145,11 +177,15 @@ const defaultInitial = {
   showSessionTitle: true,
   showAppLogo: true,
   logoUrl: '',
+  sessionLogoPlacement: DEFAULT_SESSION_LOGO_PLACEMENT,
   waitingScreenImageUrl: '',
   waitingScreenMediaType: null,
   thanksScreenImageUrl: '',
   participantTheme: DEFAULT_PARTICIPANT_THEME,
   participantThemeCustom: { ...DEFAULT_CUSTOM_THEME_COLORS },
+  presentThemeMode: DEFAULT_PRESENT_THEME_MODE,
+  presentTheme: DEFAULT_PARTICIPANT_THEME,
+  presentThemeCustom: { ...DEFAULT_CUSTOM_THEME_COLORS },
   builderMode: 'normal',
   questionsPerParticipant: 10,
   advancedSelectionMode: 'random_all',
@@ -258,6 +294,9 @@ function SessionFormModal({
   const [showAppLogo, setShowAppLogo] = useState(defaultInitial.showAppLogo !== false)
   const [autoEndEnabled, setAutoEndEnabled] = useState(defaultInitial.autoEndEnabled)
   const [logoUrl, setLogoUrl] = useState('')
+  const [sessionLogoPlacement, setSessionLogoPlacement] = useState(
+    DEFAULT_SESSION_LOGO_PLACEMENT,
+  )
   const [logoUploading, setLogoUploading] = useState(false)
   const [logoError, setLogoError] = useState('')
   const [waitingScreenImageUrl, setWaitingScreenImageUrl] = useState('')
@@ -271,6 +310,9 @@ function SessionFormModal({
   const [participantThemeCustom, setParticipantThemeCustom] = useState(() => ({
     ...DEFAULT_CUSTOM_THEME_COLORS,
   }))
+  const [presentThemeMode, setPresentThemeMode] = useState(DEFAULT_PRESENT_THEME_MODE)
+  const [presentTheme, setPresentTheme] = useState(DEFAULT_PARTICIPANT_THEME)
+  const [presentThemeCustom, setPresentThemeCustom] = useState(() => defaultPresentThemeCustom())
   const [builderMode, setBuilderMode] = useState(defaultInitial.builderMode)
   const [questionsPerParticipant, setQuestionsPerParticipant] = useState(
     defaultInitial.questionsPerParticipant,
@@ -373,6 +415,9 @@ function SessionFormModal({
     setShowAppLogo(initialValues.showAppLogo !== false)
     setAutoEndEnabled(Boolean(initialValues.autoEndEnabled))
     setLogoUrl(initialValues.logoUrl || '')
+    setSessionLogoPlacement(
+      normalizeSessionLogoPlacement(initialValues.sessionLogoPlacement),
+    )
     setLogoError('')
     setLogoUploading(false)
     setWaitingScreenImageUrl(initialValues.waitingScreenImageUrl || '')
@@ -389,6 +434,13 @@ function SessionFormModal({
     setParticipantTheme(normalizeParticipantTheme(initialValues.participantTheme))
     setParticipantThemeCustom(
       normalizeCustomThemeColors(initialValues.participantThemeCustom),
+    )
+    setPresentThemeMode(normalizePresentThemeMode(initialValues.presentThemeMode))
+    setPresentTheme(normalizeParticipantTheme(initialValues.presentTheme))
+    setPresentThemeCustom(
+      normalizeCustomThemeColors(
+        initialValues.presentThemeCustom || defaultPresentThemeCustom(),
+      ),
     )
     setBuilderMode(initialValues.builderMode === 'advanced' ? 'advanced' : 'normal')
     setQuestionsPerParticipant(
@@ -773,6 +825,7 @@ function SessionFormModal({
       logoUrl: logoUrl
         ? normalizeQuestionMediaUrlForStorage(logoUrl) || logoUrl
         : null,
+      sessionLogoPlacement: normalizeSessionLogoPlacement(sessionLogoPlacement),
       waitingScreenImageUrl: waitingScreenImageUrl
         ? normalizeQuestionMediaUrlForStorage(waitingScreenImageUrl) || waitingScreenImageUrl
         : null,
@@ -784,6 +837,9 @@ function SessionFormModal({
         : null,
       participantTheme: normalizeParticipantTheme(participantTheme),
       participantThemeCustom: toCustomThemeColorsApi(participantThemeCustom),
+      presentThemeMode: normalizePresentThemeMode(presentThemeMode),
+      presentTheme: normalizeParticipantTheme(presentTheme),
+      presentThemeCustom: toCustomThemeColorsApi(presentThemeCustom),
       builderMode: liveSettingsOnly ? undefined : builderMode,
       questionsPerParticipant:
         !liveSettingsOnly && builderMode === 'advanced' ? Number(questionsPerParticipant) : null,
@@ -1766,12 +1822,14 @@ function SessionFormModal({
             />
           </div>
 
-          <div className="md:col-span-2">
-            <label className="text-sm font-semibold text-slate-700">Session logo</label>
-            <p className="mt-1 text-xs text-slate-500">
-              When set, this logo appears in Present Mode and on participant screens.
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
+          <div className="md:col-span-2 space-y-3">
+            <div>
+              <label className="text-sm font-semibold text-slate-700">Session logo</label>
+              <p className="mt-1 text-xs text-slate-500">
+                Upload a logo, then choose where it appears.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-blue-200/70 bg-white px-3 py-3">
               <div className="flex h-16 w-28 items-center justify-center overflow-hidden rounded-lg border border-blue-100 bg-slate-50">
                 {logoPreviewSrc ? (
                   <img
@@ -1827,17 +1885,54 @@ function SessionFormModal({
                 ) : null}
               </div>
             </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Show logo on
+              </p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                {SESSION_LOGO_PLACEMENT_OPTIONS.map((option) => {
+                  const selected = sessionLogoPlacement === option.value
+                  return (
+                    <label
+                      key={option.value}
+                      className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 ${
+                        selected
+                          ? 'border-navy-600 bg-blue-50/80'
+                          : 'border-blue-100 bg-slate-50/80'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="session-logo-placement"
+                        className="mt-1"
+                        checked={selected}
+                        onChange={() => setSessionLogoPlacement(option.value)}
+                      />
+                      <span>
+                        <span className="block text-sm font-semibold text-slate-800">
+                          {option.label}
+                        </span>
+                        <span className="block text-xs text-slate-500">
+                          {option.description}
+                        </span>
+                      </span>
+                    </label>
+                  )
+                })}
+              </div>
+            </div>
             {logoError ? (
-              <p className="mt-1.5 text-xs font-semibold text-red-700">{logoError}</p>
+              <p className="text-xs font-semibold text-red-700">{logoError}</p>
             ) : null}
             {!uploadDeptId ? (
-              <p className="mt-1.5 text-xs text-amber-800">
+              <p className="text-xs text-amber-800">
                 Choose a department first so the logo can be uploaded.
               </p>
             ) : null}
           </div>
 
           <div className="md:col-span-2 rounded-xl border border-blue-200/70 bg-white p-3">
+            <p className="mb-2 text-sm font-semibold text-slate-700">Participant look</p>
             <ParticipantThemePicker
               value={participantTheme}
               customColors={participantThemeCustom}
@@ -1847,6 +1942,77 @@ function SessionFormModal({
                 if (custom) setParticipantThemeCustom(normalizeCustomThemeColors(custom))
               }}
             />
+          </div>
+
+          <div className="md:col-span-2 space-y-3 rounded-xl border border-blue-200/70 bg-white p-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-700">Present mode look</p>
+              <p className="text-xs text-slate-500">
+                Choose a separate present theme, or match the participant look above.
+              </p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label
+                className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 ${
+                  presentThemeMode === PRESENT_THEME_MODE_MIRROR
+                    ? 'border-navy-600 bg-blue-50/80'
+                    : 'border-blue-100 bg-slate-50/80'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="present-theme-mode"
+                  className="mt-1"
+                  checked={presentThemeMode === PRESENT_THEME_MODE_MIRROR}
+                  onChange={() => setPresentThemeMode(PRESENT_THEME_MODE_MIRROR)}
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-slate-800">
+                    Use participant theme
+                  </span>
+                  <span className="block text-xs text-slate-500">
+                    Present Mode matches the participant look settings.
+                  </span>
+                </span>
+              </label>
+              <label
+                className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 ${
+                  presentThemeMode === PRESENT_THEME_MODE_CUSTOM
+                    ? 'border-navy-600 bg-blue-50/80'
+                    : 'border-blue-100 bg-slate-50/80'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="present-theme-mode"
+                  className="mt-1"
+                  checked={presentThemeMode === PRESENT_THEME_MODE_CUSTOM}
+                  onChange={() => setPresentThemeMode(PRESENT_THEME_MODE_CUSTOM)}
+                />
+                <span>
+                  <span className="block text-sm font-semibold text-slate-800">
+                    Custom present theme
+                  </span>
+                  <span className="block text-xs text-slate-500">
+                    Pick a different theme just for Present Mode.
+                  </span>
+                </span>
+              </label>
+            </div>
+            {presentThemeMode === PRESENT_THEME_MODE_CUSTOM ? (
+              <ParticipantThemePicker
+                variant="present"
+                title="Present theme"
+                description="Background, header, and panel colors for Present Mode."
+                value={presentTheme}
+                customColors={presentThemeCustom}
+                deptId={uploadDeptId}
+                onChange={(themeId, custom) => {
+                  setPresentTheme(normalizeParticipantTheme(themeId))
+                  if (custom) setPresentThemeCustom(normalizeCustomThemeColors(custom))
+                }}
+              />
+            ) : null}
           </div>
 
           <div className="md:col-span-2 rounded-xl border border-blue-200/70 bg-white">

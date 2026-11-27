@@ -1,22 +1,21 @@
 import { Info, Trophy } from 'lucide-react'
-// import { Info, MessageSquare, Trophy } from 'lucide-react' // MessageSquare was for Q&A tile
+import { BrandLogoPair } from '../../components/branding/BrandLogoPair'
+import { buildParticipantThemeStyle } from '../../utils/participantTheme'
+import { resolvePresentTheme } from '../../utils/presentTheme'
 import { HeaderQuizTimer } from '../participant-session/components/HeaderQuizTimer'
 
-export function PresentShell({ children, footer, embed = false }) {
+export function PresentShell({ children, footer, embed = false, session = null }) {
+  const { themeId, customColors } = resolvePresentTheme(session)
+  const themeStyle = buildParticipantThemeStyle(themeId, customColors)
+
   return (
     <div
-      className={`present-mode relative flex flex-col overflow-hidden bg-linear-to-br from-slate-50 via-blue-50/80 to-indigo-100/60 text-navy-900 ${
+      className={`present-mode participant-session-bg relative flex flex-col overflow-hidden text-navy-900 ${
         embed ? 'h-dvh' : 'min-h-dvh'
       }`}
+      data-participant-theme={themeId}
+      style={themeStyle}
     >
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.35]"
-        aria-hidden
-        style={{
-          backgroundImage:
-            'radial-gradient(circle at 20% 20%, rgba(27, 75, 107, 0.12) 0%, transparent 45%), radial-gradient(circle at 80% 80%, rgba(79, 70, 229, 0.08) 0%, transparent 40%)',
-        }}
-      />
       <main
         className={`relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden ${
           embed
@@ -137,14 +136,13 @@ function PresentLiveIndicator({ isSessionLive }) {
 export function PresentSlideHeader({
   sessionTitle,
   sessionLogoUrl,
+  showAppLogo = true,
   participantCount = 0,
   liveParticipantCount = 0,
-  // qaCount = 0, // Q&A feature disabled
   isSessionLive = false,
   onParticipantsClick,
   onOverallRankingsClick,
   overallRankingsActive = false,
-  // onQaClick, // Q&A feature disabled
   readOnly = false,
   showParticipantStats = true,
   hasQuizCountdown = false,
@@ -154,29 +152,33 @@ export function PresentSlideHeader({
   const modeLabel = readOnly ? 'View display' : 'Present mode'
   const showParticipantsTile = showParticipantStats && Boolean(onParticipantsClick)
   const showOverallRankingsTile = Boolean(onOverallRankingsClick)
-  // const showQaTile = Boolean(onQaClick) // Q&A feature disabled
   const showStatTiles = showParticipantsTile || showOverallRankingsTile
-  // const showStatTiles = showParticipantsTile || showQaTile
   const joined = Number(participantCount) || 0
   const live = Number(liveParticipantCount) || 0
   const showQuizTimer = Boolean(hasQuizCountdown)
+  const showBrand = Boolean(sessionLogoUrl) || showAppLogo !== false
 
   return (
-    <header className="mb-[clamp(1rem,3vh,2rem)] flex shrink-0 flex-wrap items-end justify-between gap-4">
+    <header className="participant-topbar mb-[clamp(1rem,3vh,2rem)] flex shrink-0 flex-wrap items-end justify-between gap-4 rounded-3xl border border-blue-200/70 bg-white/90 px-[clamp(0.85rem,2vw,1.25rem)] py-[clamp(0.75rem,1.8vh,1.1rem)] shadow-sm shadow-navy-900/5">
       <div className="min-w-0 flex-1">
-        {/* <BrandLogoPair
-          variant="present"
-          sessionLogoUrl={sessionLogoUrl}
-          sessionTitle={sessionTitle}
-          className="mb-3"
-        /> */}
+        {showBrand ? (
+          <BrandLogoPair
+            variant="present"
+            sessionLogoUrl={sessionLogoUrl}
+            showAppLogo={showAppLogo !== false}
+            sessionTitle={sessionTitle}
+            className="mb-3"
+          />
+        ) : null}
         <div className="flex items-center gap-2">
           <PresentLiveIndicator isSessionLive={isSessionLive} />
-          <p className="text-[clamp(0.65rem,1.2vw,0.8rem)] font-semibold uppercase tracking-[0.35em] text-navy-600/80">
+          <p className="participant-muted text-[clamp(0.65rem,1.2vw,0.8rem)] font-semibold uppercase tracking-[0.35em] text-navy-600/80">
             {modeLabel}
           </p>
         </div>
-        <h1 className="mt-1 text-[clamp(1.1rem,2.5vw,1.75rem)] font-bold text-navy-900">{sessionTitle}</h1>
+        <h1 className="participant-heading mt-1 text-[clamp(1.1rem,2.5vw,1.75rem)] font-bold text-navy-900">
+          {sessionTitle}
+        </h1>
       </div>
 
       {showStatTiles || showQuizTimer ? (
@@ -191,17 +193,6 @@ export function PresentSlideHeader({
           ) : null}
           {showStatTiles ? (
             <div className="flex flex-wrap items-stretch justify-end gap-2">
-              {/* Q&A feature disabled — re-enable when bringing Q&A back
-              {showQaTile ? (
-                <PresentHeaderStatButton
-                  label="Q&A"
-                  count={qaCount}
-                  onClick={onQaClick}
-                  icon={MessageSquare}
-                  ariaLabel={`${qaCount} Q&A questions. View question list.`}
-                />
-              ) : null}
-              */}
               {showOverallRankingsTile ? (
                 <PresentHeaderStatButton
                   label="Overall rankings"
@@ -238,7 +229,7 @@ export function PresentSlideHeader({
           <div className="text-right">
             <div className="flex items-center justify-end gap-2">
               <PresentLiveIndicator isSessionLive={isSessionLive} />
-              <p className="text-[clamp(0.7rem,1.3vw,0.85rem)] font-semibold uppercase tracking-wider text-slate-500">
+              <p className="participant-muted text-[clamp(0.7rem,1.3vw,0.85rem)] font-semibold uppercase tracking-wider text-slate-500">
                 Participants
               </p>
             </div>

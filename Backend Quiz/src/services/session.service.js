@@ -5,8 +5,27 @@ const {
 const {
   normalizeParticipantTheme,
   normalizeCustomThemeColors,
+  normalizePresentThemeMode,
   CUSTOM_PARTICIPANT_THEME
 } = require("../utils/participantTheme");
+const { normalizeSessionLogoPlacement } = require("../utils/sessionLogo");
+
+function normalizeThemeCustomForTheme(themeId, customInput, existingCustom) {
+  if (themeId === CUSTOM_PARTICIPANT_THEME) {
+    if (customInput !== undefined) {
+      if (customInput == null) return normalizeCustomThemeColors(null);
+      return normalizeCustomThemeColors(customInput);
+    }
+    return existingCustom != null
+      ? normalizeCustomThemeColors(existingCustom)
+      : normalizeCustomThemeColors(null);
+  }
+  if (customInput !== undefined) {
+    if (customInput == null) return null;
+    return normalizeCustomThemeColors(customInput);
+  }
+  return existingCustom != null ? normalizeCustomThemeColors(existingCustom) : existingCustom;
+}
 const { normalizeTimerSoundFields } = require("../utils/timerSound");
 const {
   DEFAULT_LEADERBOARD_TOP_N,
@@ -312,6 +331,9 @@ async function createSession({ deptId, input, user }) {
        input.logo_url != null && String(input.logo_url).trim()
          ? String(input.logo_url).trim()
          : null,
+     session_logo_placement: normalizeSessionLogoPlacement(
+       input.session_logo_placement ?? input.sessionLogoPlacement
+     ),
      waiting_screen_image_url:
        input.waiting_screen_image_url != null &&
        String(input.waiting_screen_image_url).trim()
@@ -346,7 +368,24 @@ async function createSession({ deptId, input, user }) {
          : input.participant_theme_custom != null
            ? normalizeCustomThemeColors(input.participant_theme_custom)
            : null,
-     present_mode_settings: normalizePresentModeSettings(input.present_mode_settings)
+     present_mode_settings: normalizePresentModeSettings(input.present_mode_settings),
+     present_theme_mode: normalizePresentThemeMode(
+       input.present_theme_mode ?? input.presentThemeMode
+     ),
+     present_theme: normalizeParticipantTheme(
+       input.present_theme ?? input.presentTheme
+     ),
+     present_theme_custom: (() => {
+       const theme = normalizeParticipantTheme(
+         input.present_theme ?? input.presentTheme
+       );
+       const custom =
+         input.present_theme_custom ?? input.presentThemeCustom;
+       if (theme === CUSTOM_PARTICIPANT_THEME) {
+         return normalizeCustomThemeColors(custom);
+       }
+       return custom != null ? normalizeCustomThemeColors(custom) : null;
+     })()
    });
 
    await provisionSessionAdminForSession({ session, host });
@@ -505,6 +544,9 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
         response_time_score_bands: source.response_time_score_bands ?? null,
         qr_code_url: null,
         logo_url: source.logo_url || null,
+        session_logo_placement: normalizeSessionLogoPlacement(
+          source.session_logo_placement
+        ),
         waiting_screen_image_url: source.waiting_screen_image_url || null,
         waiting_screen_media_type: source.waiting_screen_image_url
           ? source.waiting_screen_media_type || "image"
@@ -524,7 +566,15 @@ async function duplicateSession({ sourceSessionId, user, input = {} }) {
             : source.participant_theme_custom != null
               ? normalizeCustomThemeColors(source.participant_theme_custom)
               : null,
-        present_mode_settings: normalizePresentModeSettings(source.present_mode_settings)
+        present_mode_settings: normalizePresentModeSettings(source.present_mode_settings),
+        present_theme_mode: normalizePresentThemeMode(source.present_theme_mode),
+        present_theme: normalizeParticipantTheme(source.present_theme),
+        present_theme_custom:
+          normalizeParticipantTheme(source.present_theme) === CUSTOM_PARTICIPANT_THEME
+            ? normalizeCustomThemeColors(source.present_theme_custom)
+            : source.present_theme_custom != null
+              ? normalizeCustomThemeColors(source.present_theme_custom)
+              : null
       },
       { transaction }
     );
@@ -676,12 +726,16 @@ async function updateSession({ sessionId, input, user }) {
     "show_app_logo",
     "title",
     "logo_url",
+    "session_logo_placement",
     "waiting_screen_image_url",
     "waiting_screen_media_type",
     "thanks_screen_image_url",
     "present_mode_settings",
     "participant_theme",
     "participant_theme_custom",
+    "present_theme_mode",
+    "present_theme",
+    "present_theme_custom",
     "join_locked",
     "tab_switch_detection_enabled",
     "tab_switch_block_after",
@@ -695,7 +749,7 @@ async function updateSession({ sessionId, input, user }) {
     const disallowed = inputKeys.filter((key) => !liveSettingsOnly.includes(key));
     if (disallowed.length > 0) {
       const error = new Error(
-        "Only session title, logo, present mode settings, participant theme, rankings, survey results, and participant count settings can be updated while the session is live"
+        "Only session title, logo, present mode settings, participant/present theme, rankings, survey results, and participant count settings can be updated while the session is live"
       );
       error.statusCode = 400;
       throw error;
@@ -979,6 +1033,10 @@ async function updateSession({ sessionId, input, user }) {
           ? String(input.logo_url).trim()
           : null
         : session.logo_url,
+    session_logo_placement:
+      input.session_logo_placement !== undefined
+        ? normalizeSessionLogoPlacement(input.session_logo_placement)
+        : normalizeSessionLogoPlacement(session.session_logo_placement),
     waiting_screen_image_url:
       input.waiting_screen_image_url !== undefined
         ? input.waiting_screen_image_url != null &&
@@ -1037,7 +1095,26 @@ async function updateSession({ sessionId, input, user }) {
         ? normalizePresentModeSettings(input.present_mode_settings)
         : session.present_mode_settings != null
           ? normalizePresentModeSettings(session.present_mode_settings)
-          : session.present_mode_settings
+          : session.present_mode_settings,
+    present_theme_mode:
+      input.present_theme_mode !== undefined
+        ? normalizePresentThemeMode(input.present_theme_mode)
+        : normalizePresentThemeMode(session.present_theme_mode),
+    present_theme:
+      input.present_theme !== undefined
+        ? normalizeParticipantTheme(input.present_theme)
+        : normalizeParticipantTheme(session.present_theme),
+    present_theme_custom: (() => {
+      const nextTheme =
+        input.present_theme !== undefined
+          ? normalizeParticipantTheme(input.present_theme)
+          : normalizeParticipantTheme(session.present_theme);
+      return normalizeThemeCustomForTheme(
+        nextTheme,
+        input.present_theme_custom,
+        session.present_theme_custom
+      );
+    })()
   });
 
   await session.save();

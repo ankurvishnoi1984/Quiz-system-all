@@ -1,5 +1,6 @@
 import { CalendarClock, Clock3, PauseCircle, Radio, XCircle } from 'lucide-react'
 import { BrandLogoPair } from '../../../components/branding/BrandLogoPair'
+import { resolveSessionLogoUrl } from '../../../utils/sessionLogo'
 import { PageCenteredShell } from './PageCenteredShell'
 import { getSessionNotLiveCopy } from '../utils/joinFlow'
 import { formatScheduledSessionForDisplay } from '../../../utils/sessionSchedule'
@@ -50,7 +51,7 @@ export function SessionNotLiveView({
         <div className="text-center">
           <BrandLogoPair
             variant="hero"
-            sessionLogoUrl={session?.logo_url}
+            sessionLogoUrl={resolveSessionLogoUrl(session, 'participant')}
             sessionTitle={session?.title || 'Session'}
             showAppLogo={session?.show_app_logo !== false}
           />

@@ -5,6 +5,7 @@ import { PresentSlideHeader } from './PresentShell'
 export function PresentSurveyEndingSlide({
   sessionTitle,
   sessionLogoUrl,
+  showAppLogo = true,
   summary,
   isLoading,
   participantCount,
@@ -26,6 +27,7 @@ export function PresentSurveyEndingSlide({
       <PresentSlideHeader
         sessionTitle={sessionTitle}
         sessionLogoUrl={sessionLogoUrl}
+        showAppLogo={showAppLogo}
         participantCount={participantCount}
         liveParticipantCount={liveParticipantCount}
         qaCount={qaCount}

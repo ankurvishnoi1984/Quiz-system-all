@@ -24,6 +24,7 @@ import {
   normalizeCustomThemeColors,
   normalizeHexColor,
   normalizeParticipantTheme,
+  themeFieldsForVariant,
 } from '../../utils/participantTheme'
 
 const THEME_IMAGE_ACCEPT = QUESTION_MEDIA_SUPPORTED_IMAGE_TYPES.join(',')
@@ -51,7 +52,7 @@ function ThemePreviewQuestion({ compact = false }) {
           Question 1 / 10
         </p>
         {!compact ? (
-          <p className="max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
+          <p className="participant-muted max-w-[min(100%,20rem)] text-right text-[11px] font-medium leading-snug text-slate-500">
             Answer this question or wait for the timer to use Next.
           </p>
         ) : null}
@@ -111,6 +112,67 @@ function ThemePreviewQuestion({ compact = false }) {
   )
 }
 
+/** Present Mode mock used by Preview + customizer when variant="present". */
+function PresentThemePreviewSlide({ compact = false }) {
+  return (
+    <div className={`quiz-fade-in space-y-3 ${compact ? '' : 'space-y-4'}`}>
+      <header
+        className={`participant-topbar rounded-2xl border border-blue-200/70 bg-white/92 shadow-sm shadow-navy-900/5 ${
+          compact ? 'px-3 py-2.5' : 'px-4 py-3'
+        }`}
+      >
+        <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-navy-600/80">
+          Present mode
+        </p>
+        <h2
+          className={`participant-heading mt-1 font-bold text-navy-900 ${
+            compact ? 'text-base' : 'text-xl'
+          }`}
+        >
+          Saturday Test Session
+        </h2>
+        <p className="participant-muted mt-0.5 text-[11px] text-slate-500">
+          Header bar · Header text
+        </p>
+      </header>
+
+      <h3
+        className={`participant-heading font-bold leading-snug text-navy-900 ${
+          compact ? 'text-sm' : 'text-lg'
+        }`}
+      >
+        Q1. What is the capital of France?
+      </h3>
+      <p className="participant-muted -mt-1 text-[10px] text-slate-500">
+        Question text
+      </p>
+
+      <div className={`grid gap-2 ${compact ? 'grid-cols-1' : 'sm:grid-cols-3'}`}>
+        {[
+          { title: 'Results', body: 'Graph / chart panel' },
+          { title: 'Responses', body: 'Live submissions' },
+          { title: 'How to join', body: 'QR + session code' },
+        ].map((panel) => (
+          <div
+            key={panel.title}
+            className={`participant-surface rounded-2xl border border-blue-200/70 bg-white/92 shadow-sm shadow-navy-900/5 ${
+              compact ? 'p-3' : 'p-4'
+            }`}
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              {panel.title}
+            </p>
+            <p className="participant-heading mt-1 text-sm font-semibold text-navy-800">
+              {panel.body}
+            </p>
+            <p className="participant-muted mt-1 text-[10px] text-slate-500">Panel color</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function FullscreenThemePreview({
   themeId,
   customColors,
@@ -118,10 +180,12 @@ function FullscreenThemePreview({
   disabled,
   onClose,
   onApply,
+  variant = 'participant',
 }) {
   const theme = getParticipantThemeMeta(themeId, customColors)
   const isSelected = selectedThemeId === theme.id
   const themeStyle = buildParticipantThemeStyle(themeId, customColors)
+  const isPresent = variant === 'present'
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -141,7 +205,9 @@ function FullscreenThemePreview({
 
   return createPortal(
     <div
-      className="host-print-hide participant-theme-stage participant-session-bg fixed inset-0 z-[200] flex flex-col"
+      className={`host-print-hide participant-theme-stage participant-session-bg fixed inset-0 z-[200] flex flex-col ${
+        isPresent ? 'present-mode' : ''
+      }`}
       data-participant-theme={theme.id}
       style={themeStyle}
       role="dialog"
@@ -154,9 +220,13 @@ function FullscreenThemePreview({
             id="participant-theme-preview-title"
             className="participant-heading truncate text-base font-bold text-navy-900 sm:text-lg"
           >
-            {theme.label} theme preview
+            {isPresent ? `${theme.label} · Present preview` : `${theme.label} theme preview`}
           </p>
-          <p className="truncate text-xs text-slate-600 sm:text-sm">{theme.description}</p>
+          <p className="participant-muted truncate text-xs text-slate-600 sm:text-sm">
+            {isPresent
+              ? 'How Present Mode looks with this theme'
+              : theme.description}
+          </p>
         </div>
         <button
           type="button"
@@ -170,9 +240,9 @@ function FullscreenThemePreview({
 
       <div className="relative z-10 flex min-h-0 flex-1 items-start justify-center overflow-y-auto p-4 sm:p-6 md:p-8">
         <div className="w-full max-w-4xl space-y-4">
-          <ThemePreviewQuestion />
+          {isPresent ? <PresentThemePreviewSlide /> : <ThemePreviewQuestion />}
           <p className="text-center text-xs font-medium uppercase tracking-wide text-slate-500">
-            Dummy question · Preview only · {theme.label}
+            {isPresent ? 'Dummy present slide' : 'Dummy question'} · Preview only · {theme.label}
           </p>
         </div>
       </div>
@@ -373,8 +443,10 @@ function CustomThemeEditor({
   deptId,
   onClose,
   onSave,
+  variant = 'participant',
 }) {
   const [draft, setDraft] = useState(() => normalizeCustomThemeColors(initialColors))
+  const isPresent = variant === 'present'
 
   useEffect(() => {
     if (!open) return
@@ -404,6 +476,15 @@ function CustomThemeEditor({
     setDraft((prev) => ({ ...prev, [key]: value }))
   }
 
+  const handleSave = () => {
+    onSave(
+      normalizeCustomThemeColors({
+        ...draft,
+        cardImage: null,
+      }),
+    )
+  }
+
   return createPortal(
     <div
       className="host-print-hide fixed inset-0 z-[180] flex items-center justify-center p-3 sm:p-6"
@@ -424,10 +505,12 @@ function CustomThemeEditor({
               id="custom-theme-editor-title"
               className="text-lg font-bold text-navy-900 sm:text-xl"
             >
-              Customize your theme
+              {isPresent ? 'Customize Present theme' : 'Customize your theme'}
             </h3>
             <p className="mt-1 text-sm text-slate-600">
-              Set color and optional image for page, top bar, and cards — preview updates live.
+              {isPresent
+                ? 'Page + top bar can use images. Cards are color only — preview updates live.'
+                : 'Page and top bar can use images. Cards are color only — preview updates live.'}
             </p>
           </div>
           <button
@@ -442,19 +525,27 @@ function CustomThemeEditor({
 
         <div className="grid min-h-0 flex-1 gap-0 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)]">
           <div
-            className="participant-theme-stage participant-session-bg relative min-h-[18rem] p-4 sm:p-5"
+            className={`participant-theme-stage participant-session-bg relative min-h-[18rem] p-4 sm:p-5 ${
+              isPresent ? 'present-mode' : ''
+            }`}
             data-participant-theme={CUSTOM_PARTICIPANT_THEME}
             style={themeStyle}
           >
-            <div className="participant-topbar mb-3 rounded-xl border border-blue-200/70 bg-white/92 px-3 py-2.5 shadow-sm backdrop-blur-sm">
-              <p className="participant-heading text-sm font-bold">Session header</p>
-              <p className="participant-muted text-[11px] text-slate-500">
-                Top bar color / image / text
-              </p>
-            </div>
-            <ThemePreviewQuestion compact />
+            {isPresent ? (
+              <PresentThemePreviewSlide compact />
+            ) : (
+              <>
+                <div className="participant-topbar mb-3 rounded-xl border border-blue-200/70 bg-white/92 px-3 py-2.5 shadow-sm backdrop-blur-sm">
+                  <p className="participant-heading text-sm font-bold">Session header</p>
+                  <p className="participant-muted text-[11px] text-slate-500">
+                    Top bar color / image / text
+                  </p>
+                </div>
+                <ThemePreviewQuestion compact />
+              </>
+            )}
             <p className="mt-3 text-center text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Live preview
+              Live preview · {isPresent ? 'Present' : 'Participant'}
             </p>
           </div>
 
@@ -462,22 +553,32 @@ function CustomThemeEditor({
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Surfaces
             </p>
-            {CUSTOM_THEME_SURFACE_FIELDS.map((field) => (
-              <SurfaceField
-                key={field.key}
-                field={field}
-                color={draft[field.key]}
-                imageUrl={draft[field.imageKey]}
-                disabled={disabled}
-                deptId={deptId}
-                onColorChange={setColor}
-                onImageChange={setImage}
-              />
-            ))}
+            {themeFieldsForVariant(CUSTOM_THEME_SURFACE_FIELDS, variant).map((field) =>
+              field.imageKey ? (
+                <SurfaceField
+                  key={field.key}
+                  field={field}
+                  color={draft[field.key]}
+                  imageUrl={draft[field.imageKey]}
+                  disabled={disabled}
+                  deptId={deptId}
+                  onColorChange={setColor}
+                  onImageChange={setImage}
+                />
+              ) : (
+                <ColorField
+                  key={field.key}
+                  field={field}
+                  value={draft[field.key]}
+                  disabled={disabled}
+                  onChange={setColor}
+                />
+              ),
+            )}
             <p className="pt-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Accents
+              Text & accents
             </p>
-            {CUSTOM_THEME_ACCENT_FIELDS.map((field) => (
+            {themeFieldsForVariant(CUSTOM_THEME_ACCENT_FIELDS, variant).map((field) => (
               <ColorField
                 key={field.key}
                 field={field}
@@ -508,7 +609,7 @@ function CustomThemeEditor({
           <button
             type="button"
             disabled={disabled}
-            onClick={() => onSave(normalizeCustomThemeColors(draft))}
+            onClick={handleSave}
             className="rounded-xl bg-navy-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-navy-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Use custom theme
@@ -623,6 +724,9 @@ function ThemeOptionRow({
  *   onChange: (themeId: string, customColors?: object | null) => void,
  *   disabled?: boolean,
  *   deptId?: string | number | null,
+ *   title?: string,
+ *   description?: string,
+ *   variant?: 'participant' | 'present',
  * }} props
  */
 export function ParticipantThemePicker({
@@ -631,7 +735,11 @@ export function ParticipantThemePicker({
   onChange,
   disabled = false,
   deptId = null,
+  title = 'Participant screen theme',
+  description = 'Background for join, waiting, and quiz screens.',
+  variant = 'participant',
 }) {
+  const isPresent = variant === 'present'
   const selected = normalizeParticipantTheme(value)
   const colors = normalizeCustomThemeColors(customColors)
   const selectedMeta = getParticipantThemeMeta(selected, colors)
@@ -684,10 +792,8 @@ export function ParticipantThemePicker({
   return (
     <div className="space-y-2">
       <div>
-        <p className="text-sm font-semibold text-slate-700">Participant screen theme</p>
-        <p className="text-xs text-slate-500">
-          Background for join, waiting, and quiz screens.
-        </p>
+        <p className="text-sm font-semibold text-slate-700">{title}</p>
+        {description ? <p className="text-xs text-slate-500">{description}</p> : null}
       </div>
 
       <div className="space-y-3 rounded-xl border border-blue-200/80 bg-slate-50/80 p-3">
@@ -773,8 +879,12 @@ export function ParticipantThemePicker({
 
       <Modal
         open={pickerOpen}
-        title="Choose participant theme"
-        subtitle="Pick a preset or create your own. Use Preview to see a full participant question."
+        title={isPresent ? 'Choose Present theme' : 'Choose participant theme'}
+        subtitle={
+          isPresent
+            ? 'Pick a preset or create your own. Preview shows a Present Mode slide.'
+            : 'Pick a preset or create your own. Use Preview to see a full participant question.'
+        }
         onClose={() => setPickerOpen(false)}
         size="lg"
       >
@@ -816,6 +926,7 @@ export function ParticipantThemePicker({
         deptId={deptId ? String(deptId) : null}
         onClose={() => setCustomizerOpen(false)}
         onSave={saveCustom}
+        variant={variant}
       />
 
       {previewThemeId != null ? (
@@ -826,6 +937,7 @@ export function ParticipantThemePicker({
           disabled={disabled}
           onClose={closePreview}
           onApply={applyFromPreview}
+          variant={variant}
         />
       ) : null}
     </div>

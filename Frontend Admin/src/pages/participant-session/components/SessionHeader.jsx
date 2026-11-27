@@ -1,5 +1,6 @@
 import { Users } from 'lucide-react'
 import { BrandLogoPair } from '../../../components/branding/BrandLogoPair'
+import { resolveSessionLogoUrl } from '../../../utils/sessionLogo'
 import { HeaderQuizTimer } from './HeaderQuizTimer'
 
 export function SessionHeader({
@@ -24,7 +25,7 @@ export function SessionHeader({
       <div className="min-w-0 flex-1">
         <BrandLogoPair
           variant="header"
-          sessionLogoUrl={session?.logo_url}
+          sessionLogoUrl={resolveSessionLogoUrl(session, 'participant')}
           sessionTitle={session?.title || 'Session'}
           showAppLogo={showAppLogo}
           className="mb-2"

@@ -175,12 +175,70 @@ function validateCustomThemeColors(input) {
   return null;
 }
 
+const PRESENT_THEME_MODES = Object.freeze([
+  "mirror_participant",
+  "custom_present"
+]);
+const DEFAULT_PRESENT_THEME_MODE = "mirror_participant";
+
+function normalizePresentThemeMode(value) {
+  const mode = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (PRESENT_THEME_MODES.includes(mode)) return mode;
+  return DEFAULT_PRESENT_THEME_MODE;
+}
+
+/**
+ * Resolve which theme Present Mode should render.
+ * mirror_participant → participant fields; custom_present → present fields.
+ */
+function resolvePresentThemeFields(sessionOrInput = {}) {
+  const mode = normalizePresentThemeMode(sessionOrInput.present_theme_mode);
+  if (mode === "mirror_participant") {
+    const theme = normalizeParticipantTheme(sessionOrInput.participant_theme);
+    return {
+      present_theme_mode: mode,
+      theme,
+      custom:
+        theme === CUSTOM_PARTICIPANT_THEME
+          ? normalizeCustomThemeColors(sessionOrInput.participant_theme_custom)
+          : sessionOrInput.participant_theme_custom != null
+            ? normalizeCustomThemeColors(sessionOrInput.participant_theme_custom)
+            : null
+    };
+  }
+  const theme = normalizeParticipantTheme(sessionOrInput.present_theme);
+  return {
+    present_theme_mode: mode,
+    theme,
+    custom:
+      theme === CUSTOM_PARTICIPANT_THEME
+        ? normalizeCustomThemeColors(sessionOrInput.present_theme_custom)
+        : sessionOrInput.present_theme_custom != null
+          ? normalizeCustomThemeColors(sessionOrInput.present_theme_custom)
+          : null
+  };
+}
+
+function validatePresentThemeCustom(input) {
+  if (input === undefined) return null;
+  const err = validateCustomThemeColors(input);
+  if (!err) return null;
+  return String(err).replaceAll("participant_theme_custom", "present_theme_custom");
+}
+
 module.exports = {
   PARTICIPANT_THEME_IDS,
   DEFAULT_PARTICIPANT_THEME,
   CUSTOM_PARTICIPANT_THEME,
   DEFAULT_CUSTOM_THEME_COLORS,
+  PRESENT_THEME_MODES,
+  DEFAULT_PRESENT_THEME_MODE,
   normalizeParticipantTheme,
   normalizeCustomThemeColors,
-  validateCustomThemeColors
+  validateCustomThemeColors,
+  normalizePresentThemeMode,
+  resolvePresentThemeFields,
+  validatePresentThemeCustom
 };

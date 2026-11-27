@@ -1,7 +1,55 @@
 const {
   validateJoinAllowlistFields
 } = require("../utils/joinAllowlist");
-const { validateCustomThemeColors } = require("../utils/participantTheme");
+const {
+  validateCustomThemeColors,
+  validatePresentThemeCustom,
+  normalizePresentThemeMode,
+  PRESENT_THEME_MODES,
+  PARTICIPANT_THEME_IDS
+} = require("../utils/participantTheme");
+const {
+  SESSION_LOGO_PLACEMENTS,
+  normalizeSessionLogoPlacement
+} = require("../utils/sessionLogo");
+
+function validateSessionLogoPlacementField(payload, errors) {
+  if (payload?.session_logo_placement === undefined || payload.session_logo_placement === null) {
+    return;
+  }
+  const raw = String(payload.session_logo_placement).trim().toLowerCase();
+  if (!SESSION_LOGO_PLACEMENTS.includes(raw)) {
+    errors.push(
+      `session_logo_placement must be one of: ${SESSION_LOGO_PLACEMENTS.join(", ")}`
+    );
+  }
+  normalizeSessionLogoPlacement(payload.session_logo_placement);
+}
+
+function validatePresentThemeFields(payload, errors) {
+  if (payload?.present_theme_mode !== undefined && payload.present_theme_mode !== null) {
+    const mode = String(payload.present_theme_mode).trim().toLowerCase();
+    if (!PRESENT_THEME_MODES.includes(mode)) {
+      errors.push(
+        `present_theme_mode must be one of: ${PRESENT_THEME_MODES.join(", ")}`
+      );
+    }
+  }
+  if (payload?.present_theme !== undefined && payload.present_theme !== null) {
+    const id = String(payload.present_theme).trim().toLowerCase();
+    if (!PARTICIPANT_THEME_IDS.includes(id)) {
+      errors.push(
+        `present_theme must be one of: ${PARTICIPANT_THEME_IDS.join(", ")}`
+      );
+    }
+  }
+  const presentCustomError = validatePresentThemeCustom(payload?.present_theme_custom);
+  if (presentCustomError) errors.push(presentCustomError);
+  // Touch normalize so invalid empty strings still coerce consistently in services.
+  if (payload?.present_theme_mode !== undefined) {
+    normalizePresentThemeMode(payload.present_theme_mode);
+  }
+}
 const {
   CUSTOMER_MATCH_ZONES,
   normalizeCustomerMatchZones,
@@ -515,6 +563,8 @@ function validateCreateSessionPayload(payload) {
 
   const customThemeError = validateCustomThemeColors(payload?.participant_theme_custom);
   if (customThemeError) errors.push(customThemeError);
+  validatePresentThemeFields(payload, errors);
+  validateSessionLogoPlacementField(payload, errors);
 
   const quizTotalTimeError = validateQuizTotalTimeMinutes(payload);
   if (quizTotalTimeError) errors.push(quizTotalTimeError);
@@ -590,6 +640,7 @@ function validateUpdateSessionPayload(payload) {
     "auto_end_date",
     "auto_end_time",
     "logo_url",
+    "session_logo_placement",
     "waiting_screen_image_url",
     "waiting_screen_media_type",
     "thanks_screen_image_url",
@@ -601,6 +652,9 @@ function validateUpdateSessionPayload(payload) {
     "present_mode_settings",
     "participant_theme",
     "participant_theme_custom",
+    "present_theme_mode",
+    "present_theme",
+    "present_theme_custom",
     "builder_mode",
     "questions_per_participant",
     "advanced_selection_mode",
@@ -723,6 +777,8 @@ function validateUpdateSessionPayload(payload) {
 
   const customThemeError = validateCustomThemeColors(payload?.participant_theme_custom);
   if (customThemeError) errors.push(customThemeError);
+  validatePresentThemeFields(payload, errors);
+  validateSessionLogoPlacementField(payload, errors);
 
   const quizTotalTimeError = validateQuizTotalTimeMinutes(payload);
   if (quizTotalTimeError) errors.push(quizTotalTimeError);

@@ -46,6 +46,7 @@ import { normalizeLeaderboardTopN, SESSION_LEADERBOARD_TOP_N } from '../../utils
 import { isAdvancedBuilderSession, isSessionQuizTotalTimeEnabled } from '../../utils/sessionFlags'
 import { getQuizTotalRemainingSeconds } from '../../utils/questionTimer'
 import { getPresentModeSettings } from '../../utils/presentModeSettings'
+import { resolveSessionLogoUrl } from '../../utils/sessionLogo'
 import {
   HOST_EXTRA_SOUNDS_ENABLED,
   playLeaderboardShown,
@@ -998,7 +999,8 @@ function PresentModePage({
   }
 
   const sessionTitle = session.title || 'Live session'
-  const sessionLogoUrl = session?.logo_url || null
+  const sessionLogoUrl = resolveSessionLogoUrl(session, 'present')
+  const showAppLogo = session?.show_app_logo !== false
   const participantCount = participants.length
   const liveParticipantCount = liveParticipantsCount
   const isSessionLive = session.status === 'live'
@@ -1225,6 +1227,7 @@ function PresentModePage({
   return (
     <PresentShell
       embed={embed}
+      session={session}
       footer={
         embed ? null : (
         <footer className="relative z-20 flex shrink-0 flex-col gap-3 border-t border-blue-200/50 bg-white/60 px-[clamp(1rem,3vw,3rem)] py-4 backdrop-blur-sm">
@@ -1277,6 +1280,7 @@ function PresentModePage({
             <PresentSlideHeader
               sessionTitle={sessionTitle}
               sessionLogoUrl={sessionLogoUrl}
+              showAppLogo={showAppLogo}
               participantCount={participantCount}
               liveParticipantCount={liveParticipantCount}
               // qaCount={qaCount} // Q&A feature disabled
@@ -1288,7 +1292,7 @@ function PresentModePage({
               readOnly
             />
             <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-[clamp(1rem,4vw,3rem)] text-center">
-              <div className="quiz-enter max-w-2xl rounded-3xl border border-blue-200/70 bg-white/95 px-[clamp(1.5rem,4vw,3rem)] py-[clamp(2rem,6vh,3.5rem)] shadow-xl shadow-navy-900/10">
+              <div className="participant-surface quiz-enter max-w-2xl rounded-3xl border border-blue-200/70 bg-white/95 px-[clamp(1.5rem,4vw,3rem)] py-[clamp(2rem,6vh,3.5rem)] shadow-xl shadow-navy-900/10">
                 <p className="text-[clamp(0.75rem,1.4vw,0.9rem)] font-semibold uppercase tracking-[0.25em] text-slate-500">
                   Waiting for host
                 </p>
@@ -1413,6 +1417,7 @@ function PresentModePage({
           <Top3PodiumSlide
             sessionTitle={sessionTitle}
             sessionLogoUrl={sessionLogoUrl}
+            showAppLogo={showAppLogo}
             leaderboard={leaderboard}
             participantCount={participantCount}
             liveParticipantCount={liveParticipantCount}
@@ -1430,6 +1435,7 @@ function PresentModePage({
           <LeaderboardSlide
             sessionTitle={sessionTitle}
             sessionLogoUrl={sessionLogoUrl}
+            showAppLogo={showAppLogo}
             leaderboard={leaderboard}
             title={
               session?.current_rankings_enabled
@@ -1455,6 +1461,7 @@ function PresentModePage({
           <PresentSurveyEndingSlide
             sessionTitle={sessionTitle}
             sessionLogoUrl={sessionLogoUrl}
+            showAppLogo={showAppLogo}
             summary={surveySummaryQuery.data}
             isLoading={surveySummaryQuery.isLoading}
             participantCount={participantCount}

@@ -2,6 +2,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { getPresentViewSessionApi } from '../../services/presentViewApi'
 import { formatScheduledSessionForDisplay } from '../../utils/sessionSchedule'
+import { resolveSessionLogoUrl } from '../../utils/sessionLogo'
 import PresentModePage from '../present-mode/PresentModePage'
 import { PresentShell, PresentSlideHeader } from '../present-mode/PresentShell'
 
@@ -34,10 +35,12 @@ function EmbedWaitingScreen({ session }) {
   )
 
   return (
-    <PresentShell embed>
+    <PresentShell embed session={session}>
       <div className="flex min-h-0 flex-1 flex-col">
         <PresentSlideHeader
           sessionTitle={session?.title || 'Live session'}
+          sessionLogoUrl={resolveSessionLogoUrl(session, 'present')}
+          showAppLogo={session?.show_app_logo !== false}
           participantCount={0}
           isSessionLive={false}
           readOnly

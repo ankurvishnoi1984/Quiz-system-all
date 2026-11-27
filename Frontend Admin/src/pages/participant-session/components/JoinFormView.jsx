@@ -1,4 +1,5 @@
 import { BrandLogoPair } from '../../../components/branding/BrandLogoPair'
+import { resolveSessionLogoUrl } from '../../../utils/sessionLogo'
 import { PageCenteredShell } from './PageCenteredShell'
 
 const CONTACT_JOIN_TYPES = new Set(['name_email', 'name_mobile', 'name_email_mobile'])
@@ -54,7 +55,7 @@ export function JoinFormView({
         <div className="text-center">
           <BrandLogoPair
             variant="hero"
-            sessionLogoUrl={session?.logo_url}
+            sessionLogoUrl={resolveSessionLogoUrl(session, 'participant')}
             sessionTitle={session?.title || 'Session'}
             showAppLogo={session?.show_app_logo !== false}
           />

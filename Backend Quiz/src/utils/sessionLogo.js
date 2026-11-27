@@ -1,0 +1,30 @@
+"use strict";
+
+const SESSION_LOGO_PLACEMENT_BOTH = "both";
+const SESSION_LOGO_PLACEMENT_PARTICIPANT = "participant_only";
+const SESSION_LOGO_PLACEMENT_PRESENT = "present_only";
+
+const SESSION_LOGO_PLACEMENTS = [
+  SESSION_LOGO_PLACEMENT_BOTH,
+  SESSION_LOGO_PLACEMENT_PARTICIPANT,
+  SESSION_LOGO_PLACEMENT_PRESENT
+];
+
+const DEFAULT_SESSION_LOGO_PLACEMENT = SESSION_LOGO_PLACEMENT_BOTH;
+
+function normalizeSessionLogoPlacement(value) {
+  const raw = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (SESSION_LOGO_PLACEMENTS.includes(raw)) return raw;
+  return DEFAULT_SESSION_LOGO_PLACEMENT;
+}
+
+module.exports = {
+  SESSION_LOGO_PLACEMENT_BOTH,
+  SESSION_LOGO_PLACEMENT_PARTICIPANT,
+  SESSION_LOGO_PLACEMENT_PRESENT,
+  SESSION_LOGO_PLACEMENTS,
+  DEFAULT_SESSION_LOGO_PLACEMENT,
+  normalizeSessionLogoPlacement
+};

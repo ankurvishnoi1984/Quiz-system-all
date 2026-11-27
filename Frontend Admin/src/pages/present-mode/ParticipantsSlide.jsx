@@ -2,6 +2,7 @@ import { PresentSlideHeader } from './PresentShell'
 import { PresentJoinPanel } from './PresentJoinInfo'
 import { PresentSessionReadyLobby } from './PresentSessionReadyLobby'
 import { getPresentModeSettings } from '../../utils/presentModeSettings'
+import { resolveSessionLogoUrl } from '../../utils/sessionLogo'
 
 export function ParticipantsSlide({
   session,
@@ -29,7 +30,8 @@ export function ParticipantsSlide({
     <div className="quiz-slide-in flex min-h-0 flex-1 flex-col">
       <PresentSlideHeader
         sessionTitle={sessionTitle}
-        sessionLogoUrl={session?.logo_url}
+        sessionLogoUrl={resolveSessionLogoUrl(session, 'present')}
+        showAppLogo={session?.show_app_logo !== false}
         participantCount={participantCount}
         liveParticipantCount={liveParticipantCount}
         qaCount={qaCount}

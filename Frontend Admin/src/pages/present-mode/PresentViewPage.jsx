@@ -4,12 +4,13 @@ import { useQuery } from '@tanstack/react-query'
 import { Maximize2, Minimize2 } from 'lucide-react'
 import { getPresentViewSessionApi } from '../../services/presentViewApi'
 import { formatScheduledSessionForDisplay } from '../../utils/sessionSchedule'
+import { resolveSessionLogoUrl } from '../../utils/sessionLogo'
 import PresentModePage from './PresentModePage'
 import { PresentShell, PresentSlideHeader } from './PresentShell'
 
-function PresentViewShell({ children, footer }) {
+function PresentViewShell({ children, footer, session = null }) {
   return (
-    <PresentShell footer={footer}>
+    <PresentShell footer={footer} session={session}>
       {children}
     </PresentShell>
   )
@@ -43,6 +44,7 @@ function PresentViewWaitingScreen({ session }) {
 
   return (
     <PresentViewShell
+      session={session}
       footer={
         <footer className="relative z-20 flex shrink-0 justify-center border-t border-blue-200/50 bg-white/60 px-[clamp(1rem,3vw,3rem)] py-4 backdrop-blur-sm">
           <button
@@ -68,14 +70,15 @@ function PresentViewWaitingScreen({ session }) {
       <div className="flex min-h-0 flex-1 flex-col">
         <PresentSlideHeader
           sessionTitle={sessionTitle}
-          sessionLogoUrl={session?.logo_url}
+          sessionLogoUrl={resolveSessionLogoUrl(session, 'present')}
+          showAppLogo={session?.show_app_logo !== false}
           participantCount={0}
           // qaCount={0} // Q&A feature disabled
           isSessionLive={false}
           readOnly
         />
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-[clamp(1rem,4vw,3rem)] text-center">
-          <div className="max-w-2xl rounded-3xl border border-blue-200/70 bg-white/95 px-[clamp(1.5rem,4vw,3rem)] py-[clamp(2rem,6vh,3.5rem)] shadow-xl shadow-navy-900/10">
+          <div className="participant-surface max-w-2xl rounded-3xl border border-blue-200/70 bg-white/95 px-[clamp(1.5rem,4vw,3rem)] py-[clamp(2rem,6vh,3.5rem)] shadow-xl shadow-navy-900/10">
             <p className="text-[clamp(0.75rem,1.4vw,0.9rem)] font-semibold uppercase tracking-[0.25em] text-slate-500">
               Waiting for host
             </p>

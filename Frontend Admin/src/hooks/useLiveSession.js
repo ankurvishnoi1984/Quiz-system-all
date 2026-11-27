@@ -355,6 +355,35 @@ export function useLiveSession(accessToken, sessionId, options = {}) {
             data.present_mode_settings !== undefined
               ? data.present_mode_settings
               : old.present_mode_settings,
+          participant_theme:
+            data.participant_theme !== undefined
+              ? data.participant_theme
+              : old.participant_theme,
+          participant_theme_custom:
+            data.participant_theme_custom !== undefined
+              ? data.participant_theme_custom
+              : old.participant_theme_custom,
+          present_theme_mode:
+            data.present_theme_mode !== undefined
+              ? data.present_theme_mode
+              : old.present_theme_mode,
+          present_theme:
+            data.present_theme !== undefined ? data.present_theme : old.present_theme,
+          present_theme_custom:
+            data.present_theme_custom !== undefined
+              ? data.present_theme_custom
+              : old.present_theme_custom,
+          logo_url: data.logo_url !== undefined ? data.logo_url : old.logo_url,
+          session_logo_placement:
+            data.session_logo_placement !== undefined
+              ? data.session_logo_placement
+              : old.session_logo_placement,
+          show_app_logo:
+            data.show_app_logo !== undefined ? Boolean(data.show_app_logo) : old.show_app_logo,
+          show_session_title:
+            data.show_session_title !== undefined
+              ? Boolean(data.show_session_title)
+              : old.show_session_title,
         }
       })
       if (

@@ -815,7 +815,15 @@ function notifySessionSettings(sessionCode, settings) {
     quiz_total_time_synced: Boolean(settings.quiz_total_time_synced),
     present_mode_settings: settings.present_mode_settings ?? null,
     participant_theme: settings.participant_theme || "default",
-    participant_theme_custom: settings.participant_theme_custom ?? null
+    participant_theme_custom: settings.participant_theme_custom ?? null,
+    present_theme_mode: settings.present_theme_mode || "mirror_participant",
+    present_theme: settings.present_theme || "default",
+    present_theme_custom: settings.present_theme_custom ?? null,
+    logo_url: settings.logo_url !== undefined ? settings.logo_url : undefined,
+    session_logo_placement:
+      settings.session_logo_placement !== undefined
+        ? settings.session_logo_placement
+        : undefined
   });
 }
 

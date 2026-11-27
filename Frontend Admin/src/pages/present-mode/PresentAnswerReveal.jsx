@@ -191,12 +191,12 @@ export function PresentOptionsPanel({
   if (!rows.length) return null
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-blue-200/70 bg-white/90 shadow-xl shadow-navy-900/10">
+    <div className="participant-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-blue-200/70 bg-white/90 shadow-xl shadow-navy-900/10">
       <div className="shrink-0 border-b border-blue-100/80 px-[clamp(0.85rem,2vw,1.25rem)] py-[clamp(0.65rem,1.5vh,0.85rem)]">
-        <p className="text-[clamp(0.65rem,1.2vw,0.75rem)] font-semibold uppercase tracking-wider text-slate-500">
+        <p className="participant-muted text-[clamp(0.65rem,1.2vw,0.75rem)] font-semibold uppercase tracking-wider text-slate-500">
           Options
         </p>
-        <p className="text-[clamp(0.9rem,1.6vw,1rem)] font-semibold text-navy-800">
+        <p className="participant-heading text-[clamp(0.9rem,1.6vw,1rem)] font-semibold text-navy-800">
           {rows.length} choice{rows.length === 1 ? '' : 's'}
         </p>
       </div>

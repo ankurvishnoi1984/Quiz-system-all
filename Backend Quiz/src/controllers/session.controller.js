@@ -198,7 +198,13 @@ async function update(req, res) {
         join_blocked_reason: joinBlock.reason || null,
         present_mode_settings: session.present_mode_settings ?? null,
         participant_theme: session.participant_theme || "default",
-        participant_theme_custom: session.participant_theme_custom ?? null
+        participant_theme_custom: session.participant_theme_custom ?? null,
+        present_theme_mode: session.present_theme_mode || "mirror_participant",
+        present_theme: session.present_theme || "default",
+        present_theme_custom: session.present_theme_custom ?? null,
+        logo_url: session.logo_url || null,
+        session_logo_placement: session.session_logo_placement || "both",
+        show_app_logo: session.show_app_logo !== false
       });
       const rankingsVisible =
         Boolean(session.leaderboard_enabled) || Boolean(session.current_rankings_enabled);
@@ -424,6 +430,7 @@ async function lookupByCode(req, res) {
           join_otp_required: Boolean(session.join_otp_required),
           customer_match_enabled: Boolean(session.customer_match_enabled),
           logo_url: session.logo_url || null,
+          session_logo_placement: session.session_logo_placement || "both",
           waiting_screen_image_url: session.waiting_screen_image_url || null,
           waiting_screen_media_type: session.waiting_screen_image_url
             ? session.waiting_screen_media_type || "image"
@@ -453,6 +460,9 @@ async function lookupByCode(req, res) {
           participant_theme: session.participant_theme || "default",
           participant_theme_custom: session.participant_theme_custom ?? null,
           present_mode_settings: session.present_mode_settings ?? null,
+          present_theme_mode: session.present_theme_mode || "mirror_participant",
+          present_theme: session.present_theme || "default",
+          present_theme_custom: session.present_theme_custom ?? null,
           allow_late_join: Boolean(session.allow_late_join),
           join_locked: Boolean(session.join_locked),
           tab_switch_detection_enabled: Boolean(session.tab_switch_detection_enabled),
@@ -876,7 +886,12 @@ async function activateAdvancedAssignmentSlotHandler(req, res) {
         "quiz_total_time_synced",
         "present_mode_settings",
         "participant_theme",
-        "participant_theme_custom"
+        "participant_theme_custom",
+        "present_theme_mode",
+        "present_theme",
+        "present_theme_custom",
+        "logo_url",
+        "session_logo_placement"
       ]
     });
 

@@ -256,6 +256,11 @@ const Session = sequelize.define(
       type: DataTypes.TEXT,
       allowNull: true
     },
+    session_logo_placement: {
+      type: DataTypes.STRING(32),
+      allowNull: false,
+      defaultValue: "both"
+    },
     waiting_screen_image_url: {
       type: DataTypes.TEXT,
       allowNull: true
@@ -292,6 +297,21 @@ const Session = sequelize.define(
       defaultValue: false
     },
     present_mode_settings: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: null
+    },
+    present_theme_mode: {
+      type: DataTypes.STRING(32),
+      allowNull: false,
+      defaultValue: "mirror_participant"
+    },
+    present_theme: {
+      type: DataTypes.STRING(32),
+      allowNull: false,
+      defaultValue: "default"
+    },
+    present_theme_custom: {
       type: DataTypes.JSON,
       allowNull: true,
       defaultValue: null

@@ -104,17 +104,17 @@ export function PresentLeaderboardList({
     /no one has given a correct answer/i.test(String(emptyMessage || ''))
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-blue-200/70 bg-white/90 shadow-xl shadow-navy-900/10">
+    <div className="participant-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-blue-200/70 bg-white/90 shadow-xl shadow-navy-900/10">
       {showTitle ? (
         <div className="flex shrink-0 items-center gap-3 border-b border-blue-100/80 px-[clamp(1rem,3vw,1.75rem)] py-[clamp(0.75rem,2vh,1rem)]">
           <span className="grid size-10 place-items-center rounded-xl bg-amber-100 text-amber-700">
             <Trophy className="size-5" aria-hidden />
           </span>
           <div>
-            <p className="text-[clamp(0.7rem,1.3vw,0.8rem)] font-semibold uppercase tracking-wider text-slate-500">
+            <p className="participant-muted text-[clamp(0.7rem,1.3vw,0.8rem)] font-semibold uppercase tracking-wider text-slate-500">
               {title}
             </p>
-            <p className="text-[clamp(0.95rem,1.8vw,1.1rem)] font-semibold text-navy-800">
+            <p className="participant-heading text-[clamp(0.95rem,1.8vw,1.1rem)] font-semibold text-navy-800">
               {rows.length > 0
                 ? `${rows.length} participant${rows.length === 1 ? '' : 's'} ranked`
                 : noCorrectAnswers

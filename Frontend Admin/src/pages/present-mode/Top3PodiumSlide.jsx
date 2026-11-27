@@ -4,6 +4,7 @@ import { PresentSlideHeader } from './PresentShell'
 export function Top3PodiumSlide({
   sessionTitle,
   sessionLogoUrl,
+  showAppLogo = true,
   leaderboard,
   participantCount,
   liveParticipantCount = 0,
@@ -24,6 +25,7 @@ export function Top3PodiumSlide({
       <PresentSlideHeader
         sessionTitle={sessionTitle}
         sessionLogoUrl={sessionLogoUrl}
+        showAppLogo={showAppLogo}
         participantCount={participantCount}
         liveParticipantCount={liveParticipantCount}
         qaCount={qaCount}

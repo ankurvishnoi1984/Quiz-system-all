@@ -25,6 +25,7 @@ import {
   questionUsesOptionChart,
   questionUsesEmojiChart,
 } from '../../utils/livePresentation'
+import { resolveSessionLogoUrl } from '../../utils/sessionLogo'
 import {
   PresentAnswerRevealBadge,
   PresentOptionsKey,
@@ -107,12 +108,12 @@ function PresentResponsesPanel({
     : 'Waiting for responses…'
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-blue-200/70 bg-white/90 shadow-xl shadow-navy-900/10">
+    <div className="participant-surface flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-blue-200/70 bg-white/90 shadow-xl shadow-navy-900/10">
       <div className="shrink-0 border-b border-blue-100/80 px-[clamp(0.85rem,2vw,1.25rem)] py-[clamp(0.65rem,1.5vh,0.85rem)]">
-        <p className="text-[clamp(0.65rem,1.2vw,0.75rem)] font-semibold uppercase tracking-wider text-slate-500">
+        <p className="participant-muted text-[clamp(0.65rem,1.2vw,0.75rem)] font-semibold uppercase tracking-wider text-slate-500">
           Responses
         </p>
-        <p className="text-[clamp(0.9rem,1.6vw,1rem)] font-semibold text-navy-800">
+        <p className="participant-heading text-[clamp(0.9rem,1.6vw,1rem)] font-semibold text-navy-800">
           {responseRows.length} submission{responseRows.length === 1 ? '' : 's'}
         </p>
       </div>
@@ -447,8 +448,8 @@ export function QuestionSlide({
 
   const renderResultsPanel = ({ compact = false } = {}) => {
     const panelClass = compact
-      ? 'flex min-h-0 flex-1 flex-col rounded-3xl border border-blue-200/70 bg-white/90 p-[clamp(0.65rem,1.5vw,1rem)] shadow-xl shadow-navy-900/10'
-      : 'min-h-0 flex-1 rounded-3xl border border-blue-200/70 bg-white/90 p-6 shadow-xl shadow-navy-900/10'
+      ? 'participant-surface flex min-h-0 flex-1 flex-col rounded-3xl border border-blue-200/70 bg-white/90 p-[clamp(0.65rem,1.5vw,1rem)] shadow-xl shadow-navy-900/10'
+      : 'participant-surface min-h-0 flex-1 rounded-3xl border border-blue-200/70 bg-white/90 p-6 shadow-xl shadow-navy-900/10'
 
     if (!resultsPanelMeta) {
       return (
@@ -526,7 +527,8 @@ export function QuestionSlide({
       {chartExpandedOverlay}
       <PresentSlideHeader
         sessionTitle={sessionTitle}
-        sessionLogoUrl={session?.logo_url}
+        sessionLogoUrl={resolveSessionLogoUrl(session, 'present')}
+        showAppLogo={session?.show_app_logo !== false}
         participantCount={participantCount}
         liveParticipantCount={liveParticipantCount}
         qaCount={qaCount}
@@ -577,7 +579,7 @@ export function QuestionSlide({
               : ''
           }`}
         >
-          <h2 className="min-w-0 flex-1 text-[clamp(1.1rem,2.4vw,1.85rem)] font-bold leading-snug text-navy-900">
+          <h2 className="participant-heading min-w-0 flex-1 text-[clamp(1.1rem,2.4vw,1.85rem)] font-bold leading-snug text-navy-900">
             {questionNumber != null && Number(questionNumber) > 0
               ? `Q${questionNumber}. ${question.text || 'Untitled question'}`
               : question.text || 'Untitled question'}

@@ -84,27 +84,74 @@ export const CUSTOM_THEME_ACCENT_FIELDS = [
   },
 ]
 
-/** Surfaces that support color + optional background image. */
+/**
+ * Surfaces in the custom theme editor.
+ * `imageKey` means optional background image upload; omit for color-only (Card).
+ */
 export const CUSTOM_THEME_SURFACE_FIELDS = [
   {
     key: 'background',
     imageKey: 'backgroundImage',
     label: 'Page background',
-    description: 'Main screen wash behind questions',
+    description: 'Full-screen wash behind the header and panels',
   },
   {
     key: 'topbar',
     imageKey: 'topbarImage',
     label: 'Top bar',
-    description: 'Session header bar',
+    description: 'Header strip (brand, title, status)',
   },
   {
     key: 'card',
-    imageKey: 'cardImage',
     label: 'Card',
-    description: 'Question and content cards',
+    description: 'Content panels — Results, responses, join cards (color only)',
   },
 ]
+
+/** Present Mode customizer copy — same keys, Present-page wording. */
+const PRESENT_THEME_FIELD_COPY = {
+  background: {
+    label: 'Present background',
+    description: 'Full-screen wash behind the header and panels',
+  },
+  topbar: {
+    label: 'Header bar',
+    description: 'Strip with brand, session title, and stats',
+  },
+  card: {
+    label: 'Panel color',
+    description: 'Results, Responses, and How to join panels (color only)',
+  },
+  accent: {
+    label: 'Accent',
+    description: 'Buttons and highlights on Present controls',
+  },
+  accentStrong: {
+    label: 'Accent dark',
+    description: 'Stronger accent / primary button end',
+  },
+  topbarText: {
+    label: 'Header text',
+    description: 'Text inside the header bar (title, Present mode label)',
+  },
+  cardText: {
+    label: 'Question text',
+    description: 'Question title and panel headings',
+  },
+}
+
+/**
+ * @param {Array<{ key: string, label: string, description: string, imageKey?: string }>} fields
+ * @param {'participant' | 'present'} variant
+ */
+export function themeFieldsForVariant(fields, variant = 'participant') {
+  if (variant !== 'present') return fields
+  return fields.map((field) => {
+    const copy = PRESENT_THEME_FIELD_COPY[field.key]
+    if (!copy) return field
+    return { ...field, label: copy.label, description: copy.description }
+  })
+}
 
 /** @deprecated use CUSTOM_THEME_SURFACE_FIELDS + CUSTOM_THEME_ACCENT_FIELDS */
 export const CUSTOM_THEME_COLOR_FIELDS = [
@@ -274,7 +321,7 @@ export function buildParticipantThemeStyle(themeId, customColors) {
   const bgLight = mixWithWhite(c.background, 0.55)
   const pageImage = c.backgroundImage ? cssUrl(c.backgroundImage) : null
   const topbarImage = c.topbarImage ? cssUrl(c.topbarImage) : null
-  const cardImage = c.cardImage ? cssUrl(c.cardImage) : null
+  // Card is color-only (no background image) for readable panels on participant + present.
 
   // Image is the top layer; color sits behind so transparent PNGs show the color through.
   const pageLayers = pageImage
@@ -298,7 +345,7 @@ export function buildParticipantThemeStyle(themeId, customColors) {
     '--pt-topbar': c.topbar,
     '--pt-topbar-image': topbarImage || 'none',
     '--pt-surface': c.card,
-    '--pt-surface-image': cardImage || 'none',
+    '--pt-surface-image': 'none',
     '--pt-surface-border': hexToRgba(c.accent, 0.22),
     '--pt-surface-shadow': `0 1px 2px ${hexToRgba(c.cardText, 0.06)}`,
     '--pt-option-bg': hexToRgba(c.card, 0.96),

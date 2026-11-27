@@ -1,6 +1,7 @@
 import { Calendar, Clock3, Play, Users } from 'lucide-react'
 import { BrandLogoPair } from '../../components/branding/BrandLogoPair'
 import { HeaderQuizTimer } from '../participant-session/components/HeaderQuizTimer'
+import { resolveSessionLogoUrl } from '../../utils/sessionLogo'
 import {
   formatScheduledDateForDisplay,
   formatScheduledTimeForDisplay,
@@ -18,7 +19,7 @@ function resolveStatusLabel(session, isSessionLive) {
 
 function AudienceCard({ joined, live }) {
   return (
-    <div className="rounded-[2rem] border border-blue-200/70 bg-white/95 px-[clamp(1.25rem,3vw,2rem)] py-[clamp(1.25rem,3vh,2rem)] shadow-xl shadow-navy-900/10">
+    <div className="participant-surface rounded-[2rem] border border-blue-200/70 bg-white/95 px-[clamp(1.25rem,3vw,2rem)] py-[clamp(1.25rem,3vh,2rem)] shadow-xl shadow-navy-900/10">
       <div className="flex items-center justify-center gap-2 text-slate-500">
         <Users className="size-[clamp(1rem,2vw,1.25rem)]" aria-hidden />
         <p className="text-[clamp(0.7rem,1.3vw,0.85rem)] font-semibold uppercase tracking-wider">
@@ -74,6 +75,9 @@ export function PresentSessionReadyLobby({
   className = '',
 }) {
   const sessionTitle = session?.title || 'Live session'
+  const sessionLogoUrl = resolveSessionLogoUrl(session, 'present')
+  const showAppLogo = session?.show_app_logo !== false
+  const showBrand = Boolean(sessionLogoUrl) || showAppLogo
   const statusLabel = resolveStatusLabel(session, isSessionLive)
   const hasSchedule = Boolean(session?.scheduled_date || session?.scheduled_time)
   const dateLabel =
@@ -128,10 +132,11 @@ export function PresentSessionReadyLobby({
         }`}
       >
         <div className="mb-[clamp(1rem,3vh,1.75rem)] shrink-0 text-center">
-          {session?.logo_url ? (
+          {showBrand ? (
             <BrandLogoPair
               variant="present"
-              sessionLogoUrl={session.logo_url}
+              sessionLogoUrl={sessionLogoUrl}
+              showAppLogo={showAppLogo}
               sessionTitle={sessionTitle}
               className="mb-4 justify-center"
             />

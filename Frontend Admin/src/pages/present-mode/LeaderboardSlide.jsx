@@ -5,6 +5,7 @@ import { PresentSlideHeader } from './PresentShell'
 export function LeaderboardSlide({
   sessionTitle,
   sessionLogoUrl,
+  showAppLogo = true,
   leaderboard,
   title = 'Session rankings',
   topN = 10,
@@ -27,6 +28,7 @@ export function LeaderboardSlide({
       <PresentSlideHeader
         sessionTitle={sessionTitle}
         sessionLogoUrl={sessionLogoUrl}
+        showAppLogo={showAppLogo}
         participantCount={participantCount}
         liveParticipantCount={liveParticipantCount}
         qaCount={qaCount}

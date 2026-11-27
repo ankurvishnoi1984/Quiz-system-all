@@ -483,6 +483,22 @@
     @apply inline-flex w-full items-center justify-center rounded-xl bg-linear-to-r from-navy-900 via-navy-700 to-navy-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-navy-900/25 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60;
   }
 
+  /* Present Mode reuses participant theme tokens via .participant-session-bg */
+  .present-mode.participant-session-bg {
+    overflow: hidden;
+    background-attachment: scroll;
+  }
+
+  .present-mode .participant-topbar {
+    background-size: cover;
+    background-position: center;
+  }
+
+  .present-mode .participant-surface {
+    /* Cards stay color-only (no surface image) for readable charts / QR / text */
+    background-image: none !important;
+  }
+
   .present-mode .present-lb-row {
     animation: present-lb-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
   }
