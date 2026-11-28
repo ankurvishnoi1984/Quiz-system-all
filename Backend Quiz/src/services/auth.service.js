@@ -71,6 +71,9 @@ function buildUserPayload(user) {
     parent_id: user.parent_id || null,
     email_verified: Boolean(user.email_verified_at),
     email_verified_at: user.email_verified_at || null,
+    terms_accepted_at: user.terms_accepted_at || null,
+    marketing_opt_in: Boolean(user.marketing_opt_in),
+    marketing_opt_in_at: user.marketing_opt_in_at || null,
     rights: getEffectiveRights(user),
     rights_overrides: Array.isArray(user.rights_overrides) ? user.rights_overrides : null,
     sub_admin_access: user.sub_admin_access || null,
@@ -221,6 +224,24 @@ async function signupUser(input) {
     planId: plan.plan_id
   });
 
+  const termsAccepted =
+    input.terms_accepted === true ||
+    input.terms_accepted === 1 ||
+    input.terms_accepted === "1" ||
+    input.terms_accepted === "true";
+  if (!termsAccepted) {
+    const error = new Error("You must agree to the Terms of Use and Privacy Policy");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const marketingOptIn =
+    input.marketing_opt_in === true ||
+    input.marketing_opt_in === 1 ||
+    input.marketing_opt_in === "1" ||
+    input.marketing_opt_in === "true";
+  const consentNow = new Date();
+
   const planExpiresAt = plan.default_duration_days
     ? addDaysToDateOnly(plan.default_duration_days)
     : null;
@@ -249,7 +270,10 @@ async function signupUser(input) {
         dept_id: department.dept_id,
         plan_id: plan.plan_id,
         plan_expires_at: planExpiresAt,
-        email_verified_at: new Date(),
+        email_verified_at: consentNow,
+        terms_accepted_at: consentNow,
+        marketing_opt_in: marketingOptIn,
+        marketing_opt_in_at: marketingOptIn ? consentNow : null,
         must_change_password: false,
         is_active: true
       },

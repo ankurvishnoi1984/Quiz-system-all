@@ -53,6 +53,19 @@ const env = {
       process.env.SMS_MSG ||
       "{0} is your otp to verify your number for doctor engagement survey activity. Thank you - Highvoltage Softwares Pvt Ltd."
   },
+  // Meta Cloud API–shaped WhatsApp stub. Leave unset until provider credentials are ready.
+  whatsapp: {
+    enabled: envFlagTrue(process.env.WHATSAPP_ENABLED, false),
+    provider: (process.env.WHATSAPP_PROVIDER || "meta").trim().toLowerCase(),
+    apiBaseUrl: (
+      process.env.WHATSAPP_API_BASE_URL || "https://graph.facebook.com/v21.0"
+    ).trim(),
+    accessToken: (process.env.WHATSAPP_ACCESS_TOKEN || "").trim(),
+    phoneNumberId: (process.env.WHATSAPP_PHONE_NUMBER_ID || "").trim(),
+    templatePromo: (process.env.WHATSAPP_TEMPLATE_PROMO || "").trim(),
+    templateOtp: (process.env.WHATSAPP_TEMPLATE_OTP || "").trim(),
+    templateLanguage: (process.env.WHATSAPP_TEMPLATE_LANGUAGE || "en").trim()
+  },
   mongo: {
     logEnabled: envFlagTrue(process.env.MONGO_LOG_ENABLED, false),
     uri: (process.env.MONGO_URI || "").trim(),

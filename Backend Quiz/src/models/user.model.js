@@ -60,6 +60,19 @@ const User = sequelize.define(
       type: DataTypes.DATE,
       allowNull: true
     },
+    terms_accepted_at: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    marketing_opt_in: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+    marketing_opt_in_at: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
     extra_participants: {
       type: DataTypes.INTEGER,
       allowNull: false,

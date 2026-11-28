@@ -23,6 +23,7 @@ import {
   validatePassword,
   validatePlanId,
   validateRegisterForm,
+  validateTermsAccepted,
 } from '../utils/registerValidation'
 
 function fieldInputClass(hasError) {
@@ -70,6 +71,8 @@ function RegisterPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [selectedPlanId, setSelectedPlanId] = useState('')
+  const [termsAccepted, setTermsAccepted] = useState(false)
+  const [marketingOptIn, setMarketingOptIn] = useState(false)
   const [fieldErrors, setFieldErrors] = useState({})
   const [submitError, setSubmitError] = useState('')
   const [step, setStep] = useState('register')
@@ -132,6 +135,7 @@ function RegisterPage() {
         password,
         selectedPlanId,
         companyName,
+        termsAccepted,
       },
       { requirePassword: !googleIdentityLocked },
     )
@@ -261,6 +265,8 @@ function RegisterPage() {
           : { password }),
         plan_id: Number(selectedPlanId),
         payment_id: payment.payment_id,
+        terms_accepted: true,
+        marketing_opt_in: Boolean(marketingOptIn),
       })
       redirectToAdminLoginAfterSignup(email.trim())
     } catch (error) {
@@ -537,6 +543,71 @@ function RegisterPage() {
                   </select>
                 )}
                 <FieldError id="plan-error" message={fieldErrors.plan} />
+              </div>
+
+              <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-3">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={termsAccepted}
+                    onChange={(event) => {
+                      setTermsAccepted(event.target.checked)
+                      clearFieldError('termsAccepted')
+                    }}
+                    onBlur={() =>
+                      setFieldErrors((current) => ({
+                        ...current,
+                        termsAccepted: validateTermsAccepted(termsAccepted),
+                      }))
+                    }
+                    className="mt-1 size-4 shrink-0 rounded border-slate-300 text-navy-700 focus:ring-navy-500/30"
+                    aria-invalid={Boolean(fieldErrors.termsAccepted)}
+                    aria-describedby={
+                      fieldErrors.termsAccepted ? 'termsAccepted-error' : undefined
+                    }
+                  />
+                  <span className="text-sm leading-snug text-slate-700">
+                    I agree to the{' '}
+                    <Link
+                      to="/terms"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-semibold text-navy-800 underline decoration-navy-300 underline-offset-2 hover:text-navy-950"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      Terms of Use
+                    </Link>{' '}
+                    and{' '}
+                    <Link
+                      to="/privacy"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-semibold text-navy-800 underline decoration-navy-300 underline-offset-2 hover:text-navy-950"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      Privacy Policy
+                    </Link>
+                    .
+                  </span>
+                </label>
+                <FieldError id="termsAccepted-error" message={fieldErrors.termsAccepted} />
+
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={marketingOptIn}
+                    onChange={(event) => setMarketingOptIn(event.target.checked)}
+                    className="mt-1 size-4 shrink-0 rounded border-slate-300 text-navy-700 focus:ring-navy-500/30"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm leading-snug text-slate-700">
+                      Keep me updated with product news, tips, and offers by email or WhatsApp.
+                    </span>
+                    <span className="mt-1 block text-xs text-slate-500">
+                      You can unsubscribe anytime. We won’t spam you.
+                    </span>
+                  </span>
+                </label>
               </div>
 
               {submitError ? (

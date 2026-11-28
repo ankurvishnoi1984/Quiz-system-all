@@ -46,6 +46,13 @@ export function validateCompanyName(value) {
   return ''
 }
 
+export function validateTermsAccepted(value) {
+  if (!value) {
+    return 'Please agree to the Terms of Use and Privacy Policy to continue.'
+  }
+  return ''
+}
+
 export function validateRegisterForm(fields, { requirePassword = true } = {}) {
   return {
     fullName: validateFullName(fields.fullName),
@@ -54,6 +61,7 @@ export function validateRegisterForm(fields, { requirePassword = true } = {}) {
     password: requirePassword ? validatePassword(fields.password) : '',
     plan: validatePlanId(fields.selectedPlanId),
     companyName: validateCompanyName(fields.companyName),
+    termsAccepted: validateTermsAccepted(fields.termsAccepted),
   }
 }
 

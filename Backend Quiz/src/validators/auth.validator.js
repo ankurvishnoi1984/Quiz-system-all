@@ -126,6 +126,29 @@ function validateSignupPayload(payload) {
     errors.push("payment_id is required");
   }
 
+  const termsAccepted =
+    payload?.terms_accepted === true ||
+    payload?.terms_accepted === 1 ||
+    payload?.terms_accepted === "1" ||
+    payload?.terms_accepted === "true";
+  if (!termsAccepted) {
+    errors.push("terms_accepted must be true");
+  }
+
+  if (
+    payload?.marketing_opt_in !== undefined &&
+    payload?.marketing_opt_in !== null &&
+    typeof payload.marketing_opt_in !== "boolean" &&
+    payload.marketing_opt_in !== 0 &&
+    payload.marketing_opt_in !== 1 &&
+    payload.marketing_opt_in !== "0" &&
+    payload.marketing_opt_in !== "1" &&
+    payload.marketing_opt_in !== "true" &&
+    payload.marketing_opt_in !== "false"
+  ) {
+    errors.push("marketing_opt_in must be a boolean");
+  }
+
   return errors;
 }
 
